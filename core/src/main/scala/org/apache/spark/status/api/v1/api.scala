@@ -23,171 +23,171 @@ import scala.collection.Map
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.api.StageStatus
 
-case class ApplicationInfo(
-  id: String,
-  name: String,
-  startTime: Date,
-  endTime: Date,
-  sparkUser: String,
-  completed: Boolean = false
+class ApplicationInfo(
+  val id: String,
+  val name: String,
+  val startTime: Date,
+  val endTime: Date,
+  val sparkUser: String,
+  val completed: Boolean = false
 )
 
-case class ExecutorStageSummary(
-  taskTime : Long,
-  failedTasks : Int,
-  succeededTasks : Int,
-  inputBytes : Long,
-  outputBytes : Long,
-  shuffleRead : Long,
-  shuffleWrite : Long,
-  memoryBytesSpilled : Long,
-  diskBytesSpilled : Long
+class ExecutorStageSummary(
+  val taskTime : Long,
+  val failedTasks : Int,
+  val succeededTasks : Int,
+  val inputBytes : Long,
+  val outputBytes : Long,
+  val shuffleRead : Long,
+  val shuffleWrite : Long,
+  val memoryBytesSpilled : Long,
+  val diskBytesSpilled : Long
 )
 
-case class ExecutorSummary(
-  id: String,
-  hostPort: String,
-  rddBlocks: Int,
-  memoryUsed: Long,
-  diskUsed: Long,
-  activeTasks: Int,
-  failedTasks: Int,
-  completedTasks: Int,
-  totalTasks: Int,
-  totalDuration: Long,
-  totalInputBytes: Long,
-  totalShuffleRead: Long,
-  totalShuffleWrite: Long,
-  maxMemory: Long,
-  executorLogs: Map[String, String]
+class ExecutorSummary(
+  val id: String,
+  val hostPort: String,
+  val rddBlocks: Int,
+  val memoryUsed: Long,
+  val diskUsed: Long,
+  val activeTasks: Int,
+  val failedTasks: Int,
+  val completedTasks: Int,
+  val totalTasks: Int,
+  val totalDuration: Long,
+  val totalInputBytes: Long,
+  val totalShuffleRead: Long,
+  val totalShuffleWrite: Long,
+  val maxMemory: Long,
+  val executorLogs: Map[String, String]
 )
 
-case class JobData(
-  jobId: Int,
-  name: String,
-  description: Option[String],
-  submissionTime: Option[Date],
-  completionTime: Option[Date],
-  stageIds: Seq[Int],
-  jobGroup: Option[String],
-  status: JobExecutionStatus,
-  numTasks: Int,
-  numActiveTasks: Int,
-  numCompletedTasks: Int,
-  numSkippedTasks: Int,
-  numFailedTasks: Int,
-  numActiveStages: Int,
-  numCompletedStages: Int,
-  numSkippedStages: Int,
-  numFailedStages: Int
+class JobData(
+  val jobId: Int,
+  val name: String,
+  val description: Option[String],
+  val submissionTime: Option[Date],
+  val completionTime: Option[Date],
+  val stageIds: Seq[Int],
+  val jobGroup: Option[String],
+  val status: JobExecutionStatus,
+  val numTasks: Int,
+  val numActiveTasks: Int,
+  val numCompletedTasks: Int,
+  val numSkippedTasks: Int,
+  val numFailedTasks: Int,
+  val numActiveStages: Int,
+  val numCompletedStages: Int,
+  val numSkippedStages: Int,
+  val numFailedStages: Int
 )
 
 // Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage
 // page ... does anybody pay attention to it?
-case class RDDStorageInfo(
-  id: Int,
-  name: String,
-  numPartitions: Int,
-  numCachedPartitions: Int,
-  storageLevel: String,
-  memoryUsed: Long,
-  diskUsed: Long,
-  dataDistribution: Option[Seq[RDDDataDistribution]],
-  partitions: Option[Seq[RDDPartitionInfo]]
+class RDDStorageInfo(
+  val id: Int,
+  val name: String,
+  val numPartitions: Int,
+  val numCachedPartitions: Int,
+  val storageLevel: String,
+  val memoryUsed: Long,
+  val diskUsed: Long,
+  val dataDistribution: Option[Seq[RDDDataDistribution]],
+  val partitions: Option[Seq[RDDPartitionInfo]]
 )
 
-case class RDDDataDistribution(
-  address: String,
-  memoryUsed: Long,
-  memoryRemaining: Long,
-  diskUsed: Long
+class RDDDataDistribution(
+  val address: String,
+  val memoryUsed: Long,
+  val memoryRemaining: Long,
+  val diskUsed: Long
 )
 
-case class RDDPartitionInfo(
-  blockName: String,
-  storageLevel: String,
-  memoryUsed: Long,
-  diskUsed: Long,
-  executors: Seq[String]
+class RDDPartitionInfo(
+  val blockName: String,
+  val storageLevel: String,
+  val memoryUsed: Long,
+  val diskUsed: Long,
+  val executors: Seq[String]
 )
 
-case class StageData(
-  status: StageStatus,
-  stageId: Int,
-  numActiveTasks: Int ,
-  numCompleteTasks: Int,
-  numFailedTasks: Int,
+class StageData(
+  val status: StageStatus,
+  val stageId: Int,
+  val numActiveTasks: Int ,
+  val numCompleteTasks: Int,
+  val numFailedTasks: Int,
 
-  executorRunTime: Long,
+  val executorRunTime: Long,
 
-  inputBytes: Long,
-  inputRecords: Long,
-  outputBytes: Long,
-  outputRecords: Long,
-  shuffleReadBytes: Long,
-  shuffleReadRecords: Long,
-  shuffleWriteBytes: Long,
-  shuffleWriteRecords: Long,
-  memoryBytesSpilled: Long,
-  diskBytesSpilled: Long,
+  val inputBytes: Long,
+  val inputRecords: Long,
+  val outputBytes: Long,
+  val outputRecords: Long,
+  val shuffleReadBytes: Long,
+  val shuffleReadRecords: Long,
+  val shuffleWriteBytes: Long,
+  val shuffleWriteRecords: Long,
+  val memoryBytesSpilled: Long,
+  val diskBytesSpilled: Long,
 
-  name: String,
-  details: String,
-  schedulingPool: String,
+  val name: String,
+  val details: String,
+  val schedulingPool: String,
 
   //TODO what to do about accumulables?
-  tasks: Option[Map[Long, TaskData]],
-  executorSummary:Option[Map[String,ExecutorStageSummary]]
+  val tasks: Option[Map[Long, TaskData]],
+  val executorSummary:Option[Map[String,ExecutorStageSummary]]
 )
 
-case class TaskData(
-  taskId: Long,
-  index: Int,
-  attempt: Int,
-  launchTime: Date,
-  executorId: String,
-  host: String,
-  taskLocality: String,
-  speculative: Boolean,
-  errorMessage: Option[String] = None,
-  taskMetrics: Option[TaskMetrics] = None
+class TaskData(
+  val taskId: Long,
+  val index: Int,
+  val attempt: Int,
+  val launchTime: Date,
+  val executorId: String,
+  val host: String,
+  val taskLocality: String,
+  val speculative: Boolean,
+  val errorMessage: Option[String] = None,
+  val taskMetrics: Option[TaskMetrics] = None
 )
 
-case class TaskMetrics(
-  executorDeserializeTime: Long,
-  executorRunTime: Long,
-  resultSize: Long,
-  jvmGcTime: Long,
-  resultSerializationTime: Long,
-  memoryBytesSpilled: Long,
-  diskBytesSpilled: Long,
-  inputMetrics: Option[InputMetrics],
-  outputMetrics: Option[OutputMetrics],
-  shuffleReadMetrics: Option[ShuffleReadMetrics],
-  shuffleWriteMetrics: Option[ShuffleWriteMetrics]
+class TaskMetrics(
+  val executorDeserializeTime: Long,
+  val executorRunTime: Long,
+  val resultSize: Long,
+  val jvmGcTime: Long,
+  val resultSerializationTime: Long,
+  val memoryBytesSpilled: Long,
+  val diskBytesSpilled: Long,
+  val inputMetrics: Option[InputMetrics],
+  val outputMetrics: Option[OutputMetrics],
+  val shuffleReadMetrics: Option[ShuffleReadMetrics],
+  val shuffleWriteMetrics: Option[ShuffleWriteMetrics]
 )
 
-case class InputMetrics(
-  bytesRead: Long,
-  recordsRead: Long
+class InputMetrics(
+  val bytesRead: Long,
+  val recordsRead: Long
 )
 
-case class OutputMetrics(
-  bytesWritten: Long,
-  recordsWritten: Long
+class OutputMetrics(
+  val bytesWritten: Long,
+  val recordsWritten: Long
 )
 
-case class ShuffleReadMetrics(
-  remoteBlocksFetched: Int,
-  localBlocksFetched: Int,
-  fetchWaitTime: Long,
-  remoteBytesRead: Long,
-  totalBlocksFetched: Int,
-  recordsRead: Long
+class ShuffleReadMetrics(
+  val remoteBlocksFetched: Int,
+  val localBlocksFetched: Int,
+  val fetchWaitTime: Long,
+  val remoteBytesRead: Long,
+  val totalBlocksFetched: Int,
+  val recordsRead: Long
 )
 
-case class ShuffleWriteMetrics(
-  bytesWritten: Long,
-  writeTime: Long,
-  recordsWritten: Long
+class ShuffleWriteMetrics(
+  val bytesWritten: Long,
+  val writeTime: Long,
+  val recordsWritten: Long
 )

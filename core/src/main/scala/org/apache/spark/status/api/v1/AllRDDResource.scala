@@ -73,7 +73,7 @@ object AllRDDResource {
 
     val dataDistribution = if (includeDetails) {
       Some(storageStatusList.map { status =>
-        RDDDataDistribution(
+        new RDDDataDistribution(
           address = status.blockManagerId.hostPort,
           memoryUsed = status.memUsedByRdd(rddId),
           memoryRemaining = status.memRemaining,
@@ -84,7 +84,7 @@ object AllRDDResource {
     }
     val partitions = if (includeDetails) {
       Some(blocks.map { case(id, block, locations) =>
-        RDDPartitionInfo(
+        new RDDPartitionInfo(
           blockName = id.name,
           storageLevel = block.storageLevel.description,
           memoryUsed = block.memSize,
@@ -96,7 +96,7 @@ object AllRDDResource {
       None
     }
 
-    RDDStorageInfo(
+    new RDDStorageInfo(
       id = rddId,
       name = rddInfo.name,
       numPartitions = rddInfo.numPartitions,

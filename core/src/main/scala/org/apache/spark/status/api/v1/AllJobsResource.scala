@@ -72,7 +72,7 @@ object AllJobsResource {
       }
       val lastStageName = lastStageInfo.map { _.name }.getOrElse("(Unknown Stage Name)")
       val lastStageDescription = lastStageData.flatMap { _.description }
-      JobData(
+      new JobData(
         jobId = job.jobId,
         name = lastStageName,
         description = lastStageDescription,

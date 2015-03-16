@@ -72,7 +72,7 @@ object AllStagesResource {
     }
     val executorSummary = if(includeDetails) {
       Some(stageUiData.executorSummary.map { case(k,summary) =>
-        k -> ExecutorStageSummary(
+        k -> new ExecutorStageSummary(
           taskTime = summary.taskTime,
           failedTasks = summary.failedTasks,
           succeededTasks = summary.succeededTasks,
@@ -87,7 +87,7 @@ object AllStagesResource {
     } else {
       None
     }
-    StageData(
+    new StageData(
       status = status,
       stageId = stageInfo.stageId,
       numActiveTasks = stageUiData.numActiveTasks,
@@ -126,7 +126,7 @@ object AllStagesResource {
 
 
   def convertTaskData(uiData: TaskUIData): TaskData = {
-    TaskData(
+    new TaskData(
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attempt,
@@ -141,7 +141,7 @@ object AllStagesResource {
   }
 
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
-    TaskMetrics(
+    new TaskMetrics(
       executorDeserializeTime = internal.executorDeserializeTime,
       executorRunTime = internal.executorRunTime,
       resultSize = internal.resultSize,
@@ -157,21 +157,21 @@ object AllStagesResource {
   }
 
   def convertInputMetrics(internal: InternalInputMetrics): InputMetrics = {
-    InputMetrics(
+    new InputMetrics(
       bytesRead = internal.bytesRead,
       recordsRead = internal.recordsRead
     )
   }
 
   def convertOutputMetrics(internal: InternalOutputMetrics): OutputMetrics = {
-    OutputMetrics(
+    new OutputMetrics(
       bytesWritten = internal.bytesWritten,
       recordsWritten = internal.recordsWritten
     )
   }
 
   def convertShuffleReadMetrics(internal: InternalShuffleReadMetrics): ShuffleReadMetrics = {
-    ShuffleReadMetrics(
+    new ShuffleReadMetrics(
       remoteBlocksFetched = internal.remoteBlocksFetched,
       localBlocksFetched = internal.localBlocksFetched,
       fetchWaitTime = internal.fetchWaitTime,
@@ -182,7 +182,7 @@ object AllStagesResource {
   }
 
   def convertShuffleWriteMetrics(internal: InternalShuffleWriteMetrics): ShuffleWriteMetrics = {
-    ShuffleWriteMetrics(
+    new ShuffleWriteMetrics(
       bytesWritten = internal.shuffleBytesWritten,
       writeTime = internal.shuffleWriteTime,
       recordsWritten = internal.shuffleRecordsWritten

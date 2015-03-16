@@ -55,7 +55,7 @@ class ApplicationListResource(uiRoot: UIRoot) {
 
 object ApplicationsListResource {
   def appHistoryInfoToPublicAppInfo(app: ApplicationHistoryInfo): ApplicationInfo = {
-    ApplicationInfo(
+    new ApplicationInfo(
       id = app.id,
       name = app.name,
       startTime = new Date(app.startTime),
@@ -68,7 +68,7 @@ object ApplicationsListResource {
   def convertApplicationInfo(
       internal: InternalApplicationInfo,
       completed: Boolean): ApplicationInfo = {
-    ApplicationInfo(
+    new ApplicationInfo(
       id = internal.id,
       name = internal.desc.name,
       startTime = new Date(internal.startTime),

@@ -94,7 +94,7 @@ private[spark] class SparkUI private (
   }
 
   def getApplicationInfoList: Seq[ApplicationInfo] = {
-    Seq(ApplicationInfo(
+    Seq(new ApplicationInfo(
       id = appName,
       name = appName,
       //TODO
