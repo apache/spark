@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.rdd.EmptyRDD
 import org.apache.spark.sql.test.TestSQLContext.{sparkContext => sc}
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
