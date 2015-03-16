@@ -189,7 +189,7 @@ private[spark] object SizeEstimator extends Logging {
     // Arrays have object header and length field which is an integer
     var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
-    if (elementClass.isPrimitive()) {
+    if (elementClass.isPrimitive) {
       arrSize += alignSize(length * primitiveSize(elementClass))
       state.size += arrSize
     } else {
@@ -197,15 +197,18 @@ private[spark] object SizeEstimator extends Logging {
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
-        for (i <- 0 until length) {
-          state.enqueue(ScalaRunTime.array_apply(array, i).asInstanceOf[AnyRef])
+        var arrayIndex = 0
+        while (arrayIndex < length) {
+          state.enqueue(ScalaRunTime.array_apply(array, arrayIndex).asInstanceOf[AnyRef])
+          arrayIndex += 1
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
         var size = 0.0
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
-        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+        var num_elements_drawn = 0
+        while (num_elements_drawn < ARRAY_SAMPLE_SIZE) {
           var index = 0
           do {
             index = rand.nextInt(length)
@@ -213,6 +216,7 @@ private[spark] object SizeEstimator extends Logging {
           drawn.add(index)
           val elem = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
           size += SizeEstimator.estimate(elem, state.visited)
+          num_elements_drawn += 1
         }
         state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
       }
