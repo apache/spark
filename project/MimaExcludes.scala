@@ -16,6 +16,7 @@
  */
 
 import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -33,6 +34,17 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.4") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx"),
+            excludePackage("org.spark-project.jetty"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts since 1.2.
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+            )
+
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
