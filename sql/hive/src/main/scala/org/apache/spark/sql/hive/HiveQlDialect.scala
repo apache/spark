@@ -19,13 +19,18 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.dialect.Dialect
+import org.apache.spark.sql.sources.DDLParser
 
 object HiveQlDialect extends Dialect {
   val name = "hiveql"
 
+  @transient
+  protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
+
   override def description = "Hive query language dialect"
 
   override def parse(sql: String): LogicalPlan = {
-    HiveQl.parseSql(sql)
+    val ddlPlan = ddlParserWithHiveQL(sql, exceptionOnError = false)
+    ddlPlan.getOrElse(HiveQl.parseSql(sql))
   }
 }
