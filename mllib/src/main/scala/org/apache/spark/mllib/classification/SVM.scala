@@ -86,6 +86,10 @@ class SVMModel (
   }
 
   override protected def formatVersion: String = "1.0"
+
+  override def toString: String = {
+    super.toString + s", numClasses = 2, threshold = ${threshold}"
+  }
 }
 
 object SVMModel extends Loader[SVMModel] {
