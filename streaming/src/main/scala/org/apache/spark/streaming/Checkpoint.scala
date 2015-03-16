@@ -47,10 +47,8 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
-    val oldMaster = new SparkConf(loadDefaults = true).getOption("spark.master")
-    oldMaster.foreach { newMaster =>
-      newSparkConf.setMaster(newMaster)
-    }
+    val newMasterOption = new SparkConf(loadDefaults = true).getOption("spark.master")
+    newMasterOption.foreach { newMaster => newSparkConf.setMaster(newMaster) }
     newSparkConf
   }
 
