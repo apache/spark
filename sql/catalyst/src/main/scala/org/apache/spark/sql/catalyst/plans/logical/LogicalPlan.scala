@@ -209,7 +209,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // More than one match.
       case ambiguousReferences =>
         throw new AnalysisException(
-          s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
+          s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")} $this")
     }
   }
 }
