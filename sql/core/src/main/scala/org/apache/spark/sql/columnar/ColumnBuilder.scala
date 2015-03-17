@@ -106,6 +106,13 @@ private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleCol
 
 private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
+private[sql] class FixedDecimalColumnBuilder(
+    precision: Int,
+    scale: Int)
+  extends NativeColumnBuilder(
+    new FixedDecimalColumnStats,
+    FIXED_DECIMAL(precision, scale))
+
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
 private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
@@ -139,25 +146,25 @@ private[sql] object ColumnBuilder {
   }
 
   def apply(
-      typeId: Int,
+      dataType: DataType,
       initialSize: Int = 0,
       columnName: String = "",
       useCompression: Boolean = false): ColumnBuilder = {
-
-    val builder = (typeId match {
-      case INT.typeId       => new IntColumnBuilder
-      case LONG.typeId      => new LongColumnBuilder
-      case FLOAT.typeId     => new FloatColumnBuilder
-      case DOUBLE.typeId    => new DoubleColumnBuilder
-      case BOOLEAN.typeId   => new BooleanColumnBuilder
-      case BYTE.typeId      => new ByteColumnBuilder
-      case SHORT.typeId     => new ShortColumnBuilder
-      case STRING.typeId    => new StringColumnBuilder
-      case BINARY.typeId    => new BinaryColumnBuilder
-      case GENERIC.typeId   => new GenericColumnBuilder
-      case DATE.typeId      => new DateColumnBuilder
-      case TIMESTAMP.typeId => new TimestampColumnBuilder
-    }).asInstanceOf[ColumnBuilder]
+    val builder: ColumnBuilder = dataType match {
+      case IntegerType => new IntColumnBuilder
+      case LongType => new LongColumnBuilder
+      case DoubleType => new DoubleColumnBuilder
+      case BooleanType => new BooleanColumnBuilder
+      case ByteType => new ByteColumnBuilder
+      case ShortType => new ShortColumnBuilder
+      case StringType => new StringColumnBuilder
+      case BinaryType => new BinaryColumnBuilder
+      case DateType => new DateColumnBuilder
+      case TimestampType => new TimestampColumnBuilder
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
+        new FixedDecimalColumnBuilder(precision, scale)
+      case _ => new GenericColumnBuilder
+    }
 
     builder.initialize(initialSize, columnName, useCompression)
     builder
