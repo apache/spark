@@ -436,6 +436,26 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
+  test("describe") {
+    def getSchemaAsSeq(df: DataFrame) = df.schema.map(_.name).toSeq
+
+    val describeAllCols = describeTestData.describe("age", "height")
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeAllCols, describeResult)
+
+    val describeNoCols = describeTestData.describe()
+    assert(getSchemaAsSeq(describeNoCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeNoCols, describeResult)
+
+    val describeOneCol = describeTestData.describe("age")
+    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+
+    val emptyDescription = describeTestData.limit(0).describe()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)

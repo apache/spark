@@ -752,6 +752,86 @@ class DataFrame private[sql](
   }
 
   /**
+   * Compute specified aggregations for given columns of this [[DataFrame]].
+   * Each row of the resulting [[DataFrame]] contains column with aggregation name
+   * and columns with aggregation results for each given column.
+   * The aggregations are described as a List of mappings of their name to function
+   * which generates aggregation expression from column name.
+   *
+   * Note: can process only simple aggregation expressions
+   * which can be parsed by spark [[SqlParser]]
+   *
+   * {{{
+   *   val aggregations = List(
+   *     "max" -> (col => s"max($col)"),             // expression computes max
+   *     "avg" -> (col => s"sum($col)/count($col)")) // expression computes average
+   *   df.multipleAggExpr("summary", aggregations, "age", "height")
+   *
+   *   // summary age   height
+   *   // max     92.0  192.0
+   *   // avg     53.0  178.0
+   * }}}
+   */
+  @scala.annotation.varargs
+  private def multipleAggExpr(
+    aggCol: String,
+    aggregations: List[(String, String => String)],
+    cols: String*): DataFrame = {
+
+    val sqlParser = new SqlParser()
+
+    def addAggNameCol(aggDF: DataFrame, aggName: String = "") =
+      aggDF.selectExpr(s"'$aggName' as $aggCol"::cols.toList:_*)
+
+    def unionWithNextAgg(aggSoFarDF: DataFrame, nextAgg: (String, String => String)) =
+      nextAgg match { case (aggName, colToAggExpr) =>
+        val nextAggDF = if (cols.nonEmpty) {
+            def colToAggCol(col: String) =
+              Column(sqlParser.parseExpression(colToAggExpr(col))).as(col)
+            val aggCols = cols.map(colToAggCol)
+            agg(aggCols.head, aggCols.tail:_*)
+          } else {
+            sqlContext.emptyDataFrame
+          }
+        val nextAggWithNameDF = addAggNameCol(nextAggDF, aggName)
+        aggSoFarDF.unionAll(nextAggWithNameDF)
+      }
+
+    val emptyAgg = addAggNameCol(this).limit(0)
+    aggregations.foldLeft(emptyAgg)(unionWithNextAgg)
+  }
+
+  /**
+   * Compute numerical statistics for given columns of this [[DataFrame]]:
+   * count, mean (avg), stddev (standard deviation), min, max.
+   * Each row of the resulting [[DataFrame]] contains column with statistic name
+   * and columns with statistic results for each given column.
+   * If no columns are given then computes for all numerical columns.
+   *
+   * {{{
+   *   df.describe("age", "height")
+   *
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // max     92.0  192.0
+   * }}}
+   */
+  @scala.annotation.varargs
+  def describe(cols: String*): DataFrame = {
+    val numCols = if (cols.isEmpty) numericColumns.map(_.prettyString) else cols
+    val aggregations = List[(String, String => String)](
+      "count" -> (col => s"count($col)"),
+      "mean" -> (col => s"avg($col)"),
+      "stddev" -> (col => s"sqrt(avg($col*$col) - avg($col)*avg($col))"),
+      "min" -> (col => s"min($col)"),
+      "max" -> (col => s"max($col)"))
+    multipleAggExpr("summary", aggregations, numCols:_*)
+  }
+
+  /**
    * Returns the first `n` rows.
    * @group action
    */
