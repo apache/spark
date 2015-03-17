@@ -983,55 +983,55 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 }
 
 object JavaPairRDD {
-private[spark]
-def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
-  rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
-}
+  private[spark]
+  def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
+    rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
+  }
 
-private[spark]
-def cogroupResultToJava[K: ClassTag, V, W](
-    rdd: RDD[(K, (Iterable[V], Iterable[W]))]): RDD[(K, (JIterable[V], JIterable[W]))] = {
-  rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2)))
-}
+  private[spark]
+  def cogroupResultToJava[K: ClassTag, V, W](
+      rdd: RDD[(K, (Iterable[V], Iterable[W]))]): RDD[(K, (JIterable[V], JIterable[W]))] = {
+    rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2)))
+  }
 
-private[spark]
-def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
-    rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))])
-    : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
-  rddToPairRDDFunctions(rdd)
-    .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
-}
+  private[spark]
+  def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
+      rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))])
+      : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
+    rddToPairRDDFunctions(rdd)
+      .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
+  }
 
-private[spark]
-def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
-    rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
-: RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
-  rddToPairRDDFunctions(rdd)
-    .mapValues(x =>
-      (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
-}
+  private[spark]
+  def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
+      rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
+  : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
+    rddToPairRDDFunctions(rdd)
+      .mapValues(x =>
+        (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
+  }
 
-def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {
-  new JavaPairRDD[K, V](rdd)
-}
+  def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {
+    new JavaPairRDD[K, V](rdd)
+  }
 
-implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
+  implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
 
-private[spark]
-implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
-  (x: T1, x1: T2) => fun.call(x, x1)
-}
+  private[spark]
+  implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
+    (x: T1, x1: T2) => fun.call(x, x1)
+  }
 
-private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
+  private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
 
-private[spark]
-implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
+  private[spark]
+  implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
 
-/** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
-def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
-  implicit val ctagK: ClassTag[K] = fakeClassTag
-  implicit val ctagV: ClassTag[V] = fakeClassTag
-  new JavaPairRDD[K, V](rdd.rdd)
-}
+  /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
+  def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
+    implicit val ctagK: ClassTag[K] = fakeClassTag
+    implicit val ctagV: ClassTag[V] = fakeClassTag
+    new JavaPairRDD[K, V](rdd.rdd)
+  }
 
 }
