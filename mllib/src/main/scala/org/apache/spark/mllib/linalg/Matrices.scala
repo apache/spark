@@ -114,6 +114,50 @@ sealed trait Matrix extends Serializable {
    *          corresponding value in the matrix with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+
+  override def hashCode(): Int = {
+    var result: Int = numRows * numCols + 31
+    this.foreachActive { case (rowInd, colInd, value) =>
+      // ignore explict 0 for comparison between sparse and dense
+      if (value != 0) {
+        result = 31 * result + rowInd + (numRows * colInd)
+        // refer to {@link java.util.Arrays.equals} for hash algorithm
+        val bits = java.lang.Double.doubleToLongBits(value)
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+      }
+    }
+    result
+  }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case mat: Matrix =>
+        if (mat.numRows != this.numRows || mat.numCols != this.numCols) return false
+        (this, mat) match {
+          case (dm1: DenseMatrix, dm2: DenseMatrix) =>
+            Arrays.equals(dm1.toArray, dm2.toArray)
+          case (sm1: SparseMatrix, sm2: SparseMatrix) =>
+            // For the case in which one matrix is CSC and the other is CSR
+            // the values, colPtrs and rowIndices need not be the same.
+            // When both matrices are of the same type, it is sufficient to check that
+            // the values, colPtrs and rowIndices are the same.
+            if (sm1.isTransposed != sm2.isTransposed) {
+              if (sm1.values.length != sm2.values.length) return false
+              sm1.foreachActive {
+                case (i, j, value) => if (value != sm2(i, j)) return false
+              }
+            } else {
+                if (sm1.values != sm2.values) return false
+                if (sm1.colPtrs != sm2.colPtrs) return false
+                if (sm1.rowIndices != sm2.rowIndices) return false
+            }
+            true
+          case (dm1: DenseMatrix, sm1: SparseMatrix) => Matrices.equals(dm1, sm1)
+          case (sm1: SparseMatrix, dm1: DenseMatrix) => Matrices.equals(dm1, sm1)
+        }
+      case _ => false
+    }
+  }
 }
 
 @DeveloperApi
@@ -812,6 +856,16 @@ object Matrices {
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
     }
+  }
+
+  /**
+   * Check equality between sparse/dense matrices
+   */
+  private[mllib] def equals(denseMat: DenseMatrix, sparseMat: SparseMatrix): Boolean = {
+    sparseMat.foreachActive { (row, col, value) =>
+      if (value != denseMat(row, col)) return false
+    }
+    return true
   }
 
   /**
