@@ -329,6 +329,16 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
     }
   }
+
+  test("read non-existent parquet file") {
+    intercept[java.io.FileNotFoundException] {
+      sqlContext.parquetFile("file:///nonexistent")
+    }
+    intercept[java.net.UnknownHostException] {
+      sqlContext.parquetFile("hdfs://nonexistent")
+    }
+  }
+
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
