@@ -20,22 +20,21 @@ package org.apache.spark.scheduler
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
+/**
+ * The ResultStage represents the final stage in a job.
+ */
 private[spark] class ResultStage(
-    override val id: Int,
-    override val rdd: RDD[_],
-    override val numTasks: Int,
-    override val parents: List[Stage],
-    override val jobId: Int,
-    override val callSite: CallSite)
+    id: Int,
+    rdd: RDD[_],
+    numTasks: Int,
+    parents: List[Stage],
+    jobId: Int,
+    callSite: CallSite)
   extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  /**
-   * For stages that are the final (consists of only ResultTasks), links to the active job for
-   * this results stage.
-   */
+  // "The active job for this result stage. Will be empty if the job has already finished
+  // (e.g., because the job was cancelled)."
   var resultOfJob: Option[ActiveJob] = None
 
   override def toString: String = "ResultStage " + id
-
-  override def isAvailable: Boolean= true
 }

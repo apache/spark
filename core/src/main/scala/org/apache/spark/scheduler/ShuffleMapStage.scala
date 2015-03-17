@@ -17,23 +17,29 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.ShuffleDependency
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
+/**
+ * The ShuffleMapStage represents the intermediate stages in a job.
+ */
 private[spark] class ShuffleMapStage(
-    override val id: Int,
-    override val rdd: RDD[_],
-    override val numTasks: Int,
-    override val parents: List[Stage],
-    override val jobId: Int,
-    override val callSite: CallSite,
+    id: Int,
+    rdd: RDD[_],
+    numTasks: Int,
+    parents: List[Stage],
+    jobId: Int,
+    callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _])
   extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
   override def toString: String = "ShuffleMapStage " + id
-  override def isAvailable: Boolean = numAvailableOutputs == numPartitions
+
+  var numAvailableOutputs: Long = 0
+
+  def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
@@ -75,7 +81,4 @@ private[spark] class ShuffleMapStage(
         this, execId, numAvailableOutputs, numPartitions, isAvailable))
     }
   }
-
-
 }
-

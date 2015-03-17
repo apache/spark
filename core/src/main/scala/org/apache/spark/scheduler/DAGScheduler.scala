@@ -865,6 +865,7 @@ class DAGScheduler(
           val part = stage.rdd.partitions(id)
           new ShuffleMapTask(stage.id, taskBinary, part, locs)
         }
+
       case stage: ResultStage =>
         val job = stage.resultOfJob.get
         partitionsToCompute.map { id =>
@@ -887,8 +888,15 @@ class DAGScheduler(
       // SparkListenerStageCompleted here in case there are no tasks to run.
       outputCommitCoordinator.stageEnd(stage.id)
       listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
-      logDebug("Stage " + stage + " is actually done; %b %d %d".format(
-        stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
+
+      val debugString = stage match {
+        case stage: ShuffleMapStage =>
+          "Stage " + stage + " is actually done; %b %d %d".format(stage.isAvailable,
+            stage.numAvailableOutputs, stage.numPartitions)
+        case stage : ResultStage =>
+          "Stage " + stage + " is actually done; %d".format(stage.numPartitions)
+      }
+      logDebug(debugString)
       runningStages -= stage
     }
   }
@@ -1082,7 +1090,7 @@ class DAGScheduler(
         // the fetch failure has already been handled by the scheduler.
         if (runningStages.contains(failedStage)) {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-              s"due to a fetch failure from $mapStage (${mapStage.name})")
+            s"due to a fetch failure from $mapStage (${mapStage.name})")
           markStageAsFinished(failedStage, Some(failureMessage))
           runningStages -= failedStage
         }

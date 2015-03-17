@@ -70,10 +70,6 @@ private[spark] abstract class Stage(
   /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
-  var numAvailableOutputs: Long = 0
-
-  def isAvailable: Boolean
-
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
