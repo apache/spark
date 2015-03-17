@@ -44,7 +44,8 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
  * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
-    val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int) extends RpcEnv with Logging {
+    val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
+  extends RpcEnv(conf) with Logging {
 
   private val defaultAddress: RpcAddress = {
     val address = actorSystem.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress
@@ -216,23 +217,16 @@ private[spark] class AkkaRpcEnv private[akka] (
       address.port.getOrElse(defaultAddress.port))
   }
 
-  override def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
-    val timeout = AkkaUtils.lookupTimeout(conf)
-    val ref = Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
-    // TODO defaultAddress is wrong
-    new AkkaRpcEndpointRef(defaultAddress, ref, conf)
-  }
-
-  override def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByUrl(uriOf(systemName, address, endpointName))
+  override def asyncSetupEndpointRefByUrl(url: String): Future[RpcEndpointRef] = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    actorSystem.actorSelection(url).resolveOne(defaultLookupTimeout).
+      map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
   }
 
   override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String = {
     AkkaUtils.address(
       AkkaUtils.protocol(actorSystem), systemName, address.host, address.port, endpointName)
   }
-
 
   override def shutdown(): Unit = {
     actorSystem.shutdown()

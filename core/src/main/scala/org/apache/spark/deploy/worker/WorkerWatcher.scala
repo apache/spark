@@ -31,8 +31,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   override def onStart() {
     logInfo(s"Connecting to worker $workerUrl")
     if (!isTesting) {
-      val worker = rpcEnv.setupEndpointRefByUrl(workerUrl)
-      worker.send(SendHeartbeat) // need to send a message here to initiate connection
+      rpcEnv.asyncSetupEndpointRefByUrl(workerUrl)
     }
   }
 

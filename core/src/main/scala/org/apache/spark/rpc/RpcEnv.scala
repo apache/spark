@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkException, SecurityManager, SparkConf}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
@@ -34,7 +34,9 @@ import org.apache.spark.util.Utils
  *
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
  */
-private[spark] trait RpcEnv {
+private[spark] abstract class RpcEnv(conf: SparkConf) {
+
+  private[spark] val defaultLookupTimeout = AkkaUtils.lookupTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
@@ -68,15 +70,34 @@ private[spark] trait RpcEnv {
   def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `url`.
+   * Retrieve the [[RpcEndpointRef]] represented by `url` asynchronously.
    */
-  def setupEndpointRefByUrl(url: String): RpcEndpointRef
+  def asyncSetupEndpointRefByUrl(url: String): Future[RpcEndpointRef]
+
+  /**
+   * Retrieve the [[RpcEndpointRef]] represented by `url`. This is a blocking action.
+   */
+  def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
+    Await.result(asyncSetupEndpointRefByUrl(url), defaultLookupTimeout)
+  }
 
   /**
    * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
+   * asynchronously.
+   */
+  def asyncSetupEndpointRef(
+      systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
+    asyncSetupEndpointRefByUrl(uriOf(systemName, address, endpointName))
+  }
+
+  /**
+   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
+   * This is a blocking action.
    */
   def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef
+      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByUrl(uriOf(systemName, address, endpointName))
+  }
 
   /**
    * Stop [[RpcEndpoint]] specified by `endpoint`.
