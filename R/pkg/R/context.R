@@ -110,7 +110,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.RRDD",
+  jrdd <- callJStatic("org.apache.spark.api.r.RRDD",
                       "createRDDFromArray", sc, serializedSlices)
 
   RDD(jrdd, "byte")

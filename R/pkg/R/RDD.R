@@ -142,7 +142,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             prev_jrdd <- rdd@prev_jrdd
 
             if (serializedMode == "string") {
-              rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.StringRRDD",
+              rddRef <- newJObject("org.apache.spark.api.r.StringRRDD",
                                    callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
                                    rdd@env$prev_serializedMode,
@@ -151,7 +151,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             } else {
-              rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
+              rddRef <- newJObject("org.apache.spark.api.r.RRDD",
                                    callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
                                    rdd@env$prev_serializedMode,

@@ -306,12 +306,12 @@ numToInt <- function(num) {
 
 # create a Seq in JVM
 toSeq <- function(...) {
-  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
 }
 
 # create a Seq in JVM from a list
 listToSeq <- function(l) {
-  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
 }
 
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a

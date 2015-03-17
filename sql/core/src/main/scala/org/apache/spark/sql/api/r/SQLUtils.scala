@@ -1,14 +1,30 @@
-package edu.berkeley.cs.amplab.sparkr
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.r.SerDe
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
-
-import edu.berkeley.cs.amplab.sparkr.SerDe._
 
 object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
@@ -31,17 +47,14 @@ object SQLUtils {
   }
 
   // A helper to include grouping columns in Agg()
-  // TODO(davies): use internal API after merged into Spark
   def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
     val aggExprs = exprs.map { col =>
-      val f = col.getClass.getDeclaredField("expr")
-      f.setAccessible(true)
-      val expr = f.get(col).asInstanceOf[Expression]
-      expr match {
+      col.expr match {
         case expr: NamedExpression => expr
         case expr: Expression => Alias(expr, expr.simpleString)()
       }
     }
+    // TODO(davies): use internal API
     val toDF = gd.getClass.getDeclaredMethods.filter(f => f.getName == "toDF").head
     toDF.setAccessible(true)
     toDF.invoke(gd, aggExprs).asInstanceOf[DataFrame]
@@ -54,9 +67,9 @@ object SQLUtils {
   private[this] def bytesToRow(bytes: Array[Byte]): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
-    val num = readInt(dis)
+    val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      readObject(dis)
+      SerDe.readObject(dis)
     }.toSeq)
   }
 

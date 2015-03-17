@@ -557,7 +557,7 @@ setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
             # listCols is a list of raw vectors, one per column
-            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", x@sdf)
+            listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
             cols <- lapply(listCols, function(col) {
               objRaw <- rawConnection(col)
               numRows <- readInt(objRaw)
@@ -687,7 +687,7 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 setMethod("toRDD",
           signature(x = "DataFrame"),
           function(x) {
-            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", x@sdf)
+            jrdd <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToRowRDD", x@sdf)
             colNames <- callJMethod(x@sdf, "columns")
             rdd <- RDD(jrdd, serializedMode = "row")
             lapply(rdd, function(row) {
@@ -1270,7 +1270,7 @@ setMethod("saveDF",
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
-            jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
+            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
                 options[['path']] = path
@@ -1328,7 +1328,7 @@ setMethod("saveAsTable",
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
-            jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
+            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
           })

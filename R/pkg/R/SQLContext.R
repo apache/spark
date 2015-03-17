@@ -109,7 +109,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
       })
   }
   if (is.list(data)) {
-    sc <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getJavaSparkContext", sqlCtx)
+    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlCtx)
     rdd <- parallelize(sc, data)
   } else if (inherits(data, "RDD")) {
     rdd <- data
@@ -154,7 +154,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
-  sdf <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "createDF",
+  sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
                      srdd, schemaString, sqlCtx)
   dataFrame(sdf)
 }

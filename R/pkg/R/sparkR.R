@@ -119,14 +119,14 @@ sparkR.init <- function(
     path <- tempfile(pattern = "backend_port")
     if (Sys.getenv("SPARKR_USE_SPARK_SUBMIT", "") == "") {
       launchBackend(classPath = cp,
-                    mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+                    mainClass = "org.apache.spark.api.r.SparkRBackend",
                     args = path,
                     javaOpts = paste("-Xmx", sparkMem, sep = ""))
     } else {
       # TODO: We should deprecate sparkJars and ask users to add it to the
       # command line (using --jars) which is picked up by SparkSubmit
       launchBackendSparkSubmit(
-          mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+          mainClass = "org.apache.spark.api.r.SparkRBackend",
           args = path,
           appJar = .sparkREnv$assemblyJarPath,
           sparkHome = sparkHome,
@@ -194,7 +194,7 @@ sparkR.init <- function(
   assign(
     ".sparkRjsc",
     callJStatic(
-      "edu.berkeley.cs.amplab.sparkr.RRDD",
+      "org.apache.spark.api.r.RRDD",
       "createSparkContext",
       master,
       appName,
@@ -231,7 +231,7 @@ sparkRSQL.init <- function(jsc) {
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
 
-  sqlCtx <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+  sqlCtx <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                         "createSQLContext",
                         jsc)
   assign(".sparkRSQLsc", sqlCtx, envir = .sparkREnv)
