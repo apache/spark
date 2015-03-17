@@ -21,8 +21,7 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.TaskCompletionListener
-
+import org.apache.spark.util.{TaskCompletionListener, TaskInterruptionListener}
 
 object TaskContext {
   /**
@@ -104,6 +103,20 @@ abstract class TaskContext extends Serializable {
    */
   @deprecated("use addTaskCompletionListener", "1.2.0")
   def addOnCompleteCallback(f: () => Unit)
+
+  /**
+   * Add a (Java friendly) listener to be executed on task interruption. We add this
+   * listener for some more clean works. An example use is to stop `receiver supervisor`
+   * properly.
+   */
+  def addTaskInterruptedListener(listener: TaskInterruptionListener): TaskContext
+
+  /**
+   * Add a listener in the form of a Scala closure to be executed on task interruption.
+   * We add this listener for some more clean works. An example use is to stop `receiver
+   * supervisor` properly.
+   */
+  def addTaskInterruptedListener(f: TaskContext => Unit): TaskContext
 
   /**
    * The ID of the stage that this task belong to.

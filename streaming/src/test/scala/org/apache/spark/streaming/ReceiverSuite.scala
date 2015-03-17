@@ -343,7 +343,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     executor: FakeReceiverSupervisor,
     prefLocs: Seq[TaskLocation] = Nil) extends Task[Unit](stageId, 0) {
     override def runTask(context: TaskContext): Unit = {
-      executor.setTaskContext(context)
+      context.addTaskInterruptedListener { context =>
+        if (context.isInterrupted()) {
+          executor.stop("Receiver was killed by user.", None)
+        }
+      }
       executor.start()
       executor.awaitTermination()
     }

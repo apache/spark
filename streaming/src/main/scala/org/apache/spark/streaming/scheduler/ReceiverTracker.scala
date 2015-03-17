@@ -297,7 +297,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
 
-        supervisor.setTaskContext(context)
+        // Due to SPARK-5205, `Receiver` stage can not be stopped properly, we need to add a
+        // callback to do some more clean works.
+        context.addTaskInterruptedListener { context => {
+          if (context.isInterrupted()) {
+            supervisor.stop("Receiver was killed by user.", None)
+          }
+        }}
         supervisor.start()
         supervisor.awaitTermination()
       }

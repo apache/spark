@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util.{TaskInterruptionListener, TaskInterruptionListenerException, TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -34,6 +34,9 @@ private[spark] class TaskContextImpl(
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId(): Long = taskAttemptId
+
+  // List of callback functions to execute when interrupt the task.
+  @transient private val onInterruptedCallbacks = new ArrayBuffer[TaskInterruptionListener]
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -63,6 +66,18 @@ private[spark] class TaskContextImpl(
     }
   }
 
+  override def addTaskInterruptedListener(listener: TaskInterruptionListener): this.type = {
+    onInterruptedCallbacks += listener
+    this
+  }
+
+  override def addTaskInterruptedListener(f: TaskContext => Unit): this.type = {
+    onInterruptedCallbacks += new TaskInterruptionListener {
+      override def onTaskInterrupted(context: TaskContext): Unit = f(context)
+    }
+    this
+  }
+
   /** Marks the task as completed and triggers the listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
@@ -82,9 +97,27 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task for interruption, i.e. cancellation. */
+  /**
+   * Marks the task as interruption, i.e. cancellation. We add this
+   * method for some more clean works. For example, we need to register
+   * an "interruption" callback to completely stop a receiver supervisor.
+   */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process interruption callbacks in the reverse order of registration
+    onInterruptedCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskInterrupted(this)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskInterruptionListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskInterruptionListenerException(errorMsgs)
+    }
   }
 
   override def isCompleted(): Boolean = completed

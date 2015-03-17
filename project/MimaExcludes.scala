@@ -153,6 +153,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
+          ) ++ Seq(
+            // SPARK-5205
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskInterruptedListener")
           )
 
         case v if v.startsWith("1.2") =>

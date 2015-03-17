@@ -25,6 +25,7 @@ import org.apache.spark.{TaskContext, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import scala.concurrent._
 import ExecutionContext.Implicits.global
+import java.util.concurrent.CountDownLatch
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -48,11 +49,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Receiver id */
   protected val streamId = receiver.streamId
 
-  /** Indicate whether to terminate `ReceiverSupervisor` */
-  private var isTerminated = false
-
-  /** The context of task that is running a receiver */
-  private var taskContext: Option[TaskContext] = None
+  /** Has the receiver been marked for stop. */
+  private val stopLatch = new CountDownLatch(1)
 
   /** Time between a receiver is stopped and started again */
   private val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
@@ -113,7 +111,7 @@ private[streaming] abstract class ReceiverSupervisor(
     stoppingError = error.orNull
     stopReceiver(message, error)
     onStop(message, error)
-    isTerminated = true
+    stopLatch.countDown()
   }
 
   /** Start receiver */
@@ -175,33 +173,9 @@ private[streaming] abstract class ReceiverSupervisor(
     receiverState == Stopped
   }
 
-  /** Due to SPARK-5205, we need `TaskContext` to check if the task is interrupted. */
-  def setTaskContext(context: TaskContext) = {
-    taskContext = Some(context)
-  }
-
-  /**
-   * Due to SPARK-5205, we need to check if the task is interrupted to stop the
-   * `receiver` properly. If `taskContext` is not set, we just need to check
-   * the `isTerminated`.
-   */
-  def checkTermination(): Boolean = {
-    taskContext match {
-      case Some(context) => context.isInterrupted || isTerminated
-      case None => isTerminated
-    }
-  }
-
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
-    while (!checkTermination()) {
-      Thread.sleep(100)
-    }
-    // This may occur when `TaskContext` is interrupted but `ReceiverSupervisor` has
-    // no time to do `stop` work properly.
-    if (!isTerminated) {
-      stop("Killed by user.", None)
-    }
+    stopLatch.await()
     logInfo("Waiting for executor stop is over")
     if (stoppingError != null) {
       logError("Stopped executor with error: " + stoppingError)
