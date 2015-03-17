@@ -138,9 +138,17 @@ function send_archived_logs () {
   fi
 }
 
+# environment variable to capture PR test output
+pr_message=""
+
 # run pull request tests
 for t in "${PR_TESTS[@]}"; do
-  bash -c "${FWDIR}/dev/tests/${t}.sh" "$ghprbActualCommit" "$sha1"
+  this_test="${FWDIR}/dev/tests/${t}.sh"
+  # Ensure the test is a file and is executable
+  if [ -x "$this_test" ]; then
+    this_mssg="`bash -c \"${this_test}\" \"$ghprbActualCommit\" \"$sha1\" 2>/dev/null`"
+    pr_message="${pr_message}\n${this_mssg}"
+  fi
 done
 
 read
@@ -206,7 +214,7 @@ read
 
   result_message="${result_message}\n${test_result_note}"
   result_message="${result_message}\n${merge_note}"
-  result_message="${result_message}\n${public_classes_note}"
+  result_message="${result_message}\n${pr_message}"
 
   post_message "$result_message"
 }
