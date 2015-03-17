@@ -95,5 +95,5 @@ object Time {
 }
 
 private[streaming] class TimeComparator extends Comparator[Time] {
-override def compare (o1: Time, o2: Time): Int = Longs.compare (o1.milliseconds, o2.milliseconds)
+  override def compare(o1: Time, o2: Time): Int = Longs.compare(o1.milliseconds, o2.milliseconds)
 }

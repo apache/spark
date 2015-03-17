@@ -317,7 +317,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // All the checkpoint information about which batches have been processed, etc have
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
     lastProcessedBatch.foreach { lastProcessed =>
-      val removalTime = lastProcessed -  graph.getMaxInputStreamRememberDuration()
+      val removalTime = lastProcessed - graph.getMaxInputStreamRememberDuration()
       ssc.graph.clearMetadata(removalTime)
       if (shouldCheckpoint) ssc.graph.clearCheckpointData(removalTime)
       jobScheduler.receiverTracker
