@@ -8,7 +8,7 @@ import parquet.Log
 import parquet.hadoop.util.ContextUtil
 import parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetOutputCommitter}
 
-class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
   val LOG = Log.getLog(classOf[ParquetOutputCommitter])
 
