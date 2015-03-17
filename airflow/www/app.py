@@ -1293,7 +1293,7 @@ class ReloadTaskView(BaseView):
     @expose('/')
     def index(self):
         logging.info("Reloading the dags")
-        dagbag.collect_dags()
+        dagbag.collect_dags(only_if_updated=False)
         dagbag.merge_dags()
         return redirect(url_for('index'))
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))

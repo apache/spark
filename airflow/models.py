@@ -149,7 +149,7 @@ class DagBag(object):
         in the file.
         """
         if os.path.isfile(dag_folder):
-            self.process_file(dag_folder)
+            self.process_file(dag_folder, only_if_updated=only_if_updated)
         elif os.path.isdir(dag_folder):
             patterns = []
             for root, dirs, files in os.walk(dag_folder):
@@ -167,7 +167,8 @@ class DagBag(object):
                     if file_ext != '.py':
                         continue
                     if not any([re.findall(p, filepath) for p in patterns]):
-                        self.process_file(filepath)
+                        self.process_file(
+                            filepath, only_if_updated=only_if_updated)
 
     def merge_dags(self):
         session = settings.Session()
