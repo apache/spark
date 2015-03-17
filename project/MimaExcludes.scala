@@ -43,7 +43,7 @@ object MimaExcludes {
             // the maven-generated artifacts since 1.2.
             MimaBuild.excludeSparkPackage("unused"),
             ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
-            )
+          )
 
         case v if v.startsWith("1.3") =>
           Seq(
