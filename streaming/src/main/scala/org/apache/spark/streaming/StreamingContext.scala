@@ -116,7 +116,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.sparkConf)
+      new SparkContext(cp_.createSparkConf())
     } else {
       sc_
     }
