@@ -192,8 +192,9 @@ class DAGScheduler(
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
-      val locs = blockManagerMaster.getLocations(blockIds)
-        .map(_.map(bm => TaskLocation(bm.host, bm.executorId)))
+      val locs: Seq[Seq[TaskLocation]] = blockManagerMaster.getLocations(blockIds).map { blockLocs =>
+        blockLocs.map(bm => TaskLocation(bm.host, bm.executorId))
+      }
       cacheLocs(rdd.id) = locs
     }
     cacheLocs(rdd.id)
