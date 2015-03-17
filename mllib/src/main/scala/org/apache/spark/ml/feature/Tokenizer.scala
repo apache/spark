@@ -54,18 +54,6 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
   /**
-   * param to enable/disable code folding to lowercase prior tokenization
-   * @group param
-   */
-  val lowerCase = new BooleanParam(this, "lowerCase", "Fold case to lower case", Some(false))
-
-  /** @group setParam */
-  def setLowercase(value: Boolean) = set(lowerCase, value)
-  
-  /** @group getParam */
-  def getLowercase: Boolean = get(lowerCase)
-
-  /**
    * param for minimum token length
    * @group param
    */
@@ -78,16 +66,16 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def getMinTokenLength: Int = get(minTokenLength)
 
   /**
-   * param sets regex as matching (true) or splitting (false)
+   * param sets regex as matching gaps(true) or tokens (false)
    * @group param
    */
-  val matching = new BooleanParam(this, "matching", "Set regex to matching or split", Some(true))
+  val gaps = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens", Some(false))
 
   /** @group setParam */
-  def setMatching(value: Boolean) = set(matching, value)
+  def setGaps(value: Boolean) = set(gaps, value)
 
   /** @group getParam */
-  def getMatching: Boolean = get(matching)
+  def getGaps: Boolean = get(gaps)
 
   /**
    * param sets regex used by tokenizer 
@@ -101,12 +89,10 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   /** @group getParam */
   def getRegex: String = get(regex)
 
-  override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { x =>
-
-    val str = if (paramMap(lowerCase)) x.toLowerCase else x
+  override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { str =>
 
     val re = paramMap(regex)
-    val tokens = if(paramMap(matching))(re.r.findAllIn(str)).toList else str.split(re).toList
+    val tokens = if(paramMap(gaps)) str.split(re).toList else (re.r.findAllIn(str)).toList
 
     tokens.filter(_.length >= paramMap(minTokenLength))
   }
