@@ -315,4 +315,16 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
+  
+  test("collecting objects of class defined in repl - shuffling") {
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |case class Foo(i: Int)
+        |val list = List((1, Foo(1)), (1, Foo(2)))
+        |val ret = sc.parallelize(list).groupByKey.collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
+  }
 }
