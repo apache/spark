@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, sum}
+import breeze.linalg.{DenseVector => BDV, norm}
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
@@ -82,9 +82,10 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
    * Set the convergence tolerance. Default 0.001
    * convergenceTol is a condition which decides iteration termination.
    * If the difference between the current loss and the previous loss is less than convergenceTol
-   * minibatch iteration will end at that point.
+   * minibatch iteration will end at that point. Must be between 0.0 and 1.0 inclusively.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
+    require(0.0 <= tolerance && tolerance <= 1.0)
     this.convergenceTol = tolerance
     this
   }
@@ -156,9 +157,10 @@ object GradientDescent extends Logging {
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
-   * @param convergenceTol - Minibatch iteration will end before numIterations
-   *                         if the difference between the current loss and the previous loss
-   *                         is less than this value. Default value 0.001.
+   * @param convergenceTol - Minibatch iteration will end before numIterations if the
+   *                         difference between the current loss and the previous loss is less
+   *                         than this value. In measuring convergence, L2 norm is calculated.
+   *                         Default value 0.001. Must be between 0.0 and 1.0 inclusively.
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the
    *         stochastic loss computed for every iteration.
@@ -183,6 +185,7 @@ object GradientDescent extends Logging {
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
     // Record previous weight and current one to calculate solution vector difference
 
+    val initialWeightsNorm = norm(initialWeights.toBreeze.toDenseVector)
     var previousWeights: Option[Vector] = None
     var currentWeights: Option[Vector] = None
 
@@ -249,7 +252,7 @@ object GradientDescent extends Logging {
         }
         if (previousWeights != None && currentWeights != None) {
           if (isConverged(previousWeights.get, currentWeights.get,
-            initialWeights, convergenceTol)) {
+            initialWeightsNorm, convergenceTol)) {
             converged = true
           }
         }
@@ -280,24 +283,15 @@ object GradientDescent extends Logging {
 
 
   private def isConverged(previousWeights: Vector, currentWeights: Vector,
-                          initialWeights: Vector, convergenceTol: Double): Boolean = {
-    require(previousWeights != None)
-    require(currentWeights != None)
-    // To compare with convergence tolerance
-    def solutionVecDiff(previousWeight: Vector,
-                        currentWeight: Vector): Double = {
+                          initialWeightsNorm: Double, convergenceTol: Double): Boolean = {
+    // To compare with convergence tolerance.
+    val previousBDV = previousWeights.toBreeze.toDenseVector
+    val currentBDV = currentWeights.toBreeze.toDenseVector
 
-      val lastWeight = currentWeight.toBreeze
-      val lastBeforeWeight = previousWeight.toBreeze
-      sum((lastBeforeWeight - lastWeight)
-        :* (lastBeforeWeight - lastWeight)) / lastWeight.length
-    }
+    // This represents the difference of updated weights in the iteration.
+    val solutionVecDiff: Double = norm(previousBDV - currentBDV)
 
-    def squareAvg(weights: Vector): Double =
-      sum(weights.toBreeze :* weights.toBreeze) / weights.toBreeze.length
-
-    solutionVecDiff(previousWeights, currentWeights) <
-      convergenceTol * squareAvg(initialWeights)
+    solutionVecDiff < convergenceTol * initialWeightsNorm
   }
 
 }
