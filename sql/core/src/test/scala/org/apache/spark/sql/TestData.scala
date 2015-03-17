@@ -199,6 +199,25 @@ object TestData {
     Salary(1, 1000.0) :: Nil).toDF()
   salary.registerTempTable("salary")
 
+  case class PersonToDescribe(name: String, age: Int, height: Double)
+  val describeTestData = TestSQLContext.sparkContext.parallelize(
+    PersonToDescribe("Bob",   16, 176) ::
+    PersonToDescribe("Alice", 32, 164) ::
+    PersonToDescribe("David", 60, 192) ::
+    PersonToDescribe("Amy",   24, 180) :: Nil).toDF()
+  val describeResult =
+    Row("count",   4.0,             4.0) ::
+    Row("mean",    33.0,            178.0) ::
+    Row("stddev",  16.583123951777, 10.0) ::
+    Row("min",     16.0,            164) ::
+    Row("max",     60.0,            192) :: Nil
+  val emptyDescribeResult =
+    Row("count",   0,    0) ::
+    Row("mean",    null, null) ::
+    Row("stddev",  null, null) ::
+    Row("min",     null, null) ::
+    Row("max",     null, null) :: Nil
+
   case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)
   val complexData =
     TestSQLContext.sparkContext.parallelize(
