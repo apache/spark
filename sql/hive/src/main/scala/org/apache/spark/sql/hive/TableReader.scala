@@ -142,7 +142,39 @@ class HadoopTableReader(
       partitionToDeserializer: Map[HivePartition,
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
-    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
+    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
+
+      var existPathSet =collection.mutable.Set[String]()
+      var pathPatternSet = collection.mutable.Set[String]()
+
+     val hivePartitionRDDs = partitionToDeserializer.filter {
+            case (partition, partDeserializer) =>
+
+            def updateExistPathSetByPathPattern(pathPatternStr:String ){
+              val pathPattern = new Path(pathPatternStr)
+              val fs = pathPattern.getFileSystem(sc.hiveconf)
+              val matchs = fs.globStatus(pathPattern);
+              matchs.map( fileStatus =>(existPathSet+= fileStatus.getPath.toString))
+            }
+            // convert  /demo/data/year/month/day  to  /demo/data/**/**/**/
+            def getPathPatternByPath(parNum:Int,tpath:Path):String = {
+              var path  = tpath
+              for (i <- (1 to parNum)) { path = path.getParent }
+              val tails = (1 to parNum).map(_ => "*").mkString("/","/","/")
+              path.toString + tails
+            }
+
+            val partPath = HiveShim.getDataLocationPath(partition)
+            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
+            var pathPatternStr = getPathPatternByPath(partNum,partPath)
+            if(!pathPatternSet.contains(pathPatternStr)){
+              pathPatternSet+=pathPatternStr
+              updateExistPathSetByPathPattern(pathPatternStr)
+            }
+              existPathSet.contains(partPath.toString)
+
+       }
+      .map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = HiveShim.getDataLocationPath(partition)
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
