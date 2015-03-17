@@ -67,6 +67,8 @@ private[spark] class MesosSchedulerBackend(
 
   // The listener bus to publish executor added/removed events.
   val listenerBus = sc.listenerBus
+  
+  val executorCores = sc.conf.getInt("spark.mesos.executor.cores", 1)
 
   @volatile var appId: String = _
 
@@ -139,7 +141,7 @@ private[spark] class MesosSchedulerBackend(
       .setName("cpus")
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder()
-        .setValue(scheduler.CPUS_PER_TASK).build())
+        .setValue(executorCores).build())
       .build()
     val memory = Resource.newBuilder()
       .setName("mem")
@@ -223,7 +225,7 @@ private[spark] class MesosSchedulerBackend(
         // TODO(pwendell): Should below be 1 + scheduler.CPUS_PER_TASK?
         (mem >= MemoryUtils.calculateTotalMemory(sc) &&
           // need at least 1 for executor, 1 for task
-          cpus >= 2 * scheduler.CPUS_PER_TASK) ||
+          cpus >= (executorCores + scheduler.CPUS_PER_TASK)) ||
           (slaveIdsWithExecutors.contains(slaveId) &&
             cpus >= scheduler.CPUS_PER_TASK)
       }
@@ -234,8 +236,7 @@ private[spark] class MesosSchedulerBackend(
         } else {
           // If the executor doesn't exist yet, subtract CPU for executor
           // TODO(pwendell): Should below just subtract "1"?
-          getResource(o.getResourcesList, "cpus").toInt -
-            scheduler.CPUS_PER_TASK
+          getResource(o.getResourcesList, "cpus").toInt - executorCores
         }
         new WorkerOffer(
           o.getSlaveId.getValue,
