@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.DeployMessages.SendHeartbeat
 import org.apache.spark.rpc._
 
 /**

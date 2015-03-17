@@ -17,33 +17,38 @@
 
 package org.apache.spark.deploy
 
-import scala.concurrent._
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success}
 
-import akka.actor._
-import akka.pattern.ask
-import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.log4j.{Level, Logger}
 
+import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Proxy that relays messages to the driver.
  */
-private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
-  extends Actor with ActorLogReceive with Logging {
+private class ClientEndpoint(
+    override val rpcEnv: RpcEnv,
+    driverArgs: ClientArguments,
+    masterEndpoint: RpcEndpointRef,
+    conf: SparkConf)
+  extends ThreadSafeRpcEndpoint with Logging {
 
-  var masterActor: ActorSelection = _
-  val timeout = AkkaUtils.askTimeout(conf)
+  private val forwardMessageThread = Utils.newDaemonFixedThreadPool(1, "client-forward-message")
+  private implicit val forwardMessageExecutionContext =
+    ExecutionContext.fromExecutor(forwardMessageThread,
+      t => t match {
+        case ie: InterruptedException => // Exit normally
+        case e =>
+          e.printStackTrace()
+          System.exit(-1)
+      })
 
-  override def preStart(): Unit = {
-    masterActor = context.actorSelection(
-      Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
-
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-
+  override def onStart(): Unit = {
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
 
     driverArgs.cmd match {
@@ -79,22 +84,36 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.supervise,
           command)
 
-        masterActor ! RequestSubmitDriver(driverDescription)
+        masterEndpoint.sendWithReply[SubmitDriverResponse](RequestSubmitDriver(driverDescription)).
+          onComplete {
+            case Success(v) => self.send(v)
+            case Failure(e) =>
+              println(s"Error sending messages to master ${driverArgs.master}, exiting.")
+              e.printStackTrace()
+              System.exit(-1)
+        }
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        masterActor ! RequestKillDriver(driverId)
+        masterEndpoint.sendWithReply[KillDriverResponse](RequestKillDriver(driverId)).onComplete {
+          case Success(v) => self.send(v)
+          case Failure(e) =>
+            println(s"Error sending messages to master ${driverArgs.master}, exiting.")
+            e.printStackTrace()
+            System.exit(-1)
+        }
     }
   }
 
   /* Find out driver status then exit the JVM */
   def pollAndReportStatus(driverId: String) {
+    // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
+    // is fine.
     println("... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
-    val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
-      .mapTo[DriverStatusResponse]
-    val statusResponse = Await.result(statusFuture, timeout)
+    val statusResponse =
+      masterEndpoint.askWithReply[DriverStatusResponse](RequestDriverStatus(driverId))
 
     statusResponse.found match {
       case false =>
@@ -118,7 +137,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     }
   }
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+  override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
@@ -128,14 +147,27 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       println(message)
       if (success) pollAndReportStatus(driverId) else System.exit(-1)
 
-    case DisassociatedEvent(_, remoteAddress, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-      System.exit(-1)
+  }
 
-    case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-      println(s"Cause was: $cause")
-      System.exit(-1)
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+    System.exit(-1)
+  }
+
+  override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+    println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+    cause.printStackTrace()
+    System.exit(-1)
+  }
+
+  override def onError(cause: Throwable): Unit = {
+    println(s"Error processing messages, exiting.")
+    cause.printStackTrace()
+    System.exit(-1)
+  }
+
+  override def onStop(): Unit = {
+    forwardMessageThread.shutdownNow()
   }
 }
 
@@ -159,13 +191,14 @@ object Client {
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
+    val rpcEnv =
+      RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
-    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
-    Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(actorSystem))
-    actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
+    val masterAddress = RpcAddress.fromSparkURL(driverArgs.master)
+    val masterEndpoint =
+      rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoint, conf))
 
-    actorSystem.awaitTermination()
+    rpcEnv.awaitTermination()
   }
 }

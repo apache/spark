@@ -30,8 +30,7 @@ private[master]
 class MasterWebUI(val master: Master, requestedPort: Int)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
 
-  val masterActorRef = master.self
-  val timeout = AkkaUtils.askTimeout(master.conf)
+  val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   initialize()

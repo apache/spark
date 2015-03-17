@@ -23,7 +23,6 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
-import akka.actor.ActorRef
 import com.fasterxml.jackson.core.JsonProcessingException
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
@@ -32,9 +31,10 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.rpc.RpcEndpointRef
 
 /**
  * A server that responds to requests submitted by the [[StandaloneRestClient]].
@@ -54,14 +54,14 @@ import org.apache.spark.deploy.ClientArguments._
  *
  * @param host the address this server should bind to
  * @param requestedPort the port this server will attempt to bind to
- * @param masterActor reference to the Master actor to which requests can be sent
+ * @param masterEndpoint reference to the Master endpoint to which requests can be sent
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
  * @param masterConf the conf used by the Master
  */
 private[deploy] class StandaloneRestServer(
     host: String,
     requestedPort: Int,
-    masterActor: ActorRef,
+    masterEndpoint: RpcEndpointRef,
     masterUrl: String,
     masterConf: SparkConf)
   extends Logging {
@@ -73,9 +73,9 @@ private[deploy] class StandaloneRestServer(
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
   protected val baseContext = s"/$PROTOCOL_VERSION/submissions"
   protected val contextToServlet = Map[String, StandaloneRestServlet](
-    s"$baseContext/create/*" -> new SubmitRequestServlet(masterActor, masterUrl, masterConf),
-    s"$baseContext/kill/*" -> new KillRequestServlet(masterActor, masterConf),
-    s"$baseContext/status/*" -> new StatusRequestServlet(masterActor, masterConf),
+    s"$baseContext/create/*" -> new SubmitRequestServlet(masterEndpoint, masterUrl, masterConf),
+    s"$baseContext/kill/*" -> new KillRequestServlet(masterEndpoint, masterConf),
+    s"$baseContext/status/*" -> new StatusRequestServlet(masterEndpoint, masterConf),
     "/*" -> new ErrorServlet // default handler
   )
 
@@ -204,7 +204,7 @@ private[rest] abstract class StandaloneRestServlet extends HttpServlet with Logg
 /**
  * A servlet for handling kill requests passed to the [[StandaloneRestServer]].
  */
-private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
+private[rest] class KillRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
   extends StandaloneRestServlet {
 
   /**
@@ -223,9 +223,8 @@ private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
-      DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
+    val response = masterEndpoint.askWithReply[DeployMessages.KillDriverResponse](
+      DeployMessages.RequestKillDriver(submissionId))
     val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
     k.message = response.message
@@ -238,7 +237,7 @@ private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
 /**
  * A servlet for handling status requests passed to the [[StandaloneRestServer]].
  */
-private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
+private[rest] class StatusRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
   extends StandaloneRestServlet {
 
   /**
@@ -257,9 +256,8 @@ private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
-      DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
+    val response = masterEndpoint.askWithReply[DeployMessages.DriverStatusResponse](
+      DeployMessages.RequestDriverStatus(submissionId))
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
@@ -277,7 +275,7 @@ private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
  * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
  */
 private[rest] class SubmitRequestServlet(
-    masterActor: ActorRef,
+    masterEndpoint: RpcEndpointRef,
     masterUrl: String,
     conf: SparkConf)
   extends StandaloneRestServlet {
@@ -321,10 +319,9 @@ private[rest] class SubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = AkkaUtils.askTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
-        val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+        val response = masterEndpoint.askWithReply[DeployMessages.SubmitDriverResponse](
+          DeployMessages.RequestSubmitDriver(driverDescription))
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
         submitResponse.message = response.message

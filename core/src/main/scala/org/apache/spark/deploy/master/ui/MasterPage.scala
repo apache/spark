@@ -19,25 +19,21 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.pattern.ask
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.DeployMessages.{RequestKillDriver, MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, RequestKillDriver, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
-  private val master = parent.masterActorRef
-  private val timeout = parent.timeout
+  private val master = parent.masterEndpointRef
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
+    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
     JsonProtocol.writeMasterState(state)
   }
 
@@ -50,7 +46,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   def handleDriverKillRequest(request: HttpServletRequest): Unit = {
-    handleKillRequest(request, id => { master ! RequestKillDriver(id) })
+    handleKillRequest(request, id => {
+      master.sendWithReply[KillDriverResponse](RequestKillDriver(id))
+    })
   }
 
   private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
@@ -68,8 +66,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
+    val state = master.askWithReply[MasterStateResponse](RequestMasterState)
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
