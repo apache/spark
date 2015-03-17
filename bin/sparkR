@@ -17,8 +17,10 @@
 # limitations under the License.
 #
 
-FWDIR="$(cd `dirname $0`; pwd)"
+# Figure out where Spark is installed
+export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
+FWDIR="$(cd `dirname $0`; pwd)"
 export PROJECT_HOME="$FWDIR/../R/"
 
 unset JAVA_HOME
