@@ -1,9 +1,10 @@
 .sparkREnv <- new.env()
 
-assemblyJarName <- "sparkr-assembly-0.1.jar"
+#TODO(davies): change to spark-submit
+assemblyJarName <- "spark-assembly-1.3.0-SNAPSHOT-hadoop1.0.4.jar"
 
 sparkR.onLoad <- function(libname, pkgname) {
-  assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep = "")
+  assemblyJarPath <- paste(libname, "/../../assembly/target/scala-2.10/", assemblyJarName, sep = "")
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
  
   .sparkREnv$libname <- libname
