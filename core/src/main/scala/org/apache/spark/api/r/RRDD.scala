@@ -185,9 +185,10 @@ private class PairwiseRRDD[T: ClassTag](
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, deserializer,
-                                          SerializationFormats.BYTE, packageNames, rLibDir,
-                                          broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
+  extends BaseRRDD[T, (Int, Array[Byte])](
+    parent, numPartitions, hashFunc, deserializer,
+    SerializationFormats.BYTE, packageNames, rLibDir,
+    broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
 
