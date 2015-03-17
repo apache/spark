@@ -901,8 +901,11 @@ class Airflow(BaseView):
 
         num_runs = request.args.get('num_runs')
         num_runs = int(num_runs) if num_runs else 25
+        from_time = datetime.min.time()
+        if dag.start_date:
+            from_time = dag.start_date.time()
         from_date = (base_date-(num_runs * dag.schedule_interval)).date()
-        from_date = datetime.combine(from_date, datetime.min.time())
+        from_date = datetime.combine(from_date, from_time)
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
