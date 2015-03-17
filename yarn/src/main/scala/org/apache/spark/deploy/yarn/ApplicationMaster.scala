@@ -151,7 +151,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + e.getMessage())
+          "Uncaught exception: " + e)
     }
     exitCode
   }
