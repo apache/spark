@@ -148,6 +148,15 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]
 
   /**
+   * Append new vertices and edges into an existing Graph.
+   * This is useful for time-evolving graphs; new vertices and edges are built
+   * from streaming data in Spark Streaming, and then incrementally
+   * appended into an existing graph.
+   */
+  def append(newEdges: RDD[Edge[ED]], partitionStrategy: PartitionStrategy,
+      defaultVertexAttr: VD = null.asInstanceOf[VD]): Graph[VD, ED]
+
+  /**
    * Transforms each vertex attribute in the graph using the map function.
    *
    * @note The new graph has the same structure.  As a consequence the underlying index structures

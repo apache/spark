@@ -101,7 +101,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
     val edTag = classTag[ED]
     val vdTag = classTag[VD]
-    val newEdges = edges.withPartitionsRDD(edges.map { e =>
+    val newEdges = edges.withPartitionsRDD[ED, VD](edges.map { e =>
       val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
       (part, (e.srcId, e.dstId, e.attr))
     }
@@ -116,6 +116,24 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         Iterator((pid, edgePartition))
       }, preservesPartitioning = true)).cache()
     GraphImpl.fromExistingRDDs(vertices.withEdges(newEdges), newEdges)
+  }
+
+  def append(newEdges: RDD[Edge[ED]], partitionStrategy: PartitionStrategy,
+      defaultVertexAttr: VD): Graph[VD, ED] = {
+    val numPartitions = edges.partitions.size
+    val msgEdgePartitions = newEdges.map { e =>
+        val pid: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+        (pid, e)
+      }.partitionBy(edges.partitioner.get)
+    val newEdgeRdd = edges.withPartitionsRDD[ED, VD](
+        edges.partitionsRDD.zipPartitions(msgEdgePartitions, true) { (baseIter, newIter) =>
+          baseIter.map { case (pid, ePart) =>
+            val newEdgePart = ePart.appendEdges(newIter.map(e => e._2))
+            (pid, newEdgePart)
+        }
+      })
+    GraphImpl.fromEdgeRDD[VD, ED](
+      newEdgeRdd, defaultVertexAttr, edges.targetStorageLevel, edges.targetStorageLevel)
   }
 
   override def reverse: Graph[VD, ED] = {

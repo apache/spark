@@ -149,6 +149,26 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("Graph#append updates an existing graph") {
+    withSpark { sc =>
+      val edges = sc.parallelize(0L until 100L).map { i => Edge(i, 0L, 0) }
+      val strategy = PartitionStrategy.fromString("EdgePartition2D")
+      val graph = Graph.fromEdges[Int, Int](edges, 0).partitionBy(strategy, 2)
+      val verts = graph.aggregateMessages[Int]({ case ctx =>
+          ctx.sendToDst(1)
+        }, _ + _)
+      assert(verts.map(v => v._2).reduce(_ + _) == 100)
+
+      // Append new edges into an existing graph
+      val newEdges = sc.parallelize(100L until 150L).map { i => Edge(i, 0L, 0) }
+      val newGraph = graph.append(newEdges, strategy)
+      val newVerts = newGraph.aggregateMessages[Int]({ case ctx =>
+          ctx.sendToDst(1)
+        }, _ + _)
+      assert(newVerts.map(v => v._2).reduce(_ + _) == 150)
+    }
+  }
+
   test("mapVertices") {
     withSpark { sc =>
       val n = 5

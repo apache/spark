@@ -95,6 +95,14 @@ class EdgePartition[
       activeSet)
   }
 
+  /** Append new edges into existing edges. */
+  def appendEdges(newEdges: Iterator[Edge[ED]]): EdgePartition[ED, VD] = {
+    val builder = new EdgePartitionBuilder[ED, VD]()
+    for (e <- iterator) builder.add(e)
+    for (e <- newEdges) builder.add(e)
+    builder.toEdgePartition
+  }
+
   /** Return a new `EdgePartition` without any locally cached vertex attributes. */
   def withoutVertexAttributes[VD2: ClassTag](): EdgePartition[ED, VD2] = {
     val newVertexAttrs = new Array[VD2](vertexAttrs.length)
