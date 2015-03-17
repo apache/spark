@@ -23,16 +23,16 @@
 # found at dev/run-tests-jenkins.
 #
 # Arg1: The Github Pull Request Actual Commit
-#+ known as `ghprbActualCommit`
+#+ known as `ghprbActualCommit` in `run-tests-jenkins`
 # Arg2: The SHA1 hash
-#+ known as `sha1`
+#+ known as `sha1` in `run-tests-jenkins`
 #
 
-GHPRB_ACTUAL_COMMIT="$1"
-SHA1="$2"
+ghprbActualCommit="$1"
+sha1="$2"
 
 # check PR merge-ability
-if [ "${SHA1}" == "${GHPRB_ACTUAL_COMMIT}" ]; then
+if [ "${sha1}" == "${ghprbActualCommit}" ]; then
   echo " * This patch **does not merge cleanly**."
 else
   echo " * This patch merges cleanly."

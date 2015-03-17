@@ -17,8 +17,22 @@
 # limitations under the License.
 #
 
+#
+# This script follows the base format for testing pull requests against
+# another branch and returning results to be published. More details can be
+# found at dev/run-tests-jenkins.
+#
+# Arg1: The Github Pull Request Actual Commit
+#+ known as `ghprbActualCommit` in `run-tests-jenkins`
+# Arg2: The SHA1 hash
+#+ known as `sha1` in `run-tests-jenkins`
+#
+
 # We diff master...$ghprbActualCommit because that gets us changes introduced in the PR
 #+ and not anything else added to master since the PR was branched.
+
+ghprbActualCommit="$1"
+sha1="$2"
 
 source_files=$(
   git diff master...$ghprbActualCommit --name-only  `# diff patch against master from branch point` \
