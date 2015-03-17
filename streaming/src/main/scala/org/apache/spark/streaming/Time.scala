@@ -17,6 +17,10 @@
 
 package org.apache.spark.streaming
 
+import java.util.Comparator
+
+import com.google.common.primitives.Longs
+
 /**
  * This is a simple class that represents an absolute instant of time.
  * Internally, it represents time as the difference, measured in milliseconds, between the current
@@ -84,17 +88,12 @@ case class Time(private val millis: Long) {
   override def hashCode: Int = {
     milliseconds.hashCode()
   }
-
-  override def equals(o2: Any): Boolean = {
-    if (o2 == null || !o2.isInstanceOf[Time]) {
-      false
-    } else {
-      o2.asInstanceOf[Time].millis == millis
-    }
-  }
-
 }
 
 object Time {
   implicit val ordering = Ordering.by((time: Time) => time.millis)
+}
+
+private[streaming] class TimeComparator extends Comparator[Time] {
+override def compare (o1: Time, o2: Time): Int = Longs.compare (o1.milliseconds, o2.milliseconds)
 }

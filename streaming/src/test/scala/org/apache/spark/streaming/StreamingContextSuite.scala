@@ -180,7 +180,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
-      ssc = new StreamingContext(sc, Milliseconds(500))
+      ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
       TestReceiver.counter.set(1)
       val input = ssc.receiverStream(new TestReceiver)
