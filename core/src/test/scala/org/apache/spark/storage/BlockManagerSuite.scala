@@ -1223,4 +1223,56 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
   }
+
+  test("test BlockWaitCondition") {
+    val info1 = new BlockInfo(StorageLevel.MEMORY_ONLY, true)
+    val t1 = new Thread {
+      override def run() {
+        assert(!info1.waitForReady("PUT"))
+        info1.resetStatus()
+        Thread.sleep(2000)
+        info1.markFailureOrWithRemove()
+      }
+    }
+    t1.setName("t1")
+    val t2 = new Thread {
+      override def run() {
+        assert(!info1.waitForReady("PUT"))
+        info1.resetStatus()
+        Thread.sleep(2000)
+        info1.markFailureOrWithRemove()
+      }
+    }
+    t2.setName("t2")
+
+    val info2 = new BlockInfo(StorageLevel.MEMORY_ONLY, true)
+    val t3 = new Thread {
+      override def run() { assert(info2.waitForReady("PUT")) }
+    }
+    t3.setName("t3")
+    val t4 = new Thread {
+      override def run() { assert(info2.waitForReady("PUT")) }
+    }
+    t4.setName("t4")
+
+    //info1: Failed, reput one by one
+    t1.start()
+    t2.start()
+    Thread.sleep(100)
+    assert(!info1.isRemoved)
+    info1.markFailureOrWithRemove()
+    assert(!info1.isRemoved)
+    Thread.sleep(5000)
+    assert(info1.isRemoved)
+    t1.join()
+    t2.join()
+
+    //info2: Succeed, notify all wait thread
+    t3.start()
+    t4.start()
+    Thread.sleep(1000)
+    info2.markReady(1024)
+    t3.join()
+    t4.join()
+  }
 }

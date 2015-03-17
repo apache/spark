@@ -18,8 +18,21 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.{ReentrantLock, Condition}
+
+import scala.collection.mutable
 
 private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+  //Those lock conditions is used for PUT/GET/DROP thread to wait this block be ready
+  private val lock = new ReentrantLock()
+  private val putCondition = lock.newCondition()
+  private val othersCondition = lock.newCondition()
+
+  private val waitTypes = new BlockWaitCondition(Map("PUT" -> putCondition,
+                                             "DROP" -> othersCondition,
+                                             "GET" -> othersCondition))
+  private var removed = false
+
   // To save space, 'pending' and 'failed' are encoded as special sizes:
   @volatile var size: Long = BlockInfo.BLOCK_PENDING
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING
@@ -39,12 +52,15 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
    * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
    * Return true if the block is available, false otherwise.
    */
-  def waitForReady(): Boolean = {
+  def waitForReady(waitType: String): Boolean = {
     if (pending && initThread != Thread.currentThread()) {
-      synchronized {
+      try {
+        lock.lock()
         while (pending) {
-          this.wait()
+          waitTypes.waitTypeValWithName(waitType).await()
         }
+      } finally {
+        lock.unlock()
       }
     }
     !failed
@@ -56,20 +72,34 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     assert(pending)
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)
-    synchronized {
-      this.notifyAll()
+    try {
+      lock.lock()
+      waitTypes.myValues.filter(_.getCount > 0).foreach(_.signalSuccess())
+    } finally {
+      lock.unlock()
     }
   }
 
   /** Mark this BlockInfo as ready but failed */
-  def markFailure() {
+  def markFailureOrWithRemove(): Boolean = {
     assert(pending)
     size = BlockInfo.BLOCK_FAILED
     BlockInfo.blockInfoInitThreads.remove(this)
-    synchronized {
-      this.notifyAll()
+    try {
+      lock.lock()
+      removed = waitTypes.PUT.getCount == 0
+      waitTypes.myValues.filter(_.getCount > 0).foreach(_.signalFailure())
+    } finally {
+      lock.unlock()
     }
+    removed
   }
+
+  def resetStatus() {
+    size = BlockInfo.BLOCK_PENDING
+  }
+
+  def isRemoved = removed
 }
 
 private object BlockInfo {
@@ -80,4 +110,54 @@ private object BlockInfo {
 
   private val BLOCK_PENDING: Long = -1L
   private val BLOCK_FAILED: Long = -2L
+}
+
+/**
+ * A class for GET/PUT/DROP threads to use as lock.condition to wait block be ready
+ * All GET/DROP thread wait one time for PUT whether succeed or failed
+ * PUT thread do one by one until one succeed
+ */
+private[storage] class BlockWaitCondition(conditions: Map[String, Condition]) extends Enumeration {
+  private val actualValues: mutable.HashSet[WaitTypeVal] = new mutable.HashSet[WaitTypeVal]()
+
+  class WaitTypeVal(protected val finalCondition: Condition) extends Val {
+    @volatile protected var count = 0
+    def getCount = count
+
+    def signalFailure() {
+      count = 0
+      finalCondition.signalAll()
+    }
+
+    def await() {
+      count += 1
+      finalCondition.await()
+    }
+
+    def signalSuccess() {
+      count = 0
+      finalCondition.signalAll()
+    }
+  }
+
+  //Put Threads that wait will execute one by one until one will be succeed
+  val PUT = new WaitTypeVal(conditions("PUT")) {
+    override def signalFailure() {
+      count -= 1
+      finalCondition.signal()
+    }
+  }
+
+  //DROP and GET Thread just return if one PUT thread is failed
+  val DROP = new WaitTypeVal(conditions("DROP"))
+  val GET = new WaitTypeVal(conditions("GET"))
+
+  def  myValues = {
+    if (actualValues.isEmpty) {
+      values.foreach(v => actualValues += v.asInstanceOf[WaitTypeVal])
+    }
+    actualValues
+  }
+
+  def waitTypeValWithName(name: String) = this.withName(name).asInstanceOf[WaitTypeVal]
 }
