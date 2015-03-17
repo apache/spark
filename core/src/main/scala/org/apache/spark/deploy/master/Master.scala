@@ -735,7 +735,7 @@ private[master] class Master(
    * Rebuild a new SparkUI from the given application's event logs.
    * Return the UI if successful, else None
    */
-  private def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
+  private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
