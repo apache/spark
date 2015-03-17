@@ -241,7 +241,10 @@ abstract class HiveComparisonTest
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
 
-      val allQueries = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
+      val sqlWithoutComment =
+        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
+      val allQueries =
+        sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       // TODO: DOCUMENT UNSUPPORTED
       val queryList =

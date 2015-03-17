@@ -19,26 +19,21 @@ package org.apache.spark.streaming.kafka;
 
 import java.io.Serializable;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Arrays;
-
-import org.apache.spark.SparkConf;
 
 import scala.Tuple2;
-
-import junit.framework.Assert;
 
 import kafka.common.TopicAndPartition;
 import kafka.message.MessageAndMetadata;
 import kafka.serializer.StringDecoder;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-
-import org.junit.Test;
-import org.junit.After;
-import org.junit.Before;
 
 public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
@@ -78,8 +73,8 @@ public class JavaKafkaRDDSuite implements Serializable {
       OffsetRange.create(topic2, 0, 0, 1)
     };
 
-    HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap();
-    HashMap<TopicAndPartition, Broker> leaders = new HashMap();
+    HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap<TopicAndPartition, Broker>();
+    HashMap<TopicAndPartition, Broker> leaders = new HashMap<TopicAndPartition, Broker>();
     String[] hostAndPort = suiteBase.brokerAddress().split(":");
     Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
     leaders.put(new TopicAndPartition(topic1, 0), broker);
@@ -96,7 +91,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(scala.Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) throws Exception {
             return kv._2();
           }
         }
