@@ -113,7 +113,7 @@ function run_streaming_tests() {
       KAFKA_ASSEMBLY_JAR="$f"
     done
 
-    export EXTRA_PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR}"
+    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
     run_test "pyspark/streaming/util.py"
     run_test "pyspark/streaming/tests.py"
 }
