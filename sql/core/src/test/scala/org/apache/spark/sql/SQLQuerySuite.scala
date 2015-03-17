@@ -43,6 +43,28 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("SPARK-6247 Certain self joins cannot be analyzed") {
+    val df =
+      (1 to 10)
+        .map(i => (i, i.toDouble, i.toLong, i.toString, i.toString))
+        .toDF("intCol", "doubleCol", "longCol", "stringCol1", "stringCol2")
+
+    df.registerTempTable("test")
+
+    sql(
+      """
+        |SELECT x.stringCol2, y.intCol
+        |FROM test x JOIN test y ON (x.stringCol1 = y.stringCol1)
+      """.stripMargin).explain()
+
+    sql(
+      """
+        |SELECT x.stringCol2, avg(y.intCol), sum(x.doubleCol)
+        |FROM test x JOIN test y ON (x.stringCol1 = y.stringCol1)
+        |GROUP BY x.stringCol2
+      """.stripMargin).explain()
+  }
+
   test("grouping on nested fields") {
     jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")

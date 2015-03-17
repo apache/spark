@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 
 protected class AttributeEquals(val a: Attribute) {
   override def hashCode() = a match {
@@ -34,6 +35,9 @@ protected class AttributeEquals(val a: Attribute) {
 object AttributeSet {
   def apply(a: Attribute) =
     new AttributeSet(Set(new AttributeEquals(a)))
+
+  /** Construct a [[AttributeSet]] given a QueryPlan for its direct output attributes */
+  def apply(plan: QueryPlan[_]) = new AttributeSet(plan.output.map(new AttributeEquals(_)).toSet)
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Seq[Expression]) =

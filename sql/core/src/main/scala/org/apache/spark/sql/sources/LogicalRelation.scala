@@ -47,7 +47,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   /** Used to lookup original attribute capitalization */
   val attributeMap = AttributeMap(output.map(o => (o, o)))
 
-  def newInstance() = LogicalRelation(relation).asInstanceOf[this.type]
+  override def newInstance() = LogicalRelation(relation).asInstanceOf[this.type]
 
   override def simpleString = s"Relation[${output.mkString(",")}] $relation"
 }
