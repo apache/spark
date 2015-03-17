@@ -336,9 +336,10 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     intercept[java.io.FileNotFoundException] {
       sqlContext.parquetFile("file:///nonexistent")
     }
-    intercept[java.net.UnknownHostException] {
+    val errorMessage = intercept[Throwable] {
       sqlContext.parquetFile("hdfs://nonexistent")
-    }
+    }.toString
+    assert(errorMessage.contains("UnknownHostException"))
   }
 
 }
