@@ -63,7 +63,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
-   * We don't just override Object.Equals, as doing so prevents the scala compiler from from
+   * We don't just override Object.equals, as doing so prevents the scala compiler from
    * generating case class `equals` methods
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
@@ -343,7 +343,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }.mkString(", ")
 
   /** String representation of this node without any children */
-  def simpleString = s"$nodeName $argString"
+  def simpleString = s"$nodeName $argString".trim
 
   override def toString: String = treeString
 

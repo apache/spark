@@ -261,6 +261,20 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
       ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
     }
   }
+
+  test("serialization buffer overflow reporting") {
+    import org.apache.spark.SparkException
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max.mb"
+
+    val largeObject = (1 to 1000000).toArray
+
+    val conf = new SparkConf(false)
+    conf.set(kryoBufferMaxProperty, "1")
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val thrown = intercept[SparkException](ser.serialize(largeObject))
+    assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
 }
 
 

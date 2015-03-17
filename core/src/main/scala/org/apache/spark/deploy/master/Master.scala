@@ -96,7 +96,7 @@ private[spark] class Master(
   val webUi = new MasterWebUI(this, webUiPort)
 
   val masterPublicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 
@@ -764,8 +764,9 @@ private[spark] class Master(
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
-        replayBus.replay(logInput, eventLogFile)
+        replayBus.replay(logInput, eventLogFile, maybeTruncated)
       } finally {
         logInput.close()
       }

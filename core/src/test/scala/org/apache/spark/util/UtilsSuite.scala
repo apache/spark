@@ -386,10 +386,11 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   }
 
   test("fetch hcfs dir") {
-    val sourceDir = Utils.createTempDir()
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "source-dir")
     val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
-    val targetDir = new File(Utils.createTempDir(), "target-dir")
+    val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
 
     val path = new Path("file://" + sourceDir.getAbsolutePath)
@@ -413,7 +414,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(destInnerFile.isFile())
 
     val filePath = new Path("file://" + sourceFile.getAbsolutePath)
-    val testFileDir = new File("test-filename")
+    val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
     Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),

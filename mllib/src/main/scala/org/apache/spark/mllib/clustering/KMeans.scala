@@ -52,17 +52,32 @@ class KMeans private (
    */
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
+  /**
+   * Number of clusters to create (k).
+   */
+  def getK: Int = k
+
   /** Set the number of clusters to create (k). Default: 2. */
   def setK(k: Int): this.type = {
     this.k = k
     this
   }
 
+  /**
+   * Maximum number of iterations to run.
+   */
+  def getMaxIterations: Int = maxIterations
+
   /** Set maximum number of iterations to run. Default: 20. */
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
   }
+
+  /**
+   * The initialization algorithm. This can be either "random" or "k-means||".
+   */
+  def getInitializationMode: String = initializationMode
 
   /**
    * Set the initialization algorithm. This can be either "random" to choose random points as
@@ -76,6 +91,13 @@ class KMeans private (
     this.initializationMode = initializationMode
     this
   }
+
+  /**
+   * :: Experimental ::
+   * Number of runs of the algorithm to execute in parallel.
+   */
+  @Experimental
+  def getRuns: Int = runs
 
   /**
    * :: Experimental ::
@@ -93,6 +115,11 @@ class KMeans private (
   }
 
   /**
+   * Number of steps for the k-means|| initialization mode
+   */
+  def getInitializationSteps: Int = initializationSteps
+
+  /**
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
    */
@@ -105,6 +132,11 @@ class KMeans private (
   }
 
   /**
+   * The distance threshold within which we've consider centers to have converged.
+   */
+  def getEpsilon: Double = epsilon
+
+  /**
    * Set the distance threshold within which we've consider centers to have converged.
    * If all centers move less than this Euclidean distance, we stop iterating one run.
    */
@@ -112,6 +144,11 @@ class KMeans private (
     this.epsilon = epsilon
     this
   }
+
+  /**
+   * The random seed for cluster initialization.
+   */
+  def getSeed: Long = seed
 
   /** Set the random seed for cluster initialization. */
   def setSeed(seed: Long): this.type = {
