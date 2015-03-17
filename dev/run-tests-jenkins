@@ -51,6 +51,17 @@ TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 
 # Array to capture all tests to run on the pull request. These tests are held under the
 #+ dev/tests/ directory.
+#
+# To write a PR test:
+#+  * the file must reside within the dev/tests directory
+#+  * be an executable bash script
+#+  * accept two arguments on the command line, the first being the Github PR long commit
+#+    hash and the second the Github SHA1 hash
+#+  * and, lastly, return string output to be included in the pr message output that will
+#+    be posted to Github
+# All PR tests will start on the current PR branch although the test developer can feel
+#+ free to switch to any other branch (i.e. master) under the assumption that the branch
+#+ is automatically reset at the end of each test
 PR_TESTS=(
   "pr_merge_ability"
   "pr_public_classes"
@@ -138,10 +149,10 @@ function send_archived_logs () {
   fi
 }
 
-# environment variable to capture PR test output
+# Environment variable to capture PR test output
 pr_message=""
 
-# run pull request tests
+# Run pull request tests
 for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"
   # Ensure the test is a file and is executable
