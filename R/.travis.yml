@@ -1,0 +1,26 @@
+# Based on https://github.com/craigcitro/r-travis
+
+language: java
+
+before_install:
+  - cd pkg
+  - curl -OL http://raw.github.com/craigcitro/r-travis/master/scripts/travis-tool.sh
+  - chmod 755 ./travis-tool.sh
+  - ./travis-tool.sh bootstrap
+install:
+  - sudo R CMD javareconf
+  - ./travis-tool.sh install_deps
+  - ./travis-tool.sh install_r_binary plyr
+  - cd ..
+  - ./install-dev.sh
+script:
+  - ./run-tests.sh
+
+cache:
+  directories:
+    - $HOME/.m2
+    - $HOME/.ivy2
+    - $HOME/.sbt
+
+after_failure:
+  - ./travis-tool.sh dump_logs
