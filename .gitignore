@@ -7,6 +7,9 @@
 *.iws
 *.pyc
 *.pyo
+*.o
+*.so
+*.Rd
 .idea/
 .idea_modules/
 build/*.jar
