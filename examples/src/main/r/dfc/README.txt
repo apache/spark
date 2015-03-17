@@ -10,7 +10,7 @@ Type the following into the command line:
 
 	<masked_matrix> Should be in matrix market format. We have included
 					a sample matrix file, called "example.mat", which is a
-					1000x1000 entry noisy gaussain matrix with 10% revealed.
+					100x100 entry noisy gaussain matrix with 10% revealed.
 
 	<iter> is the number of iterations
 
