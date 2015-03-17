@@ -329,6 +329,24 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
     }
   }
+
+  test("SPARK-6352 DirectParquetOutputCommitter") {
+    try {
+      configuration.set("spark.sql.parquet.useDirectParquetOutputCommitter", "true")
+      sqlContext.udf.register("div0", (x: Int) => x / 0)
+      withTempPath { dir =>
+        intercept[org.apache.spark.SparkException] {
+          sqlContext.sql("select div0(1)").saveAsParquetFile(dir.getCanonicalPath)
+        }
+        val path = new Path(dir.getCanonicalPath, "_temporary")
+        val fs = path.getFileSystem(configuration)
+        assert(!fs.exists(path))
+      }
+    }
+    finally {
+      configuration.set("spark.sql.parquet.useDirectParquetOutputCommitter", "false")
+    }
+  }
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
