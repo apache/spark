@@ -86,7 +86,7 @@ class KafkaRDD[
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      log.warn("Beginning offset ${part.fromOffset} is the same as ending offset " +
+      log.warn(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
