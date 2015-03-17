@@ -157,7 +157,8 @@ for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"
   # Ensure the test is a file and is executable
   if [ -x "$this_test" ]; then
-    this_mssg="`bash -c \"${this_test}\" \"$ghprbActualCommit\" \"$sha1\" 2>/dev/null`"
+    echo "RUNNING TEST: $this_test with $ghprbActualCommit and $sha1"
+    this_mssg='`bash -c "${this_test}" "${ghprbActualCommit}" "${sha1}" 2>/dev/null`'
     pr_message="${pr_message}\n${this_mssg}"
   fi
   # Ensure, for each test, they start on the current PR branch
