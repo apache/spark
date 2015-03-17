@@ -802,7 +802,8 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
-        case stage: ShuffleMapStage => (0 until stage.numPartitions).filter(id =>
+        case stage: ShuffleMapStage =>
+          (0 until stage.numPartitions).filter(id =>
           stage.outputLocs(id) == Nil)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
