@@ -149,6 +149,8 @@ for t in "${PR_TESTS[@]}"; do
     this_mssg="`bash -c \"${this_test}\" \"$ghprbActualCommit\" \"$sha1\" 2>/dev/null`"
     pr_message="${pr_message}\n${this_mssg}"
   fi
+  # Ensure, for each test, they start on the current PR branch
+  git checkout ${ghprbActualCommit}
 done
 
 read
@@ -160,7 +162,6 @@ read
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   start_message="${start_message}\n${merge_note}"
-  # start_message="${start_message}\n${public_classes_note}"
 
   post_message "$start_message"
 }
