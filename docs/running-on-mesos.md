@@ -226,9 +226,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
     which is used to calculate the total Mesos task memory. A value of <code>384</code>
-    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
+    implies a 384MiB overhead. Additionally, there is a hard-coded 10% minimum
     overhead. The final overhead will be the larger of either
-    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
+    `spark.mesos.executor.memoryOverhead` or 10% of `spark.executor.memory`.
   </td>
 </tr>
 </table>
