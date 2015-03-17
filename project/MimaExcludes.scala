@@ -190,7 +190,6 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
           )
 
-
         case v if v.startsWith("1.2") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
