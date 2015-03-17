@@ -32,8 +32,8 @@ private[spark] class ResultStage(
     callSite: CallSite)
   extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  // "The active job for this result stage. Will be empty if the job has already finished
-  // (e.g., because the job was cancelled)."
+  // The active job for this result stage. Will be empty if the job has already finished
+  // (e.g., because the job was cancelled).
   var resultOfJob: Option[ActiveJob] = None
 
   override def toString: String = "ResultStage " + id

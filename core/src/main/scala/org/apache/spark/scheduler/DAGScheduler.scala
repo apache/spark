@@ -891,10 +891,13 @@ class DAGScheduler(
 
       val debugString = stage match {
         case stage: ShuffleMapStage =>
-          "Stage " + stage + " is actually done; %b %d %d".format(stage.isAvailable,
-            stage.numAvailableOutputs, stage.numPartitions)
+          "Stage " + stage + (" is actually done; " +
+            "(available: ${stage.isAvailable}," +
+            "available outputs: ${stage.numAvailableOutputs}," +
+            "partitions: ${stage.numPartitions})")
         case stage : ResultStage =>
-          "Stage " + stage + " is actually done; %d".format(stage.numPartitions)
+          "Stage " + stage + (" is actually done; " +
+            "(partitions: ${stage.numPartitions})")
       }
       logDebug(debugString)
       runningStages -= stage
@@ -1058,7 +1061,7 @@ class DAGScheduler(
                 val newlyRunnable = new ArrayBuffer[Stage]
                 for (shuffleStage <- waitingStages) {
                   logInfo("Missing parents for " + shuffleStage + ": " +
-                      getMissingParentStages(shuffleStage))
+                    getMissingParentStages(shuffleStage))
                 }
                 for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage) == Nil) {
                   newlyRunnable += shuffleStage
@@ -1070,7 +1073,7 @@ class DAGScheduler(
                   jobId <- activeJobForStage(shuffleStage)
                 } {
                   logInfo("Submitting " + shuffleStage + " (" +
-                      shuffleStage.rdd + "), which is now runnable")
+                    shuffleStage.rdd + "), which is now runnable")
                   submitMissingTasks(shuffleStage, jobId)
                 }
               }
@@ -1102,7 +1105,7 @@ class DAGScheduler(
           // in that case the event will already have been scheduled.
           // TODO: Cancel running tasks in the stage
           logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-              s"$failedStage (${failedStage.name}) due to fetch failure")
+            s"$failedStage (${failedStage.name}) due to fetch failure")
           messageScheduler.schedule(new Runnable {
             override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
           }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
