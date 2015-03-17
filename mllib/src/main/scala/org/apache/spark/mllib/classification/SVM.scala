@@ -128,6 +128,7 @@ class SVMWithSGD private (
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
+  this.setFeatureScaling(true)
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
