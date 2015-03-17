@@ -165,7 +165,7 @@ class LogisticRegressionModel (
   override protected def formatVersion: String = "1.0"
 
   override def toString: String = {
-    super.toString + s", numClasses = $numClasses, threshold = ${threshold}"
+    "%s, numClasses=%s, threshold=%s".format(super.toString, numClasses, threshold.get)
   }
 }
 

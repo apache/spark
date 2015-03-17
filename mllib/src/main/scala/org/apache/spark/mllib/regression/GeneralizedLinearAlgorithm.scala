@@ -80,7 +80,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * Print a summary of the model.
    */
   override def toString: String = {
-    this.getClass.getName + " : " + s"intercept = $intercept, numFeatures = ${weights.size}"
+    "%s: intercept=%s, numFeatures=%s".format(this.getClass.getName, intercept, weights.size)
   }
 
   /**
