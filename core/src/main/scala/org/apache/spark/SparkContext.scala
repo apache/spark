@@ -94,6 +94,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // contains a map from hostname to a list of input format splits on the host.
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
+  // This is used for Spark Streaming to check whether driver host and port are set by user,
+  // if these two configurations are set by user, so the recovery mechanism should not remove this.
+  private[spark] val isDriverHostSetByUser = config.contains("spark.driver.host")
+  private[spark] val isDriverPortSetByUser = config.contains("spark.driver.port")
+
   val startTime = System.currentTimeMillis()
 
   private val stopped: AtomicBoolean = new AtomicBoolean(false)

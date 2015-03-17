@@ -191,6 +191,38 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests if "spark.driver.host" and "spark.driver.port" is set by user, can be recovered
+  // with correct value.
+  test("correctly recover spark.driver.[host|port] from checkpoint") {
+    val conf = Map("spark.driver.host" -> "localhost", "spark.driver.port" -> "9999")
+    conf.foreach(kv => System.setProperty(kv._1, kv._2))
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val originalConf = ssc.conf
+    assert(ssc.sc.isDriverHostSetByUser === true)
+    assert(ssc.sc.isDriverPortSetByUser === true)
+    assert(originalConf.get("spark.driver.host") === "localhost")
+    assert(originalConf.get("spark.driver.port") === "9999")
+
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.sparkConf
+    assert(newCpConf.contains("spark.driver.host"))
+    assert(newCpConf.contains("spark.driver.port"))
+    assert(originalConf.get("spark.driver.host") === "localhost")
+    assert(originalConf.get("spark.driver.port") === "9999")
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf = ssc.conf
+    assert(ssc.sc.isDriverHostSetByUser === true)
+    assert(ssc.sc.isDriverPortSetByUser === true)
+    assert(restoredConf.get("spark.driver.host") === "localhost")
+    assert(restoredConf.get("spark.driver.port") === "9999")
+  }
 
   // This tests whether the systm can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
