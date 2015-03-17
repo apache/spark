@@ -331,7 +331,7 @@ object SparkSubmit {
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
-        args.mainClass = "org.apache.spark.api.r.SparkRBackend"
+        args.mainClass = "org.apache.spark.api.r.RBackend"
       } else {
         // If a R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main R file> [app arguments]

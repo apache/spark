@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.api.r.SparkRBackend
+import org.apache.spark.api.r.RBackend
 
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
@@ -51,7 +51,7 @@ object RRunner {
 
     // Launch a SparkR backend server for the R process to connect to; this will let it see our
     // Java system properties etc.
-    val sparkRBackend = new SparkRBackend()
+    val sparkRBackend = new RBackend()
     @volatile var sparkRBackendPort = 0
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
@@ -63,7 +63,7 @@ object RRunner {
     }
 
     sparkRBackendThread.start()
-    // Wait for SparkRBackend initialization to finish
+    // Wait for RBackend initialization to finish
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {

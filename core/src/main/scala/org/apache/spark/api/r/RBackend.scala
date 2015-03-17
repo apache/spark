@@ -32,16 +32,16 @@ import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
 /**
  * Netty-based backend server that is used to communicate between R and Java.
  */
-class SparkRBackend {
+class RBackend {
 
   var channelFuture: ChannelFuture = null  
   var bootstrap: ServerBootstrap = null
   var bossGroup: EventLoopGroup = null
 
   def init(): Int = {
-    bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
+    bossGroup = new NioEventLoopGroup(2)
     val workerGroup = bossGroup
-    val handler = new SparkRBackendHandler(this)
+    val handler = new RBackendHandler(this)
   
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
@@ -89,13 +89,13 @@ class SparkRBackend {
 
 }
 
-object SparkRBackend {
+object RBackend {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: SparkRBackend <tempFilePath>")
+      System.err.println("Usage: RBackend <tempFilePath>")
       System.exit(-1)
     }
-    val sparkRBackend = new SparkRBackend()
+    val sparkRBackend = new RBackend()
     try {
       // bind to random port
       val boundPort = sparkRBackend.init()

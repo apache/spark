@@ -28,12 +28,12 @@ import io.netty.channel.SimpleChannelInboundHandler
 import org.apache.spark.api.r.SerDe._
 
 /**
- * Handler for SparkRBackend
- * TODO: This is marked as sharable to get a handle to SparkRBackend. Is it safe to re-use
+ * Handler for RBackend
+ * TODO: This is marked as sharable to get a handle to RBackend. Is it safe to re-use
  * this across connections ?
  */
 @Sharable
-class SparkRBackendHandler(server: SparkRBackend)
+class RBackendHandler(server: RBackend)
   extends SimpleChannelInboundHandler[Array[Byte]] {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
