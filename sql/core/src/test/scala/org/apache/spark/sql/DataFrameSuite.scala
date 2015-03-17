@@ -422,6 +422,14 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("call udf through an implicit conversion") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    df.sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", udf"simpleUdf"($"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(

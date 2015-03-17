@@ -259,6 +259,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
       }
     }
 
+    /**
+     * Convert udf"registered function name" into a [[UnresolvedFunction]].
+     * Example:
+     * {{{
+     *  import org.apache.spark.sql._
+     *
+     *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+     *  df.sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+     *  df.select($"id", udf"simpleUdf"($"value"))
+     * }}}
+     */
+    implicit class StringToUdf(val sc: StringContext) {
+      def udf(args: Any*)(cols: Column*) =
+        Column(UnresolvedFunction(sc.s(args: _*), cols.map(_.expr)))
+    }
+
     /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
     implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
