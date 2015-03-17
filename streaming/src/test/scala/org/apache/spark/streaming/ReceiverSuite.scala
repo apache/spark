@@ -292,8 +292,6 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       assert(sortedAllLogFiles1.takeRight(1).forall(leftLogFiles1.contains))
       assert(sortedAllLogFiles2.takeRight(3).forall(leftLogFiles2.contains))
     }
-
-    Utils.deleteRecursively(tempDirectory)
   }
 
   /**

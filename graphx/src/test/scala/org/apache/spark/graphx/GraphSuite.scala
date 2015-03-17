@@ -387,7 +387,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert(graph.isCheckpointed)
       assert(graph.getCheckpointFiles.size === 2)
     }
-    Utils.deleteRecursively(checkpointDir)
   }
 
   test("cache, getStorageLevel") {

@@ -135,7 +135,6 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     assert(listFolders(tmpDir,List()).sortBy(_.toString()) == expected.sortBy(_.toString))
     sql("DROP TABLE table_with_partition")
     sql("DROP TABLE tmp_table")
-    Utils.deleteRecursively(tmpDir)
   }
 
   test("Insert ArrayType.containsNull == false") {

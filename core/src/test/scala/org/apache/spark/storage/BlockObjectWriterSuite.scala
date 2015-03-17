@@ -20,9 +20,9 @@ import java.io.File
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
 class BlockObjectWriterSuite extends FunSuite {
