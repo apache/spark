@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.r
+package org.apache.spark.deploy
 
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
@@ -24,11 +24,13 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.api.r.SparkRBackend
+
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
  * subprocess and then has it connect back to the JVM to access system properties etc.
  */
-object SparkRRunner {
+object RRunner {
   def main(args: Array[String]) {
     val rFile = args(0)
 
@@ -46,7 +48,6 @@ object SparkRRunner {
     } else {
       rFile
     }
-
 
     // Launch a SparkR backend server for the R process to connect to; this will let it see our
     // Java system properties etc.
