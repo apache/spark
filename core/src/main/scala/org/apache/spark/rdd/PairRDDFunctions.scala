@@ -164,25 +164,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Returns the top k (largest) elements for each key from this RDD as defined by the specified
-   * implicit Ordering[T]. This does the opposite of [[takeOrderedByKey]].
+   * implicit Ordering[T].
+   * If the number of elements for a certain key is less than k, all of them will be returned.
    *
    * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an RDD that contains the top k values for each key
    */
-  def topByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] =
-    takeOrderedByKey(num)(ord.reverse)
-
-  /**
-   * Returns the first k (smallest) elements for each key from this RDD as defined by the specified
-   * implicit Ordering[T] and maintains the ordering. This does the opposite of [[topByKey]].
-   *
-   * @param num k, the number of elements to return
-   * @param ord the implicit ordering for T
-   * @return an RDD that contains the smallest k values for each key
-   */
-  def takeOrderedByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] = {
-    aggregateByKey(new BoundedPriorityQueue[V](num)(ord.reverse))(
+  def topByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] = {
+    aggregateByKey(new BoundedPriorityQueue[V](num)(ord))(
       seqOp = (queue, item) => {
         queue += item
         queue
@@ -191,7 +181,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         queue1 ++= queue2
         queue1
       }
-    ).mapValues(_.toArray.sorted)
+    ).mapValues(_.toArray.sorted(ord.reverse))
   }
 
   /**

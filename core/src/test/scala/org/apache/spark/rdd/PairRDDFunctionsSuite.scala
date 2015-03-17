@@ -50,13 +50,14 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("topByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
 
-    val sets = pairs.topByKey(2).collect()
-    assert(sets.size === 3)
-    val valuesFor1 = sets.find(_._1 == 1).get._2
+    val topMap = pairs.topByKey(2).collectAsMap()
+
+    assert(topMap.size === 3)
+    val valuesFor1 = topMap(1)
     assert(valuesFor1 === Array(2, 1))
-    val valuesFor3 = sets.find(_._1 == 3).get._2
+    val valuesFor3 = topMap(3)
     assert(valuesFor3 === Array(7, 5))
-    val valuesFor5 = sets.find(_._1 == 5).get._2
+    val valuesFor5 = topMap(5)
     assert(valuesFor5 === Array(3, 1))
   }
 
