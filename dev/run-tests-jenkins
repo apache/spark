@@ -164,8 +164,6 @@ for t in "${PR_TESTS[@]}"; do
   git checkout ${ghprbActualCommit}
 done
 
-read
-
 # post start message
 {
   start_message="\
