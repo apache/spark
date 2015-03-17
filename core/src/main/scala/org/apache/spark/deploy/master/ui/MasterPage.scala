@@ -31,7 +31,7 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 

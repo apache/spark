@@ -24,6 +24,32 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 private[spark] object JsonProtocol {
+ def writeWorkerInfo(obj: WorkerInfo) = {
+   ("id" -> obj.id) ~
+   ("host" -> obj.host) ~
+   ("port" -> obj.port) ~
+   ("webuiaddress" -> obj.webUiAddress) ~
+   ("cores" -> obj.cores) ~
+   ("coresused" -> obj.coresUsed) ~
+   ("coresfree" -> obj.coresFree) ~
+   ("memory" -> obj.memory) ~
+   ("memoryused" -> obj.memoryUsed) ~
+   ("memoryfree" -> obj.memoryFree) ~
+   ("state" -> obj.state.toString) ~
+   ("lastheartbeat" -> obj.lastHeartbeat)
+ }
+
+  def writeApplicationInfo(obj: ApplicationInfo) = {
+    ("starttime" -> obj.startTime) ~
+    ("id" -> obj.id) ~
+    ("name" -> obj.desc.name) ~
+    ("cores" -> obj.desc.maxCores) ~
+    ("user" ->  obj.desc.user) ~
+    ("memoryperslave" -> obj.desc.memoryPerSlave) ~
+    ("submitdate" -> obj.submitDate.toString) ~
+    ("state" -> obj.state.toString) ~
+    ("duration" -> obj.duration)
+  }
 
   def writeApplicationDescription(obj: ApplicationDescription) = {
     ("name" -> obj.name) ~
