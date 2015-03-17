@@ -13,10 +13,8 @@
 
 ## Performance improvements
 1. Write hash functions in C and use .Call to call into them.
-2. Use long-running R worker daemons to avoid forking a process each time.
-3. Memoizations of frequently queried vals in RDD, such as numPartitions, count etc.
-4. Pipelined RRDD to execute multiple functions with one call.
-5. Profile serialization overhead and see if there is anything better we can do.
+2. Memoizations of frequently queried vals in RDD, such as numPartitions, count etc.
+3. Profile serialization overhead and see if there is anything better we can do.
 
 ## Feature wishlist
 

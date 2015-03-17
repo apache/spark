@@ -30,13 +30,6 @@ sudo -E /usr/local/bin/R CMD javareconf
 # Install additional needed R packages
 sudo /usr/local/bin/Rscript -e 'install.packages(c("rJava", "Rserve"), repos = "http://cran.rstudio.com")'
 
-# Install Scala 2.10.4
-wget http://www.scala-lang.org/files/archive/scala-2.10.4.tgz
-tar xzvf scala-2.10.4.tgz
-sudo mkdir /usr/local/share/scala
-sudo mv scala-2.10.4/* /usr/local/share/scala
-rmdir scala-2.10.4
-
 # Clean-up
 #cd ..
 #rm -r --force build_SparkR

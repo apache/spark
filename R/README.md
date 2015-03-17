@@ -1,50 +1,25 @@
 # R on Spark
 
-[![Build Status](https://travis-ci.org/amplab-extras/SparkR-pkg.png?branch=master)](https://travis-ci.org/amplab-extras/SparkR-pkg)
-
 SparkR is an R package that provides a light-weight frontend to use Spark from
 R.
 
 
 ## Installing SparkR
 
-### Requirements
-SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses
-Apache Spark 1.1.0. You can also build SparkR against a
-different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
+### Build Spark
+
+TBD
 
 ### Package installation
-To develop SparkR, you can build the scala package and the R package using
 
-    ./install-dev.sh
+To develop SparkR, you can build the R package using
+
+    ./R/install-dev.sh
 
 If you wish to try out the package directly from github, you can use [`install_github`](http://www.inside-r.org/packages/cran/devtools/docs/install_github) from [`devtools`](http://www.inside-r.org/packages/cran/devtools). Note that you can specify which branch, tag etc to install from.
 
     library(devtools)
-    install_github("amplab-extras/SparkR-pkg", subdir="pkg")
-
-SparkR by default uses Apache Spark 1.1.0. You can switch to a different Spark
-version by setting the environment variable `SPARK_VERSION`. For example, to
-use Apache Spark 1.3.0, you can run
-
-    SPARK_VERSION=1.3.0 ./install-dev.sh
-
-SparkR by default links to Hadoop 1.0.4. To use SparkR with other Hadoop
-versions, you will need to rebuild SparkR with the same version that [Spark is
-linked
-to](http://spark.apache.org/docs/latest/index.html#a-note-about-hadoop-versions).
-For example to use SparkR with a CDH 4.2.0 MR1 cluster, you can run
-
-    SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 ./install-dev.sh
-
-By default, SparkR uses [sbt](http://www.scala-sbt.org) to build an assembly
-jar. If you wish to use [maven](http://maven.apache.org/) instead, you can set
-the environment variable `USE_MAVEN=1`. For example
-
-    USE_MAVEN=1 ./install-dev.sh
-    
-If you are building SparkR from behind a proxy, you can [setup maven](https://maven.apache.org/guides/mini/guide-proxies.html) to use the right proxy
-server.
+    install_github("apache/spark", subdir="R/pkg")
 
 #### Building from source from GitHub
 
@@ -67,7 +42,7 @@ install_github("repo/SparkR-pkg", ref="branchname", subdir="pkg")
 If you have cloned and built SparkR, you can start using it by launching the SparkR
 shell with
 
-    ./sparkR
+    ./bin/sparkR
 
 The `sparkR` script automatically creates a SparkContext with Spark by default in
 local mode. To specify the Spark master of a cluster for the automatically created
@@ -102,15 +77,15 @@ sparkR.stop() can be invoked to terminate a SparkContext created previously via 
     
 ## Examples, Unit tests
 
-SparkR comes with several sample programs in the `examples` directory.
-To run one of them, use `./sparkR <filename> <args>`. For example:
+SparkR comes with several sample programs in the `examples/src/main/r` directory.
+To run one of them, use `./bin/sparkR <filename> <args>`. For example:
 
-    ./sparkR examples/pi.R local[2]
+    ./bin/sparkR examples/src/main/r/pi.R local[2]
 
 You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
 
     R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
-    ./run-tests.sh
+    ./R/run-tests.sh
 
 ## Running on EC2
 
