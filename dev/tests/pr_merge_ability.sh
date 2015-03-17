@@ -31,8 +31,6 @@
 ghprbActualCommit="$1"
 sha1="$2"
 
-echo "TESTING!! $1 $ghprbActualCommit $2 $sha1"
-
 # check PR merge-ability
 if [ "${sha1}" == "${ghprbActualCommit}" ]; then
   echo " * This patch **does not merge cleanly**."
