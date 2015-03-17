@@ -76,7 +76,7 @@ object NaiveBayesSuite {
 
   /** Binary labels, 3 features */
   private val binaryModel = new NaiveBayesModel(labels = Array(0.0, 1.0), pi = Array(0.2, 0.8),
-    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)), NaiveBayes.Bernoulli.toString)
+    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)), NaiveBayes.Bernoulli)
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
