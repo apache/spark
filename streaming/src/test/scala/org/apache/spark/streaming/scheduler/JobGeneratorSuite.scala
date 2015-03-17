@@ -130,5 +130,4 @@ class JobGeneratorSuite extends TestSuiteBase {
 
 object JobGeneratorSuite {
   val waitLatch = new CountDownLatch(1)
-
 }
