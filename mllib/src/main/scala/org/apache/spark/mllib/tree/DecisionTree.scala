@@ -327,14 +327,14 @@ object DecisionTree extends Serializable with Logging {
    * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
    *             each (feature, bin).
    * @param treePoint  Data point being aggregated.
-   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
+   * @param splits possible splits indexed (numFeatures)(numSplits)
    * @param unorderedFeatures  Set of indices of unordered features.
    * @param instanceWeight  Weight (importance) of instance in dataset.
    */
   private def mixedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
-      bins: Array[Array[Bin]],
+      splits: Array[Array[Split]],
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
       featuresForNode: Option[Array[Int]]): Unit = {
@@ -362,7 +362,7 @@ object DecisionTree extends Serializable with Logging {
         val numSplits = agg.metadata.numSplits(featureIndex)
         var splitIndex = 0
         while (splitIndex < numSplits) {
-          if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
+          if (splits(featureIndex)(splitIndex).categories.contains(featureValue)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           } else {
@@ -506,8 +506,8 @@ object DecisionTree extends Serializable with Logging {
         if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
         } else {
-          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, metadata.unorderedFeatures,
-            instanceWeight, featuresForNode)
+          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
+            metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
       }
     }
@@ -1024,35 +1024,15 @@ object DecisionTree extends Serializable with Logging {
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex)
             if (metadata.isUnordered(featureIndex)) {
-              // TODO: The second half of the bins are unused.  Actually, we could just use
-              //       splits and not build bins for unordered features.  That should be part of
-              //       a later PR since it will require changing other code (using splits instead
-              //       of bins in a few places).
               // Unordered features
-              //   2^(maxFeatureValue - 1) - 1 combinations
+              // 2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
-              bins(featureIndex) = new Array[Bin](numBins)
               var splitIndex = 0
               while (splitIndex < numSplits) {
                 val categories: List[Double] =
                   extractMultiClassCategories(splitIndex + 1, featureArity)
                 splits(featureIndex)(splitIndex) =
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
-                bins(featureIndex)(splitIndex) = {
-                  if (splitIndex == 0) {
-                    new Bin(
-                      new DummyCategoricalSplit(featureIndex, Categorical),
-                      splits(featureIndex)(0),
-                      Categorical,
-                      Double.MinValue)
-                  } else {
-                    new Bin(
-                      splits(featureIndex)(splitIndex - 1),
-                      splits(featureIndex)(splitIndex),
-                      Categorical,
-                      Double.MinValue)
-                  }
-                }
                 splitIndex += 1
               }
             } else {
@@ -1060,8 +1040,11 @@ object DecisionTree extends Serializable with Logging {
               //   Bins correspond to feature values, so we do not need to compute splits or bins
               //   beforehand.  Splits are constructed as needed during training.
               splits(featureIndex) = new Array[Split](0)
-              bins(featureIndex) = new Array[Bin](0)
             }
+            // For ordered features, bins correspond to feature values.
+            // For unordered categorical features, there is no need to construct the bins.
+            // since there is a one-to-one correspondence between the splits and the bins.
+            bins(featureIndex) = new Array[Bin](0)
           }
           featureIndex += 1
         }

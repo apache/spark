@@ -39,7 +39,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{AkkaUtils, ManualClock}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
@@ -165,7 +165,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       preCleanupLogFiles.size should be > 1
 
       // this depends on the number of blocks inserted using generateAndStoreData()
-      manualClock.currentTime() shouldEqual 5000L
+      manualClock.getTimeMillis() shouldEqual 5000L
 
       val cleanupThreshTime = 3000L
       handler.cleanupOldBlocks(cleanupThreshTime)
@@ -243,7 +243,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     val blockIds = Seq.fill(blocks.size)(generateBlockId())
     val storeResults = blocks.zip(blockIds).map {
       case (block, id) =>
-        manualClock.addToTime(500) // log rolling interval set to 1000 ms through SparkConf
+        manualClock.advance(500) // log rolling interval set to 1000 ms through SparkConf
         logDebug("Inserting block " + id)
         receivedBlockHandler.storeBlock(id, block)
     }.toList

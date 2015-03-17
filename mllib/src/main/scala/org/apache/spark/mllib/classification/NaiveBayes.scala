@@ -102,7 +102,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       dataRDD.saveAsParquetFile(dataPath(path))
     }
 
@@ -165,6 +165,9 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
     this.lambda = lambda
     this
   }
+
+  /** Get the smoothing parameter. Default: 1.0. */
+  def getLambda: Double = lambda
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.

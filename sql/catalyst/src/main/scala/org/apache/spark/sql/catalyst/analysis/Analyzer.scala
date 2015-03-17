@@ -50,7 +50,7 @@ class Analyzer(catalog: Catalog,
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+  val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
@@ -64,86 +64,10 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedRules : _*),
-    Batch("Check Analysis", Once,
-      CheckResolution),
+      extendedResolutionRules : _*),
     Batch("Remove SubQueries", fixedPoint,
       EliminateSubQueries)
   )
-
-  /**
-   * Makes sure all attributes and logical plans have been resolved.
-   */
-  object CheckResolution extends Rule[LogicalPlan] {
-    def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
-
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      // We transform up and order the rules so as to catch the first possible failure instead
-      // of the result of cascading resolution failures.
-      plan.foreachUp {
-        case operator: LogicalPlan =>
-          operator transformExpressionsUp {
-            case a: Attribute if !a.resolved =>
-              val from = operator.inputSet.map(_.name).mkString(", ")
-              failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
-
-            case c: Cast if !c.resolved =>
-              failAnalysis(
-                s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-            case b: BinaryExpression if !b.resolved =>
-              failAnalysis(
-                s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
-          }
-
-          operator match {
-            case f: Filter if f.condition.dataType != BooleanType =>
-              failAnalysis(
-                s"filter expression '${f.condition.prettyString}' " +
-                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
-
-            case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
-              def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-                case _: AggregateExpression => // OK
-                case e: Attribute if !groupingExprs.contains(e) =>
-                  failAnalysis(
-                    s"expression '${e.prettyString}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
-                     "Add to group by or wrap in first() if you don't care which value you get.")
-                case e if groupingExprs.contains(e) => // OK
-                case e if e.references.isEmpty => // OK
-                case e => e.children.foreach(checkValidAggregateExpression)
-              }
-
-              val cleaned = aggregateExprs.map(_.transform {
-                // Should trim aliases around `GetField`s. These aliases are introduced while
-                // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-                // (Should we just turn `GetField` into a `NamedExpression`?)
-                case Alias(g, _) => g
-              })
-
-              cleaned.foreach(checkValidAggregateExpression)
-
-            case o if o.children.nonEmpty &&
-              !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
-              val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
-              val input = o.inputSet.map(_.prettyString).mkString(",")
-
-              failAnalysis(s"resolved attributes $missingAttributes missing from $input")
-
-            // Catch all
-            case o if !o.resolved =>
-              failAnalysis(
-                s"unresolved operator ${operator.simpleString}")
-
-            case _ => // Analysis successful!
-          }
-      }
-
-      plan
-    }
-  }
 
   /**
    * Removes no-op Alias expressions from the plan.
@@ -246,12 +170,21 @@ class Analyzer(catalog: Catalog,
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
+    def getTable(u: UnresolvedRelation) = {
+      try {
+        catalog.lookupRelation(u.tableIdentifier, u.alias)
+      } catch {
+        case _: NoSuchTableException =>
+          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
         i.copy(
-          table = EliminateSubQueries(catalog.lookupRelation(tableIdentifier, alias)))
-      case UnresolvedRelation(tableIdentifier, alias) =>
-        catalog.lookupRelation(tableIdentifier, alias)
+          table = EliminateSubQueries(getTable(u)))
+      case u: UnresolvedRelation =>
+        getTable(u)
     }
   }
 
@@ -377,7 +310,7 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
@@ -388,7 +321,8 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+        val requiredAttributes =
+          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {

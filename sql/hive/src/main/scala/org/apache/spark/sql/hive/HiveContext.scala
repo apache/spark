@@ -22,26 +22,24 @@ import java.sql.Timestamp
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
-import org.apache.spark.sql.sources.{CreateTableUsing, DataSourceStrategy}
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
+import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
@@ -51,10 +49,6 @@ import org.apache.spark.sql.types._
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
-  }
-
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
@@ -63,8 +57,26 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
+  /**
+   * When true, a table created by a Hive CTAS statement (no USING clause) will be
+   * converted to a data source table, using the data source set by spark.sql.sources.default.
+   * The table in CTAS statement will be converted when it meets any of the following conditions:
+   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
+   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     is either TextFile or SequenceFile.
+   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
+   *     is specified (no ROW FORMAT SERDE clause).
+   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
+   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
+   */
+  protected[sql] def convertCTAS: Boolean =
+    getConf("spark.sql.hive.convertCTAS", "false").toBoolean
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
+
+  @transient
+  protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
 
   override def sql(sqlText: String): DataFrame = {
     val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
@@ -72,8 +84,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (conf.dialect == "sql") {
       super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      DataFrame(this,
-        ddlParser(sqlText, exceptionOnError = false).getOrElse(HiveQl.parseSql(substituted)))
+      val ddlPlan = ddlParserWithHiveQL(sqlText, exceptionOnError = false)
+      DataFrame(this, ddlPlan.getOrElse(HiveQl.parseSql(substituted)))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
@@ -198,30 +210,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. reuse existing started SessionState if any
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient protected[hive] lazy val (hiveconf, sessionState) =
-    Option(SessionState.get())
-      .orElse {
-        val newState = new SessionState(new HiveConf(classOf[SessionState]))
-        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
-        // returned by `SessionState.get()` must be the most recently started one.
-        SessionState.start(newState)
-        Some(newState)
-      }
-      .map { state =>
-        setConf(state.getConf.getAllProperties)
-        if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
-        if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        (state.getConf, state)
-      }
-      .get
+  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
+
+  protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -243,7 +234,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] lazy val analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = false) {
-      override val extendedRules =
+      override val extendedResolutionRules =
+        catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
@@ -251,6 +243,44 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         sources.PreInsertCastAndRename ::
         Nil
     }
+
+  override protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[hive] class SQLSession extends super.SQLSession {
+    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+    }
+
+    protected[hive] lazy val hiveconf: HiveConf = {
+      setConf(sessionState.getConf.getAllProperties)
+      sessionState.getConf
+    }
+
+    /**
+     * SQLConf and HiveConf contracts:
+     *
+     * 1. reuse existing started SessionState if any
+     * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+     *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+     *    set in the SQLConf *as well as* in the HiveConf.
+     */
+    protected[hive] lazy val sessionState: SessionState = {
+      var state = SessionState.get()
+      if (state == null) {
+        state = new SessionState(new HiveConf(classOf[SessionState]))
+        SessionState.start(state)
+      }
+      if (state.out == null) {
+        state.out = new PrintStream(outputBuffer, true, "UTF-8")
+      }
+      if (state.err == null) {
+        state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      }
+      state
+    }
+  }
 
   /**
    * Runs the specified SQL query using Hive.

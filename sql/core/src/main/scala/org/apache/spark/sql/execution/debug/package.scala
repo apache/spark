@@ -32,7 +32,9 @@ import org.apache.spark.sql.types._
  *
  * Usage:
  * {{{
- *   sql("SELECT key FROM src").debug
+ *   import org.apache.spark.sql.execution.debug._
+ *   sql("SELECT key FROM src").debug()
+ *   dataFrame.typeCheck()
  * }}}
  */
 package object debug {
@@ -144,11 +146,9 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
    * Helper functions for checking that runtime types match a given schema.
    */
-  @DeveloperApi
-  object TypeCheck {
+  private[sql] object TypeCheck {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
@@ -168,16 +168,15 @@ package object debug {
       case (_: Short, ShortType) =>
       case (_: Boolean, BooleanType) =>
       case (_: Double, DoubleType) =>
+      case (v, udt: UserDefinedType[_]) => typeCheck(v, udt.sqlType)
 
       case (d, t) => sys.error(s"Invalid data found: got $d (${d.getClass}) expected $t")
     }
   }
 
   /**
-   * :: DeveloperApi ::
    * Augments [[DataFrame]]s with debug methods.
    */
-  @DeveloperApi
   private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
     import TypeCheck._
 

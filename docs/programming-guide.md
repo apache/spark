@@ -173,8 +173,11 @@ in-process.
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add JARs to the classpath
-by passing a comma-separated list to the `--jars` argument.
-For example, to run `bin/spark-shell` on exactly four cores, use:
+by passing a comma-separated list to the `--jars` argument. You can also add dependencies 
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates 
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
+four cores, use:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4]
@@ -184,6 +187,12 @@ Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4] --jars code.jar
+{% endhighlight %}
+
+To include a dependency using maven coordinates:
+
+{% highlight bash %}
+$ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
@@ -196,7 +205,11 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
-to the runtime path by passing a comma-separated list to `--py-files`.
+to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+can be passed to the `--repositories` argument. Any python dependencies a Spark Package has (listed in 
+the requirements.txt of that package) must be manually installed using pip when necessary.
 For example, to run `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
@@ -322,7 +335,7 @@ Apart from text files, Spark's Scala API also supports several other data format
 
 * For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html). In addition, Spark allows you to specify native types for a few common Writables; for example, `sequenceFile[Int, String]` will automatically read IntWritables and Texts.
 
-* For other Hadoop InputFormats, you can use the `SparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `SparkContext.newHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
+* For other Hadoop InputFormats, you can use the `SparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `SparkContext.newAPIHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
 
 * `RDD.saveAsObjectFile` and `SparkContext.objectFile` support saving an RDD in a simple format consisting of serialized Java objects. While this is not as efficient as specialized formats like Avro, it offers an easy way to save any RDD.
 
@@ -354,7 +367,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 * For [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), use SparkContext's `sequenceFile[K, V]` method where `K` and `V` are the types of key and values in the file. These should be subclasses of Hadoop's [Writable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Writable.html) interface, like [IntWritable](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/IntWritable.html) and [Text](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/Text.html).
 
-* For other Hadoop InputFormats, you can use the `JavaSparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `JavaSparkContext.newHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
+* For other Hadoop InputFormats, you can use the `JavaSparkContext.hadoopRDD` method, which takes an arbitrary `JobConf` and input format class, key class and value class. Set these the same way you would for a Hadoop job with your input source. You can also use `JavaSparkContext.newAPIHadoopRDD` for InputFormats based on the "new" MapReduce API (`org.apache.hadoop.mapreduce`).
 
 * `JavaRDD.saveAsObjectFile` and `JavaSparkContext.objectFile` support saving an RDD in a simple format consisting of serialized Java objects. While this is not as efficient as specialized formats like Avro, it offers an easy way to save any RDD.
 
@@ -712,7 +725,7 @@ class MyClass(object):
     def __init__(self):
         self.field = "Hello"
     def doStuff(self, rdd):
-        return rdd.map(lambda s: self.field + x)
+        return rdd.map(lambda s: self.field + s)
 {% endhighlight %}
 
 To avoid this issue, the simplest way is to copy `field` into a local variable instead
@@ -721,13 +734,76 @@ of accessing it externally:
 {% highlight python %}
 def doStuff(self, rdd):
     field = self.field
-    return rdd.map(lambda s: field + x)
+    return rdd.map(lambda s: field + s)
 {% endhighlight %}
 
 </div>
 
 </div>
 
+### Understanding closures <a name="ClosuresLink"></a>
+One of the harder things about Spark is understanding the scope and life cycle of variables and methods when executing code across a cluster. RDD operations that modify variables outside of their scope can be a frequent source of confusion. In the example below we'll look at code that uses `foreach()` to increment a counter, but similar issues can occur for other operations as well.
+
+#### Example
+
+Consider the naive RDD element sum below, which behaves completely differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN): 
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+var counter = 0
+var rdd = sc.parallelize(data)
+
+// Wrong: Don't do this!!
+rdd.foreach(x => counter += x)
+
+println("Counter value: " + counter)
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+int counter = 0;
+JavaRDD<Integer> rdd = sc.parallelize(data); 
+
+// Wrong: Don't do this!!
+rdd.foreach(x -> counter += x);
+
+println("Counter value: " + counter);
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+counter = 0
+rdd = sc.parallelize(data)
+
+# Wrong: Don't do this!!
+rdd.foreach(lambda x: counter += x)
+
+print("Counter value: " + counter)
+
+{% endhighlight %}
+</div>
+
+</div>
+
+#### Local vs. cluster modes
+
+The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node. 
+
+However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
+
+What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+
+In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an Accumulator instead if some global aggregation is needed.
+
+#### Printing elements of an RDD 
+Another common idiom is attempting to print out the elements of an RDD using `rdd.foreach(println)` or `rdd.map(println)`. On a single machine, this will generate the expected output and print all the RDD's elements. However, in `cluster` mode, the output to `stdout` being called by the executors is now writing to the executor's `stdout` instead, not the one on the driver, so `stdout` on the driver won't show these! To print all elements on the driver, one can use the `collect()` method to first bring the RDD to the driver node thus: `rdd.collect().foreach(println)`. This can cause the driver to run out of memory, though, because `collect()` fetches the entire RDD to a single machine; if you only need to print a few elements of the RDD, a safer approach is to use the `take()`: `rdd.take(100).foreach(println)`.
+ 
 ### Working with Key-Value Pairs
 
 <div class="codetabs">
@@ -1005,7 +1081,8 @@ for details.
 </tr>
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
-  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an accumulator variable (see below) or interacting with external storage systems. </td>
+  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#AccumLink">Accumulator</a> or interacting with external storage systems. 
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
 </tr>
 </table>
 
@@ -1130,6 +1207,12 @@ than shipping a copy of it with tasks. They can be used, for example, to give ev
 large input dataset in an efficient manner. Spark also attempts to distribute broadcast variables
 using efficient broadcast algorithms to reduce communication cost.
 
+Spark actions are executed through a set of stages, separated by distributed "shuffle" operations.
+Spark automatically broadcasts the common data needed by tasks within each stage. The data
+broadcasted this way is cached in serialized form and deserialized before running each task. This
+means that explicitly creating broadcast variables is only useful when tasks across multiple stages
+need the same data or when caching the data in deserialized form is important.
+
 Broadcast variables are created from a variable `v` by calling `SparkContext.broadcast(v)`. The
 broadcast variable is a wrapper around `v`, and its value can be accessed by calling the `value`
 method. The code below shows this:
@@ -1178,7 +1261,7 @@ run on the cluster so that `v` is not shipped to the nodes more than once. In ad
 `v` should not be modified after it is broadcast in order to ensure that all nodes get the same
 value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
-## Accumulators
+## Accumulators <a name="AccumLink"></a>
 
 Accumulators are variables that are only "added" to through an associative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
@@ -1323,25 +1406,28 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
-val acc = sc.accumulator(0)
-data.map(x => acc += x; f(x))
-// Here, acc is still 0 because no actions have cause the `map` to be computed.
+val accum = sc.accumulator(0)
+data.map { x => accum += x; f(x) }
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 Accumulator<Integer> accum = sc.accumulator(0);
-data.map(x -> accum.add(x); f(x););
-// Here, accum is still 0 because no actions have cause the `map` to be computed.
+data.map(x -> { accum.add(x); return f(x); });
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 accum = sc.accumulator(0)
-data.map(lambda x => acc.add(x); f(x))
-# Here, acc is still 0 because no actions have cause the `map` to be computed.
+def g(x):
+  accum.add(x)
+  return f(x)
+data.map(g)
+# Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
@@ -1352,6 +1438,11 @@ data.map(lambda x => acc.add(x); f(x))
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
 In short, once you package your application into a JAR (for Java/Scala) or a set of `.py` or `.zip` files (for Python),
 the `bin/spark-submit` script lets you submit it to any supported cluster manager.
+
+# Launching Spark jobs from Java / Scala
+
+The [org.apache.spark.launcher](api/java/index.html?org/apache/spark/launcher/package-summary.html)
+package provides classes for launching Spark jobs as child processes using a simple Java API.
 
 # Unit Testing
 

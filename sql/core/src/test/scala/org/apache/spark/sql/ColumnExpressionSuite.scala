@@ -28,49 +28,10 @@ class ColumnExpressionSuite extends QueryTest {
 
   // TODO: Add test cases for bitwise operations.
 
-  test("computability check") {
-    def shouldBeComputable(c: Column): Unit = assert(c.isComputable === true)
-
-    def shouldNotBeComputable(c: Column): Unit = {
-      assert(c.isComputable === false)
-      intercept[UnsupportedOperationException] { c.head() }
-    }
-
-    shouldBeComputable(testData2("a"))
-    shouldBeComputable(testData2("b"))
-
-    shouldBeComputable(testData2("a") + testData2("b"))
-    shouldBeComputable(testData2("a") + testData2("b") + 1)
-
-    shouldBeComputable(-testData2("a"))
-    shouldBeComputable(!testData2("a"))
-
-    shouldNotBeComputable(testData2.select(($"a" + 1).as("c"))("c") + testData2("b"))
-    shouldNotBeComputable(
-      testData2.select(($"a" + 1).as("c"))("c") + testData2.select(($"b" / 2).as("d"))("d"))
-    shouldNotBeComputable(
-      testData2.select(($"a" + 1).as("c")).select(($"c" + 2).as("d"))("d") + testData2("b"))
-
-    // Literals and unresolved columns should not be computable.
-    shouldNotBeComputable(col("1"))
-    shouldNotBeComputable(col("1") + 2)
-    shouldNotBeComputable(lit(100))
-    shouldNotBeComputable(lit(100) + 10)
-    shouldNotBeComputable(-col("1"))
-    shouldNotBeComputable(!col("1"))
-
-    // Getting data from different frames should not be computable.
-    shouldNotBeComputable(testData2("a") + testData("key"))
-    shouldNotBeComputable(testData2("a") + 1 + testData("key"))
-
-    // Aggregate functions alone should not be computable.
-    shouldNotBeComputable(sum(testData2("a")))
-  }
-
   test("collect on column produced by a binary operator") {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
-    checkAnswer(df("a") + df("b"), Seq(Row(3)))
-    checkAnswer(df("a") + df("b").as("c"), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b").as("c")), Seq(Row(3)))
   }
 
   test("star") {
@@ -78,7 +39,6 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("star qualified by data frame object") {
-    // This is not yet supported.
     val df = testData.toDF
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
@@ -352,19 +312,26 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
-    val column = df("words")
   
     checkAnswer(
-      column.explode { word: String => word.split(" ").toSeq }.as("word"),
+      df.select(df("words").explode { word: String => word.split(" ").toSeq }.as("word")),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
 
     val df2 = Seq(Tuple1("1 2 3"), Tuple1("4 5")).toDF("numbers")
-    val column2 = df2("numbers")
 
     checkAnswer(
-      column2.explode { number: String => number.split(" ").toSeq } + 1,
-      Row(2.0) :: Row(3.0) :: Row(4.0) :: Row(5.0) ::Row(6.0) :: Nil
+      df2.select(df2("numbers").explode { number: String => number.split(" ").toSeq.map(_.toInt) }.as("number")),
+      Row(1) :: Row(2) :: Row(3) :: Row(4) ::Row(5) :: Nil
     )
+  }
+
+  test("lift alias out of cast") {
+    assert(col("1234").as("name").cast("int").expr === col("1234").cast("int").as("name").expr)
+  }
+
+  test("columns can be compared") {
+    assert('key.desc == 'key.desc)
+    assert('key.desc != 'key.asc)
   }
 }

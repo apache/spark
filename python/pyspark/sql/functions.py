@@ -37,7 +37,7 @@ def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
+        jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -48,6 +48,9 @@ _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
+    'asc': 'Returns a sort expression based on the ascending order of the given column name.',
+    'desc': 'Returns a sort expression based on the descending order of the given column name.',
+
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
@@ -69,6 +72,7 @@ for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
 del _name, _doc
 __all__ += _functions.keys()
+__all__.sort()
 
 
 def countDistinct(col, *cols):
@@ -140,6 +144,7 @@ class UserDefinedFunction(object):
 def udf(f, returnType=StringType()):
     """Create a user defined function (UDF)
 
+    >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> df.select(slen(df.name).alias('slen')).collect()
     [Row(slen=5), Row(slen=3)]
@@ -151,15 +156,14 @@ def _test():
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
-    import pyspark.sql.dataframe
-    globs = pyspark.sql.dataframe.__dict__.copy()
+    import pyspark.sql.functions
+    globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
-    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs,
+        pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:

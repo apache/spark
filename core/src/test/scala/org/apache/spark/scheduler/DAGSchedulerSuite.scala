@@ -96,6 +96,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     }
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
+    override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
   }
 
   /** Length of time to wait while draining listener events. */
@@ -386,6 +387,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
       override def defaultParallelism() = 2
       override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
         blockManagerId: BlockManagerId): Boolean = true
+      override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,
@@ -735,7 +737,11 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assert(Accumulators.originals(accum.id).value === 1)
+
+    val accVal = Accumulators.originals(accum.id).get.get.value
+
+    assert(accVal === 1)
+
     assertDataStructuresEmpty
   }
 

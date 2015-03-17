@@ -22,6 +22,12 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
+ * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
+ * as an AnalysisException with the correct position information.
+ */
+class NoSuchTableException extends Exception
+
+/**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
@@ -39,6 +45,8 @@ trait Catalog {
    * isTemporary is a Boolean value indicates if a table is a temporary or not.
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
+
+  def refreshTable(databaseName: String, tableName: String): Unit
 
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
@@ -112,6 +120,10 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables.map {
       case (name, _) => (name, true)
     }.toSeq
+  }
+
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
+    throw new UnsupportedOperationException
   }
 }
 
@@ -218,4 +230,8 @@ object EmptyCatalog extends Catalog {
   }
 
   override def unregisterAllTables(): Unit = {}
+
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
 }
