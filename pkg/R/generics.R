@@ -330,3 +330,83 @@ setGeneric("sortByKey", function(x,
 #' @export
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
+
+################### Column Methods ########################
+
+#' @rdname column
+#' @export
+setGeneric("asc", function(x) { standardGeneric("asc") })
+
+#' @rdname column
+#' @export
+setGeneric("desc", function(x) { standardGeneric("desc") })
+
+#' @rdname column
+#' @export
+setGeneric("avg", function(x, ...) { standardGeneric("avg") })
+
+#' @rdname column
+#' @export
+setGeneric("last", function(x) { standardGeneric("last") })
+
+#' @rdname column
+#' @export
+setGeneric("lower", function(x) { standardGeneric("lower") })
+
+#' @rdname column
+#' @export
+setGeneric("upper", function(x) { standardGeneric("upper") })
+
+#' @rdname column
+#' @export
+setGeneric("like", function(x, ...) { standardGeneric("like") })
+
+#' @rdname column
+#' @export
+setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
+
+#' @rdname column
+#' @export
+setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+
+#' @rdname column
+#' @export
+setGeneric("endsWith", function(x, ...) { standardGeneric("endsWith") })
+
+#' @rdname column
+#' @export
+setGeneric("getField", function(x, ...) { standardGeneric("getField") })
+
+#' @rdname column
+#' @export
+setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
+
+#' @rdname column
+#' @export
+setGeneric("contains", function(x, ...) { standardGeneric("contains") })
+
+#' @rdname column
+#' @export
+setGeneric("isNull", function(x) { standardGeneric("isNull") })
+
+#' @rdname column
+#' @export
+setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
+
+#' @rdname column
+#' @export
+setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column
+#' @export
+setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
+
+#' @rdname column
+#' @export
+setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
+
+#' @rdname column
+#' @export
+setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
+
+

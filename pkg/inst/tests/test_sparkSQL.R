@@ -504,6 +504,14 @@ test_that("column functions", {
   c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
 })
 
+test_that("string operators", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_equal(count(where(df, like(df$name, "A%"))), 1)
+  expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
+  expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
+  expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
+})
+
 test_that("group by", {
   df <- jsonFile(sqlCtx, jsonPath)
   df1 <- agg(df, name = "max", age = "sum")

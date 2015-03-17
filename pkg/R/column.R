@@ -1,6 +1,6 @@
 #' Column Class
 
-#' @include jobj.R
+#' @include generics.R jobj.R
 NULL
 
 setOldClass("jobj")
@@ -32,17 +32,16 @@ setMethod("show", "Column",
             cat("Column", callJMethod(object@jc, "toString"), "\n")
           })
 
-# TODO(davies): like, rlike, startwith, substr, getField, getItem
 operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
   "&" = "and", "|" = "or" #, "!" = "unary_$bang"
 )
-
+column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
+column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct",
-               "isNull", "isNotNull")
+               "first", "last", "lower", "upper", "sumDistinct")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -64,7 +63,27 @@ createOperator <- function(op) {
             })
 }
 
-createFunction <- function(name) {
+createColumnFunction1 <- function(name) {
+  setMethod(name,
+            signature(x = "Column"),
+            function(x) {
+              column(callJMethod(x@jc, name))
+            })
+}
+
+createColumnFunction2 <- function(name) {
+  setMethod(name,
+            signature(x = "Column"),
+            function(x, data) {
+              if (class(data) == "Column") {
+                data <- data@jc
+              }
+              jc <- callJMethod(x@jc, name, data)
+              column(jc)
+            })
+}
+
+createStaticFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
@@ -77,62 +96,60 @@ createMethods <- function() {
   for (op in names(operators)) {
     createOperator(op)
   }
-
-  setGeneric("avg", function(x, ...) { standardGeneric("avg") })
-  setGeneric("last", function(x) { standardGeneric("last") })
-  setGeneric("lower", function(x) { standardGeneric("lower") })
-  setGeneric("upper", function(x) { standardGeneric("upper") })
-  setGeneric("isNull", function(x) { standardGeneric("isNull") })
-  setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
-  setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
-
+  for (name in column_functions1) {
+    createColumnFunction1(name)
+  }
+  for (name in column_functions2) {
+    createColumnFunction2(name)
+  }
   for (x in functions) {
-    createFunction(x)
+    createStaticFunction(x)
   }
 }
 
 createMethods()
 
-setGeneric("asc", function(x) { standardGeneric("asc") })
-
-setMethod("asc",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJMethod(x@jc, "asc")
-            column(jc)
-          })
-
-setGeneric("desc", function(x) { standardGeneric("desc") })
-
-setMethod("desc",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJMethod(x@jc, "desc")
-            column(jc)
-          })
-
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
-            if (class(data) == "character") {
+            if (is.character(data)) {
               column(callJMethod(object@jc, "as", data))
             } else {
-              # TODO(davies): support DataType object
-              stop("not implemented")
+              stop("data should be character")
             }
           })
 
-setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
-
-setMethod("cast",
-          signature(x = "Column", dataType = "character"),
-          function(x, dataType) {
-            column(callJMethod(x@jc, "cast", dataType))
+#' An expression that returns a substring.
+setMethod("substr", signature(x = "Column"),
+          function(x, start, stop) {
+            jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
+            column(jc)
           })
 
+#' Casts the column to a different data type.
+#' @examples
+#' \donotrun{
+#'   cast(df$age, "string")
+#'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
+#' }
+setMethod("cast",
+          signature(x = "Column"),
+          function(x, dataType) {
+            if (is.character(dataType)) {
+              column(callJMethod(x@jc, "cast", dataType))
+            } else if (is.list(dataType)) {
+              json <- tojson(dataType)
+              jdataType <- callJStatic("org.apache.spark.sql.types.DataType", "fromJson", json)
+              column(callJMethod(x@jc, "cast", jdataType))
+            } else {
+              stop("dataType should be character or list")
+            }
+          })
 
-setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
-
+#' Approx Count Distinct
+#'
+#' Returns the approximate number of distinct items in a group.
+#'
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.95) {
@@ -140,15 +157,18 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
-
+#' Count Distinct
+#'
+#' returns the number of distinct items in a group.
+#'
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
             jcol <- lapply(list(...), function (x) {
               x@jc
             })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc, listToSeq(jcol))
+            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
+                              listToSeq(jcol))
             column(jc)
           })
 
