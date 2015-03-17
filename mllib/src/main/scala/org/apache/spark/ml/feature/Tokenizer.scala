@@ -81,17 +81,18 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
    * param sets regex used by tokenizer 
    * @group param
    */
-  val regex = new Param(this, "regex", "regex used for tokenizing", Some("\\p{L}+|[^\\p{L}\\s]+"))
+  val pattern = new Param(this, "pattern", 
+    "regex pattern used for tokenizing", Some("\\p{L}+|[^\\p{L}\\s]+"))
 
   /** @group setParam */
-  def setRegex(value: String) = set(regex, value)
+  def setPattern(value: String) = set(pattern, value)
 
   /** @group getParam */
-  def getRegex: String = get(regex)
+  def getPattern: String = get(pattern)
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { str =>
 
-    val re = paramMap(regex)
+    val re = paramMap(pattern)
     val tokens = if(paramMap(gaps)) str.split(re).toList else (re.r.findAllIn(str)).toList
 
     tokens.filter(_.length >= paramMap(minTokenLength))
