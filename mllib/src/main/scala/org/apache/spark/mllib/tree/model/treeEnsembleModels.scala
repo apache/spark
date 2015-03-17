@@ -116,7 +116,7 @@ class GradientBoostedTreesModel(
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param loss evaluation metric.
    * @return an array with index i having the losses or errors for the ensemble
-   *         containing trees 1 to i + 1
+   *         containing the first i+1 trees
    */
   def evaluateEachIteration(
       data: RDD[LabeledPoint],
