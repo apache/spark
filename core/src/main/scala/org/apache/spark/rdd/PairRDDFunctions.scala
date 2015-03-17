@@ -876,6 +876,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * /path/prefix/B [/part-1, /part-2, etc]
    * /path/prefix/F [/part-1, /part-2, etc]
    * /path/prefix/N [/part-1, /part-2, etc]
+   *
+   * @param path - The path for the parent directory
+   * @param numPartitions - The number of partitions to partition to
    */
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
                                                     (implicit fm: ClassTag[F]) {

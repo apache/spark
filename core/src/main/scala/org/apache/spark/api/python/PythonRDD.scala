@@ -21,6 +21,7 @@ import java.io._
 import java.net._
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, UUID, Collections}
 
+import org.apache.commons.lang.ClassUtils
 import org.apache.spark.input.PortableDataStream
 
 import scala.collection.JavaConversions._
@@ -36,7 +37,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDDMultipleTextOutputFormat, RDD}
 import org.apache.spark.util.Utils
 
 private[spark] class PythonRDD(
@@ -679,6 +680,43 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
+   * Output a Python RDD of key-value pairs to any Hadoop file system such that the values within
+   * the rdd are written to sub-directories organized by the associated key.
+   *
+   * Keys and values are converted to suitable output types using either user specified converters
+   * or, if not specified, [[org.apache.spark.api.python.JavaToWritableConverter]]. Post-conversion
+   * types `keyClass` and `valueClass` are automatically inferred if not specified. The passed-in
+   * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
+   * this RDD.
+   */
+  def saveAsHadoopFileByKey[K, V, C <: CompressionCodec](
+      pyRDD: JavaRDD[Array[Byte]],
+      batchSerialized: Boolean,
+      path: String,
+      outputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String],
+      compressionCodecClass: String) = {
+    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
+    val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
+      inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
+    val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
+    val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
+    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
+      new JavaToWritableConverter)
+
+    converted.saveAsHadoopFile(path,
+      ClassUtils.primitiveToWrapper(kc),
+      ClassUtils.primitiveToWrapper(vc),
+      classOf[RDDMultipleTextOutputFormat[K,V]],
+      new JobConf(mergedConf),
+      codec=codec)
+  }
+
+  /**
    * Output a Python RDD of key-value pairs to any Hadoop file system, using new Hadoop
    * `OutputFormat` in mapreduce package. Keys and values are converted to suitable output
    * types using either user specified converters or, if not specified,
@@ -749,10 +787,10 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
-  /** 
+  /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
    * by the DAGScheduler's single-threaded actor anyway.
-   */ 
+   */
   @transient var socket: Socket = _
 
   def openSocket(): Socket = synchronized {

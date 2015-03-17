@@ -742,270 +742,296 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def lookup(key: K): JList[V] = seqAsJavaList(rdd.lookup(key))
 
-  /** Output the RDD to any Hadoop-supported file system. */
-  def saveAsHadoopFile[F <: OutputFormat[_, _]](
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[F],
-      conf: JobConf) {
-    rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
-  }
-
-  /** Output the RDD to any Hadoop-supported file system. */
-  def saveAsHadoopFile[F <: OutputFormat[_, _]](
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[F]) {
-    rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
-  }
-
-  /** Output the RDD to any Hadoop-supported file system, compressing with the supplied codec. */
-  def saveAsHadoopFile[F <: OutputFormat[_, _]](
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[F],
-      codec: Class[_ <: CompressionCodec]) {
-    rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
-  }
-
-  /** Output the RDD to any Hadoop-supported file system. */
-  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[F],
-      conf: Configuration) {
-    rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
-  }
-
-  /**
-   * Output the RDD to any Hadoop-supported storage system, using
-   * a Configuration object for that storage system.
-   */
-  def saveAsNewAPIHadoopDataset(conf: Configuration) {
-    rdd.saveAsNewAPIHadoopDataset(conf)
-  }
-
-  /** Output the RDD to any Hadoop-supported file system. */
-  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[F]) {
-    rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
-  }
-
-  /**
-   * Output the RDD to any Hadoop-supported storage system, using a Hadoop JobConf object for
-   * that storage system. The JobConf should set an OutputFormat and any output paths required
-   * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
-   * MapReduce job.
-   */
-  def saveAsHadoopDataset(conf: JobConf) {
-    rdd.saveAsHadoopDataset(conf)
-  }
-
-  /**
-   * Repartition the RDD according to the given partitioner and, within each resulting partition,
-   * sort records by their keys.
+  /*
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
+   * `OutputFormat` class supporting the key and value types K and V in this RDD.
    *
-   * This is more efficient than calling `repartition` and then sorting within each partition
-   * because it can push the sorting down into the shuffle machinery.
-   */
-  def repartitionAndSortWithinPartitions(partitioner: Partitioner): JavaPairRDD[K, V] = {
-    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
-    repartitionAndSortWithinPartitions(partitioner, comp)
-  }
-
-  /**
-   * Repartition the RDD according to the given partitioner and, within each resulting partition,
-   * sort records by their keys.
+   * Example:
+   * [('N', 'Nick'), ('N', 'Nancy'), ('B', 'Bob'), ('B', 'Ben'), ('F', 'Frankie')]
+   * /path/prefix/B [/part-1, /part-2, etc]
+   * /path/prefix/F [/part-1, /part-2, etc]
+   * /path/prefix/N [/part-1, /part-2, etc]
    *
-   * This is more efficient than calling `repartition` and then sorting within each partition
-   * because it can push the sorting down into the shuffle machinery.
+   * @param path - The path for the parent directory
+   * @param numPartitions - The number of partitions to partition to
    */
-  def repartitionAndSortWithinPartitions(partitioner: Partitioner, comp: Comparator[K])
-    : JavaPairRDD[K, V] = {
-    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
-    fromRDD(
-      new OrderedRDDFunctions[K, V, (K, V)](rdd).repartitionAndSortWithinPartitions(partitioner))
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
+      (implicit fm: ClassTag[F]) {
+    rdd.saveAsHadoopFileByKey(path, numPartitions)
   }
 
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements in
-   * ascending order. Calling `collect` or `save` on the resulting RDD will return or output an
-   * ordered list of records (in the `save` case, they will be written to multiple `part-X` files
-   * in the filesystem, in order of the keys).
+  /*
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
+   * `OutputFormat` class supporting the key and value types K and V in this RDD.
    */
-  def sortByKey(): JavaPairRDD[K, V] = sortByKey(true)
-
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
-   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
-   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
-   * order of the keys).
-   */
-  def sortByKey(ascending: Boolean): JavaPairRDD[K, V] = {
-    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
-    sortByKey(comp, ascending)
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    rdd.saveAsHadoopFileByKey(path)
   }
 
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
-   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
-   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
-   * order of the keys).
-   */
-  def sortByKey(ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
-    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
-    sortByKey(comp, ascending, numPartitions)
-  }
+/** Output the RDD to any Hadoop-supported file system. */
+def saveAsHadoopFile[F <: OutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F],
+    conf: JobConf) {
+  rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
+}
 
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
-   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
-   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
-   * order of the keys).
-   */
-  def sortByKey(comp: Comparator[K]): JavaPairRDD[K, V] = sortByKey(comp, true)
+/** Output the RDD to any Hadoop-supported file system. */
+def saveAsHadoopFile[F <: OutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F]) {
+  rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
+}
 
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
-   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
-   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
-   * order of the keys).
-   */
-  def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
-    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
-    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
-  }
+/** Output the RDD to any Hadoop-supported file system, compressing with the supplied codec. */
+def saveAsHadoopFile[F <: OutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F],
+    codec: Class[_ <: CompressionCodec]) {
+  rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
+}
 
-  /**
-   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
-   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
-   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
-   * order of the keys).
-   */
-  def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
-    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
-    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
-  }
+/** Output the RDD to any Hadoop-supported file system. */
+def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F],
+    conf: Configuration) {
+  rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
+}
 
-  /**
-   * Return an RDD with the keys of each tuple.
-   */
-  def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))
+/**
+ * Output the RDD to any Hadoop-supported storage system, using
+ * a Configuration object for that storage system.
+ */
+def saveAsNewAPIHadoopDataset(conf: Configuration) {
+  rdd.saveAsNewAPIHadoopDataset(conf)
+}
 
-  /**
-   * Return an RDD with the values of each tuple.
-   */
-  def values(): JavaRDD[V] = JavaRDD.fromRDD[V](rdd.map(_._2))
+/** Output the RDD to any Hadoop-supported file system. */
+def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F]) {
+  rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
+}
 
-  /**
-   * Return approximate number of distinct values for each key in this RDD.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
-   *
-   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It must be greater than 0.000017.
-   * @param partitioner partitioner of the resulting RDD.
-   */
-  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaPairRDD[K, Long] =
-  {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, partitioner))
-  }
+/**
+ * Output the RDD to any Hadoop-supported storage system, using a Hadoop JobConf object for
+ * that storage system. The JobConf should set an OutputFormat and any output paths required
+ * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
+ * MapReduce job.
+ */
+def saveAsHadoopDataset(conf: JobConf) {
+  rdd.saveAsHadoopDataset(conf)
+}
 
-  /**
-   * Return approximate number of distinct values for each key in this RDD.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
-   *
-   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It must be greater than 0.000017.
-   * @param numPartitions number of partitions of the resulting RDD.
-   */
-  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, numPartitions))
-  }
+/**
+ * Repartition the RDD according to the given partitioner and, within each resulting partition,
+ * sort records by their keys.
+ *
+ * This is more efficient than calling `repartition` and then sorting within each partition
+ * because it can push the sorting down into the shuffle machinery.
+ */
+def repartitionAndSortWithinPartitions(partitioner: Partitioner): JavaPairRDD[K, V] = {
+  val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+  repartitionAndSortWithinPartitions(partitioner, comp)
+}
 
-  /**
-   * Return approximate number of distinct values for each key in this RDD.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
-   *
-   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It must be greater than 0.000017.
-   */
-  def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD))
-  }
+/**
+ * Repartition the RDD according to the given partitioner and, within each resulting partition,
+ * sort records by their keys.
+ *
+ * This is more efficient than calling `repartition` and then sorting within each partition
+ * because it can push the sorting down into the shuffle machinery.
+ */
+def repartitionAndSortWithinPartitions(partitioner: Partitioner, comp: Comparator[K])
+  : JavaPairRDD[K, V] = {
+  implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+  fromRDD(
+    new OrderedRDDFunctions[K, V, (K, V)](rdd).repartitionAndSortWithinPartitions(partitioner))
+}
 
-  /** Assign a name to this RDD */
-  def setName(name: String): JavaPairRDD[K, V] = {
-    rdd.setName(name)
-    this
-  }
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements in
+ * ascending order. Calling `collect` or `save` on the resulting RDD will return or output an
+ * ordered list of records (in the `save` case, they will be written to multiple `part-X` files
+ * in the filesystem, in order of the keys).
+ */
+def sortByKey(): JavaPairRDD[K, V] = sortByKey(true)
+
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+ * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+ * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+ * order of the keys).
+ */
+def sortByKey(ascending: Boolean): JavaPairRDD[K, V] = {
+  val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+  sortByKey(comp, ascending)
+}
+
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+ * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+ * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+ * order of the keys).
+ */
+def sortByKey(ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
+  val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+  sortByKey(comp, ascending, numPartitions)
+}
+
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+ * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+ * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+ * order of the keys).
+ */
+def sortByKey(comp: Comparator[K]): JavaPairRDD[K, V] = sortByKey(comp, true)
+
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+ * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+ * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+ * order of the keys).
+ */
+def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
+  implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+  fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
+}
+
+/**
+ * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+ * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+ * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+ * order of the keys).
+ */
+def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
+  implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+  fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+}
+
+/**
+ * Return an RDD with the keys of each tuple.
+ */
+def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))
+
+/**
+ * Return an RDD with the values of each tuple.
+ */
+def values(): JavaRDD[V] = JavaRDD.fromRDD[V](rdd.map(_._2))
+
+/**
+ * Return approximate number of distinct values for each key in this RDD.
+ *
+ * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+ * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+ * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+ *
+ * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+ *                   It must be greater than 0.000017.
+ * @param partitioner partitioner of the resulting RDD.
+ */
+def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaPairRDD[K, Long] =
+{
+  fromRDD(rdd.countApproxDistinctByKey(relativeSD, partitioner))
+}
+
+/**
+ * Return approximate number of distinct values for each key in this RDD.
+ *
+ * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+ * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+ * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+ *
+ * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+ *                   It must be greater than 0.000017.
+ * @param numPartitions number of partitions of the resulting RDD.
+ */
+def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, Long] = {
+  fromRDD(rdd.countApproxDistinctByKey(relativeSD, numPartitions))
+}
+
+/**
+ * Return approximate number of distinct values for each key in this RDD.
+ *
+ * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+ * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+ * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+ *
+ * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+ *                   It must be greater than 0.000017.
+ */
+def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, Long] = {
+  fromRDD(rdd.countApproxDistinctByKey(relativeSD))
+}
+
+/** Assign a name to this RDD */
+def setName(name: String): JavaPairRDD[K, V] = {
+  rdd.setName(name)
+  this
+}
 }
 
 object JavaPairRDD {
-  private[spark]
-  def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
-    rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
-  }
+private[spark]
+def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
+  rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
+}
 
-  private[spark]
-  def cogroupResultToJava[K: ClassTag, V, W](
-      rdd: RDD[(K, (Iterable[V], Iterable[W]))]): RDD[(K, (JIterable[V], JIterable[W]))] = {
-    rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2)))
-  }
+private[spark]
+def cogroupResultToJava[K: ClassTag, V, W](
+    rdd: RDD[(K, (Iterable[V], Iterable[W]))]): RDD[(K, (JIterable[V], JIterable[W]))] = {
+  rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2)))
+}
 
-  private[spark]
-  def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
-      rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))])
-      : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
-    rddToPairRDDFunctions(rdd)
-      .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
-  }
+private[spark]
+def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
+    rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))])
+    : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
+  rddToPairRDDFunctions(rdd)
+    .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
+}
 
-  private[spark]
-  def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
-      rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
-  : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
-    rddToPairRDDFunctions(rdd)
-      .mapValues(x =>
-        (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
-  }
+private[spark]
+def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
+    rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
+: RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
+  rddToPairRDDFunctions(rdd)
+    .mapValues(x =>
+      (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
+}
 
-  def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {
-    new JavaPairRDD[K, V](rdd)
-  }
+def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {
+  new JavaPairRDD[K, V](rdd)
+}
 
-  implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
+implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
 
-  private[spark]
-  implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
-    (x: T1, x1: T2) => fun.call(x, x1)
-  }
+private[spark]
+implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
+  (x: T1, x1: T2) => fun.call(x, x1)
+}
 
-  private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
+private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
 
-  private[spark]
-  implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
+private[spark]
+implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
 
-  /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
-  def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
-    implicit val ctagK: ClassTag[K] = fakeClassTag
-    implicit val ctagV: ClassTag[V] = fakeClassTag
-    new JavaPairRDD[K, V](rdd.rdd)
-  }
+/** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
+def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
+  implicit val ctagK: ClassTag[K] = fakeClassTag
+  implicit val ctagV: ClassTag[V] = fakeClassTag
+  new JavaPairRDD[K, V](rdd.rdd)
+}
 
 }
