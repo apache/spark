@@ -49,7 +49,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
-private[spark] class Master(
+private[master] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
@@ -59,65 +59,68 @@ private[spark] class Master(
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
-  val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
-  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
-  val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
-  val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
-  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
-  val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
-  val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
+  
+  private val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
+  private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
+  private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
+  private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
+  private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
   val workers = new HashSet[WorkerInfo]
-  val idToWorker = new HashMap[String, WorkerInfo]
-  val addressToWorker = new HashMap[Address, WorkerInfo]
-
-  val apps = new HashSet[ApplicationInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
-  val actorToApp = new HashMap[ActorRef, ApplicationInfo]
-  val addressToApp = new HashMap[Address, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
-  val completedApps = new ArrayBuffer[ApplicationInfo]
-  var nextAppNumber = 0
-  val appIdToUI = new HashMap[String, SparkUI]
+  val apps = new HashSet[ApplicationInfo]
 
-  val drivers = new HashSet[DriverInfo]
-  val completedDrivers = new ArrayBuffer[DriverInfo]
-  val waitingDrivers = new ArrayBuffer[DriverInfo] // Drivers currently spooled for scheduling
-  var nextDriverNumber = 0
+  private val idToWorker = new HashMap[String, WorkerInfo]
+  private val addressToWorker = new HashMap[Address, WorkerInfo]
+
+  private val actorToApp = new HashMap[ActorRef, ApplicationInfo]
+  private val addressToApp = new HashMap[Address, ApplicationInfo]
+  private val completedApps = new ArrayBuffer[ApplicationInfo]
+  private var nextAppNumber = 0
+  private val appIdToUI = new HashMap[String, SparkUI]
+
+  private val drivers = new HashSet[DriverInfo]
+  private val completedDrivers = new ArrayBuffer[DriverInfo]
+  // Drivers currently spooled for scheduling
+  private val waitingDrivers = new ArrayBuffer[DriverInfo] 
+  private var nextDriverNumber = 0
 
   Utils.checkHost(host, "Expected hostname")
 
-  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
-  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
+  private val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
+  private val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
     securityMgr)
-  val masterSource = new MasterSource(this)
+  private val masterSource = new MasterSource(this)
 
-  val webUi = new MasterWebUI(this, webUiPort)
+  private val webUi = new MasterWebUI(this, webUiPort)
 
-  val masterPublicAddress = {
+  private val masterPublicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 
-  val masterUrl = "spark://" + host + ":" + port
-  var masterWebUiUrl: String = _
+  private val masterUrl = "spark://" + host + ":" + port
+  private var masterWebUiUrl: String = _
 
-  var state = RecoveryState.STANDBY
+  private var state = RecoveryState.STANDBY
 
-  var persistenceEngine: PersistenceEngine = _
+  private var persistenceEngine: PersistenceEngine = _
 
-  var leaderElectionAgent: LeaderElectionAgent = _
+  private var leaderElectionAgent: LeaderElectionAgent = _
 
   private var recoveryCompletionTask: Cancellable = _
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
-  val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
+  private val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
-  val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
+  private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
   if (defaultCores < 1) {
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
@@ -449,11 +452,11 @@ private[spark] class Master(
     }
   }
 
-  def canCompleteRecovery =
+  private def canCompleteRecovery =
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
-  def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
+  private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
@@ -484,7 +487,7 @@ private[spark] class Master(
     }
   }
 
-  def completeRecovery() {
+  private def completeRecovery() {
     // Ensure "only-once" recovery semantics using a short synchronization period.
     synchronized {
       if (state != RecoveryState.RECOVERING) { return }
@@ -517,7 +520,7 @@ private[spark] class Master(
    * launched an executor for the app on it (right now the standalone backend doesn't like having
    * two executors on the same worker).
    */
-  def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
+  private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
     worker.memoryFree >= app.desc.memoryPerSlave && !worker.hasExecutor(app)
   }
 
@@ -596,7 +599,7 @@ private[spark] class Master(
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
+  private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
@@ -605,7 +608,7 @@ private[spark] class Master(
       exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
   }
 
-  def registerWorker(worker: WorkerInfo): Boolean = {
+  private def registerWorker(worker: WorkerInfo): Boolean = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
     workers.filter { w =>
@@ -633,7 +636,7 @@ private[spark] class Master(
     true
   }
 
-  def removeWorker(worker: WorkerInfo) {
+  private def removeWorker(worker: WorkerInfo) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
@@ -656,20 +659,20 @@ private[spark] class Master(
     persistenceEngine.removeWorker(worker)
   }
 
-  def relaunchDriver(driver: DriverInfo) {
+  private def relaunchDriver(driver: DriverInfo) {
     driver.worker = None
     driver.state = DriverState.RELAUNCHING
     waitingDrivers += driver
     schedule()
   }
 
-  def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
+  private def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
 
-  def registerApplication(app: ApplicationInfo): Unit = {
+  private def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.path.address
     if (addressToApp.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
@@ -684,7 +687,7 @@ private[spark] class Master(
     waitingApps += app
   }
 
-  def finishApplication(app: ApplicationInfo) {
+  private def finishApplication(app: ApplicationInfo) {
     removeApplication(app, ApplicationState.FINISHED)
   }
 
@@ -732,7 +735,7 @@ private[spark] class Master(
    * Rebuild a new SparkUI from the given application's event logs.
    * Return whether this is successful.
    */
-  def rebuildSparkUI(app: ApplicationInfo): Boolean = {
+  private def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
@@ -798,14 +801,14 @@ private[spark] class Master(
   }
 
   /** Generate a new app ID given a app's submission date */
-  def newApplicationId(submitDate: Date): String = {
+  private def newApplicationId(submitDate: Date): String = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId
   }
 
   /** Check for, and remove, any timed-out workers */
-  def timeOutDeadWorkers() {
+  private def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
@@ -822,19 +825,19 @@ private[spark] class Master(
     }
   }
 
-  def newDriverId(submitDate: Date): String = {
+  private def newDriverId(submitDate: Date): String = {
     val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }
 
-  def createDriver(desc: DriverDescription): DriverInfo = {
+  private def createDriver(desc: DriverDescription): DriverInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     new DriverInfo(now, newDriverId(date), desc, date)
   }
 
-  def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
+  private def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
@@ -842,7 +845,10 @@ private[spark] class Master(
     driver.state = DriverState.RUNNING
   }
 
-  def removeDriver(driverId: String, finalState: DriverState, exception: Option[Exception]) {
+  private def removeDriver(
+      driverId: String, 
+      finalState: DriverState, 
+      exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
@@ -863,7 +869,7 @@ private[spark] class Master(
   }
 }
 
-private[spark] object Master extends Logging {
+private[deploy] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
 
