@@ -19,8 +19,6 @@ package org.apache.spark.rdd
 
 import java.io.{BufferedReader, InputStreamReader}
 
-import org.apache.spark.api.java.JavaPairRDD
-
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.sys.process._
 import scala.util.Random
@@ -31,9 +29,11 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
+import org.apache.hadoop.util.Progressable
+
+import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.{Partitioner, SharedSparkContext}
 import org.apache.spark.util.Utils
-import org.apache.hadoop.util.Progressable
 
 import org.scalatest.FunSuite
 
