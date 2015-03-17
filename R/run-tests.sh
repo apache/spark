@@ -3,12 +3,14 @@
 FWDIR="$(cd `dirname $0`; pwd)"
 
 FAILED=0
-rm -f unit-tests.log
+LOGFILE=unit-tests.log
+rm -f $LOGFILE
 
-$FWDIR/sparkR pkg/tests/run-all.R 2>&1 | tee -a unit-tests.log
+$FWDIR/../bin/sparkR $FWDIR/pkg/tests/run-all.R >$LOGFILE 2>&1
 FAILED=$((PIPESTATUS[0]||$FAILED))
 
 if [[ $FAILED != 0 ]]; then
+    cat $LOGFILE
     echo -en "\033[31m"  # Red
     echo "Had test failures; see logs."
     echo -en "\033[0m"  # No color
