@@ -2,7 +2,7 @@
 
 FWDIR="$(cd `dirname $0`; pwd)"
 
-export PROJECT_HOME="$FWDIR"
+export PROJECT_HOME="$FWDIR/../R/"
 
 unset JAVA_HOME
 
