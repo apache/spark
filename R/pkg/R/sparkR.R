@@ -17,15 +17,8 @@
 
 .sparkREnv <- new.env()
 
-#TODO(davies): change to spark-submit
-assemblyJarName <- "spark-assembly-1.3.0-SNAPSHOT-hadoop1.0.4.jar"
-
 sparkR.onLoad <- function(libname, pkgname) {
-  assemblyJarPath <- paste(libname, "/../../assembly/target/scala-2.10/", assemblyJarName, sep = "")
-  packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
- 
   .sparkREnv$libname <- libname
-  .sparkREnv$assemblyJarPath <- assemblyJarPath
 }
 
 # Utility function that returns TRUE if we have an active connection to the
@@ -111,8 +104,7 @@ sparkR.init <- function(
   }
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
-  jars <- suppressWarnings(
-    normalizePath(c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))))
+  jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
   # URI needs four /// as from http://stackoverflow.com/a/18522792
@@ -123,34 +115,18 @@ sparkR.init <- function(
     collapseChar <- ";"
     uriSep <- "////"
   }
-  cp <- paste0(jars, collapse = collapseChar)
-
-  yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
-  if (yarn_conf_dir != "") {
-    cp <- paste(cp, yarn_conf_dir, sep = ":")
-  }
 
   sparkRExistingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (sparkRExistingPort != "") {
     sparkRBackendPort <- sparkRExistingPort
   } else {
     path <- tempfile(pattern = "backend_port")
-    if (Sys.getenv("SPARKR_USE_SPARK_SUBMIT", "") == "") {
-      launchBackend(classPath = cp,
-                    mainClass = "org.apache.spark.api.r.SparkRBackend",
-                    args = path,
-                    javaOpts = paste("-Xmx", sparkMem, sep = ""))
-    } else {
-      # TODO: We should deprecate sparkJars and ask users to add it to the
-      # command line (using --jars) which is picked up by SparkSubmit
-      launchBackendSparkSubmit(
-          mainClass = "org.apache.spark.api.r.SparkRBackend",
-          args = path,
-          appJar = .sparkREnv$assemblyJarPath,
-          sparkHome = sparkHome,
-          sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
-    }
-    # wait atmost 100 seconds for JVM to launch 
+    launchBackend(
+        args = path,
+        sparkHome = sparkHome,
+        jars = jars,
+        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
+    # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
       Sys.sleep(wait)

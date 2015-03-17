@@ -34,37 +34,7 @@ connectBackend <- function(hostname, port, timeout = 6000) {
   con
 }
 
-# Launch the SparkR backend using a call to 'system2'.
-launchBackend <- function(
-    classPath, 
-    mainClass, 
-    args, 
-    javaOpts = "-Xms2g -Xmx2g",
-    javaHome = Sys.getenv("JAVA_HOME")) {
-  if (.Platform$OS.type == "unix") {
-    java_bin_name = "java"
-  } else {
-    java_bin_name = "java.exe"
-  }
-
-  if (javaHome != "") {
-    java_bin <- file.path(javaHome, "bin", java_bin_name)
-  } else {
-    java_bin <- java_bin_name
-  }
-  # Quote the classpath to make sure it handles spaces on Windows
-  classPath <- shQuote(classPath)
-  combinedArgs <- paste(javaOpts, "-cp", classPath, mainClass, args, sep = " ")
-  cat("Launching java with command ", java_bin, " ", combinedArgs, "\n")
-  invisible(system2(java_bin, combinedArgs, wait = F))
-}
-
-launchBackendSparkSubmit <- function(
-    mainClass,
-    args,
-    appJar,
-    sparkHome,
-    sparkSubmitOpts) {
+launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts) {
   if (.Platform$OS.type == "unix") {
     sparkSubmitBinName = "spark-submit"
   } else {
@@ -77,11 +47,11 @@ launchBackendSparkSubmit <- function(
     sparkSubmitBin <- sparkSubmitBinName
   }
 
-  # Since this function is only used while launching R shell using spark-submit,
-  # the format we need to construct is
-  # spark-submit --class <mainClass> <sparkSubmitOpts> <jarFile> <appOpts>
+  if (jars != "") {
+    jars <- paste("--jars", jars)
+  }
 
-  combinedArgs <- paste("--class", mainClass, sparkSubmitOpts, appJar, args, sep = " ")
+  combinedArgs <- paste(sparkSubmitOpts, jars, "sparkr-shell", args, sep = " ")
   cat("Launching java with spark-submit command ", sparkSubmitBin, " ", combinedArgs, "\n")
   invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
 }

@@ -125,36 +125,39 @@ exportMethods("columns",
 
 exportClasses("Column")
 
-exportMethods("asc",
-              "desc",
-              "last",
-              "lower",
-              "upper",
-              "like",
-              "rlike",
-              "startsWith",
-              "endsWith",
-              "substr",
+exportMethods("abs",
+              "alias",
+              "approxCountDistinct",
+              "asc",
+              "avg",
+              "cast",
               "contains",
+              "countDistinct",
+              "desc",
+              "endsWith",
               "getField",
               "getItem",
-              "abs",
-              "sqrt",
-              "min",
-              "max",
-              "sum",
-              "avg",
-              "mean",
-              "isNull",
               "isNotNull",
-              "alias",
-              "cast",
-              "approxCountDistinct",
-              "countDistinct",
-              "sumDistinct")
+              "isNull",
+              "last",
+              "like",
+              "lower",
+              "max",
+              "mean",
+              "min",
+              "rlike",
+              "sqrt",
+              "startsWith",
+              "substr",
+              "sum",
+              "sumDistinct"
+              "upper")
 
 exportClasses("GroupedData")
 exportMethods("agg")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 export("cacheTable",
        "clearCache",
@@ -172,7 +175,5 @@ export("cacheTable",
        "toDF",
        "uncacheTable")
 
-export("sparkRSQL.init",
-       "sparkRHive.init")
 export("print.structType",
        "print.structField")

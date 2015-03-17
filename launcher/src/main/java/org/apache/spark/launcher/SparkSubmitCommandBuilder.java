@@ -18,13 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -52,6 +46,20 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * This is the actual resource name that identifies the PySpark shell to SparkSubmit.
    */
   static final String PYSPARK_SHELL_RESOURCE = "pyspark-shell";
+
+  /**
+   * Name of the app resource used to identify the SparkR shell. The command line parser expects
+   * the resource name to be the very first argument to spark-submit in this case.
+   *
+   * NOTE: this cannot be "sparkr-shell" since that identifies the SparkR shell to SparkSubmit
+   * (see sparkR.R), and can cause this code to enter into an infinite loop.
+   */
+  static final String SPARKR_SHELL = "sparkr-shell-main";
+
+  /**
+   * This is the actual resource name that identifies the SparkR shell to SparkSubmit.
+   */
+  static final String SPARKR_SHELL_RESOURCE = "sparkr-shell";
 
   /**
    * This map must match the class names for available special classes, since this modifies the way
@@ -87,6 +95,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       this.allowsMixedArguments = true;
       appResource = PYSPARK_SHELL_RESOURCE;
       submitArgs = args.subList(1, args.size());
+    } else if (args.size() > 0 && args.get(0).equals(SPARKR_SHELL)) {
+      this.allowsMixedArguments = true;
+      appResource = SPARKR_SHELL_RESOURCE;
+      submitArgs = args.subList(1, args.size());
     } else {
       this.allowsMixedArguments = false;
     }
@@ -98,6 +110,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   public List<String> buildCommand(Map<String, String> env) throws IOException {
     if (PYSPARK_SHELL_RESOURCE.equals(appResource)) {
       return buildPySparkShellCommand(env);
+    } else if (SPARKR_SHELL_RESOURCE.equals(appResource)) {
+      return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
     }
@@ -223,7 +237,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
 
     // Store spark-submit arguments in an environment variable, since there's no way to pass
-    // them to shell.py on the comand line.
+    // them to shell.py on the command line.
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : buildSparkSubmitArgs()) {
       if (submitArgs.length() > 0) {
@@ -241,6 +255,32 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     return pyargs;
+  }
+
+  private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
+    if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
+      appResource = appArgs.get(0);
+      appArgs.remove(0);
+      return buildCommand(env);
+    }
+
+    Properties props = loadPropertiesFile();
+    mergeEnvPathList(env, getLibPathEnvName(),
+            firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+
+    // Store spark-submit arguments in an environment variable, since there's no way to pass
+    // them to sparkR on the command line.
+    StringBuilder submitArgs = new StringBuilder();
+    for (String arg : buildSparkSubmitArgs()) {
+      if (submitArgs.length() > 0) {
+        submitArgs.append(" ");
+      }
+      submitArgs.append(quoteForPython(arg));
+    }
+    env.put("SPARKR_SUBMIT_ARGS", submitArgs.toString());
+
+    List<String> args = new ArrayList<String>();
+    return args;
   }
 
   private boolean isClientMode(Properties userProps) {
