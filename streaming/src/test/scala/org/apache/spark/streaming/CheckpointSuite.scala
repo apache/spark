@@ -212,8 +212,8 @@ class CheckpointSuite extends TestSuiteBase {
     val newCpConf = newCp.sparkConf
     assert(newCpConf.contains("spark.driver.host"))
     assert(newCpConf.contains("spark.driver.port"))
-    assert(originalConf.get("spark.driver.host") === "localhost")
-    assert(originalConf.get("spark.driver.port") === "9999")
+    assert(newCpConf.get("spark.driver.host") === "localhost")
+    assert(newCpConf.get("spark.driver.port") === "9999")
 
     // Check if all the parameters have been restored
     ssc = new StreamingContext(null, newCp, null)
