@@ -66,7 +66,8 @@ class PythonRDDSuite extends FunSuite with SharedSparkContext{
 
     PythonRDD.saveAsHadoopFileByKey(
       testPairs,
-      false, fullPath,
+      false,
+      fullPath,
       classOf[RDDMultipleTextOutputFormat].toString,
       classOf[Int].toString,
       classOf[Int].toString,
