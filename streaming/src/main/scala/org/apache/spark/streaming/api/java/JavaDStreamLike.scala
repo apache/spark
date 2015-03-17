@@ -34,6 +34,15 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.java.JavaDStream._
 import org.apache.spark.streaming.dstream.DStream
 
+/**
+ * As a workaround for https://issues.scala-lang.org/browse/SI-8905, implementations
+ * of JavaDStreamLike should extend this dummy abstract class instead of directly inheriting
+ * from the trait. See SPARK-3266 for additional details.
+ */
+private[streaming]
+abstract class AbstractJavaDStreamLike[T, This <: JavaDStreamLike[T, This, R],
+  R <: JavaRDDLike[T, R]] extends JavaDStreamLike[T, This, R]
+
 trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]]
     extends Serializable {
   implicit val classTag: ClassTag[T]
