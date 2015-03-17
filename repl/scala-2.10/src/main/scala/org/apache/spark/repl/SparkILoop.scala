@@ -314,7 +314,16 @@ class SparkILoop(
   private var currentPrompt = Properties.shellPromptString
 
   /**
+   * Bind a specified name to a specified value in the Interpreter.  The name may
+   * later be used by expressions passed to interpret.
    *
+   * @note This binds via compilation and interpretation
+   *
+   * @param name The variable name to bind
+   * @param x The object value to bind to it
+   *
+   * @return An indication of whether the binding succeeded or failed
+   *         using interpreter results
    */
   @DeveloperApi
   def bindValue(name: String, x: Any): IR.Result = {
@@ -322,10 +331,12 @@ class SparkILoop(
   }
 
   /**
-   *
+    * URI of the class server used to feed REPL compiled classes in the underlying IMain.
+    *
+    * @return The string representing the class server uri
    */
   @DeveloperApi
-  def classServerUri = intp.classServerUri
+  def classServerUri: String = intp.classServerUri
 
   /**
    * Sets the prompt string used by the REPL.

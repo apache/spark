@@ -105,6 +105,39 @@ class ReplSuite extends FunSuite {
     System.clearProperty("spark.driver.port")
   }
 
+  test("publicly exposed bindValue and classServerUri") {
+    // A mock ILoop that doesn't install the SIGINT handler.
+    class ILoop(out: PrintWriter) extends SparkILoop(None, out, None) {
+      settings = new scala.tools.nsc.Settings
+      settings.usejavacp.value = true
+      org.apache.spark.repl.Main.interp = this
+      override def createInterpreter() {
+        intp = new SparkILoopInterpreter
+        intp.setContextClassLoader()
+      }
+    }
+
+    val out = new StringWriter()
+    val interp = new ILoop(new PrintWriter(out))
+    interp.sparkContext = new SparkContext("local", "repl-test")
+    interp.createInterpreter()
+    interp.intp.initialize()
+    interp.bindValue("someKey", 1)
+
+    // Make sure the value we set in the caller to interpret is propagated in the thread that
+    // interprets the command.
+    interp.interpret("someKey")
+    assertDoesNotContain("error:", out.toString)
+    assertDoesNotContain("Exception", out.toString)
+    assert(out.toString.contains("res0: Int = 1"))
+    val csu = interp.classServerUri
+    assertDoesNotContain("error:",csu)
+    assertDoesNotContain("Exception",csu)
+    assertContains("http://",csu)
+    interp.sparkContext.stop()
+    System.clearProperty("spark.driver.port")
+  }
+
   test("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
