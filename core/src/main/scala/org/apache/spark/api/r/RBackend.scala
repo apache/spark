@@ -29,6 +29,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
 
+import org.apache.spark.Logging
+
 /**
  * Netty-based backend server that is used to communicate between R and Java.
  */
@@ -89,7 +91,7 @@ class RBackend {
 
 }
 
-object RBackend {
+object RBackend extends Logging {
   def main(args: Array[String]) {
     if (args.length < 1) {
       System.err.println("Usage: RBackend <tempFilePath>")
@@ -134,7 +136,7 @@ object RBackend {
       sparkRBackend.run()
     } catch {
       case e: IOException =>
-        System.err.println("Server shutting down: failed with exception ", e)
+        logError("Server shutting down: failed with exception ", e)
         sparkRBackend.close()
         System.exit(1)
     }

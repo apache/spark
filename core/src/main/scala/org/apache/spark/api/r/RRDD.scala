@@ -29,7 +29,7 @@ import scala.util.Try
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{Partition, SparkConf, SparkEnv, SparkException, TaskContext}
+import org.apache.spark._
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -40,7 +40,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
-  extends RDD[U](parent) {
+  extends RDD[U](parent) with Logging {
   override def getPartitions = parent.partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
@@ -160,8 +160,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
         } catch {
           // TODO: We should propogate this error to the task thread
           case e: Exception =>
-            System.err.println("R Writer thread got an exception " + e)
-            e.printStackTrace()
+            logError("R Writer thread got an exception", e)
         } finally {
           Try(output.close())
         }
@@ -300,7 +299,7 @@ private class StringRRDD[T: ClassTag](
 private[spark] class BufferedStreamThread(
     in: InputStream,
     name: String,
-    errBufferSize: Int) extends Thread(name) {
+    errBufferSize: Int) extends Thread(name) with Logging {
   val lines = new Array[String](errBufferSize)
   var lineIdx = 0
   override def run() {
@@ -309,8 +308,7 @@ private[spark] class BufferedStreamThread(
         lines(lineIdx) = line
         lineIdx = (lineIdx + 1) % errBufferSize
       }
-      // TODO: user logger
-      System.err.println(line)
+      logInfo(line)
     }
   }
 

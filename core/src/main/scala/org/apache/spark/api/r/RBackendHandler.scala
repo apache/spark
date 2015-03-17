@@ -22,9 +22,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.HashMap
 
 import io.netty.channel.ChannelHandler.Sharable
-import io.netty.channel.ChannelHandlerContext
-import io.netty.channel.SimpleChannelInboundHandler
+import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
+import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.api.r.SerDe._
  */
 @Sharable
 class RBackendHandler(server: RBackend)
-  extends SimpleChannelInboundHandler[Array[Byte]] {
+  extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
     val bis = new ByteArrayInputStream(msg)
@@ -65,8 +65,7 @@ class RBackendHandler(server: RBackend)
             writeObject(dos, null)
           } catch {
             case e: Exception =>
-              System.err.println(s"Removing $objId failed with " + e)
-              e.printStackTrace()
+              logError(s"Removing $objId failed", e)
               writeInt(dos, -1)
           }
         case _ => dos.writeInt(-1)
@@ -118,10 +117,10 @@ class RBackendHandler(server: RBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }
         if (methods.isEmpty) {
-          System.err.println(s"cannot find matching method ${cls}.$methodName. "
+          logWarning(s"cannot find matching method ${cls}.$methodName. "
             + s"Candidates are:")
           selectedMethods.foreach { method =>
-            System.err.println(s"$methodName(${method.getParameterTypes.mkString(",")})")
+            logWarning(s"$methodName(${method.getParameterTypes.mkString(",")})")
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
@@ -145,8 +144,7 @@ class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        System.err.println(s"$methodName on $objId failed with " + e)
-        e.printStackTrace()
+        logError(s"$methodName on $objId failed", e)
         writeInt(dos, -1)
     }
   }
