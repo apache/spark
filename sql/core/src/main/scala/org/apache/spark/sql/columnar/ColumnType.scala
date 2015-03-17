@@ -373,6 +373,33 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
   }
 }
 
+private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
+  extends NativeColumnType(
+    DecimalType(Some(PrecisionInfo(precision, scale))),
+    10,
+    FIXED_DECIMAL.defaultSize) {
+
+  override def extract(buffer: ByteBuffer): Decimal = {
+    Decimal(buffer.getLong(), precision, scale)
+  }
+
+  override def append(v: Decimal, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v.toUnscaledLong)
+  }
+
+  override def getField(row: Row, ordinal: Int): Decimal = {
+    row(ordinal).asInstanceOf[Decimal]
+  }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
+    row(ordinal) = value
+  }
+}
+
+private[sql] object FIXED_DECIMAL {
+  val defaultSize = 8
+}
+
 private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
     typeId: Int,
     defaultSize: Int)
@@ -394,7 +421,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](10, 16) {
+private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](11, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = value
   }
@@ -405,7 +432,7 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](10, 16) 
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] object GENERIC extends ByteArrayColumnType[DataType](11, 16) {
+private[sql] object GENERIC extends ByteArrayColumnType[DataType](12, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
   }
@@ -416,18 +443,20 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](11, 16) {
 private[sql] object ColumnType {
   def apply(dataType: DataType): ColumnType[_, _] = {
     dataType match {
-      case IntegerType   => INT
-      case LongType      => LONG
-      case FloatType     => FLOAT
-      case DoubleType    => DOUBLE
-      case BooleanType   => BOOLEAN
-      case ByteType      => BYTE
-      case ShortType     => SHORT
-      case StringType    => STRING
-      case BinaryType    => BINARY
-      case DateType      => DATE
+      case IntegerType => INT
+      case LongType => LONG
+      case FloatType => FLOAT
+      case DoubleType => DOUBLE
+      case BooleanType => BOOLEAN
+      case ByteType => BYTE
+      case ShortType => SHORT
+      case StringType => STRING
+      case BinaryType => BINARY
+      case DateType => DATE
       case TimestampType => TIMESTAMP
-      case _             => GENERIC
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
+        FIXED_DECIMAL(precision, scale)
+      case _ => GENERIC
     }
   }
 }
