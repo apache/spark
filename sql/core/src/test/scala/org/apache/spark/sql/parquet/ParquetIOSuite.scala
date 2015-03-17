@@ -330,7 +330,9 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
   }
 
-  test("read non-existent parquet file") {
+  test("SPARK-6330 regression test") {
+    // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
+    // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
     intercept[java.io.FileNotFoundException] {
       sqlContext.parquetFile("file:///nonexistent")
     }
