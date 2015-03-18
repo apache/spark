@@ -471,7 +471,6 @@ class Airflow(BaseView):
             status=200,
             mimetype="application/json")
 
-
     @expose('/chart')
     @login_required
     def chart(self):
@@ -609,7 +608,7 @@ class Airflow(BaseView):
         session = settings.Session()
         latest_heartbeat = session.query(
             sqla.func.max(J.latest_heartbeat)).filter(
-                J.job_type=='MasterJob').first()[0]
+                J.job_type == 'MasterJob').first()[0]
         session.commit()
         session.close()
         ago = (datetime.now() - latest_heartbeat).total_seconds()
@@ -820,7 +819,6 @@ class Airflow(BaseView):
 
         if action == 'clear':
             task_id = request.args.get('task_id')
-            task = dag.get_task(task_id)
             execution_date = request.args.get('execution_date')
             execution_date = dateutil.parser.parse(execution_date)
             future = request.args.get('future') == "true"
@@ -829,44 +827,31 @@ class Airflow(BaseView):
             downstream = request.args.get('downstream') == "true"
             confirmed = request.args.get('confirmed') == "true"
 
-            if confirmed:
-                end_date = execution_date if not future else None
-                start_date = execution_date if not past else None
+            dag = dag.sub_dag(
+                task_regex=r"^{0}$".format(task_id),
+                include_downstream=downstream,
+                include_upstream=upstream)
 
-                count = task.clear(
+            end_date = execution_date if not future else None
+            start_date = execution_date if not past else None
+            if confirmed:
+
+                count = dag.clear(
                     start_date=start_date,
-                    end_date=end_date,
-                    upstream=upstream,
-                    downstream=downstream)
+                    end_date=end_date)
 
                 flash("{0} task instances have been cleared".format(count))
                 return redirect(origin)
             else:
-                TI = models.TaskInstance
-                qry = session.query(TI).filter(TI.dag_id == dag_id)
-
-                if not future:
-                    qry = qry.filter(TI.execution_date <= execution_date)
-                if not past:
-                    qry = qry.filter(TI.execution_date >= execution_date)
-
-                tasks = [task_id]
-
-                if upstream:
-                    tasks += [
-                        t.task_id
-                        for t in task.get_flat_relatives(upstream=True)]
-                if downstream:
-                    tasks += [
-                        t.task_id
-                        for t in task.get_flat_relatives(upstream=False)]
-
-                qry = qry.filter(TI.task_id.in_(tasks))
-                if not qry.count():
+                tis = dag.clear(
+                    start_date=start_date,
+                    end_date=end_date,
+                    dry_run=True)
+                if not tis:
                     flash("No task instances to clear", 'error')
                     response = redirect(origin)
                 else:
-                    details = "\n".join([str(t) for t in qry])
+                    details = "\n".join([str(t) for t in tis])
 
                     response = self.render(
                         'airflow/confirm.html',
@@ -1259,7 +1244,6 @@ class TaskInstanceModelView(ModelViewOnly):
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
-
 
 
 admin.add_link(

@@ -224,7 +224,7 @@ class MasterJob(BaseJob):
                 ti = TI(task, task.start_date)
                 ti.refresh_from_db()
                 if ti.is_runnable():
-                    logging.debug(
+                    logging.info(
                         'First run for {ti}'.format(**locals()))
                     cmd = ti.command(local=True)
                     executor.queue_command(ti.key, cmd)
@@ -274,7 +274,6 @@ class MasterJob(BaseJob):
 
         logging.basicConfig(level=logging.DEBUG)
         logging.info("Starting a master scheduler")
-
 
         # This should get new code
         dagbag = models.DagBag(self.subdir)
