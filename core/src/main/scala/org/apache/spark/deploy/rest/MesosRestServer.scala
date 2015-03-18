@@ -26,7 +26,8 @@ import org.apache.spark.deploy.Command
 import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
-import org.apache.spark.scheduler.cluster.mesos.DriverRequest
+import scala.collection.mutable
+import org.apache.spark.deploy.mesos.MesosDriverDescription
 
 /**
  * A server that responds to requests submitted by the [[RestClient]].
@@ -74,7 +75,7 @@ class MesosSubmitRequestServlet(
    * This does not currently consider fields used by python applications since python
    * is not supported in mesos cluster mode yet.
    */
-  private def buildDriverRequest(request: CreateSubmissionRequest): DriverRequest = {
+  private def buildDriverDescription(request: CreateSubmissionRequest): MesosDriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
@@ -93,6 +94,25 @@ class MesosSubmitRequestServlet(
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
+    val schedulerProperties = new mutable.HashMap[String, String]
+    // Store Spark submit specific arguments here to pass to the scheduler.
+    schedulerProperties("spark.app.name") = sparkProperties.getOrElse("spark.app.name", mainClass)
+
+    sparkProperties.get("spark.executor.memory").foreach {
+      v => schedulerProperties("spark.executor.memory") = v
+    }
+
+    sparkProperties.get("spark.cores.max").foreach {
+      v => schedulerProperties("spark.cores.max") = v
+    }
+
+    sparkProperties.get("spark.executor.uri").foreach {
+      v => schedulerProperties("spark.executor.uri") = v
+    }
+
+    sparkProperties.get("spark.mesos.executor.home").foreach {
+      v => schedulerProperties("spark.mesos.executor.home") = v
+    }
 
     // Construct driver description
     val conf = new SparkConf(false)
@@ -109,9 +129,10 @@ class MesosSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
 
-    DriverRequest(new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command),
-      conf)
+    val desc = new DriverDescription(
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+
+    new MesosDriverDescription(desc, schedulerProperties)
   }
 
   protected override def handleSubmit(
@@ -120,7 +141,7 @@ class MesosSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val driverDescription = buildDriverRequest(submitRequest)
+        val driverDescription = buildDriverDescription(submitRequest)
         val response = scheduler.submitDriver(driverDescription)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion

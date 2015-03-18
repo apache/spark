@@ -20,9 +20,11 @@ package org.apache.spark.scheduler.mesos
 import org.scalatest.FunSuite
 import org.apache.spark.{SparkConf, LocalSparkContext}
 import org.scalatest.mock.MockitoSugar
-import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
-import org.apache.spark.scheduler.cluster.mesos.DriverRequest
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.scheduler.cluster.mesos._
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.deploy.mesos.MesosDriverDescription
+import scala.collection.mutable
 
 class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with MockitoSugar {
   def createCommand: Command = {
@@ -34,13 +36,17 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     val conf = new SparkConf()
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
-    val scheduler = new MesosClusterScheduler(conf)
+    val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
     val response =
-      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
+      scheduler.submitDriver(
+        new MesosDriverDescription(new DriverDescription("jar", 1000, 1, true, createCommand),
+        new mutable.HashMap[String, String]()))
     assert(response.success)
 
     val response2 =
-      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
+      scheduler.submitDriver(new MesosDriverDescription(
+        new DriverDescription("jar", 1000, 1, true, createCommand),
+        new mutable.HashMap[String, String]()))
     assert(response2.success)
 
     val state = scheduler.getState()
@@ -52,9 +58,11 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     val conf = new SparkConf()
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
-    val scheduler = new MesosClusterScheduler(conf)
+    val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
     val response =
-      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
+      scheduler.submitDriver(new MesosDriverDescription(
+        new DriverDescription("jar", 1000, 1, true, createCommand),
+        new mutable.HashMap[String, String]()))
     assert(response.success)
 
     val killResponse = scheduler.killDriver(response.id)

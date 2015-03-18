@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.master
+package org.apache.spark.deploy
 
 import scala.collection.JavaConversions._
 
@@ -25,7 +25,7 @@ import org.apache.zookeeper.KeeperException
 
 import org.apache.spark.{Logging, SparkConf}
 
-private[deploy] object SparkCuratorUtil extends Logging {
+private[spark] object SparkCuratorUtil extends Logging {
 
   private val ZK_CONNECTION_TIMEOUT_MILLIS = 15000
   private val ZK_SESSION_TIMEOUT_MILLIS = 60000

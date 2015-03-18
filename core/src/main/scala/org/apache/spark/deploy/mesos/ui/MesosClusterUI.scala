@@ -21,7 +21,6 @@ import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.SparkConf
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.deploy.worker.ui.ActiveWebUiUrlAccessor
 import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
 
 /**
@@ -33,7 +32,7 @@ private [spark] class MesosClusterUI(
     conf: SparkConf,
     dispatcherPublicAddress: String,
     val scheduler: ClusterScheduler)
-  extends WebUI(securityManager, port, conf) with ActiveWebUiUrlAccessor {
+  extends WebUI(securityManager, port, conf) {
 
   initialize()
 

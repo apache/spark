@@ -30,12 +30,13 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
 
     val queuedHeaders = Seq("DriverID", "Submit Date", "Description")
     val driverHeaders = queuedHeaders ++
-      Seq("Start Date", "Mesos Slave ID", "Mesos Task ID", "State")
+      Seq("Start Date", "Mesos Slave ID", "State")
 
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
     val launchedTable = UIUtils.listingTable(driverHeaders, driverRow, state.launchedDrivers)
     val finishedTable = UIUtils.listingTable(driverHeaders, driverRow, state.finishedDrivers)
     val content =
+      <p>Mesos Framework ID: {state.appId}</p>
       <div class="row-fluid">
         <div class="span12">
           <h4>Queued Drivers:</h4>
@@ -53,7 +54,7 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     <tr>
       <td>{submission.submissionId}</td>
       <td>{submission.submitDate}</td>
-      <td>{submission.req.desc.command.mainClass}</td>
+      <td>{submission.desc.desc.command.mainClass}</td>
     </tr>
   }
 
@@ -61,10 +62,9 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     <tr>
       <td>{state.submission.submissionId}</td>
       <td>{state.submission.submitDate}</td>
-      <td>{state.submission.req.desc.command.mainClass}</td>
+      <td>{state.submission.desc.desc.command.mainClass}</td>
       <td>{state.startDate}</td>
       <td>{state.slaveId.getValue}</td>
-      <td>{state.taskId.getValue}</td>
       <td>{stateString(state.taskState)}</td>
     </tr>
   }

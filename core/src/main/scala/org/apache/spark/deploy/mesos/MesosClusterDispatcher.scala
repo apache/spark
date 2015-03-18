@@ -18,15 +18,16 @@
 package org.apache.spark.deploy.mesos
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.util.{IntParam, Utils}
+import org.apache.spark.util.{SignalLogger, IntParam, Utils}
 
 import java.io.File
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{TimeUnit, CountDownLatch}
 
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.MesosRestServer
-import org.apache.spark.scheduler.cluster.mesos.{ClusterScheduler, MesosClusterScheduler}
-
+import org.apache.spark.scheduler.cluster.mesos._
+import org.apache.spark.deploy.mesos.MesosClusterDispatcher.ClusterDispatcherArguments
+import org.apache.mesos.state.{ZooKeeperState, InMemoryState}
 
 /*
  * A dispatcher actor that is responsible for managing drivers, that is intended to
@@ -35,75 +36,100 @@ import org.apache.spark.scheduler.cluster.mesos.{ClusterScheduler, MesosClusterS
  * a daemon to launch drivers as Mesos frameworks upon request.
  */
 private [spark] class MesosClusterDispatcher(
-    host: String,
-    serverPort: Int,
-    conf: SparkConf,
-    webUi: MesosClusterUI,
-    scheduler: ClusterScheduler) extends Logging {
+    args: ClusterDispatcherArguments,
+    conf: SparkConf) extends Logging {
 
-  val server = new MesosRestServer(host, serverPort, conf, scheduler)
-
-  val sparkHome =
-    new File(sys.env.get("SPARK_HOME").getOrElse("."))
-
-  def start() {
-    server.start()
-    // We assume web ui is already started as the scheduler needs the bound port.
-  }
-
-  def stop() {
-    webUi.stop()
-    server.stop()
-  }
-}
-
-object MesosClusterDispatcher {
   def dispatcherPublicAddress(conf: SparkConf, host: String): String = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 
+  val recoveryMode = conf.get("spark.deploy.recoveryMode", "NONE").toUpperCase()
+  logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
+
+  val engineFactory = recoveryMode match {
+    case "NONE" => new BlackHolePersistenceEngineFactory
+    case "ZOOKEEPER" => {
+      new ZookeeperClusterPersistenceEngineFactory(conf)
+    }
+  }
+
+  val scheduler = new MesosClusterScheduler(
+    engineFactory,
+    conf)
+
+  val server = new MesosRestServer(args.host, args.port, conf, scheduler)
+
+  val webUi = new MesosClusterUI(
+    new SecurityManager(conf),
+    args.webUiPort,
+    conf,
+    dispatcherPublicAddress(conf, args.host),
+    scheduler)
+
   val shutdownLatch = new CountDownLatch(1)
 
-  def main(args: Array[String]) {
-    val conf = new SparkConf
-    val dispatcherArgs = new ClusterDispatcherArguments(args, conf)
-    conf.setMaster(dispatcherArgs.masterUrl)
-    conf.setAppName("Mesos Cluster Dispatcher")
-    val scheduler = new MesosClusterScheduler(conf)
+  val sparkHome =
+    new File(sys.env.get("SPARK_HOME").getOrElse("."))
 
-    // We have to create the webui and bind it early as we need to
-    // pass the framework web ui url to Mesos which is before the
-    // scheduler starts.
-    val webUi =
-      new MesosClusterUI(
-        new SecurityManager(conf),
-        dispatcherArgs.webUiPort,
-        conf,
-        dispatcherPublicAddress(conf, dispatcherArgs.host),
-        scheduler)
-
+  def start() {
     webUi.bind()
-
     scheduler.frameworkUrl = webUi.activeWebUiUrl
     scheduler.start()
-    new MesosClusterDispatcher(
-      dispatcherArgs.host,
-      dispatcherArgs.port,
-      conf,
-      webUi,
-      scheduler).start()
+    server.start()
+  }
 
+  def awaitShutdown() {
     shutdownLatch.await()
+  }
+
+  def stop() {
+    webUi.stop()
+    server.stop()
+    scheduler.stop()
+    shutdownLatch.countDown()
+  }
+}
+
+private[mesos] object MesosClusterDispatcher extends Logging {
+  def main(args: Array[String]) {
+    SignalLogger.register(log)
+
+    val conf = new SparkConf
+    val dispatcherArgs = new ClusterDispatcherArguments(args, conf)
+
+    conf.setMaster(dispatcherArgs.masterUrl)
+    conf.setAppName("Mesos Cluster Dispatcher")
+
+    val dispatcher = new MesosClusterDispatcher(
+      dispatcherArgs,
+      conf)
+
+    dispatcher.start()
+
+    val shutdownHook = new Thread() {
+      override def run() {
+        logInfo("Shutdown hook is shutting down dispatcher")
+        dispatcher.stop()
+        dispatcher.awaitShutdown()
+      }
+    }
+
+    Runtime.getRuntime.addShutdownHook(shutdownHook)
+
+    dispatcher.awaitShutdown()
   }
 
   class ClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
     var host = Utils.localHostName()
     var port = 7077
     var webUiPort = 8081
-    var masterUrl: String = null
+    var masterUrl: String = _
+    var propertiesFile: String = _
 
     parse(args.toList)
+
+    propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
     def parse(args: List[String]): Unit = args match {
       case ("--host" | "-h") :: value :: tail =>
@@ -125,6 +151,10 @@ object MesosClusterDispatcher {
           System.exit(1)
         }
         masterUrl = value.stripPrefix("mesos://")
+        parse(tail)
+
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
         parse(tail)
 
       case ("--help") :: tail =>
@@ -152,7 +182,9 @@ object MesosClusterDispatcher {
           "  -h HOST, --host HOST   Hostname to listen on\n" +
           "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
           "  --webui-port WEBUI_PORT   WebUI Port to listen on (default: 8081)\n" +
-          "  -m --master MASTER      URI for connecting to Mesos master\n")
+          "  -m --master MASTER      URI for connecting to Mesos master\n" +
+          "  --properties-file FILE Path to a custom Spark properties file.\n" +
+          "                         Default is conf/spark-defaults.conf.")
       System.exit(exitCode)
     }
   }

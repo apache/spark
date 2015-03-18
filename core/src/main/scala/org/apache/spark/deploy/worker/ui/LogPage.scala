@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import java.io.File
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -31,9 +30,6 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val worker = parent.worker
   private val workDir = parent.workDir
 
-private[spark] class LogPage(
-    urlAccessor: ActiveWebUiUrlAccessor,
-    workDir: File) extends WebUIPage("logPage") with Logging {
   def renderLog(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
 
@@ -77,7 +73,7 @@ private[spark] class LogPage(
     }
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
-    val linkToMaster = <p><a href={urlAccessor.activeWebUiUrl}>Back to Master</a></p>
+    val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
