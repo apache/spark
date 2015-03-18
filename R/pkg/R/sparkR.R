@@ -125,7 +125,7 @@ sparkR.init <- function(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
+        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"))
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {

@@ -37,40 +37,8 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 export PROJECT_HOME="${SPARK_HOME}/R/"
-
-unset JAVA_HOME
-
-export R_PROFILE_USER="/tmp/sparkR.profile"
-
-if [ $# -gt 0 ]; then
-  # If we are running an R program, only set libPaths and use Rscript
-cat > /tmp/sparkR.profile << EOF
-.First <- function() {
-  projecHome <- Sys.getenv("PROJECT_HOME")
-  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
-  Sys.setenv(NOAWT=1)
-}
-EOF
-
-  Rscript "$@"
-else
-
-  # If we don't have an R file to run, initialize context and run R
-cat > /tmp/sparkR.profile << EOF
-.First <- function() {
-  projecHome <- Sys.getenv("PROJECT_HOME")
-  Sys.setenv(NOAWT=1)
-  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
-  require(utils)
-  require(SparkR)
-  sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
-  assign("sc", sc, envir=.GlobalEnv)
-  sqlCtx <- sparkRSQL.init(sc)
-  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
-  cat("\n Welcome to SparkR!")
-  cat("\n Spark context is available as sc, SQL context is available as sqlCtx\n")
-}
-EOF
-
-  R
+if [ $# -eq 0 ]; then
+  export R_PROFILE_USER="${SPARK_HOME}/R/lib/SparkR/profile/shell.R"
 fi
+
+exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"

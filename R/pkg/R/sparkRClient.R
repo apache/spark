@@ -51,7 +51,7 @@ launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts) {
     jars <- paste("--jars", jars)
   }
 
-  combinedArgs <- paste(sparkSubmitOpts, jars, "sparkr-shell", args, sep = " ")
-  cat("Launching java with spark-submit command ", sparkSubmitBin, " ", combinedArgs, "\n")
+  combinedArgs <- paste(jars, sparkSubmitOpts, args, sep = " ")
+  cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
   invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
 }

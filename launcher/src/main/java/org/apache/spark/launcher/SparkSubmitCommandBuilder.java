@@ -280,6 +280,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     env.put("SPARKR_SUBMIT_ARGS", submitArgs.toString());
 
     List<String> args = new ArrayList<String>();
+    args.add("R");
     return args;
   }
 
