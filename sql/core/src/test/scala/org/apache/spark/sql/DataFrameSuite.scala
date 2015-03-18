@@ -437,6 +437,27 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("describe") {
+
+    val describeTestData = Seq(
+      ("Bob",   16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy",   24, 180)).toDF("name", "age", "height")
+
+    val describeResult = Seq(
+      Row("count",   4,               4),
+      Row("mean",    33.0,            178.0),
+      Row("stddev",  16.583123951777, 10.0),
+      Row("min",     16,              164),
+      Row("max",     60,              192))
+
+    val emptyDescribeResult = Seq(
+      Row("count",   0,    0),
+      Row("mean",    null, null),
+      Row("stddev",  null, null),
+      Row("min",     null, null),
+      Row("max",     null, null))
+
     def getSchemaAsSeq(df: DataFrame) = df.schema.map(_.name).toSeq
 
     val describeTwoCols = describeTestData.describe("age", "height")

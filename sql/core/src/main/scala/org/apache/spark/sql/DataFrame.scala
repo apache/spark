@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.types.{NumericType, StructType, StructField, StringType}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
 
@@ -772,32 +772,34 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def describe(cols: String*): DataFrame = {
 
-    def aggCol(name: String = "") = s"'$name' as summary"
+    def stddevExpr(expr: Expression) =
+      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
+
     val statistics = List[(String, Expression => Expression)](
-      "count"  -> (expr => Count(expr)),
-      "mean"   -> (expr => Average(expr)),
-      "stddev" -> (expr => Sqrt(Subtract(Average(Multiply(expr, expr)),
-                                         Multiply(Average(expr), Average(expr))))),
-      "min"    -> (expr => Min(expr)),
-      "max"    -> (expr => Max(expr)))
+      "count" -> Count,
+      "mean" -> Average,
+      "stddev" -> stddevExpr,
+      "min" -> Min,
+      "max" -> Max)
 
-    val numCols = if (cols.isEmpty) numericColumns.map(_.prettyString) else cols
+    val aggCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
-    // union all statistics starting from empty one
-    var description = selectExpr(aggCol()::numCols.toList:_*).limit(0)
-    for ((name, colToAgg) <- statistics) {
-      // generate next statistic aggregation
-      val nextAgg = if (numCols.nonEmpty) {
-        val aggCols = numCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
-        agg(aggCols.head, aggCols.tail:_*)
-      } else {
-        sqlContext.emptyDataFrame
+    val localAgg = if (aggCols.nonEmpty) {
+      val aggExprs = statistics.flatMap { case (_, colToAgg) =>
+        aggCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
       }
-      // add statistic name column
-      val nextStat = nextAgg.selectExpr(aggCol(name)::numCols.toList:_*)
-      description = description.unionAll(nextStat)
+
+      agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+        .grouped(aggCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
+        Row(statistic :: aggregation.toList: _*)
+      }
+    } else {
+      statistics.map { case (name, _) => Row(name) }
     }
-    description
+
+    val schema = StructType(("summary" :: aggCols).map(StructField(_, StringType)))
+    val rowRdd = sqlContext.sparkContext.parallelize(localAgg)
+    sqlContext.createDataFrame(rowRdd, schema)
   }
 
   /**
