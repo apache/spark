@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 /**
  * Utility functions to serialize, deserialize objects to / from R
  */
-object SerDe {
+private[spark] object SerDe {
 
   // Type mapping from R to Java
   //
@@ -334,7 +334,7 @@ object SerDe {
   }
 }
 
-object SerializationFormats {
+private[r] object SerializationFormats {
   val BYTE = "byte"
   val STRING = "string"
   val ROW = "row"

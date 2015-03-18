@@ -34,7 +34,7 @@ import org.apache.spark.Logging
 /**
  * Netty-based backend server that is used to communicate between R and Java.
  */
-class RBackend {
+private[spark] class RBackend {
 
   var channelFuture: ChannelFuture = null  
   var bootstrap: ServerBootstrap = null
@@ -91,7 +91,7 @@ class RBackend {
 
 }
 
-object RBackend extends Logging {
+private[spark] object RBackend extends Logging {
   def main(args: Array[String]) {
     if (args.length < 1) {
       System.err.println("Usage: RBackend <tempFilePath>")

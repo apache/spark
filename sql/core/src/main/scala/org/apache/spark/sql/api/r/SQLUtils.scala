@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpres
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
 
-object SQLUtils {
+private[r] object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
   }

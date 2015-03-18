@@ -308,7 +308,7 @@ private class StringRRDD[T: ClassTag](
   lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
 }
 
-private[spark] class BufferedStreamThread(
+private[r] class BufferedStreamThread(
     in: InputStream,
     name: String,
     errBufferSize: Int) extends Thread(name) with Logging {
@@ -333,7 +333,7 @@ private[spark] class BufferedStreamThread(
   }
 }
 
-object RRDD {
+private[r] object RRDD {
   // Because forking processes from Java is expensive, we prefer to launch
   // a single R daemon (daemon.R) and tell it to fork new workers for our tasks.
   // This daemon currently only works on UNIX-based systems now, so we should

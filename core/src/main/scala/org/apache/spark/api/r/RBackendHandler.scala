@@ -33,7 +33,7 @@ import org.apache.spark.api.r.SerDe._
  * this across connections ?
  */
 @Sharable
-class RBackendHandler(server: RBackend)
+private[r] class RBackendHandler(server: RBackend)
   extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
@@ -190,7 +190,7 @@ class RBackendHandler(server: RBackend)
  * Helper singleton that tracks JVM objects returned to R.
  * This is useful for referencing these objects in RPC calls.
  */
-object JVMObjectTracker {
+private[r] object JVMObjectTracker {
 
   // TODO: This map should be thread-safe if we want to support multiple
   // connections at the same time
