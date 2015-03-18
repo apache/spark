@@ -17,11 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem Install development version of SparkR
-rem
+rem This is the entry point for running SparkR. To avoid polluting the
+rem environment, it just launches a new cmd to do the real work.
 
-set SPARK_HOME=%~dp0..
-
-MKDIR %SPARK_HOME%\R\lib
-
-R.exe CMD INSTALL --library="%SPARK_HOME%\R\lib"  %SPARK_HOME%\R\pkg\
+cmd /V /E /C %~dp0sparkR2.cmd %*

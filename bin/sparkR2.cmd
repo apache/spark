@@ -17,11 +17,12 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem Install development version of SparkR
-rem
-
+rem Figure out where the Spark framework is installed
 set SPARK_HOME=%~dp0..
 
-MKDIR %SPARK_HOME%\R\lib
+rem Load environment variables from conf\spark-env.cmd, if it exists
+if exist "%SPARK_HOME%\conf\spark-env.cmd" call "%SPARK_HOME%\conf\spark-env.cmd"
 
-R.exe CMD INSTALL --library="%SPARK_HOME%\R\lib"  %SPARK_HOME%\R\pkg\
+set PROJECT_HOME=%SPARK_HOME%\R
+
+call %SPARK_HOME%\bin\spark-submit2.cmd sparkr-shell-main %*
