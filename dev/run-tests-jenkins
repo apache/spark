@@ -165,7 +165,7 @@ for t in "${PR_TESTS[@]}"; do
     pr_message="${pr_message}\n${this_mssg}"
   fi
   # Ensure, for each test, they start on the current PR branch
-  git checkout ${ghprbActualCommit}
+  # git checkout ${ghprbActualCommit}
 done
 
 # post start message
