@@ -37,7 +37,7 @@ object MimaExcludes {
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
-            MimaBuild.excludeSparkPackage("graphx"),
+            MimaBuild.excludeSparkPackage("ml"),
             excludePackage("org.spark-project.jetty"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts since 1.2.
