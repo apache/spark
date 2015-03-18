@@ -480,7 +480,6 @@ object SparkSubmit {
         }
         childArgs +=("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
-        // TODO(davies): support R in yarn
         val mainFile = new Path(args.primaryResource).getName
         childArgs +=("--primary-r-file", mainFile)
         childArgs +=("--class", "org.apache.spark.deploy.RRunner")
