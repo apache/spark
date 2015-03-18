@@ -40,7 +40,6 @@ import breeze.linalg.{DenseMatrix => BrzMatrix}
 import breeze.linalg.{DenseVector => BrzVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.jblas.DoubleMatrix
 
 /**
  * Common params for ALS.
@@ -402,19 +401,19 @@ object ALS extends Logging {
       x
     }
   }
-
+  
   /** NNLS solver. */
   private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
-    private var ata: DoubleMatrix = _
+    private var ata: Array[Double] = _
     private var initialized: Boolean = false
 
     private def initialize(rank: Int): Unit = {
       if (!initialized) {
         this.rank = rank
         workspace = NNLS.createWorkspace(rank)
-        ata = new DoubleMatrix(rank, rank)
+        ata = new Array[Double](rank * rank)
         initialized = true
       } else {
         require(this.rank == rank)
@@ -431,7 +430,7 @@ object ALS extends Logging {
       val rank = ne.k
       initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
-      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -444,22 +443,21 @@ object ALS extends Logging {
       var i = 0
       var pos = 0
       var a = 0.0
-      val data = ata.data
       while (i < rank) {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          data(i * rank + j) = a
-          data(j * rank + i) = a
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
           pos += 1
           j += 1
         }
-        data(i * rank + i) += lambda
+        ata(i * rank + i) += lambda
         i += 1
       }
     }
   }
-
+  
   /** Representing a normal equation (ALS' subproblem). */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
