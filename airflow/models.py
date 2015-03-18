@@ -13,7 +13,7 @@ import socket
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
     Index,)
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
@@ -126,13 +126,10 @@ class DagBag(object):
         '''
         self.dags[dag.dag_id] = dag
         dag.resolve_template_files()
-        for task in dag.tasks:
-            # Late import to prevent circular imports
-            from airflow.operators import SubDagOperator
-            if isinstance(task, SubDagOperator):
-                task.subdag.full_filepath = dag.full_filepath
-                task.subdag.parent_dag = dag
-                self.bag_dag(task.subdag)
+        for subdag in dag.subdags:
+            subdag.full_filepath = dag.full_filepath
+            subdag.parent_dag = dag
+            self.bag_dag(subdag)
         logging.info('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
@@ -1218,6 +1215,17 @@ class DAG(Base):
         session.close()
         return execution_date
 
+    @property
+    def subdags(self):
+        # Late import to prevent circular imports
+        from airflow.operators import SubDagOperator
+        l = []
+        for task in self.tasks:
+            if isinstance(task, SubDagOperator):
+                l.append(task.subdag)
+                l += task.subdag.subdags
+        return l
+
     def resolve_template_files(self):
         for t in self.tasks:
             t.resolve_template_files()
@@ -1285,10 +1293,11 @@ class DAG(Base):
 
     def clear(
             self, start_date=None, end_date=None,
-            upstream=False, downstream=False,
             only_failed=False,
             only_running=False,
-            confirm_prompt=False):
+            confirm_prompt=False,
+            include_subdags=True,
+            dry_run=False):
         session = settings.Session()
         """
         Clears a set of task instances associated with the current dag for
@@ -1296,8 +1305,18 @@ class DAG(Base):
         """
 
         TI = TaskInstance
-        tis = session.query(TI).filter(TI.dag_id == self.dag_id)
-        tis = tis.filter(TI.task_id.in_(self.task_ids))
+        tis = session.query(TI)
+        if include_subdags:
+            # Creafting the right filter for dag_id and task_ids combo
+            conditions = []
+            for dag in self.subdags + [self]:
+                conditions.append(
+                    TI.dag_id.like(dag.dag_id) & TI.task_id.in_(dag.task_ids)
+                )
+            tis = tis.filter(or_(*conditions))
+        else:
+            tis = session.query(TI).filter(TI.dag_id == self.dag_id)
+            tis = tis.filter(TI.task_id.in_(self.task_ids))
 
         if start_date:
             tis = tis.filter(TI.execution_date >= start_date)
@@ -1307,6 +1326,11 @@ class DAG(Base):
             tis = tis.filter(TI.state == State.FAILED)
         if only_running:
             tis = tis.filter(TI.state == State.RUNNING)
+
+        if dry_run:
+            tis = tis.all()
+            session.expunge_all()
+            return tis
 
         count = tis.count()
         if count == 0:
@@ -1333,12 +1357,6 @@ class DAG(Base):
     def __deepcopy__(self, memo):
         # Swiwtcharoo to go around deepcopying objects coming through the
         # backdoor
-        '''
-        for task in self.tasks:
-            if isinstance(task, SubDagOperator):
-                task.subdag.parent_dag = None
-                task.subdag = task.subdag.deepcopy()
-        '''
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -1496,6 +1514,7 @@ class KnownEventType(Base):
     def __repr__(self):
         return self.know_event_type
 
+
 class KnownEvent(Base):
     __tablename__ = "known_event"
 
@@ -1508,5 +1527,7 @@ class KnownEvent(Base):
     reported_by = relationship(
         "User", cascade=False, cascade_backrefs=False, backref='known_events')
     event_type = relationship(
-        "KnownEventType", cascade=False, cascade_backrefs=False, backref='known_events')
+        "KnownEventType",
+        cascade=False,
+        cascade_backrefs=False, backref='known_events')
     description = Column(Text)
