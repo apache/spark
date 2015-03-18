@@ -23,7 +23,7 @@ FAILED=0
 LOGFILE=unit-tests.log
 rm -f $LOGFILE
 
-$FWDIR/../bin/sparkR $FWDIR/pkg/tests/run-all.R >$LOGFILE 2>&1
+SPARK_TESTING=1 $FWDIR/../bin/sparkR $FWDIR/pkg/tests/run-all.R >$LOGFILE 2>&1
 FAILED=$((PIPESTATUS[0]||$FAILED))
 
 if [[ $FAILED != 0 ]]; then

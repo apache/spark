@@ -429,8 +429,8 @@ test_that("pipeRDD() on RDDs", {
 })
 
 test_that("zipRDD() on RDDs", {
-  rdd1 <- parallelize(sc, 0:4)
-  rdd2 <- parallelize(sc, 1000:1004)
+  rdd1 <- parallelize(sc, 0:4, 2)
+  rdd2 <- parallelize(sc, 1000:1004, 2)
   actual <- collect(zipRDD(rdd1, rdd2))
   expect_equal(actual,
                list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004)))
@@ -439,13 +439,12 @@ test_that("zipRDD() on RDDs", {
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
   
-  rdd <- textFile(sc, fileName)
+  rdd <- textFile(sc, fileName, 1)
   actual <- collect(zipRDD(rdd, rdd))
   expected <- lapply(mockFile, function(x) { list(x ,x) })
   expect_equal(actual, expected)
 
-
-  rdd1 <- parallelize(sc, 0:1, numPartitions(rdd))
+  rdd1 <- parallelize(sc, 0:1, 1)
   actual <- collect(zipRDD(rdd1, rdd))
   expected <- lapply(0:1, function(x) { list(x, mockFile[x + 1]) })
   expect_equal(actual, expected)
