@@ -19,7 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap, UUID}
+import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -734,32 +734,32 @@ private[spark] object PythonRDD extends Logging {
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
    * this RDD.
    */
-  def saveAsHadoopFileByKey[K, V, C <: CompressionCodec](
-      pyRDD: JavaRDD[Array[Byte]],
-      batchSerialized: Boolean,
-      path: String,
-      outputFormatClass: String,
-      keyClass: String,
-      valueClass: String,
-      keyConverterClass: String,
-      valueConverterClass: String,
-      confAsMap: java.util.HashMap[String, String],
-      compressionCodecClass: String) = {
-    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
-    val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
-      inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
-    val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
-    val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
-    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new JavaToWritableConverter)
-
-    converted.saveAsHadoopFile(path,
-      ClassUtils.primitiveToWrapper(kc),
-      ClassUtils.primitiveToWrapper(vc),
-      classOf[RDDMultipleTextOutputFormat[K,V]],
-      new JobConf(mergedConf),
-      codec=codec)
-  }
+//  def saveAsHadoopFileByKey[K, V, C <: CompressionCodec](
+//      pyRDD: JavaRDD[Array[Byte]],
+//      batchSerialized: Boolean,
+//      path: String,
+//      outputFormatClass: String,
+//      keyClass: String,
+//      valueClass: String,
+//      keyConverterClass: String,
+//      valueConverterClass: String,
+//      confAsMap: java.util.HashMap[String, String],
+//      compressionCodecClass: String) = {
+//    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
+//    val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
+//      inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
+//    val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
+//    val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
+//    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
+//      new JavaToWritableConverter)
+//
+//    converted.saveAsHadoopFile(path,
+//      ClassUtils.primitiveToWrapper(kc),
+//      ClassUtils.primitiveToWrapper(vc),
+//      classOf[RDDMultipleTextOutputFormat[K,V]],
+//      new JobConf(mergedConf),
+//      codec=codec)
+//  }
 
   /**
    * Output a Python RDD of key-value pairs to any Hadoop file system, using new Hadoop

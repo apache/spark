@@ -71,39 +71,39 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     fs.delete(new Path(fullPath), true)
   }
 
-  test("JavaPairRDD.saveAsHadoopFileByKey should generate a text file per key") {
-    val keys = 1 to 20
-    val testValues = 1 to 5
-    // Generate the cartesian product of keys by test values
-    val pairsLocal = keys.map(k => (k, testValues)).flatMap(kv => {
-      kv._2.map(v => (kv._1, v*kv._1))
-    })
-
-    val pairs = JavaPairRDD.fromRDD(sc.parallelize(pairsLocal))
-
-    val fs = FileSystem.get(new Configuration())
-    val basePath = sc.conf.get("spark.local.dir", "/tmp")
-    val fullPath = basePath + "/testPath"
-    fs.delete(new Path(fullPath), true)
-    pairs.saveAsHadoopFileByKey(fullPath)
-
-    // Test that a file was created for each key
-    keys.foreach(key => {
-      val testPath = new Path(fullPath + "/" + key)
-      assert(fs.exists(testPath))
-
-      // Read the file and test that the contents are the values matching that key split by line
-      val input = fs.open(testPath)
-      val reader = new BufferedReader(new InputStreamReader(input))
-      val values = new HashSet[Int]
-      val lines = Stream.continually(reader.readLine()).takeWhile(_ != null)
-      lines.foreach(s => values += s.toInt)
-
-      testValues.foreach(v => assert(values.contains(v*key)))
-    })
-
-    fs.delete(new Path(fullPath), true)
-  }
+//  test("JavaPairRDD.saveAsHadoopFileByKey should generate a text file per key") {
+//    val keys = 1 to 20
+//    val testValues = 1 to 5
+//    // Generate the cartesian product of keys by test values
+//    val pairsLocal = keys.map(k => (k, testValues)).flatMap(kv => {
+//      kv._2.map(v => (kv._1, v*kv._1))
+//    })
+//
+//    val pairs = JavaPairRDD.fromRDD(sc.parallelize(pairsLocal))
+//
+//    val fs = FileSystem.get(new Configuration())
+//    val basePath = sc.conf.get("spark.local.dir", "/tmp")
+//    val fullPath = basePath + "/testPath"
+//    fs.delete(new Path(fullPath), true)
+//    pairs.saveAsHadoopFileByKey(fullPath)
+//
+//    // Test that a file was created for each key
+//    keys.foreach(key => {
+//      val testPath = new Path(fullPath + "/" + key)
+//      assert(fs.exists(testPath))
+//
+//      // Read the file and test that the contents are the values matching that key split by line
+//      val input = fs.open(testPath)
+//      val reader = new BufferedReader(new InputStreamReader(input))
+//      val values = new HashSet[Int]
+//      val lines = Stream.continually(reader.readLine()).takeWhile(_ != null)
+//      lines.foreach(s => values += s.toInt)
+//
+//      testValues.foreach(v => assert(values.contains(v*key)))
+//    })
+//
+//    fs.delete(new Path(fullPath), true)
+//  }
 
   test("aggregateByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
