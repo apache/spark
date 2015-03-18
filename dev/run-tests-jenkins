@@ -59,9 +59,6 @@ TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 #+    hash and the second the Github SHA1 hash
 #+  * and, lastly, return string output to be included in the pr message output that will
 #+    be posted to Github
-# All PR tests will start on the current PR branch although the test developer can feel
-#+ free to switch to any other branch (i.e. master) under the assumption that the branch
-#+ is automatically reset at the end of each test
 PR_TESTS=(
   "pr_merge_ability"
   "pr_public_classes"
@@ -164,8 +161,6 @@ for t in "${PR_TESTS[@]}"; do
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
     pr_message="${pr_message}\n${this_mssg}"
   fi
-  # Ensure, for each test, they start on the current PR branch
-  # git checkout ${ghprbActualCommit}
 done
 
 # post start message
@@ -181,8 +176,7 @@ done
 
 # run tests
 {
-  # timeout "${TESTS_TIMEOUT}" ./dev/run-tests
-  echo "Happy World!"
+  timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
