@@ -211,14 +211,6 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
-  <td><code>spark.mesos.executor.cores</code></td>
-  <td>1</td>
-  <td>
-    Set the amount of cores to request for running a mesos executor. This setting is only used for Mesos fine-grained mode.
-    By default, executor will use the amount of cores even though no task is running on an executor.
-  </td>
-</tr>
-<tr>
   <td><code>spark.mesos.executor.home</code></td>
   <td>driver side <code>SPARK_HOME</code></td>
   <td>

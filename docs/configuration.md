@@ -137,6 +137,14 @@ of the most common options to set are:
     or in your default properties file.
   </td>
 </tr>
+  <td><code>spark.executor.frameworkCores</code></td>
+  <td>1</td>
+  <td>
+    Set the amount of cores allocated to the executor itself. This setting is currently used for Mesos fine-grained mode.
+    By default, executor will use the amount of cores even though no task is running on an executor.
+  </td>
+</tr>
+<tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
   <td>512m</td>
