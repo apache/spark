@@ -758,8 +758,6 @@ setMethod("take",
 #' rdd <- parallelize(sc, 1:10)
 #' first(rdd)
 #' }
-setGeneric("first", function(x) { standardGeneric("first") })
-
 setMethod("first",
           signature(x = "RDD"),
           function(x) {
@@ -1134,8 +1132,6 @@ setMethod("takeOrdered",
 #' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
 #' top(rdd, 6L) # list(10, 9, 7, 6, 5, 4)
 #'}
-setGeneric("top", function(x, num) { standardGeneric("top") })
-
 #' @rdname top
 #' @aliases top,RDD,RDD-method
 setMethod("top",
@@ -1162,8 +1158,6 @@ setMethod("top",
 #' rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
 #' fold(rdd, 0, "+") # 15
 #'}
-setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
-
 #' @rdname fold
 #' @aliases fold,RDD,RDD-method
 setMethod("fold",
@@ -1195,8 +1189,6 @@ setMethod("fold",
 #' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
 #' aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
 #'}
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
-
 #' @rdname aggregateRDD
 #' @aliases aggregateRDD,RDD,RDD-method
 setMethod("aggregateRDD",
@@ -1228,10 +1220,6 @@ setMethod("aggregateRDD",
 #' collect(pipeRDD(rdd, "more")
 #' Output: c("1", "2", ..., "10")
 #'}
-setGeneric("pipeRDD", function(x, command, env = list()) { 
-  standardGeneric("pipeRDD") 
-})
-
 #' @rdname pipeRDD
 #' @aliases pipeRDD,RDD,character-method
 setMethod("pipeRDD",
@@ -1260,8 +1248,6 @@ setMethod("pipeRDD",
 #' rdd <- parallelize(sc, list(1,2,3))
 #' name(rdd) # NULL (if not set before)
 #'}
-setGeneric("name", function(x) { standardGeneric("name") })
-
 #' @rdname name
 #' @aliases name,RDD
 setMethod("name",
@@ -1284,8 +1270,6 @@ setMethod("name",
 #' setName(rdd, "myRDD")
 #' name(rdd) # "myRDD"
 #'}
-setGeneric("setName", function(x, name) { standardGeneric("setName") })
-
 #' @rdname setName
 #' @aliases setName,RDD
 setMethod("setName",
