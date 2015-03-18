@@ -68,7 +68,7 @@ class PythonRDDSuite extends FunSuite with SharedSparkContext{
       testPairs,
       false,
       fullPath,
-      classOf[RDDMultipleTextOutputFormat].toString,
+      classOf[RDDMultipleTextOutputFormat[Int, Int]].toString,
       classOf[Int].toString,
       classOf[Int].toString,
       null,
