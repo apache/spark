@@ -285,7 +285,11 @@ class MasterJob(BaseJob):
             i += 1
             self.heartbeat()
             dagbag.collect_dags(only_if_updated=True)
-            dags = [dagbag.dags[dag_id]] if dag_id else dagbag.dags.values()
+            if dag_id:
+                dags = [dagbag.dags[dag_id]]
+            else:
+                dag = [
+                    dag for dag in dagbag.dags.values() if not dag.parent_dag]
             paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
                 if dag.dag_id in paused_dag_ids:
