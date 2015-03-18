@@ -4,26 +4,25 @@
 Airflow's Documentation
 ================================
 
-Airflow is a system to programmaticaly author, schedule and monitor data pipelines. 
+Airflow is a platform to programmaticaly author, schedule and monitor data pipelines. 
 
-Use the Airflow library to define workflows as directed acyclic graphs (DAGs) of data related tasks. Command line utilities make it easy to run parts of workflows interactively, and commiting pipelines into production is all it takes for the master scheduler to run the pipelines with the schedule and dependencies specified.
-
-The Airflow UI make it easy to visualize pipelines running in production, monitor progress and troubleshoot issues when needed.
+Use Airflow to author workflows as directed acyclic graphs (DAGs) of tasks. The Airflow scheduler executes your tasks on an array of workers while following the specified dependencies. Rich command lines utilities makes performing complex surgeries on DAGs a snap. The rich user interface makes it easy to visualize pipelines running in production, monitor progress and troubleshoot issues when needed.
 
 Principles
 ----------
 
--  **Dynamic:** Airflow has intrinsec support for dynamic pipeline
-   generation: you can write pipelines, as well as writing code that
-   defines pipeline.
--  **Interactivity:** the libraries are intuitive so that writting /
-   testing and monitoring pipelines from a shell (or an iPython
-   Notebook) should just flow
--  **Extensible:** easily define your own operators, executors and
-   extend the library so that it fits the level of abstraction that
-   suits your environment
--  **Elegant:** make your commands dynamic with the power of the
-   **Jinja** templating engine
+- **Dynamic:** Airflow pipelines are configuration as code (Python), 
+    allowing for dynamic pipeline generation. This allows for writting code
+    that instantiate pipelines dynamically.
+- **Extensible:** easily define your own operators, executors and
+    extend the library so that it fits the level of abstraction that
+    suits your environment.
+- **Elegant:** Airflow pipelines are lean and explicit. Parameterizing your
+    scripts is built in the core of Airflow using powerful **Jinja** 
+    templating engine.
+- **Scalable:** Airflow has a modular architecture and uses a message queue 
+    to talk to orchestrate an arbitrary number of workers. Airflow is 
+    ready to scale to infinity.
 
 Content
 -------

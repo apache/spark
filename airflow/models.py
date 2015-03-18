@@ -1433,7 +1433,8 @@ class DAG(Base):
 
     def run(
             self, start_date=None, end_date=None, mark_success=False,
-            include_adhoc=False, local=False, executor=None):
+            include_adhoc=False, local=False, executor=None,
+            donot_pickle=False):
         from airflow.jobs import BackfillJob
         if not executor and local:
             executor = LocalExecutor()
@@ -1445,7 +1446,8 @@ class DAG(Base):
             end_date=end_date,
             mark_success=mark_success,
             include_adhoc=include_adhoc,
-            executor=executor)
+            executor=executor,
+            donot_pickle=donot_pickle)
         job.run()
 
 
