@@ -168,7 +168,8 @@ object SVMWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
-   * @param useFeatureScaling Set if the algorithm should use feature scaling to improve the convergence during optimization.
+   * @param useFeatureScaling Set if the algorithm should use feature scaling to improve the 
+   *        convergence during optimization.
    */
   def train(
       input: RDD[LabeledPoint],
@@ -178,7 +179,8 @@ object SVMWithSGD {
       miniBatchFraction: Double,
       initialWeights: Vector,
       useFeatureScaling: Boolean): SVMModel = {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).setFeatureScaling(useFeatureScaling)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
+      .setFeatureScaling(useFeatureScaling)
       .run(input, initialWeights)
   }
   
