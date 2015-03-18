@@ -1024,20 +1024,20 @@ for details.
 
 ### Shuffle operations
 
-Certain operations within Spark trigger an operation known as the shuffle. The shuffle is Spark's mechanism for re-organizing data to co-locate data associated with particular keys. 
+Certain operations within Spark trigger an operation known as the shuffle. The shuffle is Spark's mechanism for re-distributing data so data with the same key becomes co-located after a shuffle. 
 
 #### Background
 
 To understand what happens during the shuffle we can consider the example of the [`groupByKey`](#GroupByLink) operation. The `groupByKey` operation generates a new RDD where all values for a single key are combined into a 2-tuple - the key and an Iterable object containing all the associated values. If we think of the map and reduce steps for `groupByKey()` then we can see that to generate the list of all values associated with a key, all of the values must reside on the same reducer, since the output of the reduce step is the complete array. 
 
-In Spark, by default, data is distributed randomly across partitions. During computations, a single task will operate on a single partition - thus, to organize all the data for a single `groupByKey` reduce task to execute, Spark needs to perform an all-to-all operation. It must read from all partitions to find all the values for all keys, and then organize those such that all values for any key lie within the same partition - this is called the **shuffle**. 
+In Spark, by default, the way data is distributed across partitions is undefined. During computations, a single task will operate on a single partition - thus, to organize all the data for a single `groupByKey` reduce task to execute, Spark needs to perform an all-to-all operation. It must read from all partitions to find all the values for all keys, and then organize those such that all values for any key lie within the same partition - this is called the **shuffle**. 
 
 Although the set of elements in each partition of newly shuffled data will be deterministic, the ordering of these elements is not. If one desires predictably ordered data following shuffle operations, [`mapPartitions`](#MapPartLink) can be used to sort each partition. A similar operation, [`repartitionAndSortWithinPartitions`](#Repartition2Link`) coupled with `mapPartitions`, may be used to enact a `Hadoop` style shuffle. 
 
 Operations, which cause a shuffle include [`groupByKey`](#GroupByLink), [`sortByKey`](#SortByLink), [`reduceByKey`](#ReduceByLink), [`aggregateByKey`](#AggregateByLink), [`repartition`](#RepartitionLink), [`repartitionAndSortWithinPartitions`](#Repartition2Link`), [`coalesce`](#CoalesceLink), and [`countByKey`](#CountByLink).  
 
 #### Performance Impact
-**Shuffle** is an expensive operation since it involves disk I/O, data serialization, and network I/O. Shuffle operations can have a serious impact on performance. To organize data for the shuffle, Spark will also generate lookup tables in memory, which, for large operations, can consume significant amounts of heap memory. When out of memory, for all shuffle operations with the exception of `sortByKey`, Spark will spill these tables to disk, incurring the additional overhead of disk I/O and  increased garbage collection. Since `sortByKey` does not spill these intermediate tables to disk, the shuffle operation may cause OOM errors.     
+**Shuffle** is an expensive operation since it involves disk I/O, data serialization, and network I/O. To organize data for the shuffle, internally, Spark creates a hash table, which, for large operations, can consume significant amounts of heap memory. When data does not fit in memory, for all shuffle operations with the exception of `sortByKey`, Spark will spill these tables to disk, incurring the additional overhead of disk I/O and  increased garbage collection. Since `sortByKey` does not spill these intermediate tables to disk, the shuffle operation may cause OOM errors.     
 
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files are not cleaned up from Spark's temporary storage until Spark is stopped, which means that long-running Spark jobs may consume available disk space. The temporary storage directory is specified by the `spark.local.dir` configuration parameter when configuring the Spark context. 
 
