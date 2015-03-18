@@ -36,9 +36,4 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
 fi
 
-export PROJECT_HOME="${SPARK_HOME}/R/"
-if [ $# -eq 0 ]; then
-  export R_PROFILE_USER="${SPARK_HOME}/R/lib/SparkR/profile/shell.R"
-fi
-
 exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"

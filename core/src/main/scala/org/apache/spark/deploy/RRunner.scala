@@ -71,7 +71,6 @@ object RRunner {
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         val sparkHome = System.getenv("SPARK_HOME")
-        env.put("PROJECT_HOME", Seq(sparkHome, "R").mkString(File.separator))
         env.put("R_PROFILE_USER",
           Seq(sparkHome, "R", "lib", "SparkR", "profile", "general.R").mkString(File.separator))
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize

@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -278,9 +279,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       submitArgs.append(quoteForPython(arg));
     }
     env.put("SPARKR_SUBMIT_ARGS", submitArgs.toString());
+    String sparkHome = System.getenv("SPARK_HOME");
+    env.put("R_PROFILE_USER",
+            Paths.get(sparkHome, "R", "lib", "SparkR", "profile", "shell.R").toString());
 
     List<String> args = new ArrayList<String>();
-    args.add("R");
+    args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 
