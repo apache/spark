@@ -52,7 +52,7 @@ if (isEmpty != 0) {
       # Now read as many characters as described in funcLen
       data <- SparkR:::readDeserialize(inputCon)
     } else if (deserializer == "string") {
-      data <- readLines(inputCon)
+      data <- as.list(readLines(inputCon))
     } else if (deserializer == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
