@@ -121,14 +121,13 @@ object SVMModel extends Loader[SVMModel] {
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-class SVMWithSGD private (
+class SVMWithSGD (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
-  this.setFeatureScaling(true)
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
