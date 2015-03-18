@@ -945,6 +945,7 @@ class Airflow(BaseView):
                 'end_date': task.end_date,
                 'depends_on_past': task.depends_on_past,
             }
+
         if len(dag.roots) > 1:
             # d3 likes a single root
             data = {
@@ -952,8 +953,11 @@ class Airflow(BaseView):
                 'instances': [],
                 'children': [recurse_nodes(t) for t in dag.roots]
             }
-        else:
+        elif len(dag.roots) == 1:
             data = recurse_nodes(dag.roots[0])
+        else:
+            flash("No tasks found.", "error")
+            data = []
 
         data = json.dumps(data, indent=4, default=utils.json_ser)
         session.commit()
@@ -1021,6 +1025,8 @@ class Airflow(BaseView):
             t.task_id: utils.alchemy_to_dict(t)
             for t in dag.tasks
         }
+        if not tasks:
+            flash("No tasks found", "error")
         session.commit()
         session.close()
 

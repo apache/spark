@@ -1170,6 +1170,9 @@ class DAG(Base):
             default_args=None,
             params=None):
 
+        self.user_defined_macros = user_defined_macros
+        self.default_args = default_args or {}
+        self.params = params
         utils.validate_key(dag_id)
         self.tasks = []
         self.dag_id = dag_id
@@ -1180,9 +1183,6 @@ class DAG(Base):
         if isinstance(template_searchpath, basestring):
             template_searchpath = [template_searchpath]
         self.template_searchpath = template_searchpath
-        self.user_defined_macros = user_defined_macros
-        self.default_args = default_args or {}
-        self.params = params
         self.parent_dag = None  # Gets set when DAGs are loaded
 
     def __repr__(self):
@@ -1330,6 +1330,26 @@ class DAG(Base):
         session.close()
         return count
 
+    def __deepcopy__(self, memo):
+        # Swiwtcharoo to go around deepcopying objects coming through the
+        # backdoor
+        '''
+        for task in self.tasks:
+            if isinstance(task, SubDagOperator):
+                task.subdag.parent_dag = None
+                task.subdag = task.subdag.deepcopy()
+        '''
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if k not in ('user_defined_macros', 'params'):
+                setattr(result, k, copy.deepcopy(v, memo))
+
+        result.user_defined_macros = self.user_defined_macros
+        result.params = self.params
+        return result
+
     def sub_dag(
             self, task_regex,
             include_downstream=False, include_upstream=True):
@@ -1339,15 +1359,7 @@ class DAG(Base):
         upstream and downstream neighboors based on the flag passed.
         """
 
-        # Swiwtcharoo to go around deepcopying objects coming through the
-        # backdoor
-        user_defined_macros = self.user_defined_macros
-        params = self.params
-        delattr(self, 'user_defined_macros')
-        delattr(self, 'params')
         dag = copy.deepcopy(self)
-        self.user_defined_macros = user_defined_macros
-        self.params = params
 
         regex_match = [
             t for t in dag.tasks if re.findall(task_regex, t.task_id)]
