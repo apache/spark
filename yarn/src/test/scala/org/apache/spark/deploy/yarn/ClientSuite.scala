@@ -202,22 +202,6 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }
 
-  test("conflicting distributed cache resources") {
-    val conf = new Configuration()
-    val sparkConf = new SparkConf().set(Client.CONF_SPARK_JAR, SPARK)
-    val jar = "/same.jar"
-    val args = new ClientArguments(Array("--jar", jar, "--addJars", jar), sparkConf)
-
-    val client = spy(new Client(args, conf, sparkConf))
-    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort())
-
-    val tempDir = Utils.createTempDir()
-    intercept[IllegalArgumentException] {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
-    }
-  }
-
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
