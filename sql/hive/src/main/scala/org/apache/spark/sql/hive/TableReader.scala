@@ -143,7 +143,7 @@ class HadoopTableReader(
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
         
-    //SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
+    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
