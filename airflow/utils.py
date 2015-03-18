@@ -119,9 +119,11 @@ def initdb():
         session.add(KET(know_event_type='Holiday'))
     if not session.query(KET).filter(KET.know_event_type == 'Outage').first():
         session.add(KET(know_event_type='Outage'))
-    if not session.query(KET).filter(KET.know_event_type == 'Natural Disaster').first():
+    if not session.query(KET).filter(
+            KET.know_event_type == 'Natural Disaster').first():
         session.add(KET(know_event_type='Natural Disaster'))
-    if not session.query(KET).filter(KET.know_event_type == 'Marketing Campain').first():
+    if not session.query(KET).filter(
+            KET.know_event_type == 'Marketing Campain').first():
         session.add(KET(know_event_type='Marketing Campain'))
     session.commit()
     session.close()
@@ -212,9 +214,16 @@ def apply_defaults(func):
             raise Exception(
                 "Use keyword arguments when initializing operators")
         dag_args = {}
+        dag_params = {}
         if 'dag' in kwargs and kwargs['dag']:
             dag = kwargs['dag']
             dag_args = copy(dag.default_args) or {}
+            dag_params = copy(dag.params) or {}
+
+        params = {}
+        if 'params' in kwargs:
+            params = kwargs['params']
+        dag_params.update(params)
 
         default_args = {}
         if 'default_args' in kwargs:
@@ -234,6 +243,8 @@ def apply_defaults(func):
         if missing_args:
             msg = "Argument {0} is required".format(missing_args)
             raise Exception(msg)
+
+        kwargs['params'] = dag_params
 
         result = func(*args, **kwargs)
         return result
