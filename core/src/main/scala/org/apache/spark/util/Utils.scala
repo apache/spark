@@ -1171,10 +1171,14 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: ControlThrowable => throw e
       case t: Throwable =>
+        val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
-          logError(s"uncaught error in thread ${Thread.currentThread().getName}, stopping " +
-            "SparkContext", t)
+          logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
           sc.stop()
+        }
+        if (!NonFatal(t)) {
+          logError(s"throw uncaught fatal error in thread $currentThreadName", t)
+          throw t
         }
     }
   }
