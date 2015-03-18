@@ -81,6 +81,11 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override lazy val resolved =
     childrenResolved &&
     !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(
@@ -174,7 +179,12 @@ case class Aggregate(
 case class Expand(
     projections: Seq[GroupExpression],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan) extends UnaryNode {
+  override def statistics: Statistics = {
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
 
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>
