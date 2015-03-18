@@ -212,6 +212,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
   val udf: UDFRegistration = new UDFRegistration(this)
 
   /**
+   * Call an user-defined function which is registered
+   * in functionRegistry.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlctx = df.sqlContext
+   *  sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", sqlctx.callUdf("simpleUdf", $"value"))
+   * }}}
+   */
+  def callUdf(udfName: String, cols: Column*) =
+    Column(UnresolvedFunction(udfName, cols.map(_.expr)))
+
+  /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
    */
@@ -257,22 +273,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       def $(args: Any*): ColumnName = {
         new ColumnName(sc.s(args :_*))
       }
-    }
-
-    /**
-     * Convert udf"registered function name" into a [[UnresolvedFunction]].
-     * Example:
-     * {{{
-     *  import org.apache.spark.sql._
-     *
-     *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-     *  df.sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-     *  df.select($"id", udf"simpleUdf"($"value"))
-     * }}}
-     */
-    implicit class StringToUdf(val sc: StringContext) {
-      def udf(args: Any*)(cols: Column*) =
-        Column(UnresolvedFunction(sc.s(args: _*), cols.map(_.expr)))
     }
 
     /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
