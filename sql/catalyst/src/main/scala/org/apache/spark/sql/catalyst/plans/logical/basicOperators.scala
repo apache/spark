@@ -108,6 +108,13 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  def selfJoinResolved = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
