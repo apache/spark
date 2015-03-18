@@ -63,10 +63,12 @@ abstract class Gradient extends Serializable {
  * http://statweb.stanford.edu/~tibs/ElemStatLearn/ , Eq. (4.17) on page 119 gives the formula of
  * multinomial logistic regression model. A simple calculation shows that
  *
+ * {{{
  * P(y=0|x, w) = 1 / (1 + \sum_i^{K-1} \exp(x w_i))
  * P(y=1|x, w) = exp(x w_1) / (1 + \sum_i^{K-1} \exp(x w_i))
  *   ...
  * P(y=K-1|x, w) = exp(x w_{K-1}) / (1 + \sum_i^{K-1} \exp(x w_i))
+ * }}}
  *
  * for K classes multiclass classification problem.
  *
@@ -75,9 +77,11 @@ abstract class Gradient extends Serializable {
  * will be (K-1) * N.
  *
  * As a result, the loss of objective function for a single instance of data can be written as
+ * {{{
  * l(w, x) = -log P(y|x, w) = -\alpha(y) log P(y=0|x, w) - (1-\alpha(y)) log P(y|x, w)
  *         = log(1 + \sum_i^{K-1}\exp(x w_i)) - (1-\alpha(y)) x w_{y-1}
  *         = log(1 + \sum_i^{K-1}\exp(margins_i)) - (1-\alpha(y)) margins_{y-1}
+ * }}}
  *
  * where \alpha(i) = 1 if i != 0, and
  *       \alpha(i) = 0 if i == 0,
@@ -86,14 +90,16 @@ abstract class Gradient extends Serializable {
  * For optimization, we have to calculate the first derivative of the loss function, and
  * a simple calculation shows that
  *
+ * {{{
  * \frac{\partial l(w, x)}{\partial w_{ij}}
  *   = (\exp(x w_i) / (1 + \sum_k^{K-1} \exp(x w_k)) - (1-\alpha(y)\delta_{y, i+1})) * x_j
  *   = multiplier_i * x_j
+ * }}}
  *
  * where \delta_{i, j} = 1 if i == j,
  *       \delta_{i, j} = 0 if i != j, and
- *       multiplier
- *         = \exp(margins_i) / (1 + \sum_k^{K-1} \exp(margins_i)) - (1-\alpha(y)\delta_{y, i+1})
+ *       multiplier =
+ *         \exp(margins_i) / (1 + \sum_k^{K-1} \exp(margins_i)) - (1-\alpha(y)\delta_{y, i+1})
  *
  * If any of margins is larger than 709.78, the numerical computation of multiplier and loss
  * function will be suffered from arithmetic overflow. This issue occurs when there are outliers
@@ -103,10 +109,12 @@ abstract class Gradient extends Serializable {
  * Fortunately, when max(margins) = maxMargin > 0, the loss function and the multiplier can be
  * easily rewritten into the following equivalent numerically stable formula.
  *
+ * {{{
  * l(w, x) = log(1 + \sum_i^{K-1}\exp(margins_i)) - (1-\alpha(y)) margins_{y-1}
  *         = log(\exp(-maxMargin) + \sum_i^{K-1}\exp(margins_i - maxMargin)) + maxMargin
  *           - (1-\alpha(y)) margins_{y-1}
  *         = log(1 + sum) + maxMargin - (1-\alpha(y)) margins_{y-1}
+ * }}}
  *
  * where sum = \exp(-maxMargin) + \sum_i^{K-1}\exp(margins_i - maxMargin) - 1.
  *
@@ -115,8 +123,10 @@ abstract class Gradient extends Serializable {
  *
  * For multiplier, similar trick can be applied as the following,
  *
+ * {{{
  * multiplier = \exp(margins_i) / (1 + \sum_k^{K-1} \exp(margins_i)) - (1-\alpha(y)\delta_{y, i+1})
  *            = \exp(margins_i - maxMargin) / (1 + sum) - (1-\alpha(y)\delta_{y, i+1})
+ * }}}
  *
  * where each term in \exp is also smaller than zero, so overflow is not a concern.
  *

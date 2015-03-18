@@ -63,6 +63,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  @volatile private var localRootDirs: Array[String] = null
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -213,8 +214,8 @@ private[spark] object Utils extends Logging {
   // Is the path already registered to be deleted via a shutdown hook ?
   def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
-    shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.contains(absolutePath)
+    shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.contains(absolutePath)
     }
   }
 
@@ -283,13 +284,6 @@ private[spark] object Utils extends Logging {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
-        } else {
-          // Restrict file permissions via chmod if available.
-          // For Windows this step is ignored.
-          if (!isWindows && !chmod700(dir)) {
-            dir.delete()
-            dir = null
-          }
         }
       } catch { case e: SecurityException => dir = null; }
     }
@@ -409,7 +403,8 @@ private[spark] object Utils extends Logging {
       useCache: Boolean) {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
-    if (useCache) {
+    val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
+    if (useCache && fetchCacheEnabled) {
       val cachedFileName = s"${url.hashCode}${timestamp}_cache"
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
@@ -447,6 +442,12 @@ private[spark] object Utils extends Logging {
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+
+    // Windows does not grant read permission by default to non-admin users
+    // Add read permission to owner explicitly
+    if (isWindows) {
+      FileUtil.chmod(targetFile.getAbsolutePath, "u+r")
+    }
   }
 
   /**
@@ -624,7 +625,8 @@ private[spark] object Utils extends Logging {
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
-        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, hadoopConf, fileOverwrite)
+        fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
+                      filename = Some(filename))
     }
   }
 
@@ -639,19 +641,22 @@ private[spark] object Utils extends Logging {
       fs: FileSystem,
       conf: SparkConf,
       hadoopConf: Configuration,
-      fileOverwrite: Boolean): Unit = {
-    if (!targetDir.mkdir()) {
+      fileOverwrite: Boolean,
+      filename: Option[String] = None): Unit = {
+    if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
-    fs.listStatus(path).foreach { fileStatus =>
-      val innerPath = fileStatus.getPath
-      if (fileStatus.isDir) {
-        fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, hadoopConf,
-          fileOverwrite)
-      } else {
-        val in = fs.open(innerPath)
-        val targetFile = new File(targetDir, innerPath.getName)
-        downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
+    val dest = new File(targetDir, filename.getOrElse(path.getName))
+    if (fs.isFile(path)) {
+      val in = fs.open(path)
+      try {
+        downloadFile(path.toString, in, dest, fileOverwrite)
+      } finally {
+        in.close()
+      }
+    } else {
+      fs.listStatus(path).foreach { fileStatus =>
+        fetchHcfsFile(fileStatus.getPath(), dest, fs, conf, hadoopConf, fileOverwrite)
       }
     }
   }
@@ -684,14 +689,31 @@ private[spark] object Utils extends Logging {
    * and returns only the directories that exist / could be created.
    *
    * If no directories could be created, this will return an empty list.
+   *
+   * This method will cache the local directories for the application when it's first invoked.
+   * So calling it multiple times with a different configuration will always return the same
+   * set of directories.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+    if (localRootDirs == null) {
+      this.synchronized {
+        if (localRootDirs == null) {
+          localRootDirs = getOrCreateLocalRootDirsImpl(conf)
+        }
+      }
+    }
+    localRootDirs
+  }
+
+  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       getYarnLocalDirs(conf).split(",")
+    } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
+      conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else {
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
@@ -703,7 +725,9 @@ private[spark] object Utils extends Logging {
           try {
             val rootDir = new File(root)
             if (rootDir.exists || rootDir.mkdirs()) {
-              Some(createDirectory(root).getAbsolutePath())
+              val dir = createTempDir(root)
+              chmod700(dir)
+              Some(dir.getAbsolutePath)
             } else {
               logError(s"Failed to create dir in $root. Ignoring this directory.")
               None
@@ -731,6 +755,11 @@ private[spark] object Utils extends Logging {
       throw new Exception("Yarn Local dirs can't be empty")
     }
     localDirs
+  }
+
+  /** Used by unit tests. Do not call from other places. */
+  private[spark] def clearLocalRootDirs(): Unit = {
+    localRootDirs = null
   }
 
   /**

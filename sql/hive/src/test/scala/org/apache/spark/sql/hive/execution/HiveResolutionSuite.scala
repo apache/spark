@@ -77,7 +77,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
     sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerTempTable("caseSensitivityTest")
+      .toDF().registerTempTable("caseSensitivityTest")
 
     val query = sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
     assert(query.schema.fields.map(_.name) === Seq("a", "b", "A", "B", "a", "b", "A", "B"),
@@ -88,16 +88,25 @@ class HiveResolutionSuite extends HiveComparisonTest {
   ignore("case insensitivity with scala reflection joins") {
     // Test resolution with Scala Reflection
     sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerTempTable("caseSensitivityTest")
+      .toDF().registerTempTable("caseSensitivityTest")
 
     sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a").collect()
   }
 
   test("nested repeated resolution") {
     sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerTempTable("nestedRepeatedTest")
+      .toDF().registerTempTable("nestedRepeatedTest")
     assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }
+
+  createQueryTest("test ambiguousReferences resolved as hive",
+    """
+      |CREATE TABLE t1(x INT);
+      |CREATE TABLE t2(a STRUCT<x: INT>, k INT);
+      |INSERT OVERWRITE TABLE t1 SELECT 1 FROM src LIMIT 1;
+      |INSERT OVERWRITE TABLE t2 SELECT named_struct("x",1),1 FROM src LIMIT 1;
+      |SELECT a.x FROM t1 a JOIN t2 b ON a.x = b.k;
+    """.stripMargin)
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.
