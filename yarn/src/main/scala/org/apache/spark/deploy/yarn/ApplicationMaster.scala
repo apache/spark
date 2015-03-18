@@ -151,7 +151,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + e.getMessage())
+          "Uncaught exception: " + e)
     }
     exitCode
   }
@@ -486,10 +486,10 @@ private[spark] class ApplicationMaster(
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
               case cause: Throwable =>
-                logError("User class threw exception: " + cause.getMessage, cause)
+                logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + cause.getMessage)
+                  "User class threw exception: " + cause)
             }
         }
       }
