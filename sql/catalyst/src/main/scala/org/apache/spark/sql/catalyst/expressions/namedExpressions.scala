@@ -126,7 +126,8 @@ case class Alias(child: Expression, name: String)
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
 
   override def equals(other: Any): Boolean = other match {
-    case a: Alias => name == a.name && exprId == a.exprId && child == a.child
+    case a: Alias =>
+      name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers
     case _ => false
   }
 }
