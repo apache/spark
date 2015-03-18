@@ -23,6 +23,4 @@ set SPARK_HOME=%~dp0..
 rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%SPARK_HOME%\conf\spark-env.cmd" call "%SPARK_HOME%\conf\spark-env.cmd"
 
-set PROJECT_HOME=%SPARK_HOME%\R
-
 call %SPARK_HOME%\bin\spark-submit2.cmd sparkr-shell-main %*
