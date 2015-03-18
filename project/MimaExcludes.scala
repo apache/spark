@@ -38,9 +38,9 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
-            excludePackage("org.spark-project.jetty"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts since 1.2.
+            excludePackage("org.spark-project.jetty"),
             MimaBuild.excludeSparkPackage("unused"),
             ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
           )
