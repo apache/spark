@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{TaskContext, Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import scala.concurrent._
 import ExecutionContext.Implicits.global
