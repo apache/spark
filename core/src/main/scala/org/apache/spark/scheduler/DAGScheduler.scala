@@ -26,7 +26,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.pattern.ask
@@ -497,7 +496,7 @@ class DAGScheduler(
     waiter
   }
 
-  def runJob[T, U: ClassTag](
+  def runJob[T, U](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -890,8 +889,16 @@ class DAGScheduler(
     if (event.accumUpdates != null) {
       try {
         Accumulators.add(event.accumUpdates)
+
         event.accumUpdates.foreach { case (id, partialValue) =>
-          val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+          // In this instance, although the reference in Accumulators.originals is a WeakRef,
+          // it's guaranteed to exist since the event.accumUpdates Map exists
+
+          val acc = Accumulators.originals(id).get match {
+            case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
+            case None => throw new NullPointerException("Non-existent reference to Accumulator")
+          }
+
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get

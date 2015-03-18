@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent</artifactId>
+    <artifactId>spark-parent_2.10</artifactId>
     <version>1.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
@@ -112,16 +112,6 @@
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
-              </excludes>
-            </filter>
-            <filter>
-              <!-- Exclude libgfortran, libgcc for license issues -->
-              <artifact>org.jblas:jblas</artifact>
-              <excludes>
-                <!-- Linux amd64 is OK; not statically linked -->
-                <exclude>lib/static/Linux/i386/**</exclude>
-                <exclude>lib/static/Mac OS X/**</exclude>
-                <exclude>lib/static/Windows/**</exclude>
               </excludes>
             </filter>
           </filters>

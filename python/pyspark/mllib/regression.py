@@ -18,11 +18,13 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
-           'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
+__all__ = ['LabeledPoint', 'LinearModel',
+           'LinearRegressionModel', 'LinearRegressionWithSGD',
+           'RidgeRegressionModel', 'RidgeRegressionWithSGD',
+           'LassoModel', 'LassoWithSGD']
 
 
 class LabeledPoint(object):
@@ -31,8 +33,11 @@ class LabeledPoint(object):
     The features and labels of a data point.
 
     :param label: Label for this data point.
-    :param features: Vector of features for this point (NumPy array, list,
-        pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
+    :param features: Vector of features for this point (NumPy array,
+             list, pyspark.mllib.linalg.SparseVector, or scipy.sparse
+             column matrix)
+
+    Note: 'label' and 'features' are accessible as class attributes.
     """
 
     def __init__(self, label, features):
@@ -69,6 +74,7 @@ class LinearModel(object):
         return "(weights=%s, intercept=%r)" % (self._coeff, self._intercept)
 
 
+@inherit_doc
 class LinearRegressionModelBase(LinearModel):
 
     """A linear regression model.
@@ -89,6 +95,7 @@ class LinearRegressionModelBase(LinearModel):
         return self.weights.dot(x) + self.intercept
 
 
+@inherit_doc
 class LinearRegressionModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit.
@@ -162,7 +169,7 @@ class LinearRegressionWithSGD(object):
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
-                                  are activated or not).
+                                  are activated or not). (default: False)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -172,6 +179,7 @@ class LinearRegressionWithSGD(object):
         return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
 
+@inherit_doc
 class LassoModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit with an
@@ -218,6 +226,7 @@ class LassoWithSGD(object):
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
 
+@inherit_doc
 class RidgeRegressionModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit with an

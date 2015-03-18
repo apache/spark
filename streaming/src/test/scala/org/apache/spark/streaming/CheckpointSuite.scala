@@ -146,7 +146,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   // This tests whether spark conf persists through checkpoints, and certain
   // configs gets scrubbed
-  test("persistence of conf through checkpoints") {
+  test("recovery of conf through checkpoints") {
     val key = "spark.mykey"
     val value = "myvalue"
     System.setProperty(key, value)
@@ -154,7 +154,7 @@ class CheckpointSuite extends TestSuiteBase {
     val originalConf = ssc.conf
 
     val cp = new Checkpoint(ssc, Time(1000))
-    val cpConf = cp.sparkConf
+    val cpConf = cp.createSparkConf()
     assert(cpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(cpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(cpConf.get(key) === value)
@@ -163,7 +163,8 @@ class CheckpointSuite extends TestSuiteBase {
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
 
-    val newCpConf = newCp.sparkConf
+    // Verify new SparkConf has all the previous properties
+    val newCpConf = newCp.createSparkConf()
     assert(newCpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(newCpConf.get(key) === value)
@@ -174,6 +175,20 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf = ssc.conf
     assert(restoredConf.get(key) === value)
+    ssc.stop()
+
+    // Verify new SparkConf picks up new master url if it is set in the properties. See SPARK-6331.
+    try {
+      val newMaster = "local[100]"
+      System.setProperty("spark.master", newMaster)
+      val newCpConf = newCp.createSparkConf()
+      assert(newCpConf.get("spark.master") === newMaster)
+      assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+      ssc = new StreamingContext(null, newCp, null)
+      assert(ssc.sparkContext.master === newMaster)
+    } finally {
+      System.clearProperty("spark.master")
+    }
   }
 
 

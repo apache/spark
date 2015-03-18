@@ -19,6 +19,7 @@ package org.apache.spark.sql.parquet
 import java.io.IOException
 import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, List => JList}
 
@@ -115,9 +116,15 @@ private[sql] class DefaultSource
     }
 
     val relation = if (doInsertion) {
+      // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+      // for the schema of a parquet data.
+      val df =
+        sqlContext.createDataFrame(
+          data.queryExecution.toRdd,
+          data.schema.asNullable)
       val createdRelation =
-        createRelation(sqlContext, parameters, data.schema).asInstanceOf[ParquetRelation2]
-      createdRelation.insert(data, overwrite = mode == SaveMode.Overwrite)
+        createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
+      createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
       createdRelation
     } else {
       // If the save mode is Ignore, we will just create the relation based on existing data.
@@ -153,7 +160,8 @@ private[sql] case class ParquetRelation2(
     maybeSchema: Option[StructType] = None,
     maybePartitionSpec: Option[PartitionSpec] = None)(
     @transient val sqlContext: SQLContext)
-  extends CatalystScan
+  extends BaseRelation
+  with CatalystScan
   with InsertableRelation
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -200,7 +208,7 @@ private[sql] case class ParquetRelation2(
     private var commonMetadataStatuses: Array[FileStatus] = _
 
     // Parquet footer cache.
-    private var footers: Map[FileStatus, Footer] = _
+    var footers: Map[FileStatus, Footer] = _
 
     // `FileStatus` objects of all data files (Parquet part-files).
     var dataStatuses: Array[FileStatus] = _
@@ -237,11 +245,10 @@ private[sql] case class ParquetRelation2(
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
-
       // Support either reading a collection of raw Parquet part-files, or a collection of folders
       // containing Parquet files (e.g. partitioned Parquet table).
       val baseStatuses = paths.distinct.map { p =>
+        val fs = FileSystem.get(URI.create(p), sparkContext.hadoopConfiguration)
         val qualified = fs.makeQualified(new Path(p))
 
         if (!fs.exists(qualified) && maybeSchema.isDefined) {
@@ -255,6 +262,7 @@ private[sql] case class ParquetRelation2(
 
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
       val leaves = baseStatuses.flatMap { f =>
+        val fs = FileSystem.get(f.getPath.toUri, sparkContext.hadoopConfiguration)
         SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
@@ -400,6 +408,7 @@ private[sql] case class ParquetRelation2(
     } else {
       metadataCache.dataStatuses.toSeq
     }
+    val selectedFooters = selectedFiles.map(metadataCache.footers)
 
     // FileInputFormat cannot handle empty lists.
     if (selectedFiles.nonEmpty) {
@@ -447,11 +456,16 @@ private[sql] case class ParquetRelation2(
         @transient
         val cachedStatus = selectedFiles
 
+        @transient
+        val cachedFooters = selectedFooters
+
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
           val inputFormat = if (cacheMetadata) {
             new FilteringParquetRowInputFormat {
               override def listStatus(jobContext: JobContext): JList[FileStatus] = cachedStatus
+
+              override def getFooters(jobContext: JobContext): JList[Footer] = cachedFooters
             }
           } else {
             new FilteringParquetRowInputFormat
@@ -476,6 +490,10 @@ private[sql] case class ParquetRelation2(
     // When the data does not include the key and the key is requested then we must fill it in
     // based on information from the input split.
     if (!partitionKeysIncludedInDataSchema && partitionKeyLocations.nonEmpty) {
+      // This check is based on CatalystConverter.createRootConverter.
+      val primitiveRow =
+        requestedSchema.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
       baseRDD.mapPartitionsWithInputSplit { case (split: ParquetInputSplit, iterator) =>
         val partValues = selectedPartitions.collectFirst {
           case p if split.getPath.getParent.toString == p.path => p.values
@@ -483,16 +501,42 @@ private[sql] case class ParquetRelation2(
 
         val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
 
-        iterator.map { pair =>
-          val row = pair._2.asInstanceOf[SpecificMutableRow]
-          var i = 0
-          while (i < requiredPartOrdinal.size) {
-            // TODO Avoids boxing cost here!
-            val partOrdinal = requiredPartOrdinal(i)
-            row.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
-            i += 1
+        if (primitiveRow) {
+          iterator.map { pair =>
+            // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+            val row = pair._2.asInstanceOf[SpecificMutableRow]
+            var i = 0
+            while (i < requiredPartOrdinal.size) {
+              // TODO Avoids boxing cost here!
+              val partOrdinal = requiredPartOrdinal(i)
+              row.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
+              i += 1
+            }
+            row
           }
-          row
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(requestedSchema.size)
+          iterator.map { pair =>
+            // We are using CatalystGroupConverter and it returns a GenericRow.
+            // Since GenericRow is not mutable, we just cast it to a Row.
+            val row = pair._2.asInstanceOf[Row]
+            var i = 0
+            while (i < row.size) {
+              // TODO Avoids boxing cost here!
+              mutableRow(i) = row(i)
+              i += 1
+            }
+
+            i = 0
+            while (i < requiredPartOrdinal.size) {
+              // TODO Avoids boxing cost here!
+              val partOrdinal = requiredPartOrdinal(i)
+              mutableRow.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
+              i += 1
+            }
+            mutableRow
+          }
         }
       }
     } else {

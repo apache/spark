@@ -993,6 +993,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
       try {
         while (iter.hasNext) {

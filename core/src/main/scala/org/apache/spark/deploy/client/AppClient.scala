@@ -47,18 +47,18 @@ private[spark] class AppClient(
     conf: SparkConf)
   extends Logging {
 
-  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
+  private val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
 
-  val REGISTRATION_TIMEOUT = 20.seconds
-  val REGISTRATION_RETRIES = 3
+  private val REGISTRATION_TIMEOUT = 20.seconds
+  private val REGISTRATION_RETRIES = 3
 
-  var masterAddress: Address = null
-  var actor: ActorRef = null
-  var appId: String = null
-  var registered = false
-  var activeMasterUrl: String = null
+  private var masterAddress: Address = null
+  private var actor: ActorRef = null
+  private var appId: String = null
+  private var registered = false
+  private var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with ActorLogReceive with Logging {
+  private class ClientActor extends Actor with ActorLogReceive with Logging {
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times

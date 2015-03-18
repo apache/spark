@@ -309,4 +309,13 @@ class ColumnExpressionSuite extends QueryTest {
       (1 to 100).map(n => Row(null))
     )
   }
+
+  test("lift alias out of cast") {
+    assert(col("1234").as("name").cast("int").expr === col("1234").cast("int").as("name").expr)
+  }
+
+  test("columns can be compared") {
+    assert('key.desc == 'key.desc)
+    assert('key.desc != 'key.asc)
+  }
 }

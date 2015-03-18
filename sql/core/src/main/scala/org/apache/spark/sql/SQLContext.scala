@@ -63,8 +63,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
-  // Note that this is a lazy val so we can override the default value in subclasses.
-  protected[sql] lazy val conf: SQLConf = new SQLConf
+  /**
+   * @return Spark SQL configuration
+   */
+  protected[sql] def conf = tlSession.get().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -103,9 +105,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
+  // TODO how to handle the temp table per user session?
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
 
+  // TODO how to handle the temp function per user session?
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
@@ -114,7 +118,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, caseSensitive = true) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
-        sources.PreWriteCheck(catalog) ::
         sources.PreInsertCastAndRename ::
         Nil
     }
@@ -138,6 +141,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
 
   protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+
+  @transient
+  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
+    override def initialValue = defaultSession
+  }
+
+  @transient
+  protected[sql] val defaultSession = createSession()
 
   sparkContext.getConf.getAll.foreach {
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
@@ -195,6 +206,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group basic
+   * TODO move to SQLSession?
    */
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
@@ -217,6 +229,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  /**
+   * Removes all cached tables from the in-memory cache.
+   */
+  def clearCache(): Unit = cacheManager.clearCache()
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -225,8 +242,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sqlContext = new SQLContext
-   *   import sqlContext._
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
    * }}}
    *
    * @group basic
@@ -538,20 +555,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, schema: StructType): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, schema)
-  }
+  def jsonFile(path: String, schema: StructType): DataFrame =
+    load("json", schema, Map("path" -> path))
 
   /**
    * :: Experimental ::
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
-  }
+  def jsonFile(path: String, samplingRatio: Double): DataFrame =
+    load("json", Map("path" -> path, "samplingRatio" -> samplingRatio.toString))
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
@@ -1052,6 +1065,39 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
+  @transient
+  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
+    override val extendedCheckRules = Seq(
+      sources.PreWriteCheck(catalog)
+    )
+  }
+
+
+  protected[sql] def openSession(): SQLSession = {
+    detachSession()
+    val session = createSession()
+    tlSession.set(session)
+
+    session
+  }
+
+  protected[sql] def currentSession(): SQLSession = {
+    tlSession.get()
+  }
+
+  protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[sql] def detachSession(): Unit = {
+    tlSession.remove()
+  }
+
+  protected[sql] class SQLSession {
+    // Note that this is a lazy val so we can override the default value in subclasses.
+    protected[sql] lazy val conf: SQLConf = new SQLConf
+  }
+
   /**
    * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -1059,9 +1105,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
+    def assertAnalyzed(): Unit = checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
-    lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
+    lazy val withCachedData: LogicalPlan = {
+      assertAnalyzed
+      cacheManager.useCachedData(analyzed)
+    }
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...

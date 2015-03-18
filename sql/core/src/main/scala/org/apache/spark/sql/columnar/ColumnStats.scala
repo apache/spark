@@ -181,6 +181,23 @@ private[sql] class FloatColumnStats extends ColumnStats {
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
+private[sql] class FixedDecimalColumnStats extends ColumnStats {
+  protected var upper: Decimal = null
+  protected var lower: Decimal = null
+
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      val value = row(ordinal).asInstanceOf[Decimal]
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
+      sizeInBytes += FIXED_DECIMAL.defaultSize
+    }
+  }
+
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
+}
+
 private[sql] class IntColumnStats extends ColumnStats {
   protected var upper = Int.MinValue
   protected var lower = Int.MaxValue
