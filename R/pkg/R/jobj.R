@@ -77,14 +77,17 @@ print.jobj <- function(x, ...) {
 cleanup.jobj <- function(jobj) {
   if (isValidJobj(jobj)) {
     objId <- jobj$id
-    .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
+    # If we don't know anything about this jobj, ignore it
+    if (exists(objId, envir = .validJobjs)) {
+      .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
 
-    if (.validJobjs[[objId]] == 0) {
-      rm(list = objId, envir = .validJobjs)
-      # NOTE: We cannot call removeJObject here as the finalizer may be run
-      # in the middle of another RPC. Thus we queue up this object Id to be removed
-      # and then run all the removeJObject when the next RPC is called.
-      .toRemoveJobjs[[objId]] <- 1
+      if (.validJobjs[[objId]] == 0) {
+        rm(list = objId, envir = .validJobjs)
+        # NOTE: We cannot call removeJObject here as the finalizer may be run
+        # in the middle of another RPC. Thus we queue up this object Id to be removed
+        # and then run all the removeJObject when the next RPC is called.
+        .toRemoveJobjs[[objId]] <- 1
+      }
     }
   }
 }
