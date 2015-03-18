@@ -29,6 +29,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -706,8 +707,8 @@ public class JavaAPISuite implements Serializable {
     Tuple2<double[], long[]> results = rdd.histogram(2);
     double[] expected_buckets = {1.0, 2.5, 4.0};
     long[] expected_counts = {2, 2};
-    Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
-    Assert.assertArrayEquals(expected_counts, results._2);
+    Assert.assertArrayEquals(expected_buckets, results._1(), 0.1);
+    Assert.assertArrayEquals(expected_counts, results._2());
     // Test with provided buckets
     long[] histogram = rdd.histogram(expected_buckets);
     Assert.assertArrayEquals(expected_counts, histogram);
