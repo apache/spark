@@ -527,7 +527,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       // TODO extra is in type of ASTNode which means the logical plan is not resolved
       // Need to think about how to implement the CreateTableAsSelect.resolved
-      case CreateTableAsSelect(db, tableName, child, allowExisting, extraInfo: Option[ASTNode]) =>
+      case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
@@ -535,23 +535,19 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val desc: Option[CreateTableDesc] = if (tableExists(Seq(databaseName, tblName))) {
           None
         } else {
-          extraInfo match {
-            case Some(extra: ASTNode) =>
-              val sa = new SemanticAnalyzer(hive.hiveconf) {
-                override def analyzeInternal(ast: ASTNode) {
-                  // A hack to intercept the SemanticAnalyzer.analyzeInternal,
-                  // to ignore the SELECT clause of the CTAS
-                  val method = classOf[SemanticAnalyzer].getDeclaredMethod(
-                    "analyzeCreateTable", classOf[ASTNode], classOf[QB])
-                  method.setAccessible(true)
-                  method.invoke(this, ast, this.getQB)
-                }
-              }
-              
-              sa.analyze(extra, new Context(hive.hiveconf))
-              Some(sa.getQB().getTableDesc)
-            case None => None
+          val sa = new SemanticAnalyzer(hive.hiveconf) {
+            override def analyzeInternal(ast: ASTNode) {
+              // A hack to intercept the SemanticAnalyzer.analyzeInternal,
+              // to ignore the SELECT clause of the CTAS
+              val method = classOf[SemanticAnalyzer].getDeclaredMethod(
+                "analyzeCreateTable", classOf[ASTNode], classOf[QB])
+              method.setAccessible(true)
+              method.invoke(this, ast, this.getQB)
+            }
           }
+          
+          sa.analyze(extra, new Context(hive.hiveconf))
+          Some(sa.getQB().getTableDesc)
         }
 
         // Check if the query specifies file format or storage handler.

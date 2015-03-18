@@ -557,11 +557,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TABLEPROPERTIES"),
           children)
       val (db, tableName) = extractDbNameTableName(tableNameParts)
-      if (ignores.exists(_ != None)) {
-        CreateTableAsSelect(db, tableName, nodeToPlan(query), allowExisting != None, Some(node))
-      } else {
-        CreateTableAsSelect(db, tableName, nodeToPlan(query), allowExisting != None, None)
-      }
+      CreateTableAsSelect(db, tableName, nodeToPlan(query), allowExisting != None, Some(node))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
