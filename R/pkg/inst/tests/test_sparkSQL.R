@@ -285,12 +285,12 @@ test_that("objectFile() works with row serialization", {
   objectPath <- tempfile(pattern="spark-test", fileext=".tmp")
   df <- jsonFile(sqlCtx, jsonPath)
   dfRDD <- toRDD(df)
-  saveAsObjectFile(dfRDD, objectPath)
+  saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
   objectIn <- objectFile(sc, objectPath)
 
   expect_true(inherits(objectIn, "RDD"))
-  expect_true(SparkR:::getSerializedMode(objectIn) == "byte")
-  expect_true(collect(objectIn)[[2]]$age == 30)
+  expect_equal(SparkR:::getSerializedMode(objectIn), "byte")
+  expect_equal(collect(objectIn)[[2]]$age, 30)
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
