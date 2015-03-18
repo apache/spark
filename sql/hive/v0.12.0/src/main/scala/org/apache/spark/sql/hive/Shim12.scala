@@ -189,7 +189,7 @@ private[hive] object HiveShim {
 
   def getStatsSetupConstRawDataSize = StatsSetupConst.RAW_DATA_SIZE
 
-  def createDefaultDBIfNeeded(context: HiveContext) = {}
+  def createDefaultDBIfNeeded(context: HiveContext) = {  }
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd(0), conf)
@@ -244,8 +244,9 @@ private[hive] object HiveShim {
     }
   }
 
-  def getConvertedOI(inputOI: ObjectInspector,
-                     outputOI: ObjectInspector): ObjectInspector = {
+  def getConvertedOI(
+      inputOI: ObjectInspector,
+      outputOI: ObjectInspector): ObjectInspector = {
     ObjectInspectorConverters.getConvertedOI(inputOI, outputOI, true)
   }
 
