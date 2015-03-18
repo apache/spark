@@ -84,9 +84,15 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         val elementName = newTermName(s"c$i")
         val iLit = ru.Literal(Constant(i))
 
-        q"if(i == $ordinal) { if(isNullAt($i)) return null else return $elementName }"
+        q"if(i == $ordinal) { return $elementName }"
       }
-      q"override def apply(i: Int): Any = { ..$cases; $accessorFailure }"
+      q"""
+        override def apply(i: Int): Any = {
+          if (i < 0 || i >= this.length) $accessorFailure
+          if(isNullAt(i)) return null
+          ..$cases
+        }
+      """
     }
 
     val updateFunction = {
@@ -97,16 +103,22 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         q"""
           if(i == $ordinal) {
-            if(value == null) {
-              setNullAt(i)
-            } else {
-              nullBits(i) = false
-              $elementName = value.asInstanceOf[${termForType(e.dataType)}]
-            }
+            $elementName = value.asInstanceOf[${termForType(e.dataType)}]
             return
           }"""
       }
-      q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
+      q"""
+        override def update(i: Int, value: Any): Unit = {
+          if (i < 0 || i >= this.length) $accessorFailure
+          if(value == null) {
+            setNullAt(i)
+            return
+          } else {
+            nullBits(i) = false
+          }
+          ..$cases
+        }
+      """
     }
 
     val specificAccessorFunctions = NativeType.all.map { dataType =>
