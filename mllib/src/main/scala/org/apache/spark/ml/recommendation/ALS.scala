@@ -541,8 +541,7 @@ object ALS extends Logging {
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
         if (sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)) {
-          itemFactors.checkpoint()
-          itemFactors.count() // checkpoint item factors and cut lineage
+          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
           // delete previous checkpoint file
           previousCheckpointFile.foreach { file =>
             try {
