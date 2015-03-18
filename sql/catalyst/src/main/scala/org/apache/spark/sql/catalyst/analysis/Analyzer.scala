@@ -237,22 +237,33 @@ class Analyzer(catalog: Catalog,
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+        val (oldRelation, newRelation) = right.collect {
+          // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
             val newVersion = oldVersion.newInstance()
-            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
-            (oldVersion, newVersion, newAttributes)
+            (oldVersion, newVersion)
+
+          // Handle projects that create conflicting aliases.
+          case oldVersion @ Project(projectList, _)
+              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+
+          case oldVersion @ Aggregate(_, aggregateExpressions, _)
+              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
         }.head // Only handle first case found, others will be fixed on the next pass.
 
+        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
         val newRight = right transformUp {
           case r if r == oldRelation => newRelation
+        } transformUp {
           case other => other transformExpressions {
             case a: Attribute => attributeRewrites.get(a).getOrElse(a)
           }
         }
-
         j.copy(right = newRight)
 
       case q: LogicalPlan =>
@@ -270,6 +281,17 @@ class Analyzer(catalog: Catalog,
           case UnresolvedGetField(child, fieldName) if child.resolved =>
             resolveGetField(child, fieldName)
         }
+    }
+
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     /**

@@ -100,7 +100,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.sparkConf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(newCp.createSparkConf().getInt("spark.cleaner.ttl", -1) === 10)
     ssc = new StreamingContext(null, newCp, null)
     assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }

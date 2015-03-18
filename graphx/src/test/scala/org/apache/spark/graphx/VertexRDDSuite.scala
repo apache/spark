@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import org.scalatest.FunSuite
 
 import org.apache.spark.{HashPartitioner, SparkContext}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
@@ -55,6 +56,18 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       assert(verts.diff(flipEvens).map(_._2).collect().toSet === (2 to n by 2).map(-_).toSet)
       // diff should keep the vertex values from `other`
       assert(flipEvens.diff(verts).map(_._2).collect().toSet === (2 to n by 2).toSet)
+    }
+  }
+
+  test("diff with RDD[(VertexId, VD)]") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n).cache()
+      val flipEvens: RDD[(VertexId, Int)] =
+        sc.parallelize(0L to 100L)
+          .map(id => if (id % 2 == 0) (id, -id.toInt) else (id, id.toInt)).cache()
+      // diff should keep only the changed vertices
+      assert(verts.diff(flipEvens).map(_._2).collect().toSet === (2 to n by 2).map(-_).toSet)
     }
   }
 
