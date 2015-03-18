@@ -42,7 +42,10 @@ sparkR.stop <- function(env = .sparkREnv) {
       rm(".sparkRjsc", envir = env)
     }
   
-    callJStatic("SparkRHandler", "stopBackend")
+    if (exists(".sparkRBackendLaunched", envir = env)) {
+      callJStatic("SparkRHandler", "stopBackend")
+    }
+
     # Also close the connection and remove it from our env
     conn <- get(".sparkRCon", envir = env)
     close(conn)
@@ -148,6 +151,7 @@ sparkR.init <- function(
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
+    assign(".sparkRBackendLaunched", 1, envir = .sparkREnv)
   }
 
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
