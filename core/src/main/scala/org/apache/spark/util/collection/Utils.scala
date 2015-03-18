@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.spark.annotation.Experimental
+
 import scala.collection.JavaConversions.{collectionAsScalaIterable, asJavaIterator}
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
@@ -24,7 +26,8 @@ import com.google.common.collect.{Ordering => GuavaOrdering}
 /**
  * Utility functions for collections.
  */
-private[spark] object Utils {
+@Experimental
+object Utils {
 
   /**
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]

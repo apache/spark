@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.spark.annotation.Experimental
+
 import scala.reflect.ClassTag
 
 /**
@@ -27,7 +29,8 @@ import scala.reflect.ClassTag
  * entries than that. This makes it more efficient for operations like groupBy where we expect
  * some keys to have very few elements.
  */
-private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable {
+@Experimental
+class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable {
   // First two elements
   private var element0: T = _
   private var element1: T = _
