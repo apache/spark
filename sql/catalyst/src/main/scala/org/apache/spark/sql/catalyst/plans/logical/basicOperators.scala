@@ -191,6 +191,8 @@ case class Expand(
     val sizeInBytes = child.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  override def missingInput = super.missingInput.filter(_.name != VirtualColumn.groupingIdName)
 }
 
 trait GroupingAnalytics extends UnaryNode {
