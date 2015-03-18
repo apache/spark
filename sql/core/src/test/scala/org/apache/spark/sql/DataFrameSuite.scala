@@ -56,10 +56,7 @@ class DataFrameSuite extends QueryTest {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString === "[key: int]")
-  }
-
-  test("incomputable toString") {
+    assert(testData("key").toString === "key")
     assert($"test".toString === "test")
   }
 
@@ -131,6 +128,12 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
       testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("selectExpr with alias") {
+    checkAnswer(
+      testData.selectExpr("key as k").select("k"),
+      testData.select("key").collect().toSeq)
   }
 
   test("filterExpr") {
@@ -235,6 +238,10 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
       Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
+
+    checkAnswer(
+      testData2.orderBy(asc("a"), desc("b")),
+      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
 
     checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
@@ -408,7 +415,7 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("addColumn") {
+  test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
       df,
@@ -418,7 +425,7 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
   }
 
-  test("renameColumn") {
+  test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
     checkAnswer(
@@ -431,7 +438,12 @@ class DataFrameSuite extends QueryTest {
 
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
-    checkAnswer(df("key"), testData.select('key).collect().toSeq)
+    checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
+  ignore("show") {
+    // This test case is intended ignored, but to make sure it compiles correctly
+    testData.select($"*").show()
+    testData.select($"*").show(1000)
+  }
 }

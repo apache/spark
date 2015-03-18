@@ -119,7 +119,8 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition])(@transient val sqlContext: SQLContext)
-  extends PrunedFilteredScan {
+  extends BaseRelation
+  with PrunedFilteredScan {
 
   override val schema = JDBCRDD.resolveTable(url, table)
 

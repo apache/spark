@@ -52,12 +52,6 @@ class Analyzer(catalog: Catalog,
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  /**
-   * Override to provide additional rules for the "Check Analysis" batch.
-   * These rules will be evaluated after our built-in check rules.
-   */
-  val extendedCheckRules: Seq[Rule[LogicalPlan]] = Nil
-
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
@@ -71,86 +65,9 @@ class Analyzer(catalog: Catalog,
       TrimGroupingAliases ::
       typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("Check Analysis", Once,
-      CheckResolution +:
-      extendedCheckRules: _*),
     Batch("Remove SubQueries", fixedPoint,
       EliminateSubQueries)
   )
-
-  /**
-   * Makes sure all attributes and logical plans have been resolved.
-   */
-  object CheckResolution extends Rule[LogicalPlan] {
-    def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
-
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      // We transform up and order the rules so as to catch the first possible failure instead
-      // of the result of cascading resolution failures.
-      plan.foreachUp {
-        case operator: LogicalPlan =>
-          operator transformExpressionsUp {
-            case a: Attribute if !a.resolved =>
-              val from = operator.inputSet.map(_.name).mkString(", ")
-              a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
-
-            case c: Cast if !c.resolved =>
-              failAnalysis(
-                s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-            case b: BinaryExpression if !b.resolved =>
-              failAnalysis(
-                s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
-          }
-
-          operator match {
-            case f: Filter if f.condition.dataType != BooleanType =>
-              failAnalysis(
-                s"filter expression '${f.condition.prettyString}' " +
-                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
-
-            case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
-              def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-                case _: AggregateExpression => // OK
-                case e: Attribute if !groupingExprs.contains(e) =>
-                  failAnalysis(
-                    s"expression '${e.prettyString}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
-                     "Add to group by or wrap in first() if you don't care which value you get.")
-                case e if groupingExprs.contains(e) => // OK
-                case e if e.references.isEmpty => // OK
-                case e => e.children.foreach(checkValidAggregateExpression)
-              }
-
-              val cleaned = aggregateExprs.map(_.transform {
-                // Should trim aliases around `GetField`s. These aliases are introduced while
-                // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-                // (Should we just turn `GetField` into a `NamedExpression`?)
-                case Alias(g, _) => g
-              })
-
-              cleaned.foreach(checkValidAggregateExpression)
-
-            case o if o.children.nonEmpty &&
-              !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
-              val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
-              val input = o.inputSet.map(_.prettyString).mkString(",")
-
-              failAnalysis(s"resolved attributes $missingAttributes missing from $input")
-
-            // Catch all
-            case o if !o.resolved =>
-              failAnalysis(
-                s"unresolved operator ${operator.simpleString}")
-
-            case _ => // Analysis successful!
-          }
-      }
-
-      plan
-    }
-  }
 
   /**
    * Removes no-op Alias expressions from the plan.
@@ -320,22 +237,33 @@ class Analyzer(catalog: Catalog,
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+        val (oldRelation, newRelation) = right.collect {
+          // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
             val newVersion = oldVersion.newInstance()
-            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
-            (oldVersion, newVersion, newAttributes)
+            (oldVersion, newVersion)
+
+          // Handle projects that create conflicting aliases.
+          case oldVersion @ Project(projectList, _)
+              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+
+          case oldVersion @ Aggregate(_, aggregateExpressions, _)
+              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
         }.head // Only handle first case found, others will be fixed on the next pass.
 
+        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
         val newRight = right transformUp {
           case r if r == oldRelation => newRelation
+        } transformUp {
           case other => other transformExpressions {
             case a: Attribute => attributeRewrites.get(a).getOrElse(a)
           }
         }
-
         j.copy(right = newRight)
 
       case q: LogicalPlan =>
@@ -353,6 +281,17 @@ class Analyzer(catalog: Catalog,
           case UnresolvedGetField(child, fieldName) if child.resolved =>
             resolveGetField(child, fieldName)
         }
+    }
+
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     /**
@@ -393,7 +332,7 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
@@ -404,7 +343,8 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+        val requiredAttributes =
+          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
