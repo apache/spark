@@ -227,8 +227,8 @@ class DAGScheduler(
 
   /**
    * Create a ShuffleMapStage as part of the (re)-creation of a shuffle map stage in
-   * newOrUsedShuffleStage.  The stage will be associated with the provide jobId.
-   * Production of shuffle map stages should always use newOrUsedShuffleStage,not
+   * newOrUsedShuffleStage.  The stage will be associated with the provided jobId.
+   * Production of shuffle map stages should always use newOrUsedShuffleStage, not
    * newShuffleMapStage directly.
    */
   private def newShuffleMapStage(
@@ -803,8 +803,7 @@ class DAGScheduler(
     val partitionsToCompute: Seq[Int] = {
       stage match {
         case stage: ShuffleMapStage =>
-          (0 until stage.numPartitions).filter(id =>
-          stage.outputLocs(id) == Nil)
+          (0 until stage.numPartitions).filter(id => stage.outputLocs(id) == Nil)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
           (0 until job.numPartitions).filter(id => !job.finished(id))
@@ -893,12 +892,11 @@ class DAGScheduler(
       val debugString = stage match {
         case stage: ShuffleMapStage =>
           "Stage " + stage + (" is actually done; " +
-            "(available: ${stage.isAvailable}," +
-            "available outputs: ${stage.numAvailableOutputs}," +
-            "partitions: ${stage.numPartitions})")
+            s"(available: ${stage.isAvailable}," +
+            s"available outputs: ${stage.numAvailableOutputs}," +
+            s"partitions: ${stage.numPartitions})")
         case stage : ResultStage =>
-          "Stage " + stage + (" is actually done; " +
-            "(partitions: ${stage.numPartitions})")
+          "Stage " + stage + s" is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
       runningStages -= stage
