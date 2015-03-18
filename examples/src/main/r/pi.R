@@ -19,12 +19,7 @@ library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
-if (length(args) < 1) {
-  print("Usage: pi <master> [<slices>]")
-  q("no")
-}
-
-sc <- sparkR.init(args[[1]], "PiR")
+sc <- sparkR.init(appName="PiR")
 
 slices <- ifelse(length(args) > 1, as.integer(args[[2]]), 2)
 

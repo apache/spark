@@ -1,5 +1,3 @@
-#!/bin/bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,25 +15,18 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+# NOTE: This file is only used by script bin/sparkR and hence should be
+# outside the package definition
 
-source "$SPARK_HOME"/bin/load-spark-env.sh
-
-function usage() {
-  if [ -n "$1" ]; then
-    echo $1
-  fi
-  echo "Usage: ./bin/sparkR [options]" 1>&2
-  "$SPARK_HOME"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit $2
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
+  require(utils)
+  require(SparkR)
+  sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
+  assign("sc", sc, envir=.GlobalEnv)
+  sqlCtx <- sparkRSQL.init(sc)
+  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
+  cat("\n Welcome to SparkR!")
+  cat("\n Spark context is available as sc, SQL context is available as sqlCtx\n")
 }
-export -f usage
-
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage
-fi
-
-export PROJECT_HOME="${SPARK_HOME}/R"
-
-exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"

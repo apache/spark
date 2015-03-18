@@ -1,5 +1,3 @@
-#!/bin/bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,25 +15,7 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-
-source "$SPARK_HOME"/bin/load-spark-env.sh
-
-function usage() {
-  if [ -n "$1" ]; then
-    echo $1
-  fi
-  echo "Usage: ./bin/sparkR [options]" 1>&2
-  "$SPARK_HOME"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit $2
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
 }
-export -f usage
-
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage
-fi
-
-export PROJECT_HOME="${SPARK_HOME}/R"
-
-exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"

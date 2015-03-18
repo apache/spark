@@ -70,6 +70,8 @@ object RRunner {
         val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
+        env.put("PROJECT_HOME", sys.env.getOrElse("SPARK_HOME", "") + "/R")
+        env.put("R_PROFILE_USER", sys.env.getOrElse("SPARK_HOME", "") + "/R/first-submit.R")
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 

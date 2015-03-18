@@ -278,8 +278,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       submitArgs.append(quoteForPython(arg));
     }
     env.put("SPARKR_SUBMIT_ARGS", submitArgs.toString());
+    // TODO: Is there a better way to get Spark Home here ?
+    env.put("R_PROFILE_USER", System.getenv("SPARK_HOME") + "/R/first.R");
 
     List<String> args = new ArrayList<String>();
+    args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 
