@@ -296,7 +296,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
       Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
-        env.securityManager,appName))
+        env.securityManager,appName, startTime = startTime))
     } else {
       // For tests, do not enable the UI
       None

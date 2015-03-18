@@ -43,7 +43,8 @@ private[spark] class SparkUI private (
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     var appName: String,
-    val basePath: String)
+    val basePath: String,
+    val startTime: Long)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
@@ -97,8 +98,7 @@ private[spark] class SparkUI private (
     Seq(new ApplicationInfo(
       id = appName,
       name = appName,
-      //TODO
-      startTime = new Date(-1),
+      startTime = new Date(startTime),
       endTime = new Date(-1),
       sparkUser = "",
       completed = false
@@ -127,9 +127,10 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
-      appName: String): SparkUI =  {
+      appName: String,
+      startTime: Long): SparkUI =  {
     create(Some(sc), conf, listenerBus, securityManager, appName,
-      jobProgressListener = Some(jobProgressListener))
+      jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
   def createHistoryUI(
@@ -137,8 +138,9 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
       appName: String,
-      basePath: String): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath)
+      basePath: String,
+      startTime: Long): SparkUI = {
+    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
   }
 
   /**
@@ -155,7 +157,8 @@ private[spark] object SparkUI {
       securityManager: SecurityManager,
       appName: String,
       basePath: String = "",
-      jobProgressListener: Option[JobProgressListener] = None): SparkUI = {
+      jobProgressListener: Option[JobProgressListener] = None,
+      startTime: Long): SparkUI = {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
       val listener = new JobProgressListener(conf)
@@ -174,6 +177,6 @@ private[spark] object SparkUI {
     listenerBus.addListener(storageListener)
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, _jobProgressListener, storageListener, appName, basePath)
+      executorsListener, _jobProgressListener, storageListener, appName, basePath, startTime)
   }
 }
