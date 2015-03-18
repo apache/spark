@@ -19,14 +19,13 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap, UUID}
+import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
 
 import com.google.common.base.Charsets.UTF_8
-import org.apache.commons.lang.ClassUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
@@ -36,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.rdd.{RDD, RDDMultipleTextOutputFormat}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 import scala.util.control.NonFatal
@@ -722,43 +721,6 @@ private[spark] object PythonRDD extends Logging {
       new JavaToWritableConverter)
     val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
     converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec=codec)
-  }
-
-  /**
-   * Output a Python RDD of key-value pairs to any Hadoop file system such that the values within
-   * the rdd are written to sub-directories organized by the associated key.
-   *
-   * Keys and values are converted to suitable output types using either user specified converters
-   * or, if not specified, [[org.apache.spark.api.python.JavaToWritableConverter]]. Post-conversion
-   * types `keyClass` and `valueClass` are automatically inferred if not specified. The passed-in
-   * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
-   * this RDD.
-   */
-  def saveAsHadoopFileByKey[K, V, C <: CompressionCodec](
-      pyRDD: JavaRDD[Array[Byte]],
-      batchSerialized: Boolean,
-      path: String,
-      outputFormatClass: String,
-      keyClass: String,
-      valueClass: String,
-      keyConverterClass: String,
-      valueConverterClass: String,
-      confAsMap: java.util.HashMap[String, String],
-      compressionCodecClass: String) = {
-    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
-    val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
-      inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
-    val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
-    val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
-    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new JavaToWritableConverter)
-
-    converted.saveAsHadoopFile(path,
-      ClassUtils.primitiveToWrapper(kc),
-      ClassUtils.primitiveToWrapper(vc),
-      classOf[RDDMultipleTextOutputFormat[K,V]],
-      new JobConf(mergedConf),
-      codec=codec)
   }
 
   /**

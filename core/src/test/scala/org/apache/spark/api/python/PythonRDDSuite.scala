@@ -17,16 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{BufferedReader, ByteArrayOutputStream, DataOutputStream, InputStreamReader}
+import java.io.{ByteArrayOutputStream, DataOutputStream}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SharedSparkContext
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.rdd.RDDMultipleTextOutputFormat
 import org.scalatest.FunSuite
-
-import scala.collection.mutable.HashSet
 
 class PythonRDDSuite extends FunSuite with SharedSparkContext{
 
@@ -47,49 +41,5 @@ class PythonRDDSuite extends FunSuite with SharedSparkContext{
     PythonRDD.writeIteratorToStream(Iterator((null, null), ("a", null), (null, "b")), buffer)
     PythonRDD.writeIteratorToStream(
       Iterator((null, null), ("a".getBytes, null), (null, "b".getBytes)), buffer)
-  }
-
-  test("saveAsHadoopFileByKey should generate a text file per key") {
-    val testPairs : JavaRDD[Array[Byte]] = sc.parallelize(
-      Seq(
-        Array(1.toByte,1.toByte),
-        Array(2.toByte,4.toByte),
-        Array(3.toByte,9.toByte),
-        Array(4.toByte,16.toByte),
-        Array(5.toByte,25.toByte))
-    ).toJavaRDD()
-
-    val fs = FileSystem.get(new Configuration())
-    val basePath = sc.conf.get("spark.local.dir", "/tmp")
-    val fullPath = basePath + "/testPath"
-    fs.delete(new Path(fullPath), true)
-
-    PythonRDD.saveAsHadoopFileByKey(
-      testPairs,
-      false,
-      fullPath,
-      classOf[RDDMultipleTextOutputFormat[Int, Int]].toString,
-      classOf[Int].toString,
-      classOf[Int].toString,
-      null,
-      null,
-      new java.util.HashMap(), "")
-
-    // Test that a file was created for each key
-    (1 to 5).foreach(key => {
-      val testPath = new Path(fullPath + "/" + key)
-      assert(fs.exists(testPath))
-
-      // Read the file and test that the contents are the values matching that key split by line
-      val input = fs.open(testPath)
-      val reader = new BufferedReader(new InputStreamReader(input))
-      val values = new HashSet[Int]
-      val lines = Stream.continually(reader.readLine()).takeWhile(_ != null)
-      lines.foreach(s => values += s.toInt)
-
-      assert(values.contains(key*key))
-    })
-
-    fs.delete(new Path(fullPath), true)
   }
 }
