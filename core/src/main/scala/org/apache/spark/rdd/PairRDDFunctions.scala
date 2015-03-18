@@ -177,7 +177,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         queue += item
         queue
       },
-      combOp = (queue1, queue2)  => {
+      combOp = (queue1, queue2) => {
         queue1 ++= queue2
         queue1
       }
