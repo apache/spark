@@ -185,39 +185,39 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
-{
-  # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
-  # This must be a single argument, as it is.
-  if [ -n "$_RUN_SQL_TESTS" ]; then
-    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
-  fi
-
-  if [ -n "$_SQL_TESTS_ONLY" ]; then
-    # This must be an array of individual arguments. Otherwise, having one long string
-    # will be interpreted as a single test, which doesn't work.
-    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test" "mllib/test")
-  else
-    SBT_MAVEN_TEST_ARGS=("test")
-  fi
-
-  echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
-
-  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn test $SBT_MAVEN_PROFILES_ARGS --fail-at-end
-  else
-    # NOTE: echo "q" is needed because sbt on encountering a build file with failure
-    # (either resolution or compilation) prompts the user for input either q, r, etc
-    # to quit or retry. This echo is there to make it not block.
-    # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
-    # single argument!
-    # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
-    # QUESTION: Why doesn't 'yes "q"' work?
-    # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
-    echo -e "q\n" \
-      | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
-      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-  fi
-}
+#{
+#  # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
+#  # This must be a single argument, as it is.
+#  if [ -n "$_RUN_SQL_TESTS" ]; then
+#    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+#  fi
+#
+#  if [ -n "$_SQL_TESTS_ONLY" ]; then
+#    # This must be an array of individual arguments. Otherwise, having one long string
+#    # will be interpreted as a single test, which doesn't work.
+#    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test" "mllib/test")
+#  else
+#    SBT_MAVEN_TEST_ARGS=("test")
+#  fi
+#
+#  echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
+#
+#  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
+#    build/mvn test $SBT_MAVEN_PROFILES_ARGS --fail-at-end
+#  else
+#    # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+#    # (either resolution or compilation) prompts the user for input either q, r, etc
+#    # to quit or retry. This echo is there to make it not block.
+#    # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
+#    # single argument!
+#    # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
+#    # QUESTION: Why doesn't 'yes "q"' work?
+#    # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+#    echo -e "q\n" \
+#      | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
+#      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+#  fi
+#}
 
 echo ""
 echo "========================================================================="
@@ -226,7 +226,7 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
-./python/run-tests
+#./python/run-tests
 
 echo ""
 echo "========================================================================="
@@ -245,4 +245,4 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_MIMA
 
-./dev/mima
+#./dev/mima
