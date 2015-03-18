@@ -797,7 +797,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
    * by the DAGScheduler's single-threaded actor anyway.
-   */
+   */ 
   @transient var socket: Socket = _
 
   def openSocket(): Socket = synchronized {

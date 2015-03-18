@@ -22,7 +22,7 @@ import java.io.{ByteArrayOutputStream, DataOutputStream}
 import org.apache.spark.SharedSparkContext
 import org.scalatest.FunSuite
 
-class PythonRDDSuite extends FunSuite with SharedSparkContext{
+class PythonRDDSuite extends FunSuite {
 
   test("Writing large strings to the worker") {
     val input: List[String] = List("a"*100000)
