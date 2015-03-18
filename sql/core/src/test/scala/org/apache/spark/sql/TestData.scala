@@ -209,8 +209,8 @@ object TestData {
     Row("count",   4.0,             4.0) ::
     Row("mean",    33.0,            178.0) ::
     Row("stddev",  16.583123951777, 10.0) ::
-    Row("min",     16.0,            164) ::
-    Row("max",     60.0,            192) :: Nil
+    Row("min",     16.0,            164.0) ::
+    Row("max",     60.0,            192.0) :: Nil
   val emptyDescribeResult =
     Row("count",   0,    0) ::
     Row("mean",    null, null) ::

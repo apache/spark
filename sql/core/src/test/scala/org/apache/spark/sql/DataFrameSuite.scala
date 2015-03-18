@@ -439,17 +439,21 @@ class DataFrameSuite extends QueryTest {
   test("describe") {
     def getSchemaAsSeq(df: DataFrame) = df.schema.map(_.name).toSeq
 
-    val describeAllCols = describeTestData.describe("age", "height")
+    val describeTwoCols = describeTestData.describe("age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeTwoCols, describeResult)
+
+    val describeAllCols = describeTestData.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
-
-    val describeNoCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeNoCols) === Seq("summary", "age", "height"))
-    checkAnswer(describeNoCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
     checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+
+    val describeNoCol = describeTestData.select("name").describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
