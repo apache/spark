@@ -519,13 +519,6 @@ class SparseMatrix(
     }
   }
 
-  override def equals(o: Any) = o match {
-    case m: SparseMatrix =>
-      (m.numRows == numRows && m.numCols == numCols && Arrays.equals(colPtrs, m.colPtrs)
-       && Arrays.equals(rowIndices, m.rowIndices) && Arrays.equals(values, m.values))
-    case _ => false
-  }
-
   override def copy = new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
 
   private[mllib] def map(f: Double => Double) =

@@ -432,7 +432,7 @@ class MatricesSuite extends FunSuite {
     val sm2 = dm2.toSparse
     val mUDT = new MatrixUDT()
     Seq(dm1, dm2, sm1, sm2).foreach {
-        mat => assert(mat === mUDT.deserialize(mUDT.serialize(mat)))
+        mat => assert(mat.toArray === mUDT.deserialize(mUDT.serialize(mat)).toArray)
     }
   }
 }
