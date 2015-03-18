@@ -128,7 +128,7 @@ abstract class VertexRDD[VD](
    *
    * @param other the other RDD[(VertexId, VD)] with which to diff against.
    */
-  def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD]
+  def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = ???
 
   /**
    * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
