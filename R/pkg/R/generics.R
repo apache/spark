@@ -207,6 +207,10 @@ setGeneric("name", function(x) { standardGeneric("name") })
 #' @export
 setGeneric("setName", function(x, name) { standardGeneric("setName") })
 
+#' @rdname zipRDD
+#' @export
+setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
+
 #' @rdname zipWithUniqueId
 #' @seealso zipWithIndex
 #' @export

@@ -1385,7 +1385,6 @@ setMethod("zipWithIndex",
            lapplyPartitionsWithIndex(x, partitionFunc)
          })
 
-
 ############ Binary Functions #############
 
 #' Return the union RDD of two RDDs.
@@ -1417,4 +1416,99 @@ setMethod("unionRDD",
               union.rdd <- RDD(jrdd, "byte")
             }
             union.rdd
+          })
+
+#' Zip an RDD with another RDD.
+#'
+#' Zips this RDD with another one, returning key-value pairs with the
+#' first element in each RDD second element in each RDD, etc. Assumes
+#' that the two RDDs have the same number of partitions and the same
+#' number of elements in each partition (e.g. one was made through
+#' a map on the other).
+#'
+#' @param x An RDD to be zipped.
+#' @param other Another RDD to be zipped.
+#' @return An RDD zipped from the two RDDs.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, 0:4)
+#' rdd2 <- parallelize(sc, 1000:1004)
+#' collect(zipRDD(rdd1, rdd2))
+#' # list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004))
+#'}
+#' @rdname zipRDD
+#' @aliases zipRDD,RDD
+setMethod("zipRDD",
+          signature(x = "RDD", other = "RDD"),
+          function(x, other) {
+            n1 <- numPartitions(x)
+            n2 <- numPartitions(other)
+            if (n1 != n2) {
+              stop("Can only zip RDDs which have the same number of partitions.")
+            }
+
+            if (getSerializedMode(x) != getSerializedMode(other) || 
+                getSerializedMode(x) == "byte") {
+              # Append the number of elements in each partition to that partition so that we can later
+              # check if corresponding partitions of both RDDs have the same number of elements.
+              #
+              # Note that this appending also serves the purpose of reserialization, because even if 
+              # any RDD is serialized, we need to reserialize it to make sure its partitions are encoded
+              # as a single byte array. For example, partitions of an RDD generated from partitionBy()
+              # may be encoded as multiple byte arrays.          
+              appendLength <- function(part) {
+                part[[length(part) + 1]] <- length(part) + 1
+                part
+              }
+              x <- lapplyPartition(x, appendLength)
+              other <- lapplyPartition(other, appendLength)
+            }
+            
+            zippedJRDD <- callJMethod(getJRDD(x), "zip", getJRDD(other))
+            # The zippedRDD's elements are of scala Tuple2 type. The serialized
+            # flag Here is used for the elements inside the tuples.
+            serializerMode <- getSerializedMode(x)
+            zippedRDD <- RDD(zippedJRDD, serializerMode)
+            
+            partitionFunc <- function(split, part) {
+              len <- length(part)
+              if (len > 0) {
+                if (serializerMode == "byte") {
+                  lengthOfValues <- part[[len]]
+                  lengthOfKeys <- part[[len - lengthOfValues]]
+                  stopifnot(len == lengthOfKeys + lengthOfValues)
+                  
+                  # check if corresponding partitions of both RDDs have the same number of elements.
+                  if (lengthOfKeys != lengthOfValues) {
+                    stop("Can only zip RDDs with same number of elements in each pair of corresponding partitions.")
+                  }
+                  
+                  if (lengthOfKeys > 1) {
+                    keys <- part[1 : (lengthOfKeys - 1)]
+                    values <- part[(lengthOfKeys + 1) : (len - 1)]                    
+                  } else {
+                    keys <- list()
+                    values <- list()
+                  }
+                } else {
+                  # Keys, values must have same length here, because this has
+                  # been validated inside the JavaRDD.zip() function.
+                  keys <- part[c(TRUE, FALSE)]
+                  values <- part[c(FALSE, TRUE)]
+                }
+                mapply(
+                    function(k, v) {
+                      list(k, v)
+                    },
+                    keys,
+                    values,
+                    SIMPLIFY = FALSE,
+                    USE.NAMES = FALSE)
+              } else {
+                part
+              }
+            }
+            
+            PipelinedRDD(zippedRDD, partitionFunc)
           })
