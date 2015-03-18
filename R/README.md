@@ -13,7 +13,7 @@ Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html
 
 #### Running sparkR
 
-You can start using it by launching the SparkR shell with
+You can start using SparkR by launching the SparkR shell with
 
     ./bin/sparkR
 
@@ -24,6 +24,16 @@ SparkContext, you can run
     ./bin/sparkR --master "local[2]"
 
 To set other options like driver memory, executor memory etc. you can pass in the [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
+
+#### Using SparkR from RStudio
+
+If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example 
+```
+Sys.setenv(SPARK_HOME="/Users/shivaram/spark") # Set this to where Spark is installed
+libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths())) # This line loads SparkR from the installed directory
+library(SparkR)
+sc <- sparkR.init(master="local")
+```
 
 #### Making changes to SparkR
 
