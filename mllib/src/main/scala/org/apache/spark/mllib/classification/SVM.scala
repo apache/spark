@@ -121,7 +121,7 @@ object SVMModel extends Loader[SVMModel] {
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-class SVMWithSGD (
+class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -152,6 +152,36 @@ class SVMWithSGD (
  * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
 object SVMWithSGD {
+    
+  /**
+   * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
+   * gradient descent are initialized using the initial weights provided.
+   *
+   * NOTE: Labels used in SVM should be {0, 1}.
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param regParam Regularization parameter.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   * @param useFeatureScaling Set if the algorithm should use feature scaling to improve the convergence during optimization.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double,
+      initialWeights: Vector,
+      useFeatureScaling: Boolean): SVMModel = {
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).setFeatureScaling(useFeatureScaling)
+      .run(input, initialWeights)
+  }
+  
 
   /**
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
