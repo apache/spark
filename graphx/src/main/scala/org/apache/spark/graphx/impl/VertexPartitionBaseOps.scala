@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx.impl
 
+import org.apache.spark.rdd.RDD
+
 import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -136,6 +138,31 @@ private[graphx] abstract class VertexPartitionBaseOps
     leftJoin(createUsingIndex(other))(f)
   }
 
+  def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, T]
+      (other: Self[VD2], acc: T)
+      (f: (T, VertexId, VD, Option[VD2]) => VD3): Self[VD3] = {
+    if (self.index != other.index) {
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      leftJoinWithFold(createUsingIndex(other.iterator), acc)(f)
+    } else {
+      val newValues = new Array[VD3](self.capacity)
+
+      var i = self.mask.nextSetBit(0)
+      while (i >= 0) {
+        val otherV: Option[VD2] = if (other.mask.get(i)) Some(other.values(i)) else None
+        newValues(i) = f(acc, self.index.getValue(i), self.values(i), otherV)
+        i = self.mask.nextSetBit(i + 1)
+      }
+      this.withValues(newValues)
+    }
+  }
+
+  def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, T]
+      (other: Iterator[(VertexId, VD2)], acc: T)
+      (f: (T, VertexId, VD, Option[VD2]) => VD3): Self[VD3] = {
+    leftJoinWithFold(createUsingIndex(other), acc)(f)
+  }
+
   /** Inner join another VertexPartition. */
   def innerJoin[U: ClassTag, VD2: ClassTag]
       (other: Self[U])
@@ -155,6 +182,25 @@ private[graphx] abstract class VertexPartitionBaseOps
     }
   }
 
+  /** Inner join another VertexPartition. */
+  def innerJoinWithFold[U: ClassTag, VD2: ClassTag, T]
+  (other: Self[U], acc: T)
+  (f: (T, VertexId, VD, U) => VD2): Self[VD2] = {
+    if (self.index != other.index) {
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      innerJoinWithFold(createUsingIndex(other.iterator), acc)(f)
+    } else {
+      val newMask = self.mask & other.mask
+      val newValues = new Array[VD2](self.capacity)
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        newValues(i) = f(acc, self.index.getValue(i), self.values(i), other.values(i))
+        i = newMask.nextSetBit(i + 1)
+      }
+      this.withValues(newValues).withMask(newMask)
+    }
+  }
+
   /**
    * Inner join an iterator of messages.
    */
@@ -165,10 +211,37 @@ private[graphx] abstract class VertexPartitionBaseOps
   }
 
   /**
+   * Inner join an iterator of messages.
+   */
+  def innerJoinWithFold[U: ClassTag, VD2: ClassTag, T]
+  (iter: Iterator[Product2[VertexId, U]], acc: T)
+  (f: (T, VertexId, VD, U) => VD2): Self[VD2] = {
+    innerJoinWithFold(createUsingIndex(iter), acc)(f)
+  }
+
+  /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
   def createUsingIndex[VD2: ClassTag](iter: Iterator[Product2[VertexId, VD2]])
     : Self[VD2] = {
+    val newMask = new BitSet(self.capacity)
+    val newValues = new Array[VD2](self.capacity)
+    iter.foreach { pair =>
+      val pos = self.index.getPos(pair._1)
+      if (pos >= 0) {
+        newMask.set(pos)
+        newValues(pos) = pair._2
+      }
+    }
+    this.withValues(newValues).withMask(newMask)
+  }
+
+  /**
+   * Similar effect as aggregateUsingIndex((a, b) => a)
+   */
+  def createWithFold[VD2: ClassTag, T]
+      (iter: Iterator[Product2[VertexId, VD2]], acc: T)
+  : Self[VD2] = {
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[VD2](self.capacity)
     iter.foreach { pair =>

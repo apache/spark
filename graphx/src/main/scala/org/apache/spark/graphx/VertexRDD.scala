@@ -157,6 +157,27 @@ abstract class VertexRDD[VD](
       (other: VertexRDD[VD2])(f: (VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3]
 
   /**
+   * Left joins this RDD with another VertexRDD with the same index. This function will fail if
+   * both VertexRDDs do not share the same index. The resulting vertex set contains an entry for
+   * each vertex in `this`.
+   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
+   *
+   * @tparam VD2 the attribute type of the other VertexRDD
+   * @tparam VD3 the attribute type of the resulting VertexRDD
+   * @tparam A the type of the given starting value and accumulator
+   *
+   * @param other the other VertexRDD with which to join.
+   * @param acc the starting value for the accumulator
+   * @param f the function mapping a vertex id and its attributes in this and the other vertex set
+   * to a new vertex attribute.
+   * @return a VertexRDD containing the results of `f`
+   */
+  def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
+      (other: VertexRDD[VD2], acc: A)
+      (f: (A, VertexId, VD, Option[VD2]) => VD3)
+    : VertexRDD[VD3]
+
+  /**
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
    * backed by a VertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
    * used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
@@ -178,11 +199,39 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD3]
 
   /**
+   * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
+   * backed by a VertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
+   * used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
+   * missing any vertex in this VertexRDD, `f` is passed `None`. If there are duplicates,
+   * the vertex is picked arbitrarily.
+   *
+   * @tparam VD2 the attribute type of the other VertexRDD
+   * @tparam VD3 the attribute type of the resulting VertexRDD
+   *
+   * @param other the other VertexRDD with which to join
+   * @param f the function mapping a vertex id and its attributes in this and the other vertex set
+   * to a new vertex attribute.
+   * @return a VertexRDD containing all the vertices in this VertexRDD with the attributes emitted
+   * by `f`.
+   */
+  def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, T]
+      (other: RDD[(VertexId, VD2)], acc: T)
+      (f: (T, VertexId, VD, Option[VD2]) => VD3)
+    : VertexRDD[VD3]
+
+  /**
    * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index. See
    * [[innerJoin]] for the behavior of the join.
    */
   def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
+
+  /**
+   * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index. See
+   * [[innerJoin]] for the behavior of the join.
+   */
+  def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A](other: VertexRDD[U], acc: A)
+      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2]
 
   /**
    * Inner joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
@@ -197,6 +246,21 @@ abstract class VertexRDD[VD](
    */
   def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
+
+  /**
+   * Inner joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
+   * backed by a VertexRDD with the same index then the efficient [[innerZipJoin]] implementation
+   * is used.
+   *
+   * @param other an RDD containing vertices to join. If there are multiple entries for the same
+   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndex]] to merge multiple entries.
+   * @param f the join function applied to corresponding values of `this` and `other`
+   * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
+   *         `this` and `other`, with values supplied by `f`
+   */
+  def innerJoinWithFold[U: ClassTag, VD2: ClassTag, A]
+      (other: RDD[(VertexId, U)], acc: A)
+      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2]
 
   /**
    * Aggregates vertices in `messages` that have the same ids using `reduceFunc`, returning a

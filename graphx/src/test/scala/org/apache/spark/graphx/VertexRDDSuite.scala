@@ -109,6 +109,40 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("leftJoinWithFold") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
+      // leftJoinWithFold with another VertexRDD
+      assert(verts.leftJoinWithFold(evens, List[Int]()) { (acc, id, a, bOpt) =>
+        acc ::: List(a.toInt, bOpt.getOrElse(0))
+      }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, List(x.toInt, x.toInt))).toSet
+          ++ (1 to n by 2).map(x => (x.toLong, List(x.toInt, 0))).toSet)
+      // leftJoinWithFold with an RDD
+      val evensRDD = evens.map(identity)
+      assert(verts.leftJoinWithFold(evensRDD, List[Int]()) { (acc, id, a, bOpt) =>
+        acc ::: List(a.toInt, bOpt.getOrElse(0))
+      }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, List(x.toInt, x.toInt))).toSet
+          ++ (1 to n by 2).map(x => (x.toLong, List(x.toInt, 0))).toSet)
+    }
+  }
+
+  test("leftJoinWithFold vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 100, 2).map(i => (i.toLong, 1)))
+      val vertexB = VertexRDD(
+        vertexA.filter(v => v._1 % 2 == 0).partitionBy(new HashPartitioner(3)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.leftJoinWithFold(vertexB, 0) { (acc, vid, old, newOpt) =>
+        old - (acc + newOpt.getOrElse(0))
+      }
+      assert(vertexC.filter(v => v._2 != 0).map(_._1).collect.toSet == (1 to 99 by 2).toSet)
+    }
+  }
+
   test("innerJoin") {
     withSpark { sc =>
       val n = 100
