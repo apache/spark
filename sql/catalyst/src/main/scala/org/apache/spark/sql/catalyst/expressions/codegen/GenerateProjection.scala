@@ -52,7 +52,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val nullFunctions =
       q"""
-        private[this] var nullBits = new Array[Boolean](${expressions.size})
+        private[this] var nullBits = new Array[Boolean](this.length)
         override def setNullAt(i: Int) = { nullBits(i) = true }
         override def isNullAt(i: Int) = nullBits(i)
       """.children
@@ -82,7 +82,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val cases = (0 until expressions.size).map { i =>
         val ordinal = ru.Literal(Constant(i))
         val elementName = newTermName(s"c$i")
-        val iLit = ru.Literal(Constant(i))
 
         q"if(i == $ordinal) { if(isNullAt($i)) return null else return $elementName }"
       }
@@ -93,7 +92,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val cases = expressions.zipWithIndex.map {case (e, i) =>
         val ordinal = ru.Literal(Constant(i))
         val elementName = newTermName(s"c$i")
-        val iLit = ru.Literal(Constant(i))
 
         q"""
           if(i == $ordinal) {
@@ -168,6 +166,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         }
       """
 
+    val lengthCheck =
+      q"if (this.length != specificType.length) return false"
+
     val columnChecks = (0 until expressions.size).map { i =>
       val elementName = newTermName(s"c$i")
       q"if (this.$elementName != specificType.$elementName) return false"
@@ -177,6 +178,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       q"""
         override def equals(other: Any): Boolean = other match {
           case specificType: SpecificRow =>
+            ..$lengthCheck
             ..$columnChecks
             return true
           case other => super.equals(other)
