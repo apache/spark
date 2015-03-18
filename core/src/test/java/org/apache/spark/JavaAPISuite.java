@@ -24,18 +24,18 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import org.apache.spark.input.PortableDataStream;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.serializer.KryoSerializer;
 import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
-import com.google.common.collect.*;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -51,8 +51,11 @@ import org.junit.Test;
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
 
