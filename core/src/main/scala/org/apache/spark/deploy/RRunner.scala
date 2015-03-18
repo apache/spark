@@ -32,7 +32,7 @@ import org.apache.spark.api.r.RBackend
  */
 object RRunner {
   def main(args: Array[String]) {
-    val rFile = args(0)
+    val rFile = PythonRunner.formatPath(args(0))
 
     val otherArgs = args.slice(1, args.length)
 
