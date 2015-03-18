@@ -105,11 +105,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("Checks Hive version") {
-    withJdbcStatement { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
-      resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+  if (HiveShim.version != "0.12.0") {
+    test("Checks Hive version") {
+      withJdbcStatement { statement =>
+        val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+        resultSet.next()
+        assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      }
     }
   }
 
@@ -340,30 +342,34 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode = ServerMode.http
 
-  test("JDBC query execution") {
-    withJdbcStatement { statement =>
-      val queries = Seq(
-        "SET spark.sql.shuffle.partitions=3",
-        "DROP TABLE IF EXISTS test",
-        "CREATE TABLE test(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
-        "CACHE TABLE test")
+  // When compiled against Hive 0.12.0, HiveThriftServer2 HTTP mode doesn't work. Please refer to
+  // SPARK-6387 for details: https://issues.apache.org/jira/browse/SPARK-6387
+  if (HiveShim.version != "0.12.0") {
+    test("JDBC query execution") {
+      withJdbcStatement { statement =>
+        val queries = Seq(
+          "SET spark.sql.shuffle.partitions=3",
+          "DROP TABLE IF EXISTS test",
+          "CREATE TABLE test(key INT, val STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
+          "CACHE TABLE test")
 
-      queries.foreach(statement.execute)
+        queries.foreach(statement.execute)
 
-      assertResult(5, "Row count mismatch") {
-        val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
-        resultSet.next()
-        resultSet.getInt(1)
+        assertResult(5, "Row count mismatch") {
+          val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
+          resultSet.next()
+          resultSet.getInt(1)
+        }
       }
     }
-  }
 
-  test("Checks Hive version") {
-    withJdbcStatement { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
-      resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+    test("Checks Hive version") {
+      withJdbcStatement { statement =>
+        val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+        resultSet.next()
+        assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      }
     }
   }
 }
