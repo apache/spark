@@ -23,6 +23,16 @@ import org.apache.spark.sql.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
+
+  override lazy val resolved: Boolean = {
+    val containsAggregatesOrGenerators = projectList.exists ( _.collect {
+        case agg: AggregateExpression => agg
+        case generator: Generator => generator
+      }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !containsAggregatesOrGenerators
+  }
 }
 
 /**
@@ -71,6 +81,11 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override lazy val resolved =
     childrenResolved &&
     !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(
@@ -93,6 +108,13 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  def selfJoinResolved = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -110,7 +132,8 @@ case class InsertIntoTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
   }
 }
 
@@ -163,7 +186,12 @@ case class Aggregate(
 case class Expand(
     projections: Seq[GroupExpression],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan) extends UnaryNode {
+  override def statistics: Statistics = {
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
 
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>

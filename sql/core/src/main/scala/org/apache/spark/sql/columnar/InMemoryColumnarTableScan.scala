@@ -113,12 +113,23 @@ private[sql] case class InMemoryRelation(
           val columnBuilders = output.map { attribute =>
             val columnType = ColumnType(attribute.dataType)
             val initialBufferSize = columnType.defaultSize * batchSize
-            ColumnBuilder(columnType.typeId, initialBufferSize, attribute.name, useCompression)
+            ColumnBuilder(attribute.dataType, initialBufferSize, attribute.name, useCompression)
           }.toArray
 
           var rowCount = 0
           while (rowIterator.hasNext && rowCount < batchSize) {
             val row = rowIterator.next()
+
+            // Added for SPARK-6082. This assertion can be useful for scenarios when something
+            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+            // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+            // hard to decipher.
+            assert(
+              row.size == columnBuilders.size,
+              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.size}.
+                 |Row content: $row
+               """.stripMargin)
+
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
@@ -263,8 +274,10 @@ private[sql] case class InMemoryColumnarTableScan(
       def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]) = {
         val rows = cacheBatches.flatMap { cachedBatch =>
           // Build column accessors
-          val columnAccessors = requestedColumnIndices.map { batch =>
-            ColumnAccessor(ByteBuffer.wrap(cachedBatch.buffers(batch)))
+          val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
+            ColumnAccessor(
+              relation.output(batchColumnIndex).dataType,
+              ByteBuffer.wrap(cachedBatch.buffers(batchColumnIndex)))
           }
 
           // Extract rows via column accessors

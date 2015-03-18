@@ -222,8 +222,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
-    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
-    the application is still running.
+    mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
   </td>
 </tr>
 <tr>

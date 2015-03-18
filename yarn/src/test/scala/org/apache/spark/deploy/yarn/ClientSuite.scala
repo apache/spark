@@ -33,13 +33,20 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.FunSuite
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.util.Utils
 
-class ClientSuite extends FunSuite with Matchers {
+class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+
+  override def beforeAll(): Unit = {
+    System.setProperty("SPARK_YARN_MODE", "true")
+  }
+
+  override def afterAll(): Unit = {
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 
   test("default Yarn application classpath") {
     Client.getDefaultYarnApplicationClasspath should be(Some(Fixtures.knownDefYarnAppCP))

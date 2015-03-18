@@ -706,7 +706,7 @@ object Matrices {
   }
 
   /**
-   * Generate a `DenseMatrix` consisting of zeros.
+   * Generate a `Matrix` consisting of zeros.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
@@ -778,8 +778,8 @@ object Matrices {
     SparseMatrix.sprandn(numRows, numCols, density, rng)
 
   /**
-   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
-   * @param vector a `Vector` tat will form the values on the diagonal of the matrix
+   * Generate a diagonal matrix in `Matrix` format from the supplied values.
+   * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
    */

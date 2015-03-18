@@ -102,10 +102,16 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  /** Fewer partitions to speed up testing. */
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  override protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[hive] class SQLSession extends super.SQLSession {
+    /** Fewer partitions to speed up testing. */
+    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+    }
   }
 
   /**
@@ -196,6 +202,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+  // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,

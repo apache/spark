@@ -116,7 +116,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.sparkConf)
+      new SparkContext(cp_.createSparkConf())
     } else {
       sc_
     }
@@ -578,6 +578,7 @@ class StreamingContext private[streaming] (
     // Even if we have already stopped, we still need to attempt to stop the SparkContext because
     // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
     if (stopSparkContext) sc.stop()
+    uiTab.foreach(_.detach())
     // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
   }

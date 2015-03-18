@@ -22,26 +22,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.Duration;
 import scala.Predef;
 import scala.Tuple2;
 import scala.collection.JavaConverters;
 
-import junit.framework.Assert;
-
 import kafka.serializer.StringDecoder;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-
-import org.junit.Test;
-import org.junit.After;
-import org.junit.Before;
 
 public class JavaKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;

@@ -197,18 +197,6 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     serializer.newInstance().serialize(new StringBuffer())
   }
 
-  test("deprecated config keys") {
-    val conf = new SparkConf()
-      .set("spark.files.userClassPathFirst", "true")
-      .set("spark.yarn.user.classpath.first", "true")
-    assert(conf.contains("spark.files.userClassPathFirst"))
-    assert(conf.contains("spark.executor.userClassPathFirst"))
-    assert(conf.contains("spark.yarn.user.classpath.first"))
-    assert(conf.getBoolean("spark.files.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.executor.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.yarn.user.classpath.first", false))
-  }
-
 }
 
 class Class1 {}

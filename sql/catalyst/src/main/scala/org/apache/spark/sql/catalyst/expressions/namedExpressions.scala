@@ -124,6 +124,12 @@ case class Alias(child: Expression, name: String)
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
+
+  override def equals(other: Any): Boolean = other match {
+    case a: Alias =>
+      name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers
+    case _ => false
+  }
 }
 
 /**
@@ -218,7 +224,7 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def exprId: ExprId = ???
   override def eval(input: Row): EvaluatedType = ???
   override def nullable: Boolean = ???
-  override def dataType: DataType = ???
+  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {
