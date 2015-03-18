@@ -123,4 +123,28 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   test("Single command with -e") {
     runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
   }
+
+  test("SPARK-6392:add jar") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val jarPath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/hello.jar").toString.split(":")(1)
+
+    runCliWithin(3.minute)(
+      s"""
+        |CREATE TABLE hive_test(key INT, val STRING);
+        |LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;
+        |""".stripMargin
+        -> "OK",
+      s"""
+         |add jar $jarPath ;
+         |create temporary function hello as 'hello';
+         |""".stripMargin
+        -> "Time taken: ",
+      "select hello(count(*)) from hive_test;"
+        -> "hello 5",
+      "DROP TABLE hive_test;"
+        -> "Time taken: "
+    )
+  }
 }
