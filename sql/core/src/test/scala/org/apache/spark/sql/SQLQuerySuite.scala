@@ -37,12 +37,30 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   val sqlCtx = TestSQLContext
 
   test("self join with aliases") {
-    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
+    Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
 
     checkAnswer(
       sql(
         """
           |SELECT x.str, COUNT(*)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("self join with alias in agg") {
+      Seq(1,2,3)
+        .map(i => (i, i.toString))
+        .toDF("int", "str")
+        .groupBy("str")
+        .agg($"str", count("str").as("strCount"))
+        .registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x.str, SUM(x.strCount)
           |FROM df x JOIN df y ON x.str = y.str
           |GROUP BY x.str
         """.stripMargin),

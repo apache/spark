@@ -247,15 +247,13 @@ class Analyzer(catalog: Catalog,
             (oldVersion, newVersion)
 
           // Handle projects that create conflicting aliases.
-          case oldVersion @ Project(projectList, child)
-              if newAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-            val newVersion =
-              oldVersion.copy(
-                projectList = projectList.map {
-                  case a: Alias => Alias(a.child, a.name)()
-                  case other => other
-                })
-            (oldVersion, newVersion)
+          case oldVersion @ Project(projectList, _)
+              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+
+          case oldVersion @ Aggregate(_, aggregateExpressions, _)
+              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
         }.head // Only handle first case found, others will be fixed on the next pass.
 
         val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
@@ -285,7 +283,14 @@ class Analyzer(catalog: Catalog,
         }
     }
 
-    def newAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
