@@ -68,7 +68,11 @@ private[sql] class DefaultSource
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite => {
           try {
-            fs.delete(filesystemPath, true)
+            if (!fs.delete(filesystemPath, true)) {
+              throw new IOException(
+                s"Unable to clear output directory ${filesystemPath.toString} prior"
+                  + s" to INSERT OVERWRITE a JSON table:\n")
+            }
           } catch {
             case e: IOException =>
               throw new IOException(
@@ -86,9 +90,6 @@ private[sql] class DefaultSource
     }
     if (doSave) {
       // Only save data when the save mode is not ignore.
-      if (fs.exists(filesystemPath)) {
-        sys.error(s"Unable to INSERT OVERWRITE a JSON table, because table path $path exists.")
-      }
       data.toJSON.saveAsTextFile(path)
     }
 
@@ -121,7 +122,11 @@ private[sql] case class JSONRelation(
 
     if (overwrite) {
       try {
-        fs.delete(filesystemPath, true)
+        if (fs.exists(filesystemPath) && !fs.delete(filesystemPath, true)) {
+          throw new IOException(
+            s"Unable to clear output directory ${filesystemPath.toString} prior"
+              + s" to INSERT OVERWRITE a JSON table:\n")
+        }
       } catch {
         case e: IOException =>
           throw new IOException(
@@ -129,9 +134,6 @@ private[sql] case class JSONRelation(
               + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
       }
       // Write the data.
-      if (fs.exists(filesystemPath)) {
-        sys.error(s"Unable to INSERT OVERWRITE a JSON table, because table path $path exists.")
-      }
       data.toJSON.saveAsTextFile(path)
       // Right now, we assume that the schema is not changed. We will not update the schema.
       // schema = data.schema
