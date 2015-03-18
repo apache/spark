@@ -20,6 +20,8 @@ rem
 rem Install development version of SparkR
 rem
 
-MKDIR .\lib
+set SPARK_HOME=%~dp0..
 
-R.exe CMD INSTALL --library=".\lib" pkg\
+MKDIR %SPARK_HOME%\R\lib
+
+R.exe CMD INSTALL --library="%SPARK_HOME%\R\lib"  %SPARK_HOME%\R\pkg\

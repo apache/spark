@@ -451,6 +451,7 @@
         </os>
       </activation>
       <properties>
+        <path.separator>\</path.separator>
         <script.extension>.bat</script.extension>
       </properties>
     </profile>
@@ -462,6 +463,7 @@
         </os>
       </activation>
       <properties>
+        <path.separator>/</path.separator>
         <script.extension>.sh</script.extension>
       </properties>
     </profile>
@@ -483,7 +485,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>../R/install-dev${script.extension}</executable>
+              <executable>..${path.separator}R${path.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>
