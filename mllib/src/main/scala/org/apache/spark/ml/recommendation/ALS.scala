@@ -551,12 +551,11 @@ object ALS extends Logging {
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
 
     val solver = if (nonnegative) {
-      if (System.getenv("solver") == "breeze") {
+      if (System.getenv("solver") == "mllib") new NNLSSolver()
+      else {
         println("Running Breeze NNLSSolver")
         new BrzNNLSSolver(rank)
       }
-      else
-        new NNLSSolver()
     } else new CholeskySolver()
 
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
