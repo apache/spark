@@ -43,6 +43,10 @@ The [instructions](https://cwiki.apache.org/confluence/display/SPARK/Contributin
 If you only make R file changes (i.e. no Scala changes) then you can just re-install the R package using `R/install-dev.sh` and test your changes.
 Once you have made your changes, please include unit tests for them and run existing unit tests using the `run-tests.sh` script as described below. 
     
+#### Generating documentation
+
+The SparkR documentation (Rd files and HTML files) are not a part of the source repository. To generate them you can run the script `R/create-docs.sh`. This script uses `devtools` and `knitr` to generate the docs and these packages need to be installed on the machine before using the script.
+    
 ### Examples, Unit tests
 
 SparkR comes with several sample programs in the `examples/src/main/r` directory.
