@@ -9,6 +9,5 @@ include Rtools and R in `PATH`.
 `JAVA_HOME` in the system environment variables.
 3. Download and install [Maven](http://maven.apache.org/download.html). Also include the `bin`
 directory in Maven in `PATH`.
-4. Get SparkR source code either using [`git`](http://git-scm.com/downloads) or by downloading a
-source zip from github.
-5. Open a command shell (`cmd`) in the SparkR directory and run `install-dev.bat`
+4. Set `MAVEN_OPTS` as described in [Building Spark](http://spark.apache.org/docs/latest/building-spark.html).
+5. Open a command shell (`cmd`) in the Spark directory and run `mvn -DskipTests -Psparkr package`
