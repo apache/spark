@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
@@ -106,7 +107,88 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("aggregation with codegen") {
     val originalValue = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
-    sql("SELECT key FROM testData GROUP BY key").collect()
+    // Prepare a table that we can group some rows.
+    table("testData")
+      .unionAll(table("testData"))
+      .unionAll(table("testData"))
+      .registerTempTable("testData3x")
+
+    def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
+      val df = sql(sqlText)
+      // First, check if we have GeneratedAggregate.
+      var hasGeneratedAgg = false
+      df.queryExecution.executedPlan.foreach {
+        case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
+        case _ =>
+      }
+      if (!hasGeneratedAgg) {
+        fail(
+          s"""
+             |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
+             |${df.queryExecution.simpleString}
+           """.stripMargin)
+      }
+      // Then, check results.
+      checkAnswer(df, expectedResults)
+    }
+
+    // Just to group rows.
+    testCodeGen(
+      "SELECT key FROM testData3x GROUP BY key",
+      (1 to 100).map(Row(_)))
+    // COUNT
+    testCodeGen(
+      "SELECT key, count(value) FROM testData3x GROUP BY key",
+      (1 to 100).map(i => Row(i, 3)))
+    testCodeGen(
+      "SELECT count(key) FROM testData3x",
+      Row(300) :: Nil)
+    // COUNT DISTINCT ON int
+    testCodeGen(
+      "SELECT value, count(distinct key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, 1)))
+    testCodeGen(
+      "SELECT count(distinct key) FROM testData3x",
+      Row(100) :: Nil)
+    // SUM
+    testCodeGen(
+      "SELECT value, sum(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, 3 * i)))
+    testCodeGen(
+      "SELECT sum(key) FROM testData3x",
+      Row(5050 * 3) :: Nil)
+    // AVERAGE
+    testCodeGen(
+      "SELECT value, avg(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, i)))
+    testCodeGen(
+      "SELECT avg(key) FROM testData3x",
+      Row(50.5) :: Nil)
+    // MAX
+    testCodeGen(
+      "SELECT value, max(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, i)))
+    testCodeGen(
+      "SELECT max(key) FROM testData3x",
+      Row(100) :: Nil)
+    // Some combinations.
+    testCodeGen(
+      """
+        |SELECT
+        |  value,
+        |  max(key),
+        |  sum(key),
+        |  avg(key),
+        |  count(key),
+        |  count(distinct key)
+        |FROM testData3x
+        |GROUP BY value
+      """.stripMargin,
+      (1 to 100).map(i => Row(i.toString, i, 3 * i, i, 3, 1)))
+    testCodeGen(
+      "SELECT max(key), avg(key), sum(key), count(key), count(distinct key) FROM testData3x",
+      Row(100, 50.5, 5050 * 3, 300, 100) :: Nil)
+    dropTempTable("testData3x")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 

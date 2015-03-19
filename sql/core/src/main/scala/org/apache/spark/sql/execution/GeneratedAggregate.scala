@@ -68,6 +68,8 @@ case class GeneratedAggregate(
       a.collect { case agg: AggregateExpression => agg}
     }
 
+    // If you add any new function support, please add tests in org.apache.spark.sql.SQLQuerySuite
+    // (in test "aggregation with codegen").
     val computeFunctions = aggregatesToCompute.map {
       case c @ Count(expr) =>
         // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
@@ -166,7 +168,8 @@ case class GeneratedAggregate(
           currentMax)
 
       case CollectHashSet(Seq(expr)) =>
-        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
         val initialValue = NewSet(expr.dataType)
         val addToSet = AddItemToSet(expr, set)
 
@@ -177,9 +180,10 @@ case class GeneratedAggregate(
           set)
 
       case CombineSetsAndCount(inputSet) =>
-        val ArrayType(inputType, _) = inputSet.dataType
-        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
-        val initialValue = NewSet(inputType)
+        val elementType = inputSet.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(elementType), nullable = false)()
+        val initialValue = NewSet(elementType)
         val collectSets = CombineSets(set, inputSet)
 
         AggregateEvaluation(

@@ -20,6 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/** The data type for expressions returning an OpenHashSet as the result. */
+private[sql] class OpenHashSetUDT(val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
+
+  override def sqlType: DataType = ArrayType(elementType)
+
+  /** Since we are using OpenHashSet internally, it should not be called. */
+  override def serialize(obj: Any): Seq[Any] = ???
+
+  /** Since we are using OpenHashSet internally, it should not be called. */
+  override def deserialize(datum: Any): OpenHashSet[Any] = ???
+
+  override def userClass = classOf[OpenHashSet[Any]]
+
+  private[spark] override def asNullable: OpenHashSetUDT = this
+}
+
 /**
  * Creates a new set of the specified type
  */
@@ -28,9 +44,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 
   def nullable = false
 
-  // We are currently only using these Expressions internally for aggregation.  However, if we ever
-  // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
-  def dataType = ArrayType(elementType)
+  def dataType = new OpenHashSetUDT(elementType)
 
   def eval(input: Row): Any = {
     new OpenHashSet[Any]()
@@ -50,7 +64,8 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 
   def nullable = set.nullable
 
-  def dataType = set.dataType
+  def dataType = set.dataType.asInstanceOf[OpenHashSetUDT]
+
   def eval(input: Row): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
@@ -79,7 +94,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
   def nullable = left.nullable || right.nullable
 
-  def dataType = left.dataType
+  def dataType = left.dataType.asInstanceOf[OpenHashSetUDT]
 
   def symbol = "++="
 

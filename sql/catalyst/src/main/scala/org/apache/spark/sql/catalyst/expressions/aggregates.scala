@@ -187,7 +187,7 @@ case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpress
 
   override def children = expressions
   override def nullable = false
-  override def dataType = ArrayType(expressions.head.dataType)
+  override def dataType = new OpenHashSetUDT(expressions.head.dataType)
   override def toString = s"AddToHashSet(${expressions.mkString(",")})"
   override def newInstance() = new CollectHashSetFunction(expressions, this)
 }
@@ -246,11 +246,27 @@ case class CombineSetsAndCountFunction(
   override def eval(input: Row): Any = seen.size.toLong
 }
 
+/** The data type of ApproxCountDistinctPartition since its output is a HyperLogLog object. */
+private[sql] class HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
+
+  override def sqlType: DataType = BinaryType
+
+  override def serialize(obj: Any): Array[Byte] =
+    obj.asInstanceOf[HyperLogLog].getBytes
+
+  override def deserialize(datum: Any): HyperLogLog =
+    HyperLogLog.Builder.build(datum.asInstanceOf[Array[Byte]])
+
+  override def userClass = classOf[HyperLogLog]
+
+  private[spark] override def asNullable: HyperLogLogUDT = this
+}
+
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
   override def nullable = false
-  override def dataType = child.dataType
+  override def dataType = new HyperLogLogUDT
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
   override def newInstance() = new ApproxCountDistinctPartitionFunction(child, this, relativeSD)
 }
