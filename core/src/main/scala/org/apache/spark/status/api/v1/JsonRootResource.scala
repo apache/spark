@@ -46,6 +46,12 @@ class JsonRootResource extends UIRootFromServletContext {
     new AllJobsResource(uiRoot)
   }
 
+  @Path("applications/{appId}/jobs/{jobId: \\d+}")
+  def getJob(): OneJobResource = {
+    new OneJobResource(uiRoot)
+  }
+
+
   @Path("applications/{appId}/executors")
   def getExecutors(): ExecutorListResource = {
     new ExecutorListResource(uiRoot)

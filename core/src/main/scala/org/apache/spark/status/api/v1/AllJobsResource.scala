@@ -16,11 +16,13 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util
 import java.util.Date
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
@@ -33,14 +35,9 @@ class AllJobsResource(uiRoot: UIRoot) {
     @QueryParam("status") statuses: java.util.List[JobExecutionStatus]
   ): Seq[JobData] = {
     uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs = ui.jobProgressListener.synchronized {
-        Seq(
-          JobExecutionStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
-          JobExecutionStatus.SUCCEEDED -> ui.jobProgressListener.completedJobs.toSeq,
-          JobExecutionStatus.FAILED -> ui.jobProgressListener.failedJobs.reverse.toSeq
-        )
-      }
-      val adjStatuses: java.util.List[JobExecutionStatus] = {
+      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
+        AllJobsResource.getStatusToJobs(ui)
+      val adjStatuses: util.List[JobExecutionStatus] = {
         if (statuses.isEmpty) {
           java.util.Arrays.asList(JobExecutionStatus.values(): _*)
         }
@@ -61,6 +58,19 @@ class AllJobsResource(uiRoot: UIRoot) {
 }
 
 object AllJobsResource {
+
+  def getStatusToJobs(ui: SparkUI): Seq[(JobExecutionStatus, Seq[JobUIData])] = {
+    val statusToJobs = ui.jobProgressListener.synchronized {
+      Seq(
+        JobExecutionStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
+        JobExecutionStatus.SUCCEEDED -> ui.jobProgressListener.completedJobs.toSeq,
+        JobExecutionStatus.FAILED -> ui.jobProgressListener.failedJobs.reverse.toSeq
+      )
+    }
+    statusToJobs
+  }
+
+
   def convertJobData(
     job: JobUIData,
     listener: JobProgressListener,
