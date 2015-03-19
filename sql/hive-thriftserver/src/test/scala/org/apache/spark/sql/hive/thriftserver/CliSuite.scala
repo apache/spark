@@ -128,7 +128,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val jarPath =
-      Thread.currentThread().getContextClassLoader.getResource("data/files/hello.jar").toString.split(":")(1)
+      Thread.currentThread().getContextClassLoader.getResource("jar/TestUdf.jar").toString.split(":")(1)
 
     runCliWithin(3.minute)(
       s"""
