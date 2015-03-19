@@ -62,6 +62,15 @@ class CachedTableSuite extends QueryTest {
     cacheTable("testTable")
     assertCached(sql("SELECT COUNT(*) FROM partTable"))
     uncacheTable("testTable")
+
+    sql("SELECT key, COUNT(*) AS c FROM testData GROUP BY key").registerTempTable("testTable")
+    cacheTable("testTable")
+    assertCached(sql("SELECT key FROM testData"), 0)
+    assertCached(sql("SELECT key FROM testData GROUP BY key"))
+    assertCached(sql("SELECT COUNT(*) FROM testData GROUP BY key"), 0)
+    assertCached(sql("SELECT COUNT(*) FROM testData"), 0)
+    assertCached(sql("SELECT COUNT(*) FROM testData GROUP BY value"), 0)
+    uncacheTable("testTable")
   }
 
   test("unpersist an uncached table will not raise exception") {
