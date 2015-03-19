@@ -27,7 +27,6 @@ from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_trai
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
-
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
            'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
