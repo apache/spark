@@ -34,38 +34,44 @@ sha1="$2"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-curr_results="`./build/mvn dependency:build-classpath 2>&1`"
-#./build/mvn dependency:build-classpath | \
-#  grep -A 5 "Building Spark Project Assembly" | \
-#  tail -n 1 | \
-#  tr ":" "\n" | \
-#  rev | \
-#  cut -d "/" -f 1 | \
-#  rev | \
-#  sort > ${CURR_CP_FILE}
+./build/mvn clean compile dependency:build-classpath | \
+  sed -n -e '/Building Spark Project Assembly/,$p' | \
+  grep --context=1 -m 2 "Dependencies classpath:" | \
+  head -n 3 | \
+  tail -n 1 | \
+  tr ":" "\n" | \
+  rev | \
+  cut -d "/" -f 1 | \
+  rev | \
+  sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
 git checkout apache/master
 
-master_results="`./build/mvn dependency:build-classpath 2>&1`"
-#./build/mvn dependency:build-classpath | \
-#  grep -A 5 "Building Spark Project Assembly" | \
-#  tail -n 1 | \
-#  tr ":" "\n" | \
-#  rev | \
-#  cut -d "/" -f 1 | \
-#  rev | \
-#  sort > ${MASTER_CP_FILE}
+./build/mvn clean compile dependency:build-classpath | \
+  sed -n -e '/Building Spark Project Assembly/,$p' | \
+  grep --context=1 -m 2 "Dependencies classpath:" | \
+  head -n 3 | \
+  tail -n 1 | \
+  tr ":" "\n" | \
+  rev | \
+  cut -d "/" -f 1 | \
+  rev | \
+  sort > ${MASTER_CP_FILE}
 
-echo "CURRENT:${curr_results}\nMASTER:${master_results}"
+DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
 
-#DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
-
-#if [ -z "${DIFF_RESULTS}" ]; then
-#  echo " * This patch adds no new dependencies"
-#else
+if [ -z "${DIFF_RESULTS}" ]; then
+  echo " * This patch adds no new dependencies"
+else
   # Pretty print the new dependencies
-#  new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
-#  echo " * This patch **adds the following new dependencies:**\n${new_deps}"
-#fi
+  new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
+  echo " * This patch **adds the following new dependencies:**\n${new_deps}"
+fi
   
+# Remove the files we've left over
+[ -f "${CURR_CP_FILE}" ] && rm -f "${CURR_CP_FILE}"
+[ -f "${MASTER_CP_FILE}" ] && rm -f "${MASTER_CP_FILE}"
+
+# Clean up our mess from the Maven builds just in case
+./build/mvn clean
