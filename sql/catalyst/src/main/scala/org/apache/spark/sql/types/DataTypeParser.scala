@@ -110,5 +110,5 @@ private[sql] object DataTypeParser {
   def apply(dataTypeString: String): DataType = dataTypeParser.toDataType(dataTypeString)
 }
 
-/** The exception thrown from the [[DataTypeParser]].*/
+/** The exception thrown from the [[DataTypeParser]]. */
 protected[sql] class DataTypeException(message: String) extends Exception(message)
