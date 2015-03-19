@@ -237,10 +237,10 @@ private[sql] class JDBCRDD(
       case _ => value
     }
     f match {
-      case EqualTo(attr, value)            => s"$attr = ${compileValue(value)}"
-      case LessThan(attr, value)           => s"$attr < ${compileValue(value)}"
-      case GreaterThan(attr, value)        => s"$attr > ${compileValue(value)}"
-      case LessThanOrEqual(attr, value)    => s"$attr <= ${compileValue(value)}"
+      case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+      case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+      case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
       case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
       case _ => null
     }
