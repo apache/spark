@@ -46,14 +46,22 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val stageAttemptId = parameterAttempt.toInt
       val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
 
-      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
+      val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
+      if (stageDataOption.isEmpty) {
+        val content =
+          <div id="no-info">
+            <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
+          </div>
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
+
+      }
+      if (stageDataOption.get.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(
-          s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
+        return UIUtils.headerSparkPage(stageHeader, content, parent)
       }
 
       val stageData = stageDataOption.get
@@ -442,7 +450,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
+      UIUtils.headerSparkPage(stageHeader, content, parent)
     }
   }
 
