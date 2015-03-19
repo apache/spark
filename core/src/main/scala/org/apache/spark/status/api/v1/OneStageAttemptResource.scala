@@ -50,7 +50,14 @@ class OneStageAttemptResource(uiRoot: UIRoot) {
           AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData,
             includeDetails = true)
         case None =>
-          throw new NotFoundException(s"unknown (stage, attempt): ($stageId, $attemptId)")
+          val stageAttempts = stageAndStatus.flatMap{ case (status, stages) =>
+            stages.filter { _.stageId == stageId }.map{_.attemptId}
+          }
+          if (stageAttempts.isEmpty)
+            throw new NotFoundException(s"unknown stage: $stageId")
+          else
+            throw new NotFoundException(s"unknown attempt for stage $stageId.  " +
+              s"Found attempts: ${stageAttempts.mkString("[", ",", "]")}")
       }
 
     }

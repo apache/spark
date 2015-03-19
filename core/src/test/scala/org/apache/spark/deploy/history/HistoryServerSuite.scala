@@ -142,13 +142,15 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     badStageId._1 should be (HttpServletResponse.SC_NOT_FOUND)
     badStageId._3 should be (Some("unknown stage: 12345"))
 
+    val badStageAttemptId = getContentAndCode("applications/local-1422981780767/stages/1/1")
+    badStageAttemptId._1 should be (HttpServletResponse.SC_NOT_FOUND)
+    badStageAttemptId._3 should be (Some("unknown attempt for stage 1.  Found attempts: [0]"))
+
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
-    //will take some mucking w/ jersey to get a better error msg here ...
-
+    // will take some mucking w/ jersey to get a better error msg in this case
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
-
   }
 
   test("generate history page with relative links") {
