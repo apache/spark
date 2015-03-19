@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import org.apache.spark.annotation.Experimental
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
@@ -654,3 +655,57 @@ case class LastFunction(expr: Expression, base: AggregateExpression) extends Agg
   override def eval(input: Row): Any =  if (result != null) expr.eval(result.asInstanceOf[Row])
                                         else null
 }
+
+/**
+ * :: Experimental ::
+ *
+ * An aggregator that gets together input rows by using
+ * user-provided arguments.
+ * TODO: Support aggregators that can't output partial
+ * aggregated rows.
+ */
+@Experimental
+case class UserDefinedAggregator(
+    udafName: String,
+    child: Expression,
+    isNullable: Boolean,
+    resultDataType: DataType,
+    bufClass: Class[_ <: UserDefinedAggregateFunction])
+  extends PartialAggregate with trees.UnaryNode[Expression] {
+
+  def this() = this(null, null, false, null, null)
+  override def nullable = isNullable
+  override def dataType = resultDataType
+
+  override def toString = s"${udafName}(${child})"
+  override def newInstance() = {
+    try {
+      bufClass.getConstructor(classOf[Expression], classOf[AggregateExpression])
+        .newInstance(child, this)
+    } catch {
+      case e: Exception => {
+        throw new Exception(s"${udafName} cannot be instantiated.")
+      }
+    }
+  }
+
+  override def asPartial = {
+    val partialSet = Alias(UserDefinedAggregator(
+      udafName, child, isNullable, resultDataType, bufClass), "partialUdafApplied")()
+    SplitEvaluation(
+      UserDefinedAggregator(
+        udafName, partialSet.toAttribute, isNullable, resultDataType, bufClass),
+      partialSet :: Nil)
+  }
+}
+
+@Experimental
+abstract class UserDefinedAggregateFunction extends AggregateFunction {
+  self: Product =>
+
+  // Derived user-defined aggregators must override
+  // two functions below.
+  def update(input: Row): Unit
+  def eval(input: Row): Any
+}
+

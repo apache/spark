@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{UserDefinedAggregator, UserDefinedAggregateFunction, AggregateExpression, Expression}
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
@@ -26,6 +28,15 @@ import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
 
+// A test class for user-defined aggregate functions
+case class IntegerSpecializedSum(expr: Expression, base: AggregateExpression)
+    extends UserDefinedAggregateFunction {
+  def this() = this(null, null)
+  var result = 0
+  override def update(input: Row): Unit =
+    result += expr.eval(input).asInstanceOf[Integer]
+  override def eval(input: Row): Any = result
+}
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -382,6 +393,14 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
+  }
+
+  test("udaf") {
+    checkAnswer(
+      testData2.agg(
+        count('a),
+        callUDAF("IntegerSpecializedSum", 'b, true, IntegerType, classOf[IntegerSpecializedSum])),
+      Row(6, 9))
   }
 
   test("except") {

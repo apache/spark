@@ -604,5 +604,18 @@ object functions {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
 
+  /**
+   * :: Experimental ::
+   *
+   * Call a given user-defined aggregate function.
+   *
+   * @group udf_funcs
+   */
+  @Experimental
+  def callUDAF(udafName: String, e: Column, isNullable: Boolean, resultDataType: DataType, bufClass: Class[_ <: UserDefinedAggregateFunction]): Column = {
+    UserDefinedAggregator(udafName, e.expr, isNullable, resultDataType, bufClass)
+  }
+
   // scalastyle:on
+
 }
