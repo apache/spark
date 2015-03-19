@@ -341,7 +341,7 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s", scalaVersion));
     }
 
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
+    final Pattern re = Pattern.compile("spark-assembly.*[hadoop]*.*\\.jar");
     FileFilter filter = new FileFilter() {
       @Override
       public boolean accept(File file) {
