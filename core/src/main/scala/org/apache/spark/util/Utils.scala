@@ -288,7 +288,7 @@ private[spark] object Utils extends Logging {
       } catch { case e: SecurityException => dir = null; }
     }
 
-    dir
+    dir.getCanonicalFile
   }
 
   /**
