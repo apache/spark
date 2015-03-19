@@ -34,34 +34,38 @@ sha1="$2"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-./build/mvn dependency:build-classpath | \
-  grep -A 5 "Building Spark Project Assembly" | \
-  tail -n 1 | \
-  tr ":" "\n" | \
-  rev | \
-  cut -d "/" -f 1 | \
-  rev | \
-  sort > ${CURR_CP_FILE}
+curr_results="`./build/mvn dependency:build-classpath 2>&1`"
+#./build/mvn dependency:build-classpath | \
+#  grep -A 5 "Building Spark Project Assembly" | \
+#  tail -n 1 | \
+#  tr ":" "\n" | \
+#  rev | \
+#  cut -d "/" -f 1 | \
+#  rev | \
+#  sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
 git checkout apache/master
 
-./build/mvn dependency:build-classpath | \
-  grep -A 5 "Building Spark Project Assembly" | \
-  tail -n 1 | \
-  tr ":" "\n" | \
-  rev | \
-  cut -d "/" -f 1 | \
-  rev | \
-  sort > ${MASTER_CP_FILE}
+master_results="`./build/mvn dependency:build-classpath 2>&1`"
+#./build/mvn dependency:build-classpath | \
+#  grep -A 5 "Building Spark Project Assembly" | \
+#  tail -n 1 | \
+#  tr ":" "\n" | \
+#  rev | \
+#  cut -d "/" -f 1 | \
+#  rev | \
+#  sort > ${MASTER_CP_FILE}
 
-DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
+echo "CURRENT:${curr_results}\nMASTER:${master_results}"
 
-if [ -z "${DIFF_RESULTS}" ]; then
-  echo " * This patch adds no new dependencies"
-else
+#DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
+
+#if [ -z "${DIFF_RESULTS}" ]; then
+#  echo " * This patch adds no new dependencies"
+#else
   # Pretty print the new dependencies
-  new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
-  echo " * This patch **adds the following new dependencies:**\n${new_deps}"
-fi
+#  new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
+#  echo " * This patch **adds the following new dependencies:**\n${new_deps}"
+#fi
   

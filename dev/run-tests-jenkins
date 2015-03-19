@@ -148,7 +148,7 @@ function send_archived_logs () {
 }
 
 # Environment variable to capture PR test output
-pr_message=""
+pr_message="\n"
 # Ensure we save off the current HEAD to revert to
 current_pr_head="`git rev-parse HEAD`"
 
@@ -161,7 +161,7 @@ for t in "${PR_TESTS[@]}"; do
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
-    pr_message="${pr_message}\n${this_mssg}"
+    pr_message="${pr_message}${this_mssg}"
     # Ensure, after each test, that we're on the current PR
     git checkout -f "${current_pr_head}"
   fi
