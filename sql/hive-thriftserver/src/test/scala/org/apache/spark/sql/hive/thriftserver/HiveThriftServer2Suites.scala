@@ -300,7 +300,9 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
 
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
+    warehousePath.delete()
     metastorePath = Utils.createTempDir()
+    metastorePath.delete()
     logPath = null
     logTailingProcess = null
 

@@ -39,7 +39,9 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     val warehousePath = Utils.createTempDir()
+    warehousePath.delete()
     val metastorePath = Utils.createTempDir()
+    metastorePath.delete()
     val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
 
     val command = {
