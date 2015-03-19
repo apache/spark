@@ -126,6 +126,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * The dimension of training features.
    */
+  def getNumFeatures: Int = this.numFeatures
+
+  /**
+   * The dimension of training features.
+   */
   protected var numFeatures: Int = -1
 
   /**
@@ -140,6 +145,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Create a model given the weights and intercept
    */
   protected def createModel(weights: Vector, intercept: Double): M
+
+  /**
+   * Get if the algorithm uses addIntercept
+   */
+  def isAddIntercept: Boolean = this.addIntercept
 
   /**
    * Set if the algorithm should add an intercept. Default false.
