@@ -50,7 +50,7 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
  * lowercase = false, minTokenLength = 1
  */
 @AlphaComponent
-class RegexTokenizer extends Tokenizer {
+class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
   /**
    * param for minimum token length, default is one to avoid returning empty strings
@@ -65,7 +65,7 @@ class RegexTokenizer extends Tokenizer {
   def getMinTokenLength: Int = get(minTokenLength)
 
   /**
-   * param sets regex as splitting on gaps(true) or matching tokens (false)
+   * param sets regex as splitting on gaps (true) or matching tokens (false)
    * @group param
    */
   val gaps = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens", Some(false))
@@ -81,20 +81,20 @@ class RegexTokenizer extends Tokenizer {
    * @group param
    */
   val pattern = new Param(this, "pattern", 
-    "regex pattern used for tokenizing", Some("\\p{L}+|[^\\p{L}\\s]+"))
+    "regex pattern used for tokenizing", Some("\\p{L}+|[^\\p{L}\\s]+".r))
 
   /** @group setParam */
-  def setPattern(value: String) = set(pattern, value)
+  def setPattern(value: String) = set(pattern, value.r)
 
   /** @group getParam */
-  def getPattern: String = get(pattern)
+  def getPattern: String = get(pattern).toString
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { str =>
 
     val re = paramMap(pattern)
-    val tokens = if(paramMap(gaps)) str.split(re).toList else (re.r.findAllIn(str)).toList
+    val tokens = if(paramMap(gaps)) re.split(str).toList else (re.findAllIn(str)).toList
 
-    tokens.filter(_.length >= paramMap(minTokenLength)).toSeq
+    tokens.filter(_.length >= paramMap(minTokenLength))
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
