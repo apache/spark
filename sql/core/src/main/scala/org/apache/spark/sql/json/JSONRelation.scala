@@ -67,18 +67,19 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite => {
+          var success: Boolean = false
           try {
-            if (!fs.delete(filesystemPath, true)) {
-              throw new IOException(
-                s"Unable to clear output directory ${filesystemPath.toString} prior"
-                  + s" to INSERT OVERWRITE a JSON table:\n")
-            }
+            success = fs.delete(filesystemPath, true)
           } catch {
             case e: IOException =>
               throw new IOException(
                 s"Unable to clear output directory ${filesystemPath.toString} prior"
-                  + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+                  + s" to writing to JSON table:\n${e.toString}")
           }
+          if (!success)
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table.")
           true
         }
         case SaveMode.ErrorIfExists =>
@@ -121,17 +122,20 @@ private[sql] case class JSONRelation(
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
-      try {
-        if (fs.exists(filesystemPath) && !fs.delete(filesystemPath, true)) {
-          throw new IOException(
-            s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to INSERT OVERWRITE a JSON table:\n")
+      if (fs.exists(filesystemPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(filesystemPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table:\n${e.toString}")
         }
-      } catch {
-        case e: IOException =>
+        if (!success)
           throw new IOException(
             s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+              + s" to writing to JSON table.")
       }
       // Write the data.
       data.toJSON.saveAsTextFile(path)
