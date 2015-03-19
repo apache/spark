@@ -55,29 +55,29 @@ import org.apache.spark.deploy.master.{RecoveryState, SparkCuratorUtil}
  *   - The docker images tagged spark-test-master and spark-test-worker are built from the
  *     docker/ directory. Run 'docker/spark-test/build' to generate these.
  */
-private[spark] object FaultToleranceTest extends App with Logging {
+private object FaultToleranceTest extends App with Logging {
 
-  val conf = new SparkConf()
-  val ZK_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark")
+  private val conf = new SparkConf()
+  private val ZK_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark")
 
-  val masters = ListBuffer[TestMasterInfo]()
-  val workers = ListBuffer[TestWorkerInfo]()
-  var sc: SparkContext = _
+  private val masters = ListBuffer[TestMasterInfo]()
+  private val workers = ListBuffer[TestWorkerInfo]()
+  private var sc: SparkContext = _
 
-  val zk =  SparkCuratorUtil.newClient(conf)
+  private val zk =  SparkCuratorUtil.newClient(conf)
 
-  var numPassed = 0
-  var numFailed = 0
+  private var numPassed = 0
+  private var numFailed = 0
 
-  val sparkHome = System.getenv("SPARK_HOME")
+  private val sparkHome = System.getenv("SPARK_HOME")
   assertTrue(sparkHome != null, "Run with a valid SPARK_HOME")
 
-  val containerSparkHome = "/opt/spark"
-  val dockerMountDir = "%s:%s".format(sparkHome, containerSparkHome)
+  private val containerSparkHome = "/opt/spark"
+  private val dockerMountDir = "%s:%s".format(sparkHome, containerSparkHome)
 
   System.setProperty("spark.driver.host", "172.17.42.1") // default docker host ip
 
-  def afterEach() {
+  private def afterEach() {
     if (sc != null) {
       sc.stop()
       sc = null
@@ -179,7 +179,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
     }
   }
 
-  def test(name: String)(fn: => Unit) {
+  private def test(name: String)(fn: => Unit) {
     try {
       fn
       numPassed += 1
@@ -197,19 +197,19 @@ private[spark] object FaultToleranceTest extends App with Logging {
     afterEach()
   }
 
-  def addMasters(num: Int) {
+  private def addMasters(num: Int) {
     logInfo(s">>>>> ADD MASTERS $num <<<<<")
     (1 to num).foreach { _ => masters += SparkDocker.startMaster(dockerMountDir) }
   }
 
-  def addWorkers(num: Int) {
+  private def addWorkers(num: Int) {
     logInfo(s">>>>> ADD WORKERS $num <<<<<")
     val masterUrls = getMasterUrls(masters)
     (1 to num).foreach { _ => workers += SparkDocker.startWorker(dockerMountDir, masterUrls) }
   }
 
   /** Creates a SparkContext, which constructs a Client to interact with our cluster. */
-  def createClient() = {
+  private def createClient() = {
     logInfo(">>>>> CREATE CLIENT <<<<<")
     if (sc != null) { sc.stop() }
     // Counter-hack: Because of a hack in SparkEnv#create() that changes this
@@ -218,17 +218,17 @@ private[spark] object FaultToleranceTest extends App with Logging {
     sc = new SparkContext(getMasterUrls(masters), "fault-tolerance", containerSparkHome)
   }
 
-  def getMasterUrls(masters: Seq[TestMasterInfo]): String = {
+  private def getMasterUrls(masters: Seq[TestMasterInfo]): String = {
     "spark://" + masters.map(master => master.ip + ":7077").mkString(",")
   }
 
-  def getLeader: TestMasterInfo = {
+  private def getLeader: TestMasterInfo = {
     val leaders = masters.filter(_.state == RecoveryState.ALIVE)
     assertTrue(leaders.size == 1)
     leaders(0)
   }
 
-  def killLeader(): Unit = {
+  private def killLeader(): Unit = {
     logInfo(">>>>> KILL LEADER <<<<<")
     masters.foreach(_.readState())
     val leader = getLeader
@@ -236,9 +236,9 @@ private[spark] object FaultToleranceTest extends App with Logging {
     leader.kill()
   }
 
-  def delay(secs: Duration = 5.seconds) = Thread.sleep(secs.toMillis)
+  private def delay(secs: Duration = 5.seconds) = Thread.sleep(secs.toMillis)
 
-  def terminateCluster() {
+  private def terminateCluster() {
     logInfo(">>>>> TERMINATE CLUSTER <<<<<")
     masters.foreach(_.kill())
     workers.foreach(_.kill())
@@ -247,7 +247,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   }
 
   /** This includes Client retry logic, so it may take a while if the cluster is recovering. */
-  def assertUsable() = {
+  private def assertUsable() = {
     val f = future {
       try {
         val res = sc.parallelize(0 until 10).collect()
@@ -269,7 +269,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
    * Asserts that the cluster is usable and that the expected masters and workers
    * are all alive in a proper configuration (e.g., only one leader).
    */
-  def assertValidClusterState() = {
+  private def assertValidClusterState() = {
     logInfo(">>>>> ASSERT VALID CLUSTER STATE <<<<<")
     assertUsable()
     var numAlive = 0
@@ -325,7 +325,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
     }
   }
 
-  def assertTrue(bool: Boolean, message: String = "") {
+  private def assertTrue(bool: Boolean, message: String = "") {
     if (!bool) {
       throw new IllegalStateException("Assertion failed: " + message)
     }
@@ -335,7 +335,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
     numFailed))
 }
 
-private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
+private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging  {
 
   implicit val formats = org.json4s.DefaultFormats
@@ -377,7 +377,7 @@ private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val 
       format(ip, dockerId.id, logFile.getAbsolutePath, state)
 }
 
-private[spark] class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile: File)
+private class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging {
 
   implicit val formats = org.json4s.DefaultFormats
@@ -390,7 +390,7 @@ private[spark] class TestWorkerInfo(val ip: String, val dockerId: DockerId, val 
     "[ip=%s, id=%s, logFile=%s]".format(ip, dockerId, logFile.getAbsolutePath)
 }
 
-private[spark] object SparkDocker {
+private object SparkDocker {
   def startMaster(mountDir: String): TestMasterInfo = {
     val cmd = Docker.makeRunCmd("spark-test-master", mountDir = mountDir)
     val (ip, id, outFile) = startNode(cmd)
@@ -425,11 +425,11 @@ private[spark] object SparkDocker {
   }
 }
 
-private[spark] class DockerId(val id: String) {
+private class DockerId(val id: String) {
   override def toString = id
 }
 
-private[spark] object Docker extends Logging {
+private object Docker extends Logging {
   def makeRunCmd(imageTag: String, args: String = "", mountDir: String = ""): ProcessBuilder = {
     val mountCmd = if (mountDir != "") { " -v " + mountDir } else ""
 

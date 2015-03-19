@@ -211,6 +211,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
+            addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
           }
@@ -371,6 +372,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         logWarning(s"Executor to kill $id does not exist!")
       }
     }
+    // Killing executors means effectively that we want less executors than before, so also update
+    // the target number of executors to avoid having the backend allocate new ones.
+    val newTotal = (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+      - filteredExecutorIds.size)
+    doRequestTotalExecutors(newTotal)
+
     executorsPendingToRemove ++= filteredExecutorIds
     doKillExecutors(filteredExecutorIds)
   }

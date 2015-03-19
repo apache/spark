@@ -45,9 +45,14 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.jblas</groupId>
-      <artifactId>jblas</artifactId>
-      <version>${jblas.version}</version>
+      <groupId>com.github.fommil.netlib</groupId>
+      <artifactId>core</artifactId>
+      <version>${netlib.java.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>net.sourceforge.f2j</groupId>
+      <artifactId>arpack_combined_all</artifactId>
+      <version>0.1</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
