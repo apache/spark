@@ -382,6 +382,12 @@ test_that("zipWithIndex() on RDDs", {
   expect_equal(actual, expected)
 })
 
+test_that("glom() on RDD", {
+  rdd <- parallelize(sc, as.list(1:4), 2L)
+  actual <- collect(glom(rdd))
+  expect_equal(actual, list(list(1, 2), list(3, 4)))
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)
