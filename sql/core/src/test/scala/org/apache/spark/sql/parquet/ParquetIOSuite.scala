@@ -21,6 +21,9 @@ import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.scalatest.BeforeAndAfterAll
 import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
@@ -30,15 +33,13 @@ import parquet.hadoop.{ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
-import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -63,14 +64,16 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest {
+class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   val sqlContext = TestSQLContext
+
+  import sqlContext.implicits.localSeqToDataFrameHolder
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
   protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetRDD(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
+    withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
   test("basic data types (without binary)") {
@@ -82,9 +85,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
   test("raw binary") {
     val data = (1 to 4).map(i => Tuple1(Array.fill(3)(i.toByte)))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       assertResult(data.map(_._1.mkString(",")).sorted) {
-        rdd.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
+        df.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
       }
     }
   }
@@ -98,11 +101,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
+
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
-        .select($"_1" cast decimal as "abcd")
+        .toDF()
+        // Parquet doesn't allow column names with spaces, have to add an alias here
+        .select($"_1" cast decimal as "dec")
 
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>
@@ -141,9 +147,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
   test("struct") {
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
+      checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
       })
     }
@@ -151,9 +157,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
   test("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
+      checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
       })
     }
@@ -161,8 +167,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
   test("nested map with struct as value type") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
-    withParquetRDD(data) { rdd =>
-      checkAnswer(rdd, data.map { case Tuple1(m) =>
+    withParquetDataFrame(data) { df =>
+      checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
     }
@@ -176,8 +182,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       null.asInstanceOf[java.lang.Float],
       null.asInstanceOf[java.lang.Double])
 
-    withParquetRDD(allNulls :: Nil) { rdd =>
-      val rows = rdd.collect()
+    withParquetDataFrame(allNulls :: Nil) { df =>
+      val rows = df.collect()
       assert(rows.size === 1)
       assert(rows.head === Row(Seq.fill(5)(null): _*))
     }
@@ -189,8 +195,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       None.asInstanceOf[Option[Long]],
       None.asInstanceOf[Option[String]])
 
-    withParquetRDD(allNones :: Nil) { rdd =>
-      val rows = rdd.collect()
+    withParquetDataFrame(allNones :: Nil) { df =>
+      val rows = df.collect()
       assert(rows.size === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
     }
@@ -284,5 +290,80 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)
     }
+  }
+
+  test("save - overwrite") {
+    withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Overwrite, Map("path" -> file))
+      checkAnswer(parquetFile(file), newData.map(Row.fromTuple))
+    }
+  }
+
+  test("save - ignore") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Ignore, Map("path" -> file))
+      checkAnswer(parquetFile(file), data.map(Row.fromTuple))
+    }
+  }
+
+  test("save - throw") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      val errorMessage = intercept[Throwable] {
+        newData.toDF().save(
+          "org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> file))
+      }.getMessage
+      assert(errorMessage.contains("already exists"))
+    }
+  }
+
+  test("save - append") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Append, Map("path" -> file))
+      checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
+    }
+  }
+
+}
+
+class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
+  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+
+  override protected def beforeAll(): Unit = {
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  }
+
+  override protected def afterAll(): Unit = {
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("SPARK-6330 regression test") {
+    // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
+    // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
+    intercept[java.io.FileNotFoundException] {
+      sqlContext.parquetFile("file:///nonexistent")
+    }
+    val errorMessage = intercept[Throwable] {
+      sqlContext.parquetFile("hdfs://nonexistent")
+    }.toString
+    assert(errorMessage.contains("UnknownHostException"))
+  }
+}
+
+class ParquetDataSourceOffIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
+  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+
+  override protected def beforeAll(): Unit = {
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+  }
+
+  override protected def afterAll(): Unit = {
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
 }

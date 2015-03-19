@@ -62,11 +62,11 @@ class JdbcRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
-    val length = 1 + upperBound - lowerBound
+    val length = BigInt(1) + upperBound - lowerBound
     (0 until numPartitions).map(i => {
-      val start = lowerBound + ((i * length) / numPartitions).toLong
-      val end = lowerBound + (((i + 1) * length) / numPartitions).toLong - 1
-      new JdbcPartition(i, start, end)
+      val start = lowerBound + ((i * length) / numPartitions)
+      val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
+      new JdbcPartition(i, start.toLong, end.toLong)
     }).toArray
   }
 
@@ -99,21 +99,21 @@ class JdbcRDD[T: ClassTag](
 
     override def close() {
       try {
-        if (null != rs && ! rs.isClosed()) {
+        if (null != rs) {
           rs.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing resultset", e)
       }
       try {
-        if (null != stmt && ! stmt.isClosed()) {
+        if (null != stmt) {
           stmt.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! conn.isClosed()) {
+        if (null != conn) {
           conn.close()
         }
         logInfo("closed connection")

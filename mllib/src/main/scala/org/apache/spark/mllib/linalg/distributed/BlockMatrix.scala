@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.{SparkException, Logging, Partitioner}
+import org.apache.spark.{Logging, Partitioner, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -104,6 +105,8 @@ private[mllib] object GridPartitioner {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Represents a distributed matrix in blocks of local matrices.
  *
  * @param blocks The RDD of sub-matrix blocks ((blockRowIndex, blockColIndex), sub-matrix) that
@@ -118,6 +121,7 @@ private[mllib] object GridPartitioner {
  * @param nCols Number of columns of this matrix. If the supplied value is less than or equal to
  *              zero, the number of columns will be calculated when `numCols` is invoked.
  */
+@Experimental
 class BlockMatrix(
     val blocks: RDD[((Int, Int), Matrix)],
     val rowsPerBlock: Int,
@@ -177,6 +181,10 @@ class BlockMatrix(
     assert(cols <= nCols, s"The number of columns $cols is more than claimed $nCols.")
   }
 
+  /**
+   * Validates the block matrix info against the matrix data (`blocks`) and throws an exception if
+   * any error is found.
+   */
   def validate(): Unit = {
     logDebug("Validating BlockMatrix...")
     // check if the matrix is larger than the claimed dimensions
@@ -351,7 +359,7 @@ class BlockMatrix(
           if (a.nonEmpty && b.nonEmpty) {
             val C = b.head match {
               case dense: DenseMatrix => a.head.multiply(dense)
-              case sparse: SparseMatrix => a.head.multiply(sparse.toDense())
+              case sparse: SparseMatrix => a.head.multiply(sparse.toDense)
               case _ => throw new SparkException(s"Unrecognized matrix type ${b.head.getClass}.")
             }
             Iterator(((blockRowIndex, blockColIndex), C.toBreeze))

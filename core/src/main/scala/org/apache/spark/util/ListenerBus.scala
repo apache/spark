@@ -28,7 +28,8 @@ import org.apache.spark.Logging
  */
 private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
-  private val listeners = new CopyOnWriteArrayList[L]
+  // Marked `private[spark]` for access in tests.
+  private[spark] val listeners = new CopyOnWriteArrayList[L]
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.

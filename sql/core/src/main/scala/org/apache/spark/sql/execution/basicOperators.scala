@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
@@ -40,7 +37,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  def execute() = child.execute().mapPartitions { iter =>
+  override def execute() = child.execute().mapPartitions { iter =>
     val resuableProjection = buildProjection()
     iter.map(resuableProjection)
   }
@@ -55,7 +52,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
 
   @transient lazy val conditionEvaluator = newPredicate(condition, child.output)
 
-  def execute() = child.execute().mapPartitions { iter =>
+  override def execute() = child.execute().mapPartitions { iter =>
     iter.filter(conditionEvaluator)
   }
 }
@@ -103,49 +100,7 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output = child.output
   override def outputPartitioning = SinglePartition
 
-  /**
-   * A custom implementation modeled after the take function on RDDs but which never runs any job
-   * locally.  This is to avoid shipping an entire partition of data in order to retrieve only a few
-   * rows.
-   */
-  override def executeCollect(): Array[Row] = {
-    if (limit == 0) {
-      return new Array[Row](0)
-    }
-
-    val childRDD = child.execute().map(_.copy())
-
-    val buf = new ArrayBuffer[Row]
-    val totalParts = childRDD.partitions.length
-    var partsScanned = 0
-    while (buf.size < limit && partsScanned < totalParts) {
-      // The number of partitions to try in this iteration. It is ok for this number to be
-      // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = 1
-      if (partsScanned > 0) {
-        // If we didn't find any rows after the first iteration, just try all partitions next.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-        // by 50%.
-        if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
-        } else {
-          numPartsToTry = (1.5 * limit * partsScanned / buf.size).toInt
-        }
-      }
-      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
-
-      val left = limit - buf.size
-      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-      val sc = sqlContext.sparkContext
-      val res =
-        sc.runJob(childRDD, (it: Iterator[Row]) => it.take(left).toArray, p, allowLocal = false)
-
-      res.foreach(buf ++= _.take(limit - buf.size))
-      partsScanned += numPartsToTry
-    }
-
-    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
-  }
+  override def executeCollect(): Array[Row] = child.executeTake(limit)
 
   override def execute() = {
     val rdd: RDD[_ <: Product2[Boolean, Row]] = if (sortBasedShuffleOn) {
@@ -179,13 +134,15 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
   val ord = new RowOrdering(sortOrder, child.output)
 
+  private def collectData() = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+
   // TODO: Is this copying for no reason?
-  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    .map(ScalaReflection.convertRowToScala(_, this.schema))
+  override def executeCollect() =
+    collectData().map(ScalaReflection.convertRowToScala(_, this.schema))
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  override def execute() = sparkContext.makeRDD(executeCollect(), 1)
+  override def execute() = sparkContext.makeRDD(collectData(), 1)
 }
 
 /**

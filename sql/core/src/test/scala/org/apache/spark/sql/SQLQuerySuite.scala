@@ -17,32 +17,54 @@
 
 package org.apache.spark.sql
 
-import java.util.TimeZone
-
+import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
 
-/* Implicits */
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
   TestData
 
-  var origZone: TimeZone = _
-  override protected def beforeAll() {
-    origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
+  val sqlCtx = TestSQLContext
+
+  test("self join with aliases") {
+    Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x.str, COUNT(*)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
-  override protected def afterAll() {
-    TimeZone.setDefault(origZone)
+  test("self join with alias in agg") {
+      Seq(1,2,3)
+        .map(i => (i, i.toString))
+        .toDF("int", "str")
+        .groupBy("str")
+        .agg($"str", count("str").as("strCount"))
+        .registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x.str, SUM(x.strCount)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -143,26 +165,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-3173 Timestamp support in the parser") {
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='1970-01-01 00:00:00.001'"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE '1970-01-01 00:00:00.001'=time"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
-          AND time>'1970-01-01 00:00:00.001'"""),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002")))
+      """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
+          AND time>'1969-12-31 16:00:00.001'"""),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
-      Seq(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")),
-        Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+      "SELECT time FROM timestamps WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')"),
+      Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
+        Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
@@ -294,6 +316,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("date row") {
+    checkAnswer(sql(
+      """select cast("2015-01-28" as date) from testData limit 1"""),
+      Row(java.sql.Date.valueOf("2015-01-28"))
+    )
   }
 
   test("from follow multiple brackets") {
@@ -592,7 +621,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
-    intercept[TreeNodeException[_]] {
+    intercept[AnalysisException] {
       sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
     }
   }
@@ -672,7 +701,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(values(0).toInt, values(1), values(2).toBoolean, v4)
     }
 
-    val df1 = applySchema(rowRDD1, schema1)
+    val df1 = sqlCtx.createDataFrame(rowRDD1, schema1)
     df1.registerTempTable("applySchema1")
     checkAnswer(
       sql("SELECT * FROM applySchema1"),
@@ -702,7 +731,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    val df2 = applySchema(rowRDD2, schema2)
+    val df2 = sqlCtx.createDataFrame(rowRDD2, schema2)
     df2.registerTempTable("applySchema2")
     checkAnswer(
       sql("SELECT * FROM applySchema2"),
@@ -727,7 +756,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
     }
 
-    val df3 = applySchema(rowRDD3, schema2)
+    val df3 = sqlCtx.createDataFrame(rowRDD3, schema2)
     df3.registerTempTable("applySchema3")
 
     checkAnswer(
@@ -772,7 +801,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       .build()
     val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
-    val personWithMeta = applySchema(person.rdd, schemaWithMeta)
+    val personWithMeta = sqlCtx.createDataFrame(person.rdd, schemaWithMeta)
     def validateMetadata(rdd: DataFrame): Unit = {
       assert(rdd.schema("name").metadata.getString(docKey) == docValue)
     }
@@ -787,7 +816,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
-    udf.register("len", (s: String) => s.length)
+    TestSQLContext.udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
       Row(1))
@@ -808,10 +837,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("throw errors for non-aggregate attributes with aggregation") {
     def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
       if (isInvalidQuery) {
-        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
-        assert(
-          e.getMessage.startsWith("Expression not in GROUP BY"),
-          "Non-aggregate attribute(s) not detected\n")
+        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
+        assert(e.getMessage contains "group by")
       } else {
         // Should not throw
         sql(query).queryExecution.analyzed
@@ -1038,10 +1065,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.registerTempTable("nulldata1")
+    rdd1.toDF().registerTempTable("nulldata1")
     val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
     val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.registerTempTable("nulldata2")
+    rdd2.toDF().registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Row(i)))
@@ -1050,7 +1077,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("Multi-column COUNT(DISTINCT ...)") {
     val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.registerTempTable("distinctData")
+    rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+  }
+
+  test("SPARK-6145: ORDER BY test for nested fields") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
+    // These should be successfully analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
+    sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
   }
 }

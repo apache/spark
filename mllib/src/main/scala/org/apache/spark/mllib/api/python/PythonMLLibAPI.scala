@@ -54,11 +54,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
- * The Java stubs necessary for the Python mllib bindings.
+ * The Java stubs necessary for the Python mllib bindings. It is called by Py4J on the Python side.
  */
-@DeveloperApi
-class PythonMLLibAPI extends Serializable {
+private[python] class PythonMLLibAPI extends Serializable {
 
 
   /**
@@ -295,7 +293,7 @@ class PythonMLLibAPI extends Serializable {
       k: Int, 
       convergenceTol: Double, 
       maxIterations: Int,
-      seed: Long): JList[Object] = {
+      seed: java.lang.Long): JList[Object] = {
     val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)

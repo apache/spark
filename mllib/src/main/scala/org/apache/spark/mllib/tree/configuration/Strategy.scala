@@ -62,11 +62,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * @param subsamplingRate Fraction of the training data used for learning decision tree.
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                      maintain a separate RDD of node Id cache for each row.
- * @param checkpointDir If the node Id cache is used, it will help to checkpoint
- *                      the node Id cache periodically. This is the checkpoint directory
- *                      to be used for the node Id cache.
  * @param checkpointInterval How often to checkpoint when the node Id cache gets updated.
- *                           E.g. 10 means that the cache will get checkpointed every 10 updates.
+ *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
+ *                           the checkpoint directory is not set in
+ *                           [[org.apache.spark.SparkContext]], this setting is ignored.
  */
 @Experimental
 class Strategy (
@@ -82,7 +81,6 @@ class Strategy (
     @BeanProperty var maxMemoryInMB: Int = 256,
     @BeanProperty var subsamplingRate: Double = 1,
     @BeanProperty var useNodeIdCache: Boolean = false,
-    @BeanProperty var checkpointDir: Option[String] = None,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
   def isMulticlassClassification =
@@ -165,7 +163,7 @@ class Strategy (
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointDir, checkpointInterval)
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
   }
 }
 

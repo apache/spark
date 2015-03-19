@@ -202,20 +202,21 @@ private[hive] object SparkSQLCLIDriver {
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
-      if (prefix.nonEmpty) {
-        prefix += '\n'
-      }
+      if (!line.startsWith("--")) {
+        if (prefix.nonEmpty) {
+          prefix += '\n'
+        }
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
-        currentPrompt = promptWithCurrentDB
-      } else {
-        prefix = prefix + line
-        currentPrompt = continuedPromptWithDBSpaces
+        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
+          line = prefix + line
+          ret = cli.processLine(line, true)
+          prefix = ""
+          currentPrompt = promptWithCurrentDB
+        } else {
+          prefix = prefix + line
+          currentPrompt = continuedPromptWithDBSpaces
+        }
       }
-
       line = reader.readLine(currentPrompt + "> ")
     }
 
@@ -292,9 +293,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
           }
 
+          var counter = 0
           try {
             while (!out.checkError() && driver.getResults(res)) {
-              res.foreach(out.println)
+              res.foreach{ l =>
+                counter += 1
+                out.println(l)
+              }
               res.clear()
             }
           } catch {
@@ -311,7 +316,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             ret = cret
           }
 
-          console.printInfo(s"Time taken: $timeTaken seconds", null)
+          var responseMsg = s"Time taken: $timeTaken seconds"
+          if (counter != 0) {
+            responseMsg += s", Fetched $counter row(s)"
+          }
+          console.printInfo(responseMsg , null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

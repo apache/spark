@@ -30,10 +30,8 @@ import org.apache.spark.sql.SQLContext
 
 /**
  * Implementation for "describe [extended] table".
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
+private[hive]
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
     override val output: Seq[Attribute],

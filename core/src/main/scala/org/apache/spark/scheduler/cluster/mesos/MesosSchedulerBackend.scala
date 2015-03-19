@@ -270,7 +270,8 @@ private[spark] class MesosSchedulerBackend(
       mesosTasks.foreach { case (slaveId, tasks) =>
         slaveIdToWorkerOffer.get(slaveId).foreach(o =>
           listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
-            new ExecutorInfo(o.host, o.cores)))
+            // TODO: Add support for log urls for Mesos
+            new ExecutorInfo(o.host, o.cores, Map.empty)))
         )
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }
@@ -312,14 +313,6 @@ private[spark] class MesosSchedulerBackend(
       .build()
   }
 
-  /** Check whether a Mesos task state represents a finished task */
-  def isFinished(state: MesosTaskState) = {
-    state == MesosTaskState.TASK_FINISHED ||
-      state == MesosTaskState.TASK_FAILED ||
-      state == MesosTaskState.TASK_KILLED ||
-      state == MesosTaskState.TASK_LOST
-  }
-
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     inClassLoader() {
       val tid = status.getTaskId.getValue.toLong
@@ -329,7 +322,7 @@ private[spark] class MesosSchedulerBackend(
           // We lost the executor on this slave, so remember that it's gone
           removeExecutor(taskIdToSlaveId(tid), "Lost executor")
         }
-        if (isFinished(status.getState)) {
+        if (TaskState.isFinished(state)) {
           taskIdToSlaveId.remove(tid)
         }
       }

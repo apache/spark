@@ -22,22 +22,29 @@
 from __future__ import with_statement
 
 import hashlib
+import itertools
 import logging
 import os
+import os.path
 import pipes
 import random
 import shutil
 import string
+from stat import S_IRUSR
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import time
 import urllib2
 import warnings
 from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
+
+SPARK_EC2_VERSION = "1.2.1"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
     "0.7.3",
@@ -52,45 +59,81 @@ VALID_SPARK_VERSIONS = set([
     "1.1.0",
     "1.1.1",
     "1.2.0",
+    "1.2.1",
 ])
 
-DEFAULT_SPARK_VERSION = "1.2.0"
+SPARK_TACHYON_MAP = {
+    "1.0.0": "0.4.1",
+    "1.0.1": "0.4.1",
+    "1.0.2": "0.4.1",
+    "1.1.0": "0.5.0",
+    "1.1.1": "0.5.0",
+    "1.2.0": "0.5.0",
+    "1.2.1": "0.5.0",
+}
+
+DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
-SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
-MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 
-# A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
-
-
-def setup_boto():
-    # Download Boto if it's not already present in the SPARK_EC2_DIR/lib folder:
-    version = "boto-2.34.0"
-    md5 = "5556223d2d0cc4d06dd4829e671dcecd"
-    url = "https://pypi.python.org/packages/source/b/boto/%s.tar.gz" % version
-    lib_dir = os.path.join(SPARK_EC2_DIR, "lib")
-    if not os.path.exists(lib_dir):
-        os.mkdir(lib_dir)
-    boto_lib_dir = os.path.join(lib_dir, version)
-    if not os.path.isdir(boto_lib_dir):
-        tgz_file_path = os.path.join(lib_dir, "%s.tar.gz" % version)
-        print "Downloading Boto from PyPi"
-        download_stream = urllib2.urlopen(url)
-        with open(tgz_file_path, "wb") as tgz_file:
-            tgz_file.write(download_stream.read())
-        with open(tgz_file_path) as tar:
-            if hashlib.md5(tar.read()).hexdigest() != md5:
-                print >> stderr, "ERROR: Got wrong md5sum for Boto"
-                sys.exit(1)
-        tar = tarfile.open(tgz_file_path)
-        tar.extractall(path=lib_dir)
-        tar.close()
-        os.remove(tgz_file_path)
-        print "Finished downloading Boto"
-    sys.path.insert(0, boto_lib_dir)
+# Default location to get the spark-ec2 scripts (and ami-list) from
+DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
 
 
-setup_boto()
+def setup_external_libs(libs):
+    """
+    Download external libraries from PyPI to SPARK_EC2_DIR/lib/ and prepend them to our PATH.
+    """
+    PYPI_URL_PREFIX = "https://pypi.python.org/packages/source"
+    SPARK_EC2_LIB_DIR = os.path.join(SPARK_EC2_DIR, "lib")
+
+    if not os.path.exists(SPARK_EC2_LIB_DIR):
+        print "Downloading external libraries that spark-ec2 needs from PyPI to {path}...".format(
+            path=SPARK_EC2_LIB_DIR
+        )
+        print "This should be a one-time operation."
+        os.mkdir(SPARK_EC2_LIB_DIR)
+
+    for lib in libs:
+        versioned_lib_name = "{n}-{v}".format(n=lib["name"], v=lib["version"])
+        lib_dir = os.path.join(SPARK_EC2_LIB_DIR, versioned_lib_name)
+
+        if not os.path.isdir(lib_dir):
+            tgz_file_path = os.path.join(SPARK_EC2_LIB_DIR, versioned_lib_name + ".tar.gz")
+            print " - Downloading {lib}...".format(lib=lib["name"])
+            download_stream = urllib2.urlopen(
+                "{prefix}/{first_letter}/{lib_name}/{lib_name}-{lib_version}.tar.gz".format(
+                    prefix=PYPI_URL_PREFIX,
+                    first_letter=lib["name"][:1],
+                    lib_name=lib["name"],
+                    lib_version=lib["version"]
+                )
+            )
+            with open(tgz_file_path, "wb") as tgz_file:
+                tgz_file.write(download_stream.read())
+            with open(tgz_file_path) as tar:
+                if hashlib.md5(tar.read()).hexdigest() != lib["md5"]:
+                    print >> stderr, "ERROR: Got wrong md5sum for {lib}.".format(lib=lib["name"])
+                    sys.exit(1)
+            tar = tarfile.open(tgz_file_path)
+            tar.extractall(path=SPARK_EC2_LIB_DIR)
+            tar.close()
+            os.remove(tgz_file_path)
+            print " - Finished downloading {lib}.".format(lib=lib["name"])
+        sys.path.insert(1, lib_dir)
+
+
+# Only PyPI libraries are supported.
+external_libs = [
+    {
+        "name": "boto",
+        "version": "2.34.0",
+        "md5": "5556223d2d0cc4d06dd4829e671dcecd"
+    }
+]
+
+setup_external_libs(external_libs)
+
 import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
@@ -103,12 +146,11 @@ class UsageError(Exception):
 # Configure and parse our command-line arguments
 def parse_args():
     parser = OptionParser(
-        usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
-        add_help_option=False)
-    parser.add_option(
-        "-h", "--help", action="help",
-        help="Show this help message and exit")
+        prog="spark-ec2",
+        version="%prog {v}".format(v=SPARK_EC2_VERSION),
+        usage="%prog [options] <action> <cluster_name>\n\n"
+        + "<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves")
+
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
@@ -130,13 +172,15 @@ def parse_args():
         help="Master instance type (leave empty for same as instance-type)")
     parser.add_option(
         "-r", "--region", default="us-east-1",
-        help="EC2 region zone to launch instances in")
+        help="EC2 region used to launch instances in, or to find them in (default: %default)")
     parser.add_option(
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
              "slaves across multiple (an additional $0.01/Gb for bandwidth" +
              "between zones applies) (default: a single zone chosen at random)")
-    parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
+    parser.add_option(
+        "-a", "--ami",
+        help="Amazon Machine Image ID to use")
     parser.add_option(
         "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
@@ -144,6 +188,23 @@ def parse_args():
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
         help="Github repo from which to checkout supplied commit hash (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-repo",
+        default=DEFAULT_SPARK_EC2_GITHUB_REPO,
+        help="Github repo from which to checkout spark-ec2 (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-branch",
+        default=DEFAULT_SPARK_EC2_BRANCH,
+        help="Github repo branch of spark-ec2 to use (default: %default)")
+    parser.add_option(
+        "--deploy-root-dir",
+        default=None,
+        help="A directory to copy into / on the first master. " +
+             "Must be absolute. Note that a trailing slash is handled as per rsync: " +
+             "If you omit it, the last directory of the --deploy-root-dir path will be created " +
+             "in / before copying its contents. If you append the trailing slash, " +
+             "the directory is not created and its contents are copied directly into /. " +
+             "(default: %default).")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -168,10 +229,11 @@ def parse_args():
              "Only possible on EBS-backed AMIs. " +
              "EBS volumes are only attached if --ebs-vol-size > 0." +
              "Only support up to 8 EBS volumes.")
-    parser.add_option("--placement-group", type="string", default=None,
-                      help="Which placement group to try and launch " +
-                      "instances into. Assumes placement group is already " +
-                      "created.")
+    parser.add_option(
+        "--placement-group", type="string", default=None,
+        help="Which placement group to try and launch " +
+             "instances into. Assumes placement group is already " +
+             "created.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: %default)")
@@ -204,7 +266,7 @@ def parse_args():
              "(e.g -Dspark.worker.timeout=180)")
     parser.add_option(
         "--user-data", type="string", default="",
-        help="Path to a user-data file (most AMI's interpret this as an initialization script)")
+        help="Path to a user-data file (most AMIs interpret this as an initialization script)")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",
         help="Address to authorize on created security groups (default: %default)")
@@ -215,9 +277,11 @@ def parse_args():
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
-        "--subnet-id", default=None, help="VPC subnet to launch instances in")
+        "--subnet-id", default=None,
+        help="VPC subnet to launch instances in")
     parser.add_option(
-        "--vpc-id", default=None, help="VPC to launch instances in")
+        "--vpc-id", default=None,
+        help="VPC to launch instances in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -272,65 +336,69 @@ def get_validate_spark_version(version, repo):
         return version
 
 
-# Check whether a given EC2 instance object is in a state we consider active,
-# i.e. not terminating or terminated. We count both stopping and stopped as
-# active since we can restart stopped clusters.
-def is_active(instance):
-    return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
-
-
-# Attempt to resolve an appropriate AMI given the architecture and region of the request.
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
 # Last Updated: 2014-06-20
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
+EC2_INSTANCE_TYPES = {
+    "c1.medium":   "pvm",
+    "c1.xlarge":   "pvm",
+    "c3.2xlarge":  "pvm",
+    "c3.4xlarge":  "pvm",
+    "c3.8xlarge":  "pvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
+    "cc1.4xlarge": "hvm",
+    "cc2.8xlarge": "hvm",
+    "cg1.4xlarge": "hvm",
+    "cr1.8xlarge": "hvm",
+    "hi1.4xlarge": "pvm",
+    "hs1.8xlarge": "pvm",
+    "i2.2xlarge":  "hvm",
+    "i2.4xlarge":  "hvm",
+    "i2.8xlarge":  "hvm",
+    "i2.xlarge":   "hvm",
+    "m1.large":    "pvm",
+    "m1.medium":   "pvm",
+    "m1.small":    "pvm",
+    "m1.xlarge":   "pvm",
+    "m2.2xlarge":  "pvm",
+    "m2.4xlarge":  "pvm",
+    "m2.xlarge":   "pvm",
+    "m3.2xlarge":  "hvm",
+    "m3.large":    "hvm",
+    "m3.medium":   "hvm",
+    "m3.xlarge":   "hvm",
+    "r3.2xlarge":  "hvm",
+    "r3.4xlarge":  "hvm",
+    "r3.8xlarge":  "hvm",
+    "r3.large":    "hvm",
+    "r3.xlarge":   "hvm",
+    "t1.micro":    "pvm",
+    "t2.medium":   "hvm",
+    "t2.micro":    "hvm",
+    "t2.small":    "hvm",
+}
+
+
+def get_tachyon_version(spark_version):
+    return SPARK_TACHYON_MAP.get(spark_version, "")
+
+
+# Attempt to resolve an appropriate AMI given the architecture and region of the request.
 def get_spark_ami(opts):
-    instance_types = {
-        "c1.medium":   "pvm",
-        "c1.xlarge":   "pvm",
-        "c3.2xlarge":  "pvm",
-        "c3.4xlarge":  "pvm",
-        "c3.8xlarge":  "pvm",
-        "c3.large":    "pvm",
-        "c3.xlarge":   "pvm",
-        "cc1.4xlarge": "hvm",
-        "cc2.8xlarge": "hvm",
-        "cg1.4xlarge": "hvm",
-        "cr1.8xlarge": "hvm",
-        "hi1.4xlarge": "pvm",
-        "hs1.8xlarge": "pvm",
-        "i2.2xlarge":  "hvm",
-        "i2.4xlarge":  "hvm",
-        "i2.8xlarge":  "hvm",
-        "i2.xlarge":   "hvm",
-        "m1.large":    "pvm",
-        "m1.medium":   "pvm",
-        "m1.small":    "pvm",
-        "m1.xlarge":   "pvm",
-        "m2.2xlarge":  "pvm",
-        "m2.4xlarge":  "pvm",
-        "m2.xlarge":   "pvm",
-        "m3.2xlarge":  "hvm",
-        "m3.large":    "hvm",
-        "m3.medium":   "hvm",
-        "m3.xlarge":   "hvm",
-        "r3.2xlarge":  "hvm",
-        "r3.4xlarge":  "hvm",
-        "r3.8xlarge":  "hvm",
-        "r3.large":    "hvm",
-        "r3.xlarge":   "hvm",
-        "t1.micro":    "pvm",
-        "t2.medium":   "hvm",
-        "t2.micro":    "hvm",
-        "t2.small":    "hvm",
-    }
-    if opts.instance_type in instance_types:
-        instance_type = instance_types[opts.instance_type]
+    if opts.instance_type in EC2_INSTANCE_TYPES:
+        instance_type = EC2_INSTANCE_TYPES[opts.instance_type]
     else:
         instance_type = "pvm"
         print >> stderr,\
             "Don't recognize %s, assuming type is pvm" % opts.instance_type
 
-    ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
+    # URL prefix from which to fetch AMI information
+    ami_prefix = "{r}/{b}/ami-list".format(
+        r=opts.spark_ec2_git_repo.replace("https://github.com", "https://raw.github.com", 1),
+        b=opts.spark_ec2_git_branch)
+
+    ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
     try:
         ami = urllib2.urlopen(ami_path).read().strip()
         print "Spark AMI: " + ami
@@ -349,6 +417,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.identity_file is None:
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
+
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
@@ -538,8 +607,11 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement_group=opts.placement_group,
                                       user_data=user_data_content)
                 slave_nodes += slave_res.instances
-                print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                                zone, slave_res.id)
+                print "Launched {s} slave{plural_s} in {z}, regid = {r}".format(
+                    s=num_slaves_this_zone,
+                    plural_s=('' if num_slaves_this_zone == 1 else 's'),
+                    z=zone,
+                    r=slave_res.id)
             i += 1
 
     # Launch or resume masters
@@ -569,6 +641,9 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # This wait time corresponds to SPARK-4983
+    print "Waiting for AWS to propagate instance metadata..."
+    time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
         master.add_tag(
@@ -583,39 +658,47 @@ def launch_cluster(conn, opts, cluster_name):
     return (master_nodes, slave_nodes)
 
 
-# Get the EC2 instances in an existing cluster if available.
-# Returns a tuple of lists of EC2 instance objects for the masters and slaves
-
-
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + "..."
-    reservations = conn.get_all_reservations()
-    master_nodes = []
-    slave_nodes = []
-    for res in reservations:
-        active = [i for i in res.instances if is_active(i)]
-        for inst in active:
-            group_names = [g.name for g in inst.groups]
-            if (cluster_name + "-master") in group_names:
-                master_nodes.append(inst)
-            elif (cluster_name + "-slaves") in group_names:
-                slave_nodes.append(inst)
-    if any((master_nodes, slave_nodes)):
-        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
-    if master_nodes != [] or not die_on_error:
-        return (master_nodes, slave_nodes)
-    else:
-        if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
-        else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster"
+    """
+    Get the EC2 instances in an existing cluster if available.
+    Returns a tuple of lists of EC2 instance objects for the masters and slaves.
+    """
+    print "Searching for existing cluster {c} in region {r}...".format(
+        c=cluster_name, r=opts.region)
+
+    def get_instances(group_names):
+        """
+        Get all non-terminated instances that belong to any of the provided security groups.
+
+        EC2 reservation filters and instance states are documented here:
+            http://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html#options
+        """
+        reservations = conn.get_all_reservations(
+            filters={"instance.group-name": group_names})
+        instances = itertools.chain.from_iterable(r.instances for r in reservations)
+        return [i for i in instances if i.state not in ["shutting-down", "terminated"]]
+
+    master_instances = get_instances([cluster_name + "-master"])
+    slave_instances = get_instances([cluster_name + "-slaves"])
+
+    if any((master_instances, slave_instances)):
+        print "Found {m} master{plural_m}, {s} slave{plural_s}.".format(
+            m=len(master_instances),
+            plural_m=('' if len(master_instances) == 1 else 's'),
+            s=len(slave_instances),
+            plural_s=('' if len(slave_instances) == 1 else 's'))
+
+    if not master_instances and die_on_error:
+        print >> sys.stderr, \
+            "ERROR: Could not find a master for cluster {c} in region {r}.".format(
+                c=cluster_name, r=opts.region)
         sys.exit(1)
+
+    return (master_instances, slave_instances)
 
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
-
-
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     master = master_nodes[0].public_dns_name
     if deploy_ssh_key:
@@ -643,12 +726,15 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
+    print "Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
+        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     ssh(
         host=master,
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone https://github.com/mesos/spark-ec2.git -b {b}".format(b=MESOS_SPARK_EC2_BRANCH)
+        + "git clone {r} -b {b} spark-ec2".format(r=opts.spark_ec2_git_repo,
+                                                  b=opts.spark_ec2_git_branch)
     )
 
     print "Deploying files to master..."
@@ -660,6 +746,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         slave_nodes=slave_nodes,
         modules=modules
     )
+
+    if opts.deploy_root_dir is not None:
+        print "Deploying {s} to master...".format(s=opts.deploy_root_dir)
+        deploy_user_files(
+            root_dir=opts.deploy_root_dir,
+            opts=opts,
+            master_nodes=master_nodes
+        )
 
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
@@ -675,21 +769,32 @@ def setup_spark_cluster(master, opts):
         print "Ganglia started at http://%s:5080/ganglia" % master
 
 
-def is_ssh_available(host, opts):
+def is_ssh_available(host, opts, print_ssh_output=True):
     """
     Check if SSH is available on a host.
     """
-    try:
-        with open(os.devnull, 'w') as devnull:
-            ret = subprocess.check_call(
-                ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
-                                     '%s@%s' % (opts.user, host), stringify_command('true')],
-                stdout=devnull,
-                stderr=devnull
-            )
-        return ret == 0
-    except subprocess.CalledProcessError as e:
-        return False
+    s = subprocess.Popen(
+        ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
+                             '%s@%s' % (opts.user, host), stringify_command('true')],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT  # we pipe stderr through stdout to preserve output order
+    )
+    cmd_output = s.communicate()[0]  # [1] is stderr, which we redirected to stdout
+
+    if s.returncode != 0 and print_ssh_output:
+        # extra leading newline is for spacing in wait_for_cluster_state()
+        print textwrap.dedent("""\n
+            Warning: SSH connection error. (This could be temporary.)
+            Host: {h}
+            SSH return code: {r}
+            SSH output: {o}
+        """).format(
+            h=host,
+            r=s.returncode,
+            o=cmd_output.strip()
+        )
+
+    return s.returncode == 0
 
 
 def is_cluster_ssh_available(cluster_instances, opts):
@@ -828,9 +933,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     if "." in opts.spark_version:
         # Pre-built Spark deploy
         spark_v = get_validate_spark_version(opts.spark_version, opts.spark_git_repo)
+        tachyon_v = get_tachyon_version(spark_v)
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
+        tachyon_v = ""
+        print "Deploying Spark via git hash; Tachyon won't be set up"
+        modules = filter(lambda x: x != "tachyon", modules)
 
     template_vars = {
         "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
@@ -843,6 +952,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "swap": str(opts.swap),
         "modules": '\n'.join(modules),
         "spark_version": spark_v,
+        "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
@@ -887,6 +997,23 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     shutil.rmtree(tmp_dir)
 
 
+# Deploy a given local directory to a cluster, WITHOUT parameter substitution.
+# Note that unlike deploy_files, this works for binary files.
+# Also, it is up to the user to add (or not) the trailing slash in root_dir.
+# Files are only deployed to the first master instance in the cluster.
+#
+# root_dir should be an absolute path.
+def deploy_user_files(root_dir, opts, master_nodes):
+    active_master = master_nodes[0].public_dns_name
+    command = [
+        'rsync', '-rv',
+        '-e', stringify_command(ssh_command(opts)),
+        "%s" % root_dir,
+        "%s@%s:/" % (opts.user, active_master)
+    ]
+    subprocess.check_call(command)
+
+
 def stringify_command(parts):
     if isinstance(parts, str):
         return parts
@@ -896,6 +1023,7 @@ def stringify_command(parts):
 
 def ssh_args(opts):
     parts = ['-o', 'StrictHostKeyChecking=no']
+    parts += ['-o', 'UserKnownHostsFile=/dev/null']
     if opts.identity_file is not None:
         parts += ['-i', opts.identity_file]
     return parts
@@ -1003,8 +1131,63 @@ def real_main():
             DeprecationWarning
         )
 
+    if opts.identity_file is not None:
+        if not os.path.exists(opts.identity_file):
+            print >> stderr,\
+                "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
+            sys.exit(1)
+
+        file_mode = os.stat(opts.identity_file).st_mode
+        if not (file_mode & S_IRUSR) or not oct(file_mode)[-2:] == '00':
+            print >> stderr, "ERROR: The identity file must be accessible only by you."
+            print >> stderr, 'You can fix this with: chmod 400 "{f}"'.format(f=opts.identity_file)
+            sys.exit(1)
+
+    if opts.instance_type not in EC2_INSTANCE_TYPES:
+        print >> stderr, "Warning: Unrecognized EC2 instance type for instance-type: {t}".format(
+            t=opts.instance_type)
+
+    if opts.master_instance_type != "":
+        if opts.master_instance_type not in EC2_INSTANCE_TYPES:
+            print >> stderr, \
+                "Warning: Unrecognized EC2 instance type for master-instance-type: {t}".format(
+                    t=opts.master_instance_type)
+        # Since we try instance types even if we can't resolve them, we check if they resolve first
+        # and, if they do, see if they resolve to the same virtualization type.
+        if opts.instance_type in EC2_INSTANCE_TYPES and \
+           opts.master_instance_type in EC2_INSTANCE_TYPES:
+            if EC2_INSTANCE_TYPES[opts.instance_type] != \
+               EC2_INSTANCE_TYPES[opts.master_instance_type]:
+                print >> stderr, \
+                    "Error: spark-ec2 currently does not support having a master and slaves with " + \
+                    "different AMI virtualization types."
+                print >> stderr, "master instance virtualization type: {t}".format(
+                    t=EC2_INSTANCE_TYPES[opts.master_instance_type])
+                print >> stderr, "slave instance virtualization type: {t}".format(
+                    t=EC2_INSTANCE_TYPES[opts.instance_type])
+                sys.exit(1)
+
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
+        sys.exit(1)
+
+    # Prevent breaking ami_prefix (/, .git and startswith checks)
+    # Prevent forks with non spark-ec2 names for now.
+    if opts.spark_ec2_git_repo.endswith("/") or \
+            opts.spark_ec2_git_repo.endswith(".git") or \
+            not opts.spark_ec2_git_repo.startswith("https://github.com") or \
+            not opts.spark_ec2_git_repo.endswith("spark-ec2"):
+        print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
+                         "trailing / or .git. " \
+                         "Furthermore, we currently only support forks named spark-ec2."
+        sys.exit(1)
+
+    if not (opts.deploy_root_dir is None or
+            (os.path.isabs(opts.deploy_root_dir) and
+             os.path.isdir(opts.deploy_root_dir) and
+             os.path.exists(opts.deploy_root_dir))):
+        print >> stderr, "--deploy-root-dir must be an absolute path to a directory that exists " \
+                         "on the local file system"
         sys.exit(1)
 
     try:
@@ -1034,14 +1217,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        print "Are you sure you want to destroy the cluster %s?" % cluster_name
-        print "The following instances will be terminated:"
         (master_nodes, slave_nodes) = get_existing_cluster(
             conn, opts, cluster_name, die_on_error=False)
-        for inst in master_nodes + slave_nodes:
-            print "> %s" % inst.public_dns_name
 
-        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        if any(master_nodes + slave_nodes):
+            print "The following instances will be terminated:"
+            for inst in master_nodes + slave_nodes:
+                print "> %s" % inst.public_dns_name
+            print "ALL DATA ON ALL NODES WILL BE LOST!!"
+
+        msg = "Are you sure you want to destroy the cluster {c}? (y/N) ".format(c=cluster_name)
         response = raw_input(msg)
         if response == "y":
             print "Terminating master..."
@@ -1053,7 +1238,6 @@ def real_main():
 
             # Delete security groups as well
             if opts.delete_groups:
-                print "Deleting security groups (this will take some time)..."
                 group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     conn=conn,
@@ -1061,6 +1245,7 @@ def real_main():
                     cluster_instances=(master_nodes + slave_nodes),
                     cluster_state='terminated'
                 )
+                print "Deleting security groups (this will take some time)..."
                 attempt = 1
                 while attempt <= 3:
                     print "Attempt %d" % attempt
@@ -1082,11 +1267,12 @@ def real_main():
                     time.sleep(30)  # Yes, it does have to be this long :-(
                     for group in groups:
                         try:
-                            conn.delete_security_group(group.name)
-                            print "Deleted security group " + group.name
+                            # It is needed to use group_id to make it work with VPC
+                            conn.delete_security_group(group_id=group.id)
+                            print "Deleted security group %s" % group.name
                         except boto.exception.EC2ResponseError:
                             success = False
-                            print "Failed to delete security group " + group.name
+                            print "Failed to delete security group %s" % group.name
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails
@@ -1166,6 +1352,17 @@ def real_main():
             cluster_instances=(master_nodes + slave_nodes),
             cluster_state='ssh-ready'
         )
+
+        # Determine types of running instances
+        existing_master_type = master_nodes[0].instance_type
+        existing_slave_type = slave_nodes[0].instance_type
+        # Setting opts.master_instance_type to the empty string indicates we
+        # have the same instance type for the master and the slaves
+        if existing_master_type == existing_slave_type:
+            existing_master_type = ""
+        opts.master_instance_type = existing_master_type
+        opts.instance_type = existing_slave_type
+
         setup_cluster(conn, master_nodes, slave_nodes, opts, False)
 
     else:

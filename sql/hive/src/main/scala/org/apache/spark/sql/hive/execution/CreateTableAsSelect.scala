@@ -28,7 +28,6 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
- * :: Experimental ::
  * Create table and insert the query result into it.
  * @param database the database name of the new relation
  * @param tableName the table name of the new relation
@@ -38,7 +37,7 @@ import org.apache.spark.sql.hive.MetastoreRelation
  * @param desc the CreateTableDesc, which may contains serde, storage handler etc.
 
  */
-@Experimental
+private[hive]
 case class CreateTableAsSelect(
     database: String,
     tableName: String,

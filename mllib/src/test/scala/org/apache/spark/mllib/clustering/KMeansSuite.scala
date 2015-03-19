@@ -21,9 +21,10 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -255,6 +256,47 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       assert(predicts(3) === predicts(4))
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
+    }
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(true, false).foreach { case selector =>
+      val model = KMeansSuite.createModel(10, 3, selector)
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = KMeansModel.load(sc, path)
+        KMeansSuite.checkEqual(model, sameModel)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
+}
+
+object KMeansSuite extends FunSuite {
+  def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
+    val singlePoint = isSparse match {
+      case true =>
+        Vectors.sparse(dim, Array.empty[Int], Array.empty[Double])
+      case _ =>
+        Vectors.dense(Array.fill[Double](dim)(0.0))
+    }
+    new KMeansModel(Array.fill[Vector](k)(singlePoint))
+  }
+
+  def checkEqual(a: KMeansModel, b: KMeansModel): Unit = {
+    assert(a.k === b.k)
+    a.clusterCenters.zip(b.clusterCenters).foreach {
+      case (ca: SparseVector, cb: SparseVector) =>
+        assert(ca === cb)
+      case (ca: DenseVector, cb: DenseVector) =>
+        assert(ca === cb)
+      case _ =>
+        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }

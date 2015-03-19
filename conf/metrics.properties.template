@@ -122,6 +122,15 @@
 
 #worker.sink.csv.unit=minutes
 
+# Enable Slf4jSink for all instances by class name
+#*.sink.slf4j.class=org.apache.spark.metrics.sink.Slf4jSink
+
+# Polling period for Slf4JSink
+#*.sink.sl4j.period=1
+
+#*.sink.sl4j.unit=minutes
+
+
 # Enable jvm source for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
