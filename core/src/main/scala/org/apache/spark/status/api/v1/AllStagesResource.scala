@@ -21,8 +21,7 @@ import javax.ws.rs.{GET, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
-import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo}
-import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
 import org.apache.spark.status.api._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
@@ -94,6 +93,7 @@ object AllStagesResource {
     new StageData(
       status = status,
       stageId = stageInfo.stageId,
+      attemptId = stageInfo.attemptId,
       numActiveTasks = stageUiData.numActiveTasks,
       numCompleteTasks = stageUiData.numCompleteTasks,
       numFailedTasks = stageUiData.numFailedTasks,

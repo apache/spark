@@ -48,12 +48,13 @@ class AllJobsResource(uiRoot: UIRoot) {
           statuses
         }
       }
-      for {
+      val jobInfos = for {
         (status, jobs) <- statusToJobs
         job <- jobs if adjStatuses.contains(status)
       } yield {
         AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
       }
+      jobInfos.sortBy{- _.jobId}
     }
   }
 

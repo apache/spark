@@ -114,6 +114,7 @@ class RDDPartitionInfo(
 class StageData(
   val status: StageStatus,
   val stageId: Int,
+  val attemptId: Int,
   val numActiveTasks: Int ,
   val numCompleteTasks: Int,
   val numFailedTasks: Int,

@@ -16,30 +16,31 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
+import javax.ws.rs.{GET, PathParam, Produces}
 
 import org.apache.spark.SparkException
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class OneStageResource(uiRoot: UIRoot) {
+class OneStageAttemptResource(uiRoot: UIRoot) {
 
   @GET
   def stageData(
     @PathParam("appId") appId: String,
-    @PathParam("stageId") stageId: Int
-  ): Seq[StageData] = {
+    @PathParam("stageId") stageId: Int,
+    @PathParam("attemptId") attemptId: Int
+  ): StageData = {
     uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.stagesTab.listener
       val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
-      val stageAttempts = stageAndStatus.flatMap { case (status, stages) =>
-        val matched = stages.filter{ stage => stage.stageId == stageId}
+      val oneStage = stageAndStatus.flatMap { case (status, stages) =>
+        val matched = stages.find { stage =>
+          stage.stageId == stageId && stage.attemptId == attemptId
+        }
         matched.map { status -> _ }
-      }
-      if (stageAttempts.isEmpty) {
-        throw new NotFoundException("unknown stage: " + stageId)
-      } else {
-        stageAttempts.map { case (status, stageInfo) =>
+      }.headOption
+      oneStage match {
+        case Some((status, stageInfo)) =>
           val stageUiData = listener.synchronized {
             listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId)).
               getOrElse(throw new SparkException("failed to get full stage data for stage: " +
@@ -48,7 +49,8 @@ class OneStageResource(uiRoot: UIRoot) {
           }
           AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData,
             includeDetails = true)
-        }
+        case None =>
+          throw new NotFoundException(s"unknown (stage, attempt): ($stageId, $attemptId)")
       }
 
     }

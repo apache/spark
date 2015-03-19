@@ -21,6 +21,8 @@ import java.net.{HttpURLConnection, URL}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
@@ -76,10 +78,12 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
+    "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
     "stage list with accumulable json" -> "applications/local-1426533911241/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/stages/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    //TODO multi-attempt stages
   )
 
   //run a bunch of characterization tests -- just verify the behavior is the same as what is saved in the test
@@ -97,7 +101,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
         import org.json4s.jackson.JsonMethods._
         val jsonAst = parse(json)
         val expAst = parse(exp)
-        jsonAst should be (expAst)
+        HistoryServerSuite.assertValidDataInJson(jsonAst, expAst)
       }
   }
 
@@ -170,34 +174,14 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     justHrefs should contain(link)
   }
 
-  def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    val url = new URL(s"http://localhost:$port/json/v1/$path")
-    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-    connection.setRequestMethod("GET")
-    connection.connect()
-    val code = connection.getResponseCode()
-    val inString = try {
-      val in = Option(connection.getInputStream())
-      in.map{IOUtils.toString}
-    } catch {
-      case io: IOException => None
-    }
-    val errString = try {
-      val err = Option(connection.getErrorStream())
-      err.map{IOUtils.toString}
-    } catch {
-      case io: IOException => None
-    }
-    (code, inString, errString)
+  def getContentAndCode(path: String): (Int, Option[String], Option[String]) = {
+    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
   }
-
 
   def getUrl(path: String): String = {
-    val (code, resultOpt, error) = getContentAndCode(path)
-    if (code == 200)
-      resultOpt.get
-    else throw new RuntimeException("got code: " + code + " when getting " + path + " w/ error: " + error)
+    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
   }
+
 
   def generateExpectation(path: String): Unit = {
     val json = getUrl(path)
@@ -227,6 +211,44 @@ object HistoryServerSuite {
     } finally {
       suite.stop()
     }
+  }
+
+  def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod("GET")
+    connection.connect()
+    val code = connection.getResponseCode()
+    val inString = try {
+      val in = Option(connection.getInputStream())
+      in.map{IOUtils.toString}
+    } catch {
+      case io: IOException => None
+    }
+    val errString = try {
+      val err = Option(connection.getErrorStream())
+      err.map{IOUtils.toString}
+    } catch {
+      case io: IOException => None
+    }
+    (code, inString, errString)
+  }
+
+  def getUrl(path: URL): String = {
+    val (code, resultOpt, error) = getContentAndCode(path)
+    if (code == 200)
+      resultOpt.get
+    else throw new RuntimeException("got code: " + code + " when getting " + path + " w/ error: " + error)
+  }
+
+  def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
+    val Diff(c, a, d) = validateJson diff expectedJson
+    val validatePretty = JsonMethods.pretty(validateJson)
+    val expectedPretty = JsonMethods.pretty(expectedJson)
+    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
+    import org.scalactic.TripleEquals._
+    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
+    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
+    assert(d === JNothing, s"$errorMessage\nDeleted:\n${JsonMethods.pretty(d)}")
   }
 }
 

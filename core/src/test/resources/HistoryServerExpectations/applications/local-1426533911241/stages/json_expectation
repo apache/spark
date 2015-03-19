@@ -1,6 +1,7 @@
 [ {
   "status" : "Complete",
   "stageId" : 0,
+  "attemptId" : 0,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,

@@ -1,6 +1,7 @@
 [ {
   "status" : "Complete",
   "stageId" : 3,
+  "attemptId" : 0,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
@@ -22,6 +23,7 @@
 }, {
   "status" : "Complete",
   "stageId" : 1,
+  "attemptId" : 0,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
@@ -43,6 +45,7 @@
 }, {
   "status" : "Complete",
   "stageId" : 0,
+  "attemptId" : 0,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
@@ -64,6 +67,7 @@
 }, {
   "status" : "Failed",
   "stageId" : 2,
+  "attemptId" : 0,
   "numActiveTasks" : 0,
   "numCompleteTasks" : 7,
   "numFailedTasks" : 1,
