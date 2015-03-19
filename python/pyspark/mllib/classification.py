@@ -341,7 +341,7 @@ class NaiveBayesModel(Saveable, Loader):
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = NaiveBayesModel.load(sc, path)
-    >>> sameModel.predict(sparse_data[0]) == model.predict(sparse_data[0])
+    >>> sameModel.predict(SparseVector(2, {0: 1.0})) == model.predict(SparseVector(2, {0: 1.0}))
     True
     >>> try:
     ...     os.removedirs(path)
@@ -362,21 +362,21 @@ class NaiveBayesModel(Saveable, Loader):
         return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
 
     def save(self, sc, path):
-        java_labels = _py2java(sc, _convert_to_vector(self.labels))
-        java_pi = _py2java(sc, _convert_to_vector(self.pi))
-        java_theta = _py2java(sc, _convert_to_vector(self.theta))
+        java_labels = _py2java(sc, self.labels.tolist())
+        java_pi = _py2java(sc, self.pi.tolist())
+        java_theta = _py2java(sc, self.theta.tolist())
         java_model = sc._jvm\
-            .org.apache.spark.classification.NaiveBayesModel(java_labels, java_pi, java_theta)
+            .org.apache.spark.mllib.classification.NaiveBayesModel(java_labels, java_pi, java_theta)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
     def load(cls, sc, path):
         java_model = sc._jvm.\
-            org.apache.spark.classification.NaiveBayesModel.load(sc._jsc.sc(), path)
-        py_labels = _java2py(sc, java_model.labels)
-        py_pi = _java2py(sc, java_model.pi)
-        py_theta = _java2py(sc, java_model.theta)
-        return NaiveBayesModel(py_labels.toArray, py_pi.toArray, numpy.array(py_theta))
+            org.apache.spark.mllib.classification.NaiveBayesModel.load(sc._jsc.sc(), path)
+        py_labels = _java2py(sc, java_model.labels())
+        py_pi = _java2py(sc, java_model.pi())
+        py_theta = _java2py(sc, java_model.theta())
+        return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
 class NaiveBayes(object):
 
