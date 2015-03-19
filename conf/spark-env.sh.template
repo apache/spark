@@ -15,7 +15,7 @@
 # - SPARK_PUBLIC_DNS, to set the public DNS name of the driver program
 # - SPARK_CLASSPATH, default classpath entries to append
 # - SPARK_LOCAL_DIRS, storage directories to use on this node for shuffle and RDD data
-# - MESOS_NATIVE_LIBRARY, to point to your libmesos.so if you use Mesos
+# - MESOS_NATIVE_JAVA_LIBRARY, to point to your libmesos.so if you use Mesos
 
 # Options read in YARN client mode
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files

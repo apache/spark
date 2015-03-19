@@ -663,7 +663,7 @@ val graph: Graph[Int, Float] = ...
 def msgFun(triplet: Triplet[Int, Float]): Iterator[(Int, String)] = {
   Iterator((triplet.dstId, "Hi"))
 }
-def reduceFun(a: Int, b: Int): Int = a + b
+def reduceFun(a: String, b: String): String = a + " " + b
 val result = graph.mapReduceTriplets[String](msgFun, reduceFun)
 {% endhighlight %}
 
@@ -674,7 +674,7 @@ val graph: Graph[Int, Float] = ...
 def msgFun(triplet: EdgeContext[Int, Float, String]) {
   triplet.sendToDst("Hi")
 }
-def reduceFun(a: Int, b: Int): Int = a + b
+def reduceFun(a: String, b: String): String = a + " " + b
 val result = graph.aggregateMessages[String](msgFun, reduceFun)
 {% endhighlight %}
 

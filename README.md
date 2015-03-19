@@ -85,7 +85,7 @@ storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
-["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-with-maven.html#specifying-the-hadoop-version)
+["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
 for detailed guidance on building for a particular distribution of Hadoop, including
 building for particular Hive and Hive Thriftserver distributions. See also
 ["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)

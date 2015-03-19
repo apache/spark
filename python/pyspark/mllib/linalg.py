@@ -152,6 +152,9 @@ class VectorUDT(UserDefinedType):
         else:
             raise ValueError("do not recognize type %r" % tpe)
 
+    def simpleString(self):
+        return "vector"
+
 
 class Vector(object):
 

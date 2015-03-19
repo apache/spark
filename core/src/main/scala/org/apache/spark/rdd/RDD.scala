@@ -960,7 +960,7 @@ abstract class RDD[T: ClassTag](
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)

@@ -24,7 +24,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -250,7 +251,7 @@ private[tree] sealed class TreeEnsembleModel(
   def totalNumNodes: Int = trees.map(_.numNodes).sum
 }
 
-private[tree] object TreeEnsembleModel {
+private[tree] object TreeEnsembleModel extends Logging {
 
   object SaveLoadV1_0 {
 
@@ -276,6 +277,28 @@ private[tree] object TreeEnsembleModel {
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
+
+      // SPARK-6120: We do a hacky check here so users understand why save() is failing
+      //             when they run the ML guide example.
+      // TODO: Fix this issue for real.
+      val memThreshold = 768
+      if (sc.isLocal) {
+        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+          .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
+          .map(Utils.memoryStringToMb)
+          .getOrElse(512)
+        if (driverMemory <= memThreshold) {
+          logWarning(s"$className.save() was called, but it may fail because of too little" +
+            s" driver memory (${driverMemory}m)." +
+            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+        }
+      } else {
+        if (sc.executorMemory <= memThreshold) {
+          logWarning(s"$className.save() was called, but it may fail because of too little" +
+            s" executor memory (${sc.executorMemory}m)." +
+            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+        }
+      }
 
       // Create JSON metadata.
       implicit val format = DefaultFormats
