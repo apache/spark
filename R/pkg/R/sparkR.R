@@ -42,7 +42,7 @@ sparkR.stop <- function(env = .sparkREnv) {
       rm(".sparkRjsc", envir = env)
     }
   
-    if (exists(".sparkRBackendLaunched", envir = env)) {
+    if (exists(".backendLaunched", envir = env)) {
       callJStatic("SparkRHandler", "stopBackend")
     }
 
@@ -79,7 +79,6 @@ sparkR.stop <- function(env = .sparkREnv) {
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
 #' @param sparkRLibDir The path where R is installed on the worker nodes.
-#' @param sparkRBackendPort The port to use for SparkR JVM Backend.
 #' @export
 #' @examples
 #'\dontrun{
@@ -119,9 +118,9 @@ sparkR.init <- function(
     uriSep <- "////"
   }
 
-  sparkRExistingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
-  if (sparkRExistingPort != "") {
-    sparkRBackendPort <- sparkRExistingPort
+  existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
+  if (existingPort != "") {
+    backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
     launchBackend(
@@ -142,21 +141,21 @@ sparkR.init <- function(
       stop("JVM is not ready after 10 seconds")
     }
     f <- file(path, open='rb')
-    sparkRBackendPort <- readInt(f)
+    backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
     file.remove(path)
-    if (length(sparkRBackendPort) == 0 || sparkRBackendPort == 0 ||
+    if (length(backendPort) == 0 || backendPort == 0 ||
         length(monitorPort) == 0 || monitorPort == 0) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
-    assign(".sparkRBackendLaunched", 1, envir = .sparkREnv)
+    assign(".backendLaunched", 1, envir = .sparkREnv)
   }
 
-  .sparkREnv$sparkRBackendPort <- sparkRBackendPort
+  .sparkREnv$backendPort <- backendPort
   tryCatch({
-    connectBackend("localhost", sparkRBackendPort)
+    connectBackend("localhost", backendPort)
   }, error = function(err) {
     stop("Failed to connect JVM\n")
   })

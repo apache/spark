@@ -67,8 +67,6 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' df <- jsonFile(sqlCtx, path)
 #' printSchema(df)
 #'}
-setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
-
 setMethod("printSchema",
           signature(x = "DataFrame"),
           function(x) {
@@ -92,10 +90,6 @@ setMethod("printSchema",
 #' df <- jsonFile(sqlCtx, path)
 #' dfSchema <- schema(df)
 #'}
-setGeneric("schema", function(x) { standardGeneric("schema") })
-
-#' @rdname schema
-#' @export
 setMethod("schema",
           signature(x = "DataFrame"),
           function(x) {
@@ -118,10 +112,6 @@ setMethod("schema",
 #' df <- jsonFile(sqlCtx, path)
 #' explain(df, TRUE)
 #'}
-setGeneric("explain", function(x, ...) { standardGeneric("explain") })
-
-#' @rdname explain
-#' @export
 setMethod("explain",
           signature(x = "DataFrame"),
           function(x, extended = FALSE) {
@@ -151,10 +141,6 @@ setMethod("explain",
 #' df <- jsonFile(sqlCtx, path)
 #' isLocal(df)
 #'}
-setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
-
-#' @rdname isLocal
-#' @export
 setMethod("isLocal",
           signature(x = "DataFrame"),
           function(x) {
@@ -178,10 +164,6 @@ setMethod("isLocal",
 #' df <- jsonFile(sqlCtx, path)
 #' showDF(df)
 #'}
-setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
-
-#' @rdname showDF
-#' @export
 setMethod("showDF",
           signature(x = "DataFrame"),
           function(x, numRows = 20) {
@@ -213,10 +195,6 @@ setMethod("show", "DataFrame",
 #' df <- jsonFile(sqlCtx, path)
 #' dtypes(df)
 #'}
-setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
-
-#' @rdname dtypes
-#' @export
 setMethod("dtypes",
           signature(x = "DataFrame"),
           function(x) {
@@ -241,10 +219,6 @@ setMethod("dtypes",
 #' df <- jsonFile(sqlCtx, path)
 #' columns(df)
 #'}
-setGeneric("columns", function(x) {standardGeneric("columns") })
-
-#' @rdname columns
-#' @export
 setMethod("columns",
           signature(x = "DataFrame"),
           function(x) {
@@ -279,10 +253,6 @@ setMethod("names",
 #' registerTempTable(df, "json_df")
 #' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
 #'}
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
-
-#' @rdname registerTempTable
-#' @export
 setMethod("registerTempTable",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName) {
@@ -309,10 +279,6 @@ setMethod("registerTempTable",
 #' registerTempTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
-setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
-
-#' @rdname insertInto
-#' @export
 setMethod("insertInto",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
@@ -434,10 +400,6 @@ setMethod("repartition",
 #' df <- jsonFile(sqlCtx, path)
 #' newRDD <- toJSON(df)
 #'}
-setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
-
-#' @rdname toJSON
-#' @export
 setMethod("toJSON",
           signature(x = "DataFrame"),
           function(x) {
@@ -463,10 +425,6 @@ setMethod("toJSON",
 #' df <- jsonFile(sqlCtx, path)
 #' saveAsParquetFile(df, "/tmp/sparkr-tmp/")
 #'}
-setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
-
-#' @rdname saveAsParquetFile
-#' @export
 setMethod("saveAsParquetFile",
           signature(x = "DataFrame", path = "character"),
           function(x, path) {
@@ -513,13 +471,6 @@ setMethod("distinct",
 #' collect(sampleDF(df, FALSE, 0.5)) 
 #' collect(sampleDF(df, TRUE, 0.5))
 #'}
-setGeneric("sampleDF",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sampleDF")
-          })
-
-#' @rdname sampleDF
-#' @export
 setMethod("sampleDF",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
@@ -604,10 +555,6 @@ setMethod("collect",
 #' df <- jsonFile(sqlCtx, path)
 #' limitedDF <- limit(df, 10)
 #' }
-setGeneric("limit", function(x, num) {standardGeneric("limit") })
-
-#' @rdname limit
-#' @export
 setMethod("limit",
           signature(x = "DataFrame", num = "numeric"),
           function(x, num) {
@@ -697,10 +644,6 @@ setMethod("first",
 #' df <- jsonFile(sqlCtx, path)
 #' rdd <- toRDD(df)
 #' }
-setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
-
-#' @rdname DataFrame
-#' @export
 setMethod("toRDD",
           signature(x = "DataFrame"),
           function(x) {
@@ -730,10 +673,6 @@ setMethod("toRDD",
 #'   # Compute the max age and average salary, grouped by department and gender.
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
-setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
-
-#' @rdname DataFrame
-#' @export
 setMethod("groupBy",
            signature(x = "DataFrame"),
            function(x, ...) {
@@ -881,10 +820,6 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
 #' }
-setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
-
-#' @rdname select
-#' @export
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
@@ -936,10 +871,6 @@ setMethod("select",
 #' df <- jsonFile(sqlCtx, path)
 #' selectExpr(df, "col1", "(col2 * 5) as newCol")
 #' }
-setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
-
-#' @rdname selectExpr
-#' @export
 setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
@@ -966,10 +897,6 @@ setMethod("selectExpr",
 #' df <- jsonFile(sqlCtx, path)
 #' newDF <- withColumn(df, "newCol", df$col1 * 5)
 #' }
-setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
-
-#' @rdname withColumn
-#' @export
 setMethod("withColumn",
           signature(x = "DataFrame", colName = "character", col = "Column"),
           function(x, colName, col) {
@@ -994,11 +921,6 @@ setMethod("withColumn",
 #' df <- jsonFile(sqlCtx, path)
 #' newDF <- withColumnRenamed(df, "col1", "newCol1")
 #' }
-setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
-  standardGeneric("withColumnRenamed") })
-
-#' @rdname withColumnRenamed
-#' @export
 setMethod("withColumnRenamed",
           signature(x = "DataFrame", existingCol = "character", newCol = "character"),
           function(x, existingCol, newCol) {
@@ -1032,12 +954,7 @@ setMethod("withColumnRenamed",
 #' sortDF(df, "col1")
 #' sortDF(df, asc(df$col1), desc(abs(df$col2)))
 #' }
-setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
-
 setClassUnion("characterOrColumn", c("character", "Column"))
-
-#' @rdname sortDF
-#' @export
 setMethod("sortDF",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
@@ -1051,10 +968,6 @@ setMethod("sortDF",
             }
             dataFrame(sdf)
           })
-
-#' @rdname sortDF
-#' @export
-setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
 
 #' @rdname sortDF
 #' @export
@@ -1083,10 +996,6 @@ setMethod("orderBy",
 #' filter(df, "col1 > 0")
 #' filter(df, df$col2 != "abcdefg")
 #' }
-setGeneric("filter", function(x, condition) { standardGeneric("filter") })
-
-#' @rdname filter
-#' @export
 setMethod("filter",
           signature(x = "DataFrame", condition = "characterOrColumn"),
           function(x, condition) {
@@ -1096,10 +1005,6 @@ setMethod("filter",
             sdf <- callJMethod(x@sdf, "filter", condition)
             dataFrame(sdf)
           })
-
-#' @rdname filter
-#' @export
-setGeneric("where", function(x, condition) { standardGeneric("where") })
 
 #' @rdname filter
 #' @export
@@ -1171,10 +1076,6 @@ setMethod("join",
 #' df2 <- jsonFile(sqlCtx, path2)
 #' unioned <- unionAll(df, df2)
 #' }
-setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
-
-#' @rdname unionAll
-#' @export
 setMethod("unionAll",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y) {
@@ -1200,10 +1101,6 @@ setMethod("unionAll",
 #' df2 <- jsonFile(sqlCtx, path2)
 #' intersectDF <- intersect(df, df2)
 #' }
-setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
-
-#' @rdname intersect
-#' @export
 setMethod("intersect",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y) {
@@ -1229,10 +1126,6 @@ setMethod("intersect",
 #' df2 <- jsonFile(sqlCtx, path2)
 #' subtractDF <- subtract(df, df2)
 #' }
-setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
-
-#' @rdname subtract
-#' @export
 setMethod("subtract",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y) {
@@ -1272,8 +1165,6 @@ setMethod("subtract",
 #' }
 
 allModes <- c("append", "overwrite", "error", "ignore")
-
-setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 
 setMethod("saveDF",
           signature(df = "DataFrame", path = 'character', source = 'character',
@@ -1328,11 +1219,6 @@ setMethod("saveDF",
 #' df <- jsonFile(sqlCtx, path)
 #' saveAsTable(df, "myfile")
 #' }
-
-setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
-  standardGeneric("saveAsTable")
-})
-
 setMethod("saveAsTable",
           signature(df = "DataFrame", tableName = 'character', source = 'character',
                     mode = 'character'),

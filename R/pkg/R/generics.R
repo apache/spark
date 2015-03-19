@@ -17,28 +17,23 @@
 
 ############ RDD Actions and Transformations ############
 
-# The jrdd accessor function.
-setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
+#' @rdname aggregateRDD
+#' @seealso reduce
+#' @export
+setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 #' @rdname cache-methods
 #' @export
 setGeneric("cache", function(x) { standardGeneric("cache") })
 
-#' @rdname persist
+#' @rdname coalesce
+#' @seealso repartition
 #' @export
-setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
-
-#' @rdname unpersist-methods
-#' @export
-setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
+setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
 
 #' @rdname checkpoint-methods
 #' @export
 setGeneric("checkpoint", function(x) { standardGeneric("checkpoint") })
-
-#' @rdname numPartitions
-#' @export
-setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
 #' @rdname collect-methods
 #' @export
@@ -46,14 +41,14 @@ setGeneric("collect", function(x, ...) { standardGeneric("collect") })
 
 #' @rdname collect-methods
 #' @export
+setGeneric("collectAsMap", function(x) { standardGeneric("collectAsMap") })
+
+#' @rdname collect-methods
+#' @export
 setGeneric("collectPartition",
            function(x, partitionId) {
              standardGeneric("collectPartition")
            })
-
-#' @rdname collect-methods
-#' @export
-setGeneric("collectAsMap", function(x) { standardGeneric("collectAsMap") })
 
 #' @rdname count
 #' @export
@@ -63,45 +58,65 @@ setGeneric("count", function(x) { standardGeneric("count") })
 #' @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
-#' @rdname lapply
+#' @rdname distinct
 #' @export
-setGeneric("map", function(X, FUN) {
-  standardGeneric("map") })
-
-
-#' @rdname flatMap
-#' @export
-setGeneric("flatMap", function(X, FUN) {
-  standardGeneric("flatMap") })
-
-#' @rdname lapplyPartition
-#' @export
-setGeneric("lapplyPartition", function(X, FUN) {
-  standardGeneric("lapplyPartition") })
-
-#' @rdname lapplyPartition
-#' @export
-setGeneric("mapPartitions", function(X, FUN) {
-  standardGeneric("mapPartitions") })
-
-#' @rdname lapplyPartitionsWithIndex
-#' @export
-setGeneric("lapplyPartitionsWithIndex", function(X, FUN) {
-  standardGeneric("lapplyPartitionsWithIndex") })
-
-#' @rdname lapplyPartitionsWithIndex
-#' @export
-setGeneric("mapPartitionsWithIndex", function(X, FUN) {
-  standardGeneric("mapPartitionsWithIndex") })
+setGeneric("distinct", function(x, numPartitions = 1L) { standardGeneric("distinct") })
 
 #' @rdname filterRDD
 #' @export
-setGeneric("filterRDD", 
-           function(x, f) { standardGeneric("filterRDD") })
+setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
-#' @rdname reduce
+#' @rdname first
 #' @export
-setGeneric("reduce", function(x, func) { standardGeneric("reduce") })
+setGeneric("first", function(x) { standardGeneric("first") })
+
+#' @rdname flatMap
+#' @export
+setGeneric("flatMap", function(X, FUN) { standardGeneric("flatMap") })
+
+#' @rdname fold
+#' @seealso reduce
+#' @export
+setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
+
+#' @rdname foreach
+#' @export
+setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
+
+#' @rdname foreach
+#' @export
+setGeneric("foreachPartition", function(x, func) { standardGeneric("foreachPartition") })
+
+# The jrdd accessor function.
+setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
+
+#' @rdname keyBy
+#' @export
+setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
+
+#' @rdname lapplyPartition
+#' @export
+setGeneric("lapplyPartition", function(X, FUN) { standardGeneric("lapplyPartition") })
+
+#' @rdname lapplyPartitionsWithIndex
+#' @export
+setGeneric("lapplyPartitionsWithIndex",
+           function(X, FUN) {
+             standardGeneric("lapplyPartitionsWithIndex")
+           })
+
+#' @rdname lapply
+#' @export
+setGeneric("map", function(X, FUN) { standardGeneric("map") })
+
+#' @rdname lapplyPartition
+#' @export
+setGeneric("mapPartitions", function(X, FUN) { standardGeneric("mapPartitions") })
+
+#' @rdname lapplyPartitionsWithIndex
+#' @export
+setGeneric("mapPartitionsWithIndex",
+           function(X, FUN) { standardGeneric("mapPartitionsWithIndex") })
 
 #' @rdname maximum
 #' @export
@@ -111,23 +126,30 @@ setGeneric("maximum", function(x) { standardGeneric("maximum") })
 #' @export
 setGeneric("minimum", function(x) { standardGeneric("minimum") })
 
-#' @rdname foreach
+#' @rdname name
 #' @export
-setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
+setGeneric("name", function(x) { standardGeneric("name") })
 
-#' @rdname foreach
+#' @rdname numPartitions
 #' @export
-setGeneric("foreachPartition", 
-           function(x, func) { standardGeneric("foreachPartition") })
+setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
-#' @rdname take
+#' @rdname persist
 #' @export
-setGeneric("take", function(x, num) { standardGeneric("take") })
+setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 
-#' @rdname distinct
+#' @rdname pipeRDD
 #' @export
-setGeneric("distinct",
-           function(x, numPartitions = 1L) { standardGeneric("distinct") })
+setGeneric("pipeRDD", function(x, command, env = list()) { standardGeneric("pipeRDD")})
+
+#' @rdname reduce
+#' @export
+setGeneric("reduce", function(x, func) { standardGeneric("reduce") })
+
+#' @rdname repartition
+#' @seealso coalesce
+#' @export
+setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
 
 #' @rdname sampleRDD
 #' @export
@@ -135,27 +157,6 @@ setGeneric("sampleRDD",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sampleRDD")
            })
-
-#' @rdname takeSample
-#' @export
-setGeneric("takeSample",
-           function(x, withReplacement, num, seed) {
-             standardGeneric("takeSample")
-           })
-
-#' @rdname keyBy
-#' @export
-setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
-
-#' @rdname repartition
-#' @seealso coalesce
-#' @export
-setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
-
-#' @rdname coalesce
-#' @seealso repartition
-#' @export
-setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
 
 #' @rdname saveAsObjectFile
 #' @seealso objectFile
@@ -166,135 +167,88 @@ setGeneric("saveAsObjectFile", function(x, path) { standardGeneric("saveAsObject
 #' @export
 setGeneric("saveAsTextFile", function(x, path) { standardGeneric("saveAsTextFile") })
 
+#' @rdname setName
+#' @export
+setGeneric("setName", function(x, name) { standardGeneric("setName") })
+
 #' @rdname sortBy
 #' @export
-setGeneric("sortBy", function(x,
-                              func,
-                              ascending = TRUE,
-                              numPartitions = 1L) {
-  standardGeneric("sortBy")
-})
+setGeneric("sortBy",
+           function(x, func, ascending = TRUE, numPartitions = 1L) {
+             standardGeneric("sortBy")
+           })
+
+#' @rdname take
+#' @export
+setGeneric("take", function(x, num) { standardGeneric("take") })
 
 #' @rdname takeOrdered
 #' @export
 setGeneric("takeOrdered", function(x, num) { standardGeneric("takeOrdered") })
 
+#' @rdname takeSample
+#' @export
+setGeneric("takeSample",
+           function(x, withReplacement, num, seed) {
+             standardGeneric("takeSample")
+           })
+
 #' @rdname top
 #' @export
 setGeneric("top", function(x, num) { standardGeneric("top") })
 
-#' @rdname fold
-#' @seealso reduce
+#' @rdname unionRDD
 #' @export
-setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
+setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
 
-#' @rdname aggregateRDD
-#' @seealso reduce
+#' @rdname unpersist-methods
 #' @export
-setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
-
-#' @rdname pipeRDD
-#' @export
-setGeneric("pipeRDD", function(x, command, env = list()) { 
-  standardGeneric("pipeRDD") 
-})
-
-#' @rdname name
-#' @export
-setGeneric("name", function(x) { standardGeneric("name") })
-
-#' @rdname setName
-#' @export
-setGeneric("setName", function(x, name) { standardGeneric("setName") })
+setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 
 #' @rdname zipRDD
 #' @export
 setGeneric("zipRDD", function(x, other) { standardGeneric("zipRDD") })
-
-#' @rdname zipWithUniqueId
-#' @seealso zipWithIndex
-#' @export
-setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") })
 
 #' @rdname zipWithIndex
 #' @seealso zipWithUniqueId
 #' @export
 setGeneric("zipWithIndex", function(x) { standardGeneric("zipWithIndex") })
 
+#' @rdname zipWithUniqueId
+#' @seealso zipWithIndex
+#' @export
+setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") })
+
 
 ############ Binary Functions #############
-
-
-#' @rdname unionRDD
-#' @export
-setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
-
-#' @rdname lookup
-#' @export
-setGeneric("lookup", function(x, key) { standardGeneric("lookup") })
 
 #' @rdname countByKey
 #' @export
 setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
 
+#' @rdname flatMapValues
+#' @export
+setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
+
 #' @rdname keys
 #' @export
 setGeneric("keys", function(x) { standardGeneric("keys") })
 
-#' @rdname values
+#' @rdname lookup
 #' @export
-setGeneric("values", function(x) { standardGeneric("values") })
+setGeneric("lookup", function(x, key) { standardGeneric("lookup") })
 
 #' @rdname mapValues
 #' @export
 setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
 
-#' @rdname flatMapValues
+#' @rdname values
 #' @export
-setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
+setGeneric("values", function(x) { standardGeneric("values") })
+
 
 
 ############ Shuffle Functions ############
-
-
-#' @rdname partitionBy
-#' @export
-setGeneric("partitionBy",
-           function(x, numPartitions, ...) {
-             standardGeneric("partitionBy")
-           })
-
-#' @rdname groupByKey
-#' @seealso reduceByKey
-#' @export
-setGeneric("groupByKey",
-           function(x, numPartitions) {
-             standardGeneric("groupByKey")
-           })
-
-#' @rdname reduceByKey
-#' @seealso groupByKey
-#' @export
-setGeneric("reduceByKey",
-           function(x, combineFunc, numPartitions) {
-             standardGeneric("reduceByKey")
-           })
-
-#' @rdname reduceByKeyLocally
-#' @seealso reduceByKey
-#' @export
-setGeneric("reduceByKeyLocally",
-           function(x, combineFunc) {
-             standardGeneric("reduceByKeyLocally")
-           })
-
-#' @rdname combineByKey
-#' @seealso groupByKey, reduceByKey
-#' @export
-setGeneric("combineByKey",
-           function(x, createCombiner, mergeValue, mergeCombiners, numPartitions) {
-             standardGeneric("combineByKey")
-           })
 
 #' @rdname aggregateByKey
 #' @seealso foldByKey, combineByKey
@@ -302,6 +256,22 @@ setGeneric("combineByKey",
 setGeneric("aggregateByKey",
            function(x, zeroValue, seqOp, combOp, numPartitions) {
              standardGeneric("aggregateByKey")
+           })
+
+#' @rdname cogroup
+#' @export
+setGeneric("cogroup",
+           function(..., numPartitions) {
+             standardGeneric("cogroup")
+           },
+           signature = "...")
+
+#' @rdname combineByKey
+#' @seealso groupByKey, reduceByKey
+#' @export
+setGeneric("combineByKey",
+           function(x, createCombiner, mergeValue, mergeCombiners, numPartitions) {
+             standardGeneric("combineByKey")
            })
 
 #' @rdname foldByKey
@@ -314,45 +284,183 @@ setGeneric("foldByKey",
 
 #' @rdname join-methods
 #' @export
+setGeneric("fullOuterJoin", function(x, y, numPartitions) { standardGeneric("fullOuterJoin") })
+
+#' @rdname groupByKey
+#' @seealso reduceByKey
+#' @export
+setGeneric("groupByKey", function(x, numPartitions) { standardGeneric("groupByKey") })
+
+#' @rdname join-methods
+#' @export
 setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 
 #' @rdname join-methods
 #' @export
 setGeneric("leftOuterJoin", function(x, y, numPartitions) { standardGeneric("leftOuterJoin") })
 
+#' @rdname partitionBy
+#' @export
+setGeneric("partitionBy", function(x, numPartitions, ...) { standardGeneric("partitionBy") })
+
+#' @rdname reduceByKey
+#' @seealso groupByKey
+#' @export
+setGeneric("reduceByKey", function(x, combineFunc, numPartitions) { standardGeneric("reduceByKey")})
+
+#' @rdname reduceByKeyLocally
+#' @seealso reduceByKey
+#' @export
+setGeneric("reduceByKeyLocally",
+           function(x, combineFunc) {
+             standardGeneric("reduceByKeyLocally")
+           })
+
 #' @rdname join-methods
 #' @export
 setGeneric("rightOuterJoin", function(x, y, numPartitions) { standardGeneric("rightOuterJoin") })
 
-#' @rdname join-methods
-#' @export
-setGeneric("fullOuterJoin", function(x, y, numPartitions) { standardGeneric("fullOuterJoin") })
-
-#' @rdname cogroup
-#' @export
-setGeneric("cogroup", 
-           function(..., numPartitions) { standardGeneric("cogroup") },
-           signature = "...")
-
 #' @rdname sortByKey
 #' @export
-setGeneric("sortByKey", function(x,
-                                 ascending = TRUE,
-                                 numPartitions = 1L) {
+setGeneric("sortByKey", function(x, ascending = TRUE, numPartitions = 1L) {
   standardGeneric("sortByKey")
 })
 
 
-
-############ Broadcast Variable Methods ############
-
+################### Broadcast Variable Methods #################
 
 #' @rdname broadcast
 #' @export
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
 
-################### Column Methods ########################
+
+####################  DataFrame Methods ########################
+
+#' @rdname schema
+#' @export
+setGeneric("columns", function(x) {standardGeneric("columns") })
+
+#' @rdname schema
+#' @export
+setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
+
+#' @rdname explain
+#' @export
+setGeneric("explain", function(x, ...) { standardGeneric("explain") })
+
+#' @rdname filter
+#' @export
+setGeneric("filter", function(x, condition) { standardGeneric("filter") })
+
+#' @rdname DataFrame
+#' @export
+setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
+
+#' @rdname insertInto
+#' @export
+setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
+
+#' @rdname intersect
+#' @export
+setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
+
+#' @rdname isLocal
+#' @export
+setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
+
+#' @rdname limit
+#' @export
+setGeneric("limit", function(x, num) {standardGeneric("limit") })
+
+#' @rdname sortDF
+#' @export
+setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
+
+#' @rdname schema
+#' @export
+setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
+
+#' @rdname registerTempTable
+#' @export
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
+#' @rdname sampleDF
+#' @export
+setGeneric("sampleDF",
+           function(x, withReplacement, fraction, seed) {
+             standardGeneric("sampleDF")
+          })
+
+#' @rdname saveAsParquetFile
+#' @export
+setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
+
+#' @rdname save
+#' @export
+setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
+  standardGeneric("saveAsTable")
+})
+
+#' @rdname save
+#' @export
+setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
+
+#' @rdname schema
+#' @export
+setGeneric("schema", function(x) { standardGeneric("schema") })
+
+#' @rdname select
+#' @export
+setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
+
+#' @rdname select
+#' @export
+setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
+
+#' @rdname show
+#' @export
+setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+
+#' @rdname sortDF
+#' @export
+setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
+
+#' @rdname subtract
+#' @export
+setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
+
+#' @rdname toJSON
+#' @export
+setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
+
+#' @rdname DataFrame
+#' @export
+setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
+
+#' @rdname unionAll
+#' @export
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname filter
+#' @export
+setGeneric("where", function(x, condition) { standardGeneric("where") })
+
+#' @rdname withColumn
+#' @export
+setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
+
+#' @rdname withColumnRenamed
+#' @export
+setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
+  standardGeneric("withColumnRenamed") })
+
+
+###################### Column Methods ##########################
+
+#' @rdname column
+#' @export
+setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
 #' @rdname column
 #' @export
@@ -360,35 +468,22 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 
 #' @rdname column
 #' @export
-setGeneric("desc", function(x) { standardGeneric("desc") })
-
-#' @rdname column
-#' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname column
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
+setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname column
 #' @export
-setGeneric("lower", function(x) { standardGeneric("lower") })
+setGeneric("contains", function(x, ...) { standardGeneric("contains") })
+#' @rdname column
+#' @export
+setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
 
 #' @rdname column
 #' @export
-setGeneric("upper", function(x) { standardGeneric("upper") })
-
-#' @rdname column
-#' @export
-setGeneric("like", function(x, ...) { standardGeneric("like") })
-
-#' @rdname column
-#' @export
-setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
-
-#' @rdname column
-#' @export
-setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
 #' @export
@@ -404,10 +499,6 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
-setGeneric("contains", function(x, ...) { standardGeneric("contains") })
-
-#' @rdname column
-#' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname column
@@ -416,18 +507,29 @@ setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
 
 #' @rdname column
 #' @export
+setGeneric("last", function(x) { standardGeneric("last") })
+
+#' @rdname column
+#' @export
+setGeneric("like", function(x, ...) { standardGeneric("like") })
+
+#' @rdname column
+#' @export
+setGeneric("lower", function(x) { standardGeneric("lower") })
+
+#' @rdname column
+#' @export
+setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
+
+#' @rdname column
+#' @export
+setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+
+#' @rdname column
+#' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
 #' @rdname column
 #' @export
-setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
-
-#' @rdname column
-#' @export
-setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
-
-#' @rdname column
-#' @export
-setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
-
+setGeneric("upper", function(x) { standardGeneric("upper") })
 
