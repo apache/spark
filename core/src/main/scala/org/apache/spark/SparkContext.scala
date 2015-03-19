@@ -216,6 +216,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Set Spark driver host and port system properties
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
+  Utils.setCustomHostname(conf.get("spark.driver.host"))
 
   val jars: Seq[String] =
     conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
