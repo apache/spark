@@ -427,6 +427,8 @@ uncacheTable <- function(sqlCtx, tableName) {
 #' Removes all cached tables from the in-memory cache.
 #'
 #' @param sqlCtx SQLContext to use
+#' @examples
+#' \dontrun{
 #' clearCache(sqlCtx)
 #' }
 
@@ -441,6 +443,8 @@ clearCache <- function(sqlCtx) {
 #'
 #' @param sqlCtx SQLContext to use
 #' @param tableName The name of the SparkSQL table to be dropped.
+#' @examples
+#' \dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
 #' df <- loadDF(sqlCtx, path, "parquet")

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-#' Column Class
+# Column Class
 
 #' @include generics.R jobj.R
 NULL
@@ -23,8 +23,9 @@ NULL
 setOldClass("jobj")
 
 #' @title S4 class that represents a DataFrame column
+#' @description The column class supports unary, binary operations on DataFrame columns
 
-#' @rdname column-class
+#' @rdname column
 #'
 #' @param jc reference to JVM DataFrame column
 #' @export

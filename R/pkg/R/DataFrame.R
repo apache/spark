@@ -723,7 +723,7 @@ setMethod("toRDD",
 #' @rdname DataFrame
 #' @export
 #' @examples
-#' \dontrun {
+#' \dontrun{
 #'   # Compute the average for all numeric columns grouped by department.
 #'   avg(groupBy(df, "department"))
 #'

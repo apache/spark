@@ -55,7 +55,7 @@ setMethod("show", "GroupedData",
 #' @return a DataFrame
 #' @export
 #' @examples
-#' \dontrun {
+#' \dontrun{
 #'   count(groupBy(df, "name"))
 #' }
 setMethod("count",
