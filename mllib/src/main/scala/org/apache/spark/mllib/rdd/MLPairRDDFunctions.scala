@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.rdd
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.DeveloperApi
@@ -53,7 +54,7 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
 
 @DeveloperApi
 object MLPairRDDFunctions {
-  /** Implicit conversion from an pair RDD to MLPairRDDFunctions. */
+  /** Implicit conversion from a pair RDD to MLPairRDDFunctions. */
   implicit def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): MLPairRDDFunctions[K, V] =
     new MLPairRDDFunctions[K, V](rdd)
 }
