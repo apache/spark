@@ -34,7 +34,8 @@ import org.apache.spark.util.Utils
  * A parser for foreign DDL commands.
  */
 private[sql] class DDLParser(
-    parseQuery: String => LogicalPlan) extends AbstractSparkSQLParser with Logging {
+    parseQuery: String => LogicalPlan)
+  extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
   def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
     try {
@@ -43,14 +44,6 @@ private[sql] class DDLParser(
       case ddlException: DDLException => throw ddlException
       case _ if !exceptionOnError => None
       case x: Throwable => throw x
-    }
-  }
-
-  def parseType(input: String): DataType = {
-    lexical.initialize(reservedWords)
-    phrase(dataType)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => throw new DDLException(s"Unsupported dataType: $x")
     }
   }
 
@@ -69,24 +62,6 @@ private[sql] class DDLParser(
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
   protected val REFRESH = Keyword("REFRESH")
-
-  // Data types.
-  protected val STRING = Keyword("STRING")
-  protected val BINARY = Keyword("BINARY")
-  protected val BOOLEAN = Keyword("BOOLEAN")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val INT = Keyword("INT")
-  protected val BIGINT = Keyword("BIGINT")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val DECIMAL = Keyword("DECIMAL")
-  protected val DATE = Keyword("DATE")
-  protected val TIMESTAMP = Keyword("TIMESTAMP")
-  protected val VARCHAR = Keyword("VARCHAR")
-  protected val ARRAY = Keyword("ARRAY")
-  protected val MAP = Keyword("MAP")
-  protected val STRUCT = Keyword("STRUCT")
 
   protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable | refreshTable
 
@@ -189,58 +164,9 @@ private[sql] class DDLParser(
           new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
         case None => Metadata.empty
       }
+
       StructField(columnName, typ, nullable = true, meta)
     }
-
-  protected lazy val primitiveType: Parser[DataType] =
-    STRING ^^^ StringType |
-    BINARY ^^^ BinaryType |
-    BOOLEAN ^^^ BooleanType |
-    TINYINT ^^^ ByteType |
-    SMALLINT ^^^ ShortType |
-    INT ^^^ IntegerType |
-    BIGINT ^^^ LongType |
-    FLOAT ^^^ FloatType |
-    DOUBLE ^^^ DoubleType |
-    fixedDecimalType |                   // decimal with precision/scale
-    DECIMAL ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
-    DATE ^^^ DateType |
-    TIMESTAMP ^^^ TimestampType |
-    VARCHAR ~ "(" ~ numericLit ~ ")" ^^^ StringType
-
-  protected lazy val fixedDecimalType: Parser[DataType] =
-    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
-      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
-    }
-
-  protected lazy val arrayType: Parser[DataType] =
-    ARRAY ~> "<" ~> dataType <~ ">" ^^ {
-      case tpe => ArrayType(tpe)
-    }
-
-  protected lazy val mapType: Parser[DataType] =
-    MAP ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
-    }
-
-  protected lazy val structField: Parser[StructField] =
-    ident ~ ":" ~ dataType ^^ {
-      case fieldName ~ _ ~ tpe => StructField(fieldName, tpe, nullable = true)
-    }
-
-  protected lazy val structType: Parser[DataType] =
-    (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-    case fields => StructType(fields)
-    }) |
-    (STRUCT ~> "<>" ^^ {
-      case fields => StructType(Nil)
-    })
-
-  private[sql] lazy val dataType: Parser[DataType] =
-    arrayType |
-    mapType |
-    structType |
-    primitiveType
 }
 
 private[sql] object ResolvedDataSource {
