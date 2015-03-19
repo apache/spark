@@ -55,6 +55,6 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
 @DeveloperApi
 object MLPairRDDFunctions {
   /** Implicit conversion from a pair RDD to MLPairRDDFunctions. */
-  implicit def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): MLPairRDDFunctions[K, V] =
+  implicit def fromPairRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): MLPairRDDFunctions[K, V] =
     new MLPairRDDFunctions[K, V](rdd)
 }
