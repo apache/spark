@@ -678,7 +678,7 @@ test_that("saveDF() on DataFrame and works with parquetFile", {
   saveDF(df, parquetPath, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath)
   expect_true(inherits(parquetDF, "DataFrame"))
-  expect_equal(collect(df)[order("name")], collect(parquetDF)[order("name")])
+  expect_equal(count(df), count(parquetDF))
 })
 
 test_that("parquetFile works with multiple input paths", {
