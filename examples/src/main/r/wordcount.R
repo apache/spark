@@ -19,14 +19,14 @@ library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
-if (length(args) != 2) {
-  print("Usage: wordcount <master> <file>")
+if (length(args) != 1) {
+  print("Usage: wordcount <file>")
   q("no")
 }
 
 # Initialize Spark context
-sc <- sparkR.init(args[[1]], "RwordCount")
-lines <- textFile(sc, args[[2]])
+sc <- sparkR.init(appName = "RwordCount")
+lines <- textFile(sc, args[[1]])
 
 words <- flatMap(lines,
                  function(line) {

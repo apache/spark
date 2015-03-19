@@ -19,15 +19,15 @@ library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
-if (length(args) != 4) {
-  print("Usage: logistic_regression <master> <file> <iters> <dimension>")
+if (length(args) != 3) {
+  print("Usage: logistic_regression <file> <iters> <dimension>")
   q("no")
 }
 
 # Initialize Spark context
-sc <- sparkR.init(args[[1]], "LogisticRegressionR")
-iterations <- as.integer(args[[3]])
-D <- as.integer(args[[4]])
+sc <- sparkR.init(appName = "LogisticRegressionR")
+iterations <- as.integer(args[[2]])
+D <- as.integer(args[[3]])
 
 readPartition <- function(part){
   part = strsplit(part, " ", fixed = T)
@@ -35,7 +35,7 @@ readPartition <- function(part){
 }
 
 # Read data points and convert each partition to a matrix
-points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
+points <- cache(lapplyPartition(textFile(sc, args[[1]]), readPartition))
 
 # Initialize w to a random value
 w <- runif(n=D, min = -1, max = 1)

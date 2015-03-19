@@ -43,16 +43,16 @@ closestPoint <-  function(P, C) {
 
 args <- commandArgs(trailing = TRUE) 
 
-if (length(args) != 4) {
-  print("Usage: kmeans <master> <file> <K> <convergeDist>")
+if (length(args) != 3) {
+  print("Usage: kmeans <file> <K> <convergeDist>")
   q("no")
 }
 
-sc <- sparkR.init(args[[1]], "RKMeans")
-K <- as.integer(args[[3]])
-convergeDist <- as.double(args[[4]])
+sc <- sparkR.init(appName = "RKMeans")
+K <- as.integer(args[[2]])
+convergeDist <- as.double(args[[3]])
 
-lines <- textFile(sc, args[[2]])
+lines <- textFile(sc, args[[1]])
 points <- cache(lapplyPartition(lines, parseVectors))
 # kPoints <- take(points, K)
 kPoints <- do.call(rbind, takeSample(points, FALSE, K, 16189L))

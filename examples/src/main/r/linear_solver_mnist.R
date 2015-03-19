@@ -17,19 +17,13 @@
 
 # Instructions: https://github.com/amplab-extras/SparkR-pkg/wiki/SparkR-Example:-Digit-Recognition-on-EC2
 
-library(SparkR, lib.loc="./lib")
+library(SparkR)
 library(Matrix)
 
 args <- commandArgs(trailing = TRUE)
-if (length(args) < 1) {
-  print("Usage: linear_solver <master> [<num_rand_features>]")
-  q("no")
-}
 
-# Spark master url
-master <- args[[1]]
 # number of random features; default to 1100
-D <- ifelse(length(args) > 1, as.integer(args[[2]]), 1100)
+D <- ifelse(length(args) > 0, as.integer(args[[1]]), 1100)
 # number of partitions for training dataset
 trainParts <- 12
 # dimension of digits
@@ -41,7 +35,7 @@ NTest <- 10000
 # scale of features
 gamma <- 4e-4
 
-sc <- sparkR.init(master, "SparkR-LinearSolver")
+sc <- sparkR.init(appName = "SparkR-LinearSolver")
 
 # You can also use HDFS path to speed things up:
 # hdfs://<master>/train-mnist-dense-with-labels.data
