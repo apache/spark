@@ -24,7 +24,7 @@ import org.apache.spark.util.Utils
 /**
  * An abstract request sent from the client in the REST application submission protocol.
  */
-private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
+private[rest] abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
   var clientSparkVersion: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
@@ -35,7 +35,7 @@ private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtoc
 /**
  * A request to launch a new application in the REST application submission protocol.
  */
-private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
+private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   var appResource: String = null
   var mainClass: String = null
   var appArgs: Array[String] = null
