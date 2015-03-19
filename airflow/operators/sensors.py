@@ -268,14 +268,14 @@ class S3KeySensor(BaseSensorOperator):
                 bucket_key = parsed_url.path
         self.bucket_name = bucket_name
         self.bucket_key = bucket_key
-        self.full_url = "s3://" + bucket_name + bucket_key
         self.s3_conn_id = s3_conn_id
         self.hook = S3Hook(s3_conn_id=s3_conn_id)
         session.commit()
         session.close()
 
     def poke(self):
-        logging.info('Poking for key : {self.full_url}'.format(**locals()))
+        full_url = "s3://" + self.bucket_name + self.bucket_key
+        logging.info('Poking for key : {full_url}'.format(**locals()))
         return self.hook.check_for_key(self.bucket_key, self.bucket_name)
 
 
