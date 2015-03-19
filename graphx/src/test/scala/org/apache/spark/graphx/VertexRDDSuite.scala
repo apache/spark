@@ -170,6 +170,33 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("innerJoinWithFold") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
+      // innerJoinWithFold with another VertexRDD
+      assert(verts.innerJoinWithFold(evens, 10) { (acc, id, a, b) => (a - b) + acc }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 10)).toSet)
+      // innerJoinWithFold with an RDD
+      val evensRDD = evens.map(identity)
+      assert(verts.innerJoinWithFold(evensRDD, 10) { (acc, id, a, b) => (a - b) + acc }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 10)).toSet)    }
+  }
+
+  test("innerJoinWithFold vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 100, 2).map(i => (i.toLong, 1)))
+      val vertexB = VertexRDD(
+        vertexA.filter(v => v._1 % 2 == 0).partitionBy(new HashPartitioner(3)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.innerJoinWithFold(vertexB, 10) { (acc, vid, old, newVal) =>
+        (old - newVal) + acc
+      }
+      assert(vertexC.filter(v => v._2 == 10).map(_._1).collect.toSet == (0 to 98 by 2).toSet)
+    }
+  }
+
   test("aggregateUsingIndex") {
     withSpark { sc =>
       val n = 100

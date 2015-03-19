@@ -136,9 +136,9 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
-  override def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, T]
-      (other: VertexRDD[VD2], acc: T)
-      (f: (T, VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
+  override def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
+      (other: VertexRDD[VD2], acc: A)
+      (f: (A, VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
       other.partitionsRDD, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
@@ -168,9 +168,9 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, T]
-      (other: RDD[(VertexId, VD2)], acc: T)
-      (f: (T, VertexId, VD, Option[VD2]) => VD3)
+  override def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
+      (other: RDD[(VertexId, VD2)], acc: A)
+      (f: (A, VertexId, VD, Option[VD2]) => VD3)
     : VertexRDD[VD3] = {
     other match {
       case other: VertexRDD[_] if this.partitioner == other.partitioner =>
@@ -185,7 +185,8 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
+  override def innerZipJoin[U: ClassTag, VD2: ClassTag]
+      (other: VertexRDD[U])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
       other.partitionsRDD, preservesPartitioning = true
@@ -197,9 +198,9 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
-  override def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, T]
-      (other: VertexRDD[U], acc: T)
-      (f: (T, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
+  override def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A]
+      (other: VertexRDD[U], acc: A)
+      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
       other.partitionsRDD, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
@@ -210,7 +211,8 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
-  override def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+  override def innerJoin[U: ClassTag, VD2: ClassTag]
+      (other: RDD[(VertexId, U)])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
@@ -227,9 +229,9 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def innerJoinWithFold[U: ClassTag, VD2: ClassTag, T]
-      (other: RDD[(VertexId, U)], acc: T)
-      (f: (T, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
+  override def innerJoinWithFold[U: ClassTag, VD2: ClassTag, A]
+      (other: RDD[(VertexId, U)], acc: A)
+      (f: (A, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
     other match {
