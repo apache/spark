@@ -44,7 +44,7 @@ import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -160,28 +160,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def aggregateByKey[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = {
     aggregateByKey(zeroValue, defaultPartitioner(self))(seqOp, combOp)
-  }
-
-  /**
-   * Returns the top k (largest) elements for each key from this RDD as defined by the specified
-   * implicit Ordering[T].
-   * If the number of elements for a certain key is less than k, all of them will be returned.
-   *
-   * @param num k, the number of top elements to return
-   * @param ord the implicit ordering for T
-   * @return an RDD that contains the top k values for each key
-   */
-  def topByKey(num: Int)(implicit ord: Ordering[V]): RDD[(K, Array[V])] = {
-    aggregateByKey(new BoundedPriorityQueue[V](num)(ord))(
-      seqOp = (queue, item) => {
-        queue += item
-        queue
-      },
-      combOp = (queue1, queue2) => {
-        queue1 ++= queue2
-        queue1
-      }
-    ).mapValues(_.toArray.sorted(ord.reverse))
   }
 
   /**
