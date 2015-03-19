@@ -471,18 +471,18 @@ object SparkSubmit {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.isPython) {
         val mainPyFile = new Path(args.primaryResource).getName
-        childArgs +=("--primary-py-file", mainPyFile)
+        childArgs += ("--primary-py-file", mainPyFile)
         if (args.pyFiles != null) {
           // These files will be distributed to each machine's working directory, so strip the
           // path prefix
           val pyFilesNames = args.pyFiles.split(",").map(p => (new Path(p)).getName).mkString(",")
-          childArgs +=("--py-files", pyFilesNames)
+          childArgs += ("--py-files", pyFilesNames)
         }
-        childArgs +=("--class", "org.apache.spark.deploy.PythonRunner")
+        childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
         val mainFile = new Path(args.primaryResource).getName
-        childArgs +=("--primary-r-file", mainFile)
-        childArgs +=("--class", "org.apache.spark.deploy.RRunner")
+        childArgs += ("--primary-r-file", mainFile)
+        childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
         if (args.primaryResource != SPARK_INTERNAL) {
           childArgs += ("--jar", args.primaryResource)
