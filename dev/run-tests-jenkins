@@ -62,6 +62,7 @@ TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 PR_TESTS=(
   "pr_merge_ability"
   "pr_public_classes"
+  "pr_new_dependencies"
 )
 
 function post_message () {
@@ -161,7 +162,8 @@ for t in "${PR_TESTS[@]}"; do
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
     pr_message="${pr_message}\n${this_mssg}"
-    git checkout "${current_pr_head}"
+    # Ensure, after each test, that we're on the current PR
+    git checkout -f "${current_pr_head}"
   fi
 done
 
