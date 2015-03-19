@@ -62,7 +62,7 @@ git checkout apache/master
 DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
 
 if [ -z "${DIFF_RESULTS}" ]; then
-  echo " * This patch adds no new dependencies"
+  echo " * This patch adds no new dependencies."
 else
   # Pretty print the new dependencies
   new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
