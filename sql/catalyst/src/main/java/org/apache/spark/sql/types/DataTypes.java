@@ -80,6 +80,11 @@ public class DataTypes {
   public static final DataType ShortType = ShortType$.MODULE$;
 
   /**
+   * Gets the ShortType object.
+   */
+  public static final DataType CharType = CharType$.MODULE$;
+
+  /**
    * Gets the NullType object.
    */
   public static final DataType NullType = NullType$.MODULE$;
