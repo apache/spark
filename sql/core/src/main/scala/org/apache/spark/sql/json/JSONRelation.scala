@@ -76,10 +76,11 @@ private[sql] class DefaultSource
                 s"Unable to clear output directory ${filesystemPath.toString} prior"
                   + s" to writing to JSON table:\n${e.toString}")
           }
-          if (!success)
+          if (!success) {
             throw new IOException(
               s"Unable to clear output directory ${filesystemPath.toString} prior"
                 + s" to writing to JSON table.")
+          }
           true
         }
         case SaveMode.ErrorIfExists =>
@@ -132,10 +133,11 @@ private[sql] case class JSONRelation(
               s"Unable to clear output directory ${filesystemPath.toString} prior"
                 + s" to writing to JSON table:\n${e.toString}")
         }
-        if (!success)
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${filesystemPath.toString} prior"
               + s" to writing to JSON table.")
+        }
       }
       // Write the data.
       data.toJSON.saveAsTextFile(path)
