@@ -138,7 +138,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               if (shouldShowCompletedJobs) {
                 <li>
                   <a href="#completed"><strong>Completed Jobs:</strong></a>
-                  {completedJobs.size}
+                  {listener.numCompletedJobs}
                 </li>
               }
             }
@@ -146,7 +146,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               if (shouldShowFailedJobs) {
                 <li>
                   <a href="#failed"><strong>Failed Jobs:</strong></a>
-                  {failedJobs.size}
+                  {listener.numFailedJobs}
                 </li>
               }
             }
