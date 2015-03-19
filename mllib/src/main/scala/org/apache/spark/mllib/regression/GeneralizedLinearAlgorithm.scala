@@ -76,7 +76,12 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
     predictPoint(testData, weights, intercept)
   }
 
-  override def toString() = "(weights=%s, intercept=%s)".format(weights, intercept)
+  /**
+   * Print a summary of the model.
+   */
+  override def toString: String = {
+    s"${this.getClass.getName}: intercept = ${intercept}, numFeatures = ${weights.size}"
+  }
 }
 
 /**
