@@ -105,6 +105,8 @@ class DataTypeParserSuite extends FunSuite {
       StructField("!@#$%^&*()", StringType, true) ::
       StructField("1_2.345<>:\"", StringType, true) :: Nil)
   )
+  // Empty struct.
+  checkDataType("strUCt<>", StructType(Nil))
 
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")

@@ -78,9 +78,10 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     }
 
   protected lazy val structType: Parser[DataType] =
-    "(?i)struct".r ~> "<" ~> repsep(structField, ",") <~ ">"  ^^ {
+    ("(?i)struct".r ~> "<" ~> repsep(structField, ",") <~ ">"  ^^ {
       case fields => new StructType(fields.toArray)
-    }
+    }) |
+    ("(?i)struct".r ~ "<>" ^^^ StructType(Nil))
 
   protected lazy val dataType: Parser[DataType] =
     arrayType |
