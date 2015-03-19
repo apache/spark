@@ -82,6 +82,20 @@ class CachedTableSuite extends QueryTest {
     sql("CACHE TABLE tempTable AS SELECT key FROM testData")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     uncacheTable("tempTable")
+ 
+    sql("CACHE TABLE tempTable AS SELECT key, value FROM testData")
+    testData.select('key).registerTempTable("partTable")
+    assertCached(sql("SELECT COUNT(*) FROM partTable"))
+    testData.select('value).registerTempTable("partTable2")
+    assertCached(sql("SELECT COUNT(*) FROM partTable2"))
+    uncacheTable("tempTable")
+ 
+    sql("CACHE TABLE tempTable AS SELECT key, COUNT(*) FROM testData GROUP BY key")
+    testData.select('key).registerTempTable("partTable")
+    assertCached(sql("SELECT COUNT(*) FROM partTable"), 0)
+    testData.select('value).registerTempTable("partTable2")
+    assertCached(sql("SELECT COUNT(*) FROM partTable2"), 0)
+    uncacheTable("tempTable")
   }
 
   test("uncaching temp table") {
@@ -155,8 +169,40 @@ class CachedTableSuite extends QueryTest {
         case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
       }.size
     }
-
+ 
     uncacheTable("testData")
+ 
+    testData.select('key, 'value).registerTempTable("testTable")
+    testData.select('key).registerTempTable("partTable")
+
+    cacheTable("testTable")
+    assertCached(table("testTable"))
+    assertCached(table("partTable"))
+ 
+    assertResult(1, "InMemoryRelation not found, testTable should have been cached") {
+      table("testTable").queryExecution.withCachedData.collect {
+        case r: InMemoryRelation => r
+      }.size
+    }
+    assertResult(1, "InMemoryRelation not found, partTable should have been cached") {
+      table("partTable").queryExecution.withCachedData.collect {
+        case r: InMemoryRelation => r
+      }.size
+    }
+ 
+    cacheTable("testTable")
+    assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
+      table("testTable").queryExecution.withCachedData.collect {
+        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
+      }.size
+    }
+    assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
+      table("partTable").queryExecution.withCachedData.collect {
+        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
+      }.size
+    }
+ 
+    uncacheTable("testTable")
   }
 
   test("read from cached table and uncache") {
@@ -178,9 +224,14 @@ class CachedTableSuite extends QueryTest {
   test("SELECT star from cached table") {
     sql("SELECT * FROM testData").registerTempTable("selectStar")
     cacheTable("selectStar")
+    sql("SELECT key FROM testData").registerTempTable("partTable")
+    assertCached(table("partTable"))
     checkAnswer(
       sql("SELECT * FROM selectStar WHERE key = 1"),
       Seq(Row(1, "1")))
+    checkAnswer(
+      sql("SELECT * FROM partTable WHERE key = 1"),
+      Seq(Row(1)))
     uncacheTable("selectStar")
   }
 
@@ -192,6 +243,18 @@ class CachedTableSuite extends QueryTest {
       sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
       unCachedAnswer.toSeq)
     uncacheTable("testData")
+ 
+    testData.select('key).registerTempTable("partTable")
+    val unCachedAnswer2 =
+      sql("SELECT * FROM partTable a JOIN partTable b ON a.key = b.key").collect()
+
+    cacheTable("testData")
+    assertCached(table("partTable"))
+    checkAnswer(
+      sql("SELECT * FROM partTable a JOIN partTable b ON a.key = b.key"),
+      unCachedAnswer2.toSeq)
+    uncacheTable("testData")
+ 
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
@@ -214,6 +277,9 @@ class CachedTableSuite extends QueryTest {
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
     sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
     assertCached(table("testCacheTable"))
+
+    testData.select('key).registerTempTable("partTable")
+    assertCached(table("partTable"))
 
     val rddId = rddIdOf("testCacheTable")
     assert(
