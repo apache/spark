@@ -55,11 +55,11 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @return an RDD containing the edges in this graph
    *
    * @see [[Edge]] for the edge type.
-   * @see [[triplets]] to get an RDD which contains all the edges
+   * @see [[Graph#triplets]] to get an RDD which contains all the edges
    * along with their vertex data.
    *
    */
-  @transient val edges: EdgeRDD[ED, VD]
+  @transient val edges: EdgeRDD[ED]
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
@@ -95,6 +95,32 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * multiple queries to reuse the same construction process.
    */
   def cache(): Graph[VD, ED]
+
+  /**
+   * Mark this Graph for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. It is strongly recommended that this Graph is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
+   */
+  def checkpoint(): Unit
+
+  /**
+   * Return whether this Graph has been checkpointed or not.
+   * This returns true iff both the vertices RDD and edges RDD have been checkpointed.
+   */
+  def isCheckpointed: Boolean
+
+  /**
+   * Gets the name of the files to which this Graph was checkpointed.
+   * (The vertices RDD and edges RDD are checkpointed separately.)
+   */
+  def getCheckpointFiles: Seq[String]
+
+  /**
+   * Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that
+   * build a new graph in each iteration.
+   */
+  def unpersist(blocking: Boolean = true): Graph[VD, ED]
 
   /**
    * Uncaches only the vertices of this graph, leaving the edges alone. This is useful in iterative

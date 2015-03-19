@@ -33,7 +33,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+import org.apache.spark.AccumulatorParam._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
@@ -42,6 +42,9 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
+ *
+ * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
+ * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
  */
 class JavaSparkContext(val sc: SparkContext)
   extends JavaSparkContextVarargsWorkaround with Closeable {
@@ -370,6 +373,15 @@ class JavaSparkContext(val sc: SparkContext)
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    *
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param inputFormatClass Class of the InputFormat
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
+   * @param minPartitions Minimum number of Hadoop Splits to generate.
+   *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
@@ -391,6 +403,14 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
+   *
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param inputFormatClass Class of the InputFormat
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -472,6 +492,14 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
+   *
+   * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param fClass Class of the InputFormat
+   * @param kClass Class of the keys
+   * @param vClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -672,6 +700,9 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   *
+   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration(): Configuration = {
     sc.hadoopConfiguration

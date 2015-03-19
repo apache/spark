@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.scalatest.FunSuite
@@ -35,11 +35,11 @@ class PlanTest extends FunSuite {
    * we must normalize them to check if two different queries are identical.
    */
   protected def normalizeExprIds(plan: LogicalPlan) = {
-    val list = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id))
-    val minId = if (list.isEmpty) 0 else list.min
     plan transformAllExpressions {
       case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
+        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case a: Alias =>
+        Alias(a.child, a.name)(exprId = ExprId(0))
     }
   }
 

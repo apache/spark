@@ -18,9 +18,11 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -39,22 +41,22 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.{GradientBoostedTrees, RandomForest, DecisionTree}
+import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Algo, Strategy}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.loss.Losses
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel, RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
- * The Java stubs necessary for the Python mllib bindings.
+ * The Java stubs necessary for the Python mllib bindings. It is called by Py4J on the Python side.
  */
-@DeveloperApi
-class PythonMLLibAPI extends Serializable {
+private[python] class PythonMLLibAPI extends Serializable {
 
 
   /**
@@ -74,10 +76,28 @@ class PythonMLLibAPI extends Serializable {
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeights: Vector): JList[Object] = {
-    // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-    learner.disableUncachedWarning()
-    val model = learner.run(data.rdd, initialWeights)
-    List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    try {
+      val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
+      List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Return the Updater from string
+   */
+  def getUpdaterFromString(regType: String): Updater = {
+    if (regType == "l2") {
+      new SquaredL2Updater
+    } else if (regType == "l1") {
+      new L1Updater
+    } else if (regType == null || regType == "none") {
+      new SimpleUpdater
+    } else {
+      throw new IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
+    }
   }
 
   /**
@@ -99,16 +119,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      lrAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      lrAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      lrAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-        throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-          + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    lrAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       lrAlg,
       data,
@@ -178,16 +189,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      SVMAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      SVMAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    SVMAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       SVMAlg,
       data,
@@ -213,16 +215,33 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      LogRegAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
+    trainRegressionModel(
+      LogRegAlg,
+      data,
+      initialWeights)
+  }
+
+  /**
+   * Java stub for Python mllib LogisticRegressionWithLBFGS.train()
+   */
+  def trainLogisticRegressionModelWithLBFGS(
+      data: JavaRDD[LabeledPoint],
+      numIterations: Int,
+      initialWeights: Vector,
+      regParam: Double,
+      regType: String,
+      intercept: Boolean,
+      corrections: Int,
+      tolerance: Double): JList[Object] = {
+    val LogRegAlg = new LogisticRegressionWithLBFGS()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setNumCorrections(corrections)
+      .setConvergenceTol(tolerance)
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
       data,
@@ -241,22 +260,80 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib KMeans.train()
+   * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String): KMeansModel = {
+      initializationMode: String,
+      seed: java.lang.Long): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
-      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-      .disableUncachedWarning()
-    kMeansAlg.run(data.rdd)
+
+    if (seed != null) kMeansAlg.setSeed(seed)
+
+    try {
+      kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixture.run()
+   * Returns a list containing weights, mean and covariance of each mixture component.
+   */
+  def trainGaussianMixture(
+      data: JavaRDD[Vector], 
+      k: Int, 
+      convergenceTol: Double, 
+      maxIterations: Int,
+      seed: java.lang.Long): JList[Object] = {
+    val gmmAlg = new GaussianMixture()
+      .setK(k)
+      .setConvergenceTol(convergenceTol)
+      .setMaxIterations(maxIterations)
+
+    if (seed != null) gmmAlg.setSeed(seed)
+
+    try {
+      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+      var wt = ArrayBuffer.empty[Double]
+      var mu = ArrayBuffer.empty[Vector]      
+      var sigma = ArrayBuffer.empty[Matrix]
+      for (i <- 0 until model.k) {
+          wt += model.weights(i)
+          mu += model.gaussians(i).mu
+          sigma += model.gaussians(i).sigma
+      }    
+      List(wt.toArray, mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixtureModel.predictSoft()
+   */
+  def predictSoftGMM(
+      data: JavaRDD[Vector],
+      wt: Object,
+      mu: Array[Object],
+      si: Array[Object]):  RDD[Array[Double]]  = {
+
+      val weight = wt.asInstanceOf[Array[Double]]
+      val mean = mu.map(_.asInstanceOf[DenseVector])
+      val sigma = si.map(_.asInstanceOf[DenseMatrix])
+      val gaussians = Array.tabulate(weight.length){
+        i => new MultivariateGaussian(mean(i), sigma(i))
+      }      
+      val model = new GaussianMixtureModel(weight, gaussians)
+      model.predictSoft(data)
   }
 
   /**
@@ -390,16 +467,18 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long): Word2VecModelWrapper = {
-    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
-    val model = word2vec.fit(data)
-    data.unpersist()
-    new Word2VecModelWrapper(model)
+    try {
+      val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+      new Word2VecModelWrapper(model)
+    } finally {
+      dataJRDD.rdd.unpersist(blocking = false)
+    }
   }
 
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
@@ -455,13 +534,84 @@ class PythonMLLibAPI extends Serializable {
       algo = algo,
       impurity = impurity,
       maxDepth = maxDepth,
-      numClassesForClassification = numClasses,
+      numClasses = numClasses,
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap,
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
+    try {
+      DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
 
-    DecisionTree.train(data.rdd, strategy)
+  /**
+   * Java stub for Python mllib RandomForest.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainRandomForestModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      numClasses: Int,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      impurityStr: String,
+      maxDepth: Int,
+      maxBins: Int,
+      seed: Int): RandomForestModel = {
+
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
+    val strategy = new Strategy(
+      algo = algo,
+      impurity = impurity,
+      maxDepth = maxDepth,
+      numClasses = numClasses,
+      maxBins = maxBins,
+      categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      if (algo == Algo.Classification) {
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      } else {
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      }
+    } finally {
+      cached.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GradientBoostedTrees.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainGradientBoostedTreesModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      lossStr: String,
+      numIterations: Int,
+      learningRate: Double,
+      maxDepth: Int): GradientBoostedTreesModel = {
+    val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
+    boostingStrategy.setLoss(Losses.fromString(lossStr))
+    boostingStrategy.setNumIterations(numIterations)
+    boostingStrategy.setLearningRate(learningRate)
+    boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
+
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      GradientBoostedTrees.train(cached, boostingStrategy)
+    } finally {
+      cached.unpersist(blocking = false)
+    }
   }
 
   /**
@@ -561,6 +711,21 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib RandomRDDGenerators.logNormalRDD()
+   */
+  def logNormalRDD(jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.logNormalRDD(jsc.sc, mean, std, size, parts, s)
+  }
+
+
+  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
    */
   def poissonRDD(jsc: JavaSparkContext,
@@ -571,6 +736,33 @@ class PythonMLLibAPI extends Serializable {
     val parts = getNumPartitionsOrDefault(numPartitions, jsc)
     val s = getSeedOrDefault(seed)
     RG.poissonRDD(jsc.sc, mean, size, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.exponentialRDD()
+   */
+  def exponentialRDD(jsc: JavaSparkContext,
+      mean: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.exponentialRDD(jsc.sc, mean, size, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.gammaRDD()
+   */
+  def gammaRDD(jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.gammaRDD(jsc.sc, shape, scale, size, parts, s)
   }
 
   /**
@@ -600,6 +792,22 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib RandomRDDGenerators.logNormalVectorRDD()
+   */
+  def logNormalVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.logNormalVectorRDD(jsc.sc, mean, std, numRows, numCols, parts, s)
+  }
+
+
+  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
    */
   def poissonVectorRDD(jsc: JavaSparkContext,
@@ -613,6 +821,36 @@ class PythonMLLibAPI extends Serializable {
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
   }
 
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.exponentialVectorRDD()
+   */
+  def exponentialVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.exponentialVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.gammaVectorRDD()
+   */
+  def gammaVectorRDD(jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.gammaVectorRDD(jsc.sc, shape, scale, numRows, numCols, parts, s)
+  }
+
+
 }
 
 /**
@@ -621,6 +859,7 @@ class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
+  val LATIN1 = "ISO-8859-1"
 
   /**
    * Base class used for pickle
@@ -642,7 +881,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes())
+        out.write((module + "\n" + name + "\n").getBytes)
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
@@ -672,7 +911,16 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
-      saveObjects(out, pickler, vector.toArray)
+      val bytes = new Array[Byte](8 * vector.size)
+      val bb = ByteBuffer.wrap(bytes)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      db.put(vector.values)
+
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE1)
     }
 
     def construct(args: Array[Object]): Object = {
@@ -680,7 +928,13 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 1) {
         throw new PickleException("should be 1")
       }
-      new DenseVector(args(0).asInstanceOf[Array[Double]])
+      val bytes = args(0).asInstanceOf[String].getBytes(LATIN1)
+      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      val ans = new Array[Double](bytes.length / 8)
+      db.get(ans)
+      Vectors.dense(ans)
     }
   }
 
@@ -689,15 +943,30 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
-      saveObjects(out, pickler, m.numRows, m.numCols, m.values)
+      val bytes = new Array[Byte](8 * m.values.size)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numRows))
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numCols))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE3)
     }
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
-        args(2).asInstanceOf[Array[Double]])
+      val bytes = args(2).asInstanceOf[String].getBytes(LATIN1)
+      val n = bytes.length / 8
+      val values = new Array[Double](n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
+      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values)
     }
   }
 
@@ -706,15 +975,40 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
-      saveObjects(out, pickler, v.size, v.indices, v.values)
+      val n = v.indices.size
+      val indiceBytes = new Array[Byte](4 * n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
+      val valueBytes = new Array[Byte](8 * n)
+      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(v.size))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
+      out.write(indiceBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
+      out.write(valueBytes)
+      out.write(Opcodes.TUPLE3)
     }
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
-        args(2).asInstanceOf[Array[Double]])
+      val size = args(0).asInstanceOf[Int]
+      val indiceBytes = args(1).asInstanceOf[String].getBytes(LATIN1)
+      val valueBytes = args(2).asInstanceOf[String].getBytes(LATIN1)
+      val n = indiceBytes.length / 4
+      val indices = new Array[Int](n)
+      val values = new Array[Double](n)
+      if (n > 0) {
+        val order = ByteOrder.nativeOrder()
+        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
+        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
+      }
+      new SparseVector(size, indices, values)
     }
   }
 

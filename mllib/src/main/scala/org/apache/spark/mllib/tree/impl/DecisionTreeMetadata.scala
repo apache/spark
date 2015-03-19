@@ -110,7 +110,7 @@ private[tree] object DecisionTreeMetadata extends Logging {
     val numFeatures = input.take(1)(0).features.size
     val numExamples = input.count()
     val numClasses = strategy.algo match {
-      case Classification => strategy.numClassesForClassification
+      case Classification => strategy.numClasses
       case Regression => 0
     }
 
@@ -183,7 +183,7 @@ private[tree] object DecisionTreeMetadata extends Logging {
   }
 
   /**
-   * Version of [[buildMetadata()]] for DecisionTree.
+   * Version of [[DecisionTreeMetadata#buildMetadata]] for DecisionTree.
    */
   def buildMetadata(
       input: RDD[LabeledPoint],
