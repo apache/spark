@@ -12,8 +12,8 @@ class HiveOperator(BaseOperator):
 
     :param hql: the hql to be executed
     :type hql: string
-    :param hive_conn_id: reference to the Hive database
-    :type hive_conn_id: string
+    :param hive_cli_conn_id: reference to the Hive database
+    :type hive_cli_conn_id: string
     :param hiveconf_jinja_translate: when True, hiveconf-type templating
         ${var} gets translated into jina-type templating {{ var }}
     :type hiveconf_jinja_translate: boolean

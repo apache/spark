@@ -720,7 +720,6 @@ class TaskInstance(Base):
             if self.task.dag.user_defined_macros:
                 jinja_context.update(
                     self.task.dag.user_defined_macros)
-
         for attr in task.__class__.template_fields:
             result = getattr(task, attr)
             template = self.task.get_template(attr)
