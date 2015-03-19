@@ -21,16 +21,15 @@ import java.net.{HttpURLConnection, URL}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
-import org.json4s._
-import org.json4s.jackson.JsonMethods
 import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
 
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar {
+class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
+  with JsonTestUtils {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -102,7 +101,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
         import org.json4s.jackson.JsonMethods._
         val jsonAst = parse(json)
         val expAst = parse(exp)
-        HistoryServerSuite.assertValidDataInJson(jsonAst, expAst)
+        assertValidDataInJson(jsonAst, expAst)
       }
   }
 
@@ -243,15 +242,4 @@ object HistoryServerSuite {
     else throw new RuntimeException("got code: " + code + " when getting " + path + " w/ error: " + error)
   }
 
-  def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
-    val Diff(c, a, d) = validateJson diff expectedJson
-    val validatePretty = JsonMethods.pretty(validateJson)
-    val expectedPretty = JsonMethods.pretty(expectedJson)
-    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
-    import org.scalactic.TripleEquals._
-    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
-    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
-    assert(d === JNothing, s"$errorMessage\nDeleted:\n${JsonMethods.pretty(d)}")
-  }
 }
-
