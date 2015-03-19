@@ -70,3 +70,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# SparkR docs
+R/pkg/man
+R/pkg/html

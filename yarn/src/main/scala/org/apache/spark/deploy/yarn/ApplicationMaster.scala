@@ -469,6 +469,9 @@ private[spark] class ApplicationMaster(
       System.setProperty("spark.submit.pyFiles",
         PythonRunner.formatPaths(args.pyFiles).mkString(","))
     }
+    if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
+      // TODO(davies): add R dependencies here
+    }
     val mainMethod = userClassLoader.loadClass(args.userClass)
       .getMethod("main", classOf[Array[String]])
 
