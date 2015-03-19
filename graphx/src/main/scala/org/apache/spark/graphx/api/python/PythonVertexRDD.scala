@@ -59,7 +59,6 @@ private[graphx] class PythonVertexRDD(
     JavaVertexRDD(JavaRDD.fromRDD(this).asInstanceOf[JavaRDD[(VertexId, Array[Byte])]])
   }
 
-
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
     import scala.collection.JavaConverters._
     writeToFile(items.asScala, filename)
