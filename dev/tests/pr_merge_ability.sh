@@ -17,18 +17,23 @@
 # limitations under the License.
 #
 
-# These variables are automatically filled in by the spark-ec2 script.
-export MASTERS="{{master_list}}"
-export SLAVES="{{slave_list}}"
-export HDFS_DATA_DIRS="{{hdfs_data_dirs}}"
-export MAPRED_LOCAL_DIRS="{{mapred_local_dirs}}"
-export SPARK_LOCAL_DIRS="{{spark_local_dirs}}"
-export MODULES="{{modules}}"
-export SPARK_VERSION="{{spark_version}}"
-export TACHYON_VERSION="{{tachyon_version}}"
-export HADOOP_MAJOR_VERSION="{{hadoop_major_version}}"
-export SWAP_MB="{{swap}}"
-export SPARK_WORKER_INSTANCES="{{spark_worker_instances}}"
-export SPARK_MASTER_OPTS="{{spark_master_opts}}"
-export AWS_ACCESS_KEY_ID="{{aws_access_key_id}}"
-export AWS_SECRET_ACCESS_KEY="{{aws_secret_access_key}}"
+#
+# This script follows the base format for testing pull requests against
+# another branch and returning results to be published. More details can be
+# found at dev/run-tests-jenkins.
+#
+# Arg1: The Github Pull Request Actual Commit
+#+ known as `ghprbActualCommit` in `run-tests-jenkins`
+# Arg2: The SHA1 hash
+#+ known as `sha1` in `run-tests-jenkins`
+#
+
+ghprbActualCommit="$1"
+sha1="$2"
+
+# check PR merge-ability
+if [ "${sha1}" == "${ghprbActualCommit}" ]; then
+  echo " * This patch **does not merge cleanly**."
+else
+  echo " * This patch merges cleanly."
+fi

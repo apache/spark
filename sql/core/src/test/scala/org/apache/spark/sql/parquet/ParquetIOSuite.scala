@@ -329,6 +329,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
     }
   }
+
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
@@ -340,6 +341,18 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
 
   override protected def afterAll(): Unit = {
     sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("SPARK-6330 regression test") {
+    // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
+    // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
+    intercept[java.io.FileNotFoundException] {
+      sqlContext.parquetFile("file:///nonexistent")
+    }
+    val errorMessage = intercept[Throwable] {
+      sqlContext.parquetFile("hdfs://nonexistent")
+    }.toString
+    assert(errorMessage.contains("UnknownHostException"))
   }
 }
 

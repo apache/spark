@@ -119,7 +119,10 @@ class CheckpointWriter(
   private var stopped = false
   private var fs_ : FileSystem = _
 
-  class CheckpointWriteHandler(checkpointTime: Time, bytes: Array[Byte]) extends Runnable {
+  class CheckpointWriteHandler(
+      checkpointTime: Time,
+      bytes: Array[Byte],
+      clearCheckpointDataLater: Boolean) extends Runnable {
     def run() {
       var attempts = 0
       val startTime = System.currentTimeMillis()
@@ -166,7 +169,7 @@ class CheckpointWriter(
           val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + checkpointFile +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
-          jobGenerator.onCheckpointCompletion(checkpointTime)
+          jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
           case ioe: IOException =>
@@ -180,7 +183,7 @@ class CheckpointWriter(
     }
   }
 
-  def write(checkpoint: Checkpoint) {
+  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
     val bos = new ByteArrayOutputStream()
     val zos = compressionCodec.compressedOutputStream(bos)
     val oos = new ObjectOutputStream(zos)
@@ -188,7 +191,8 @@ class CheckpointWriter(
     oos.close()
     bos.close()
     try {
-      executor.execute(new CheckpointWriteHandler(checkpoint.checkpointTime, bos.toByteArray))
+      executor.execute(new CheckpointWriteHandler(
+        checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
       logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
