@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-//TO DO: This file will move to breeze after initial stress testing inside ml
+// TO DO: This file will move to breeze after initial stress testing inside ml
 
 package breeze.optimize.linear
 
@@ -96,7 +96,7 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
   // find the optimal unconstrained step
   private def steplen(ata: BDM, dir: BDV, res: BDV,
               tmp: BDV): Double = {
-    val top = dot(dir, res) //dir.dot(res)
+    val top = dot(dir, res)
     gemv(1.0, ata, dir, 0.0, tmp)
     // Push the denominator upward very slightly to avoid infinities and silliness
     top / (dot(tmp, dir) + 1e-20)
@@ -164,9 +164,7 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
       val iterMax = if (maxIters < 0) Math.max(400, 20 * n) else maxIters
 
       // find the residual
-      //res := ata * x
       gemv(1.0, ata, x, 0.0, res)
-      //res -= atb
       axpy(-1.0, atb, res)
       grad := res
 
@@ -177,28 +175,28 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
         }
       }
 
-      val ngrad = dot(grad, grad)//grad.dot(grad)
+      val ngrad = dot(grad, grad)
       dir := grad
 
       // use a CG direction under certain conditions
       var step = steplen(ata, grad, res, tmp)
       var ndir = 0.0
-      val nx = dot(x, x)//x.dot(x)
+      val nx = dot(x, x)
 
       if (iter > lastWall + 1) {
         val alpha = ngrad / lastNorm
         axpy(alpha, lastDir, dir)
         val dstep = steplen(ata, dir, res, tmp)
-        ndir = dot(dir, dir)//dir.dot(dir)
+        ndir = dot(dir, dir)
         if (stop(dstep, ndir, nx)) {
           // reject the CG step if it could lead to premature termination
           dir := grad
-          ndir = dot(dir, dir)//dir.dot(dir)
+          ndir = dot(dir, dir)
         } else {
           step = dstep
         }
       } else {
-        ndir = dot(dir, dir)//dir.dot(dir)
+        ndir = dot(dir, dir)
       }
 
       // terminate?
