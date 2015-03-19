@@ -35,7 +35,8 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, PairFunction}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2,
+  Function3 => JFunction3, Function4 => JFunction4, PairFunction, _}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
@@ -990,6 +991,18 @@ object JavaPairRDD {
   }
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
+
+  private[spark]
+  implicit def toScalaFunction4[T1, T2, T3, T4, R](
+      fun: JFunction4[T1, T2, T3, T4, R]): Function4[T1, T2, T3, T4, R] = {
+    (x1: T1, x2: T2, x3: T3, x4: T4) => fun.call(x1, x2, x3, x4)
+  }
+
+  private[spark]
+  implicit def toScalaFunction3[T1, T2, T3, R](
+      fun: JFunction3[T1, T2, T3, R]): Function3[T1, T2, T3, R] = {
+    (x1: T1, x2: T2, x3: T3) => fun.call(x1, x2, x3)
+  }
 
   private[spark]
   implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
