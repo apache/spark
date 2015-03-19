@@ -84,6 +84,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /**
    * Returns true when the given logical plan will return part of the results of this logical plan.
    *
+   * The given logical plan is considered the part of this logical plan if all args of the given
+   * plan (i.e. cleanArgs) are contained in the ares of this logical plan.
+   *
    * Since its likely undecideable to generally determine if the given plan will produce part of
    * the results of another plan, it is okay for this function to return false, even if the results
    * are actually one part of another. Such behavior will not affect correctness, only the
@@ -99,6 +102,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     plan.children.size == children.size && {
       logDebug(s"[${plan.cleanArgs.mkString(", ")}] is part of [${cleanArgs.mkString(", ")}]")
       !plan.cleanArgs.exists {
+        // If this arg is a Seq, we check if there is a Seq in cleanArgs of this logical plan that
+        // contains all elements of this arg.
         case s: Seq[_] =>
             !cleanArgs.collect { case ss: Seq[_] if s.exists(!ss.contains(_)) => true }.isEmpty
         case o =>
