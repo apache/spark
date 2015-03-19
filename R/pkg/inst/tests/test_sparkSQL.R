@@ -608,13 +608,13 @@ test_that("join() on a DataFrame", {
   joined3 <- join(df, df2, df$name == df2$name, "right_outer")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_true(count(joined3) == 4)
-  expect_true(is.na(collect(joined3)$age[4]))
+  expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
 
   joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_true(count(joined4) == 4)
-  expect_true(first(joined4)$newAge == 24)
+  expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -678,7 +678,7 @@ test_that("saveDF() on DataFrame and works with parquetFile", {
   saveDF(df, parquetPath, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlCtx, parquetPath)
   expect_true(inherits(parquetDF, "DataFrame"))
-  expect_equal(collect(df), collect(parquetDF))
+  expect_equal(collect(df)[order("name")], collect(parquetDF)[order("name")])
 })
 
 test_that("parquetFile works with multiple input paths", {
