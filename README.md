@@ -24,6 +24,10 @@ To build Spark and its example programs, run:
 
     mvn -DskipTests clean package
 
+To build Spark with support for Hadoop, Hive and Python shell for example, you could use
+
+     mvn -Pyarn -Phive -Phive-0.13.1 -Phive-thriftserver -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
