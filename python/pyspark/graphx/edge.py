@@ -24,7 +24,7 @@ import itertools
 from tempfile import NamedTemporaryFile
 # from build.py4j.java_collections import MapConverter, ListConverter
 from py4j.java_collections import ListConverter, MapConverter
-from pyspark.accumulators import PStatsParam
+# from pyspark.accumulators import PStatsParam
 from pyspark import RDD, StorageLevel, SparkContext
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer, \
     NoOpSerializer
@@ -182,12 +182,11 @@ class EdgeRDD(object):
         if self.bypass_serializer:
             self.jedge_rdd_deserializer = NoOpSerializer()
             rdd_deserializer = NoOpSerializer()
-        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        # enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        # profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
         def f(index, iterator):
             return iterator
-        command = (f, profileStats, rdd_deserializer,
-                   rdd_deserializer)
+        command = (f, rdd_deserializer, rdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
@@ -212,9 +211,9 @@ class EdgeRDD(object):
                                              broadcast_vars, self.ctx._javaAccumulator,
                                              java_storage_level)
         self.jedge_rdd = prdd.asJavaEdgeRDD()
-        if enable_profile:
-            self.id = self.jedge_rdd.id()
-            self.ctx._add_profile(self.id, profileStats)
+        # if enable_profile:
+        #     self.id = self.jedge_rdd.id()
+        #     self.ctx._add_profile(self.id, profileStats)
         return self.jedge_rdd
 
 

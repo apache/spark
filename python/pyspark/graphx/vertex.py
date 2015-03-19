@@ -26,7 +26,7 @@ from numpy.numarray.numerictypes import Long
 
 from py4j.java_collections import MapConverter, ListConverter
 import operator
-from pyspark.accumulators import PStatsParam
+# from pyspark.accumulators import PStatsParam
 from pyspark.rdd import PipelinedRDD
 from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, AutoBatchedSerializer
 from pyspark import RDD, PickleSerializer, StorageLevel, SparkContext
@@ -43,7 +43,7 @@ types can be used for vertex ids in future
 VertexId = Long
 
 
-class VertexRDD(object):
+class VertexRDD(RDD):
     """
     VertexRDD class defines the vertex actions and transformations. The complete list of
     transformations and actions for vertices are available at
@@ -190,12 +190,11 @@ class VertexRDD(object):
         if self.bypass_serializer:
             self.jvertex_rdd_deserializer = NoOpSerializer()
             rdd_deserializer = NoOpSerializer()
-        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        # enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        # profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
         def f(index, iterator):
             return iterator
-        command = (f, profileStats, rdd_deserializer,
-                   rdd_deserializer)
+        command = (f, rdd_deserializer, rdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
@@ -221,9 +220,9 @@ class VertexRDD(object):
                                                    broadcast_vars, self.ctx._javaAccumulator,
                                                    java_storage_level)
         self.jvertex_rdd = prdd.asJavaVertexRDD()
-        if enable_profile:
-            self.id = self.jvertex_rdd.id()
-            self.ctx._add_profile(self.id, profileStats)
+        # if enable_profile:
+        #     self.id = self.jvertex_rdd.id()
+        #     self.ctx._add_profile(self.id, profileStats)
         return self.jvertex_rdd
 
 
@@ -287,8 +286,8 @@ class PipelinedVertexRDD(VertexRDD):
             return self.jvrdd_val
         if self.bypass_serializer:
             self.jvertex_rdd_deserializer = NoOpSerializer()
-        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        # enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        # profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
         command = (self.func, profileStats, self.prev_jvertex_rdd_deserializer,
                    self.jvertex_rdd_deserializer)
         # the serialized command will be compressed by broadcast
