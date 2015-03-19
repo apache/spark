@@ -19,7 +19,6 @@
 
 package breeze.optimize.linear
 
-import breeze.linalg.operators.OpMulMatrix
 import breeze.linalg.{DenseMatrix, DenseVector}
 import breeze.util.Implicits._
 import breeze.util.SerializableLogging
@@ -34,8 +33,7 @@ import spire.syntax.cfor._
  * @author debasish83, coderxiang
  */
 
-class NNLS(val maxIters: Int = -1)
-          (implicit mult: OpMulMatrix.Impl2[DenseMatrix[Double], DenseVector[Double], DenseVector[Double]]) extends SerializableLogging {
+class NNLS(val maxIters: Int = -1) extends SerializableLogging {
   type BDM = DenseMatrix[Double]
   type BDV = DenseVector[Double]
 
@@ -49,7 +47,10 @@ class NNLS(val maxIters: Int = -1)
     _f2jBLAS
   }
 
-  case class State private[NNLS](x: BDV, grad: BDV, dir: BDV, lastDir: BDV, res: BDV, tmp: BDV, lastNorm: Double, lastWall: Int, iter: Int, converged: Boolean, solveTime: Long) {
+  case class State private[NNLS](x: BDV, grad: BDV, dir: BDV,
+                                 lastDir: BDV, res: BDV, tmp: BDV,
+                                 lastNorm: Double, lastWall: Int, iter: Int,
+                                 converged: Boolean, solveTime: Long) {
     def reset() = {
       x := 0.0
       grad := 0.0
@@ -143,15 +144,20 @@ class NNLS(val maxIters: Int = -1)
     iterations(ata, atb, init)
   }
 
+  def validate(ata: DenseMatrix[Double],
+                atb: DenseVector[Double],
+                state: State) = {
+    require(ata.cols == ata.rows, s"NNLS:iterations gram matrix must be symmetric")
+    require(ata.rows == state.x.length, s"NNLS:iterations gram and linear dimension mismatch")
+    state
+  }
+
   def iterations(ata: DenseMatrix[Double],
                  atb: DenseVector[Double], initialState: State): Iterator[State] =
-    Iterator.iterate(initialState) { state =>
+    Iterator.iterate(validate(ata, atb, initialState)) { state =>
       import state._
 
       val startTime = System.nanoTime()
-
-      require(ata.cols == ata.rows, s"NNLS:iterations gram matrix must be symmetric")
-      require(ata.rows == x.length, s"NNLS:iterations gram matrix rows must be same as length of linear term")
 
       val n = atb.length
 
@@ -196,8 +202,10 @@ class NNLS(val maxIters: Int = -1)
       }
 
       // terminate?
-      if (stop(step, ndir, nx) || iter > iterMax)
-        State(x, grad, dir, lastDir, res, tmp, lastNorm, lastWall, iter + 1, true, solveTime + (System.nanoTime() - startTime))
+      if (stop(step, ndir, nx) || iter > iterMax) {
+        State(x, grad, dir, lastDir, res, tmp, lastNorm, lastWall, iter + 1, true,
+          solveTime + (System.nanoTime() - startTime))
+      }
       else {
         // don't run through the walls
         cforRange(0 until n){ i =>
@@ -217,7 +225,8 @@ class NNLS(val maxIters: Int = -1)
         }
         lastDir := dir
         val nextNorm = ngrad
-        State(x, grad, dir, lastDir, res, tmp, nextNorm, nextWall, iter + 1, false, solveTime + (System.nanoTime() - startTime))
+        State(x, grad, dir, lastDir, res, tmp, nextNorm, nextWall, iter + 1, false,
+          solveTime + (System.nanoTime() - startTime))
       }
     }.takeUpToWhere(_.converged)
 
