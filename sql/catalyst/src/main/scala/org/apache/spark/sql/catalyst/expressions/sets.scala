@@ -21,15 +21,26 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
 /** The data type for expressions returning an OpenHashSet as the result. */
-private[sql] class OpenHashSetUDT(val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
+private[sql] class OpenHashSetUDT(
+    val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
 
   override def sqlType: DataType = ArrayType(elementType)
 
-  /** Since we are using OpenHashSet internally, it should not be called. */
-  override def serialize(obj: Any): Seq[Any] = ???
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def serialize(obj: Any): Seq[Any] = {
+    obj.asInstanceOf[OpenHashSet[Any]].iterator.toSeq
+  }
 
-  /** Since we are using OpenHashSet internally, it should not be called. */
-  override def deserialize(datum: Any): OpenHashSet[Any] = ???
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def deserialize(datum: Any): OpenHashSet[Any] = {
+    val iterator = datum.asInstanceOf[Seq[Any]].iterator
+    val set = new OpenHashSet[Any]
+    while(iterator.hasNext) {
+      set.add(iterator.next())
+    }
+
+    set
+  }
 
   override def userClass = classOf[OpenHashSet[Any]]
 

@@ -251,9 +251,12 @@ private[sql] class HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
 
   override def sqlType: DataType = BinaryType
 
+  /** Since we are using HyperLogLog internally, usually it will not be called. */
   override def serialize(obj: Any): Array[Byte] =
     obj.asInstanceOf[HyperLogLog].getBytes
 
+
+  /** Since we are using HyperLogLog internally, usually it will not be called. */
   override def deserialize(datum: Any): HyperLogLog =
     HyperLogLog.Builder.build(datum.asInstanceOf[Array[Byte]])
 
