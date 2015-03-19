@@ -148,18 +148,20 @@ function send_archived_logs () {
 
 # Environment variable to capture PR test output
 pr_message=""
+# Ensure we save off the current HEAD to revert to
+current_pr_head="`git rev-parse HEAD`"
 
 # Run pull request tests
 for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"
   # Ensure the test is a file and is executable
   if [ -x "$this_test" ]; then
-    echo "current hash is `git rev-parse HEAD`"
     this_mssg="`bash \"${this_test}\" \"${ghprbActualCommit}\" \"${sha1}\" 2>/dev/null`"
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
     pr_message="${pr_message}\n${this_mssg}"
+    git checkout "${current_pr_head}"
   fi
 done
 
