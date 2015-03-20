@@ -19,6 +19,8 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.typesafe.config.Config
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
@@ -143,7 +145,17 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  private[streaming] var actorReceiverConf: Config = null
+
+  private lazy val actorSystem: ActorSystem = {
+    if (actorReceiverConf != null) {
+      ActorSystem(s"$name-ActorSystem", actorReceiverConf)
+    } else {
+      SparkEnv.get.actorSystem
+    }
+  }
+
+  protected lazy val supervisor = actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
