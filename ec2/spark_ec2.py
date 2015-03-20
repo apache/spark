@@ -568,13 +568,8 @@ def launch_cluster(conn, opts, cluster_name):
                     if i in id_to_req and id_to_req[i].state == "active":
                         active_instance_ids.append(id_to_req[i].instance_id)
                 if len(active_instance_ids) == opts.slaves:
-<<<<<<< HEAD
                     print "All %d slaves granted" % opts.slaves
                     reservations = conn.get_all_reservations(active_instance_ids)
-=======
-                    print("All %d slaves granted" % opts.slaves)
-                    reservations = conn.get_all_instances(active_instance_ids)
->>>>>>> Run `futurize` on Python code:
                     slave_nodes = []
                     for r in reservations:
                         slave_nodes += r.instances
@@ -612,16 +607,11 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement_group=opts.placement_group,
                                       user_data=user_data_content)
                 slave_nodes += slave_res.instances
-<<<<<<< HEAD
                 print "Launched {s} slave{plural_s} in {z}, regid = {r}".format(
                     s=num_slaves_this_zone,
                     plural_s=('' if num_slaves_this_zone == 1 else 's'),
                     z=zone,
                     r=slave_res.id)
-=======
-                print("Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                                zone, slave_res.id))
->>>>>>> Run `futurize` on Python code:
             i += 1
 
     # Launch or resume masters
@@ -680,7 +670,6 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         """
         Get all non-terminated instances that belong to any of the provided security groups.
 
-<<<<<<< HEAD
         EC2 reservation filters and instance states are documented here:
             http://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html#options
         """
@@ -703,30 +692,6 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         print >> sys.stderr, \
             "ERROR: Could not find a master for cluster {c} in region {r}.".format(
                 c=cluster_name, r=opts.region)
-=======
-def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print("Searching for existing cluster " + cluster_name + "...")
-    reservations = conn.get_all_instances()
-    master_nodes = []
-    slave_nodes = []
-    for res in reservations:
-        active = [i for i in res.instances if is_active(i)]
-        for inst in active:
-            group_names = [g.name for g in inst.groups]
-            if (cluster_name + "-master") in group_names:
-                master_nodes.append(inst)
-            elif (cluster_name + "-slaves") in group_names:
-                slave_nodes.append(inst)
-    if any((master_nodes, slave_nodes)):
-        print("Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)))
-    if master_nodes != [] or not die_on_error:
-        return (master_nodes, slave_nodes)
-    else:
-        if master_nodes == [] and slave_nodes != []:
-            print("ERROR: Could not find master in group " + cluster_name + "-master", file=sys.stderr)
-        else:
-            print("ERROR: Could not find any existing cluster", file=sys.stderr)
->>>>>>> Run `futurize` on Python code:
         sys.exit(1)
 
     return (master_instances, slave_instances)
@@ -782,7 +747,6 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         modules=modules
     )
 
-<<<<<<< HEAD
     if opts.deploy_root_dir is not None:
         print "Deploying {s} to master...".format(s=opts.deploy_root_dir)
         deploy_user_files(
@@ -792,9 +756,6 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         )
 
     print "Running setup on master..."
-=======
-    print("Running setup on master...")
->>>>>>> Run `futurize` on Python code:
     setup_spark_cluster(master, opts)
     print("Done!")
 
@@ -1254,17 +1215,8 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-<<<<<<< HEAD
         (master_nodes, slave_nodes) = get_existing_cluster(
             conn, opts, cluster_name, die_on_error=False)
-=======
-        print("Are you sure you want to destroy the cluster %s?" % cluster_name)
-        print("The following instances will be terminated:")
-        (master_nodes, slave_nodes) = get_existing_cluster(
-            conn, opts, cluster_name, die_on_error=False)
-        for inst in master_nodes + slave_nodes:
-            print("> %s" % inst.public_dns_name)
->>>>>>> Run `futurize` on Python code:
 
         if any(master_nodes + slave_nodes):
             print "The following instances will be terminated:"
@@ -1284,10 +1236,6 @@ def real_main():
 
             # Delete security groups as well
             if opts.delete_groups:
-<<<<<<< HEAD
-=======
-                print("Deleting security groups (this will take some time)...")
->>>>>>> Run `futurize` on Python code:
                 group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     conn=conn,
@@ -1317,20 +1265,12 @@ def real_main():
                     time.sleep(30)  # Yes, it does have to be this long :-(
                     for group in groups:
                         try:
-<<<<<<< HEAD
                             # It is needed to use group_id to make it work with VPC
                             conn.delete_security_group(group_id=group.id)
                             print "Deleted security group %s" % group.name
                         except boto.exception.EC2ResponseError:
                             success = False
                             print "Failed to delete security group %s" % group.name
-=======
-                            conn.delete_security_group(group.name)
-                            print("Deleted security group " + group.name)
-                        except boto.exception.EC2ResponseError:
-                            success = False
-                            print("Failed to delete security group " + group.name)
->>>>>>> Run `futurize` on Python code:
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails
