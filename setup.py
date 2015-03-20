@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 # Kept manually in sync with airflow.__version__
-version = '0.4'
+version = '0.4.1'
 
 
 doc = ['sphinx>=1.2.3',

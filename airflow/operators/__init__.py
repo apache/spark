@@ -6,13 +6,13 @@ from python_operator import PythonOperator
 try:
     from mysql_operator import MySqlOperator
 except:
-    logging.INFO("Couldn't import MySqlOperator")
+    logging.info("Couldn't import MySqlOperator")
     pass
 
 try:
     from postgres_operator import PostgresOperator
 except:
-    logging.INFO("Couldn't import PostgresOperator")
+    logging.info("Couldn't import PostgresOperator")
     pass
 
 from hive_operator import HiveOperator
@@ -28,7 +28,7 @@ try:
     from sensors import S3KeySensor
     from sensors import S3PrefixSensor
 except:
-    logging.INFO("Couldn't import S3KeySensor, S3PrefixSensor")
+    logging.info("Couldn't import S3KeySensor, S3PrefixSensor")
     pass
 
 from sensors import TimeSensor
@@ -38,7 +38,7 @@ from dummy_operator import DummyOperator
 try:
     from hive2samba_operator import Hive2SambaOperator
 except:
-    logging.INFO("Couldn't import Hive2SambaOperator")
+    logging.info("Couldn't import Hive2SambaOperator")
     pass
 
 from subdag_operator import SubDagOperator
