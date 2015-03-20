@@ -242,6 +242,10 @@ def parse_args():
         help="If specified, launch slaves as spot instances with the given " +
              "maximum price (in dollars)")
     parser.add_option(
+        "--master-spot-price", metavar="PRICE", type="float",
+        help="If specified, launch master as a spot instance with the given " +
+             "maximum price (in dollars)")
+    parser.add_option(
         "--ganglia", action="store_true", default=True,
         help="Setup Ganglia monitoring on cluster (default: %default). NOTE: " +
              "the Ganglia page will be publicly accessible")
@@ -554,6 +558,25 @@ def launch_cluster(conn, opts, cluster_name):
                 user_data=user_data_content)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
+        if opts.master_spot_price is not None:
+            print ("Requesting master as spot instance with price $%.3f" % opts.master_spot_price)
+            master_type = opts.master_instance_type
+            if master_type == "":
+                master_type = opts.instance_type
+            master_reqs = conn.request_spot_instances(
+                price=opts.master_spot_price,
+                image_id=opts.ami,
+                launch_group="launch-group-%s" % cluster_name,
+                placement=random.choice(zones),
+                count=1,
+                key_name=opts.key_pair,
+                security_group_ids=[master_group.id] + additional_group_ids,
+                instance_type=master_type,
+                block_device_map=block_map,
+                subnet_id=opts.subnet_id,
+                placement_group=opts.placement_group,
+                user_data=user_data_content)
+            my_req_ids.append(master_reqs[0].id)
 
         print "Waiting for spot instances to be granted..."
         try:
@@ -567,7 +590,22 @@ def launch_cluster(conn, opts, cluster_name):
                 for i in my_req_ids:
                     if i in id_to_req and id_to_req[i].state == "active":
                         active_instance_ids.append(id_to_req[i].instance_id)
-                if len(active_instance_ids) == opts.slaves:
+                if opts.master_spot_price is not None:
+                    if len(active_instance_ids) == opts.slaves + 1:
+                        print "Master and all %d slaves granted" % opts.slaves
+                        reservations = conn.get_all_reservations(active_instance_ids)
+                        master_nodes = []
+                        slave_nodes = []
+                        for r in reservations:
+                            if any([group.name == cluster_name + "-master" for group in r.groups]):
+                                master_nodes += r.instances
+                            else:
+                                slave_nodes += r.instances
+                        break
+                    else:
+                        print "%d of %d spot instances granted, waiting longer" % (
+                            len(active_instance_ids), opts.slaves + 1)
+                elif len(active_instance_ids) == opts.slaves:
                     print "All %d slaves granted" % opts.slaves
                     reservations = conn.get_all_reservations(active_instance_ids)
                     slave_nodes = []
@@ -621,7 +659,7 @@ def launch_cluster(conn, opts, cluster_name):
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
         master_nodes = existing_masters
-    else:
+    elif opts.master_spot_price is None:
         master_type = opts.master_instance_type
         if master_type == "":
             master_type = opts.instance_type
