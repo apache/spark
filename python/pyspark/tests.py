@@ -782,6 +782,11 @@ class RDDTests(ReusedPySparkTestCase):
         jobId = tracker.getJobIdsForGroup("test4")[0]
         self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
 
+    # Regression test for SPARK-6294
+    def test_take_on_jrdd(self):
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd._jrdd.first()
+
 
 class ProfilerTests(PySparkTestCase):
 

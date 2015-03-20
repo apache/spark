@@ -116,6 +116,8 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
   echo "Created Nexus staging repository: $staged_repo_id"
 
+  rm -rf $SPARK_REPO
+
   build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
@@ -128,7 +130,6 @@ if [[ ! "$@" =~ --skip-publish ]]; then
 
   ./dev/change-version-to-2.10.sh
 
-  rm -rf $SPARK_REPO
   pushd $SPARK_REPO
 
   # Remove any extra files generated during install
@@ -160,7 +161,7 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   done
 
   echo "Closing nexus staging repository"
-  repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $GIT_TAG</description></data></promoteRequest>"
+  repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $GIT_TAG (published as $PUBLISH_VERSION)</description></data></promoteRequest>"
   out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
     -H "Content-Type:application/xml" -v \
     $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
@@ -192,10 +193,12 @@ if [[ ! "$@" =~ --skip-package ]]; then
   echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md SHA512 spark-$RELEASE_VERSION.tgz > \
     spark-$RELEASE_VERSION.tgz.sha
   rm -rf spark-$RELEASE_VERSION
-
+  
+  # Updated for each binary build
   make_binary_release() {
     NAME=$1
     FLAGS=$2
+    ZINC_PORT=$3
     cp -r spark spark-$RELEASE_VERSION-bin-$NAME
     
     cd spark-$RELEASE_VERSION-bin-$NAME
@@ -205,16 +208,12 @@ if [[ ! "$@" =~ --skip-package ]]; then
       ./dev/change-version-to-2.11.sh
     fi
 
-    # Create new Zinc instances for each binary release to avoid interference
-    # that causes OOM's and random compiler crashes.
-    zinc_port=${zinc_port:-3030}
-    zinc_port=$[$zinc_port + 1]
-    export ZINC_PORT=$zinc_port
-
-    ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
+    export ZINC_PORT=$ZINC_PORT
+    echo "Creating distribution: $NAME ($FLAGS)"
+    ./make-distribution.sh --name $NAME --tgz $FLAGS -DzincPort=$ZINC_PORT 2>&1 > \
+      ../binary-release-$NAME.log
     cd ..
     cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
-    rm -rf spark-$RELEASE_VERSION-bin-$NAME
 
     echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour \
       --output spark-$RELEASE_VERSION-bin-$NAME.tgz.asc \
@@ -227,16 +226,18 @@ if [[ ! "$@" =~ --skip-package ]]; then
       spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
   }
 
-
-  make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
-  make_binary_release "hadoop1-scala2.11" "-Phive -Dscala-2.11" &
-  make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
-  make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
-  make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" &
-  make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" &
-  make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" &
-  make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
+  # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
+  # share the same Zinc server.
+  make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" "3030" &
+  make_binary_release "hadoop1-scala2.11" "-Phive -Dscala-2.11" "3031" &
+  make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
+  make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
+  make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
+  make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" "3035" &
+  make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" "3036" &
+  make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" "3037" &
   wait
+  rm -rf spark-$RELEASE_VERSION-bin-*/
 
   # Copy data
   echo "Copying release tarballs"

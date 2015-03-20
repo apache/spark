@@ -21,8 +21,10 @@ from numpy import array
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
-           'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
+__all__ = ['LabeledPoint', 'LinearModel',
+           'LinearRegressionModel', 'LinearRegressionWithSGD',
+           'RidgeRegressionModel', 'RidgeRegressionWithSGD',
+           'LassoModel', 'LassoWithSGD']
 
 
 class LabeledPoint(object):
