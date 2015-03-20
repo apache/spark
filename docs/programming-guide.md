@@ -237,8 +237,10 @@ You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`.
 the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" ./bin/pyspark
 {% endhighlight %}
+
+After IPython Notebook server is launched, you can create a new "Python 2" notebook from "Files" tab. Inside the notebook, you can input the '%pylab inline' command as part of your notebook before you start to try spark from IPython notebook.
 
 </div>
 
