@@ -20,6 +20,7 @@ package org.apache.spark.mllib.feature
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._ 
 import org.apache.spark.broadcast.Broadcast
 
 /**

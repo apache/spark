@@ -52,40 +52,40 @@ class DiscretizerModel (val thresholds: Array[(Int, Seq[Float])]) extends Vector
    */
   override def transform(data: Vector) = {
     data match {
-      case SparseVector(size, indices, values) =>
+      case v: SparseVector =>
         var newValues = Array.empty[Double]
         var i = 0
         var j = 0
-        while(i < indices.size && j < thresholds.size){
-          val ival = indices(i)
+        while(i < v.indices.size && j < thresholds.size){
+          val ival = v.indices(i)
           val th = thresholds(j)
           if (ival < th._1) {
-            newValues = values(i) +: newValues
+            newValues = v.values(i) +: newValues
             i += 1
           } else if (ival > th._1) {
             j += 1
           } else {                  
-            newValues = assignDiscreteValue(values(i), th._2).toDouble +: newValues
+            newValues = assignDiscreteValue(v.values(i), th._2).toDouble +: newValues
             j += 1
             i += 1
           }
         }
         // the `index` array inside sparse vector object will not be changed
-        Vectors.sparse(size, indices, newValues)
+        Vectors.sparse(v.size, v.indices, newValues)
         
-        case DenseVector(values) =>
+        case v: DenseVector =>
           var newValues = Array.empty[Double]
           var i = 0
           var j = 0
-          while(i < values.size && j < thresholds.size){
+          while(i < v.values.size && j < thresholds.size){
             val th = thresholds(j)
             if (i < th._1) {
-              newValues = values(i) +: newValues
+              newValues = v.values(i) +: newValues
               i += 1
             } else if (i > th._1) {
               j += 1
             } else {                  
-              newValues = assignDiscreteValue(values(i), th._2).toDouble +: newValues
+              newValues = assignDiscreteValue(v.values(i), th._2).toDouble +: newValues
               j += 1
               i += 1
             }
@@ -103,46 +103,46 @@ class DiscretizerModel (val thresholds: Array[(Int, Seq[Float])]) extends Vector
   override def transform(data: RDD[Vector]) = {
     val bc_thresholds = data.context.broadcast(thresholds)    
     data.map {
-      case SparseVector(size, indices, values) =>
+      case v: SparseVector =>
         var newValues = Array.empty[Double]
         var i = 0
         var j = 0
-        while(i < indices.size && j < bc_thresholds.value.size){
-          val ival = indices(i)
+        while(i < v.indices.size && j < bc_thresholds.value.size){
+          val ival = v.indices(i)
           val th = bc_thresholds.value(j)
           if (ival < th._1) {
-            newValues = values(i) +: newValues
+            newValues = v.values(i) +: newValues
             i += 1
           } else if (ival > th._1) {
             j += 1
           } else {                  
-            newValues = assignDiscreteValue(values(i), th._2).toDouble +: newValues
+            newValues = assignDiscreteValue(v.values(i), th._2).toDouble +: newValues
             j += 1
             i += 1
           }
-    }
-    // the `index` array inside sparse vector object will not be changed,
-    // so we can re-use it to save memory.
-    Vectors.sparse(size, indices, newValues)
-        
-      case DenseVector(values) =>
-        var newValues = Array.empty[Double]
-        var i = 0
-        var j = 0
-        while(i < values.size && j < bc_thresholds.value.size){
-          val th = bc_thresholds.value(j)
-          if (i < th._1) {
-            newValues = values(i) +: newValues
-            i += 1
-          } else if (i > th._1) {
-            j += 1
-          } else {                  
-            newValues = assignDiscreteValue(values(i), th._2).toDouble +: newValues
-            j += 1
-            i += 1
-            }
         }
-        Vectors.dense(newValues)
+        // the `index` array inside sparse vector object will not be changed,
+        // so we can re-use it to save memory.
+        Vectors.sparse(v.size, v.indices, newValues)
+        
+        case v: DenseVector =>
+          var newValues = Array.empty[Double]
+          var i = 0
+          var j = 0
+          while(i < v.values.size && j < bc_thresholds.value.size){
+            val th = bc_thresholds.value(j)
+            if (i < th._1) {
+              newValues = v.values(i) +: newValues
+              i += 1
+            } else if (i > th._1) {
+              j += 1
+            } else {                  
+              newValues = assignDiscreteValue(v.values(i), th._2).toDouble +: newValues
+              j += 1
+              i += 1
+              }
+          }
+          Vectors.dense(newValues)
     }    
   }
 
