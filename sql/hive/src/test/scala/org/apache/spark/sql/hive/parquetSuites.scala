@@ -32,6 +32,7 @@ import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -579,13 +580,8 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
   var partitionedTableDirWithKeyAndComplexTypes: File = null
 
   override def beforeAll(): Unit = {
-    partitionedTableDir = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDir.delete()
-    partitionedTableDir.mkdir()
-
-    normalTableDir = File.createTempFile("parquettests", "sparksql")
-    normalTableDir.delete()
-    normalTableDir.mkdir()
+    partitionedTableDir = Utils.createTempDir()
+    normalTableDir = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDir, s"p=$p")
@@ -601,9 +597,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       .toDF()
       .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
-    partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDirWithKey.delete()
-    partitionedTableDirWithKey.mkdir()
+    partitionedTableDirWithKey = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKey, s"p=$p")
@@ -613,9 +607,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
 
-    partitionedTableDirWithKeyAndComplexTypes = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDirWithKeyAndComplexTypes.delete()
-    partitionedTableDirWithKeyAndComplexTypes.mkdir()
+    partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
@@ -625,9 +617,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       }.toDF().saveAsParquetFile(partDir.getCanonicalPath)
     }
 
-    partitionedTableDirWithComplexTypes = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDirWithComplexTypes.delete()
-    partitionedTableDirWithComplexTypes.mkdir()
+    partitionedTableDirWithComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")

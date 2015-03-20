@@ -79,13 +79,14 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
   }
-  
+
   test("addFile works") {
-    val file1 = File.createTempFile("someprefix1", "somesuffix1")
+    val dir = Utils.createTempDir()
+
+    val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
     val absolutePath1 = file1.getAbsolutePath
 
-    val pluto = Utils.createTempDir()
-    val file2 = File.createTempFile("someprefix2", "somesuffix2", pluto)
+    val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
     val relativePath = file2.getParent + "/../" + file2.getParentFile.getName + "/" + file2.getName
     val absolutePath2 = file2.getAbsolutePath
 
@@ -129,7 +130,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       sc.stop()
     }
   }
-  
+
   test("addFile recursive works") {
     val pluto = Utils.createTempDir()
     val neptune = Utils.createTempDir(pluto.getAbsolutePath)
