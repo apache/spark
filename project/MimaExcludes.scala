@@ -35,10 +35,11 @@ object MimaExcludes {
     def excludes(version: String) =
       version match {
         case v if v.startsWith("1.4") =>
-          MimaBuild.excludeSparkClass("graphx.VertexRDD") ++
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts in 1.3.
             excludePackage("org.spark-project.jetty"),
