@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.classification
 
+import scala.collection.JavaConverters._
+
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -36,10 +38,18 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
  */
-class NaiveBayesModel private[mllib] (
+class NaiveBayesModel (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]]) extends ClassificationModel with Serializable with Saveable {
+
+  /** A Java-friendly constructor used for pyspark. */
+  def this(labels: java.lang.Iterable[Double],
+           pi: java.lang.Iterable[Double],
+           theta: java.lang.Iterable[java.lang.Iterable[Double]]) =
+    this(labels.asScala.toArray,
+      pi.asScala.toArray,
+      theta.asScala.map(x => x.asScala.toArray).toArray)
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
