@@ -36,10 +36,11 @@ object MimaExcludes {
       version match {
         case v if v.startsWith("1.4") =>
           Seq(
+            MimaBuild.excludeSparkClass("graphx.VertexRDD"),
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
             // These are needed if checking against the sbt build, since they are part of
-            // the maven-generated artifacts since 1.2.
+            // the maven-generated artifacts in 1.3.
             excludePackage("org.spark-project.jetty"),
             MimaBuild.excludeSparkPackage("unused"),
             ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
