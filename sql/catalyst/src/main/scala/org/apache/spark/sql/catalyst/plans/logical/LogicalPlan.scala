@@ -102,15 +102,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     plan.children.size == children.size && {
       logDebug(s"[${plan.cleanArgs.mkString(", ")}] is part of [${cleanArgs.mkString(", ")}]")
       !plan.cleanArgs.zip(cleanArgs).exists {
-        // If this arg is a sequence of Expression, we check if there is a sequence of Expression
-        // in cleanArgs of this logical plan at the same index that contains all elements of this
-        // arg.
-        case (s: Seq[Expression], ss: Seq[Expression]) =>
+        // If this arg is a sequence, we check if there is a sequence in cleanArgs of this logical
+        // plan at the same index that contains all elements of this arg.
+        case (s: Seq[_], ss: Seq[_]) =>
           s.exists(!ss.contains(_))
-
         // Otherwise, we check if the arg in cleanArgs at the same index is as same as this arg.
         case (o, oo) =>
-            o != oo
+          o != oo
       }
     } &&
     (children, plan.children).zipped.forall(_ partResult _)
