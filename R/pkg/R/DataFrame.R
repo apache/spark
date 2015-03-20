@@ -170,6 +170,22 @@ setMethod("showDF",
             cat(callJMethod(x@sdf, "showString", numToInt(numRows)), "\n")
           })
 
+#' show
+#'
+#' Print the DataFrame column names and types
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname show
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' show(df)
+#'}
 setMethod("show", "DataFrame",
           function(object) {
             cols <- lapply(dtypes(object), function(l) {
@@ -390,7 +406,7 @@ setMethod("repartition",
 #'
 #' @param x A SparkSQL DataFrame
 #' @return A StringRRDD of JSON objects
-#' @rdname toJSON
+#' @rdname tojson
 #' @export
 #' @examples
 #'\dontrun{
@@ -705,6 +721,7 @@ setMethod("agg",
 # the requested map function.                                                     #
 ###################################################################################
 
+#' @rdname lapply
 setMethod("lapply",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -712,12 +729,14 @@ setMethod("lapply",
             lapply(rdd, FUN)
           })
 
+#' @rdname lapply
 setMethod("map",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
             lapply(X, FUN)
           })
 
+#' @rdname flatMap
 setMethod("flatMap",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -725,6 +744,7 @@ setMethod("flatMap",
             flatMap(rdd, FUN)
           })
 
+#' @rdname lapplyPartition
 setMethod("lapplyPartition",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
@@ -732,12 +752,14 @@ setMethod("lapplyPartition",
             lapplyPartition(rdd, FUN)
           })
 
+#' @rdname lapplyPartition
 setMethod("mapPartitions",
           signature(X = "DataFrame", FUN = "function"),
           function(X, FUN) {
             lapplyPartition(X, FUN)
           })
 
+#' @rdname foreach
 setMethod("foreach",
           signature(x = "DataFrame", func = "function"),
           function(x, func) {
@@ -745,6 +767,7 @@ setMethod("foreach",
             foreach(rdd, func)
           })
 
+#' @rdname foreach
 setMethod("foreachPartition",
           signature(x = "DataFrame", func = "function"),
           function(x, func) {
@@ -759,6 +782,7 @@ getColumn <- function(x, c) {
   column(callJMethod(x@sdf, "col", c))
 }
 
+#' @rdname select
 setMethod("$", signature(x = "DataFrame"),
           function(x, name) {
             getColumn(x, name)
@@ -784,6 +808,7 @@ setMethod("$<-", signature(x = "DataFrame"),
             x
           })
 
+#' @rdname select
 setMethod("[[", signature(x = "DataFrame"),
           function(x, i) {
             if (is.numeric(i)) {
@@ -793,6 +818,7 @@ setMethod("[[", signature(x = "DataFrame"),
             getColumn(x, i)
           })
 
+#' @rdname select
 setMethod("[", signature(x = "DataFrame", i = "missing"),
           function(x, i, j, ...) {
             if (is.numeric(j)) {
@@ -812,6 +838,7 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #' @param col A list of columns or single Column or name
 #' @return A new DataFrame with selected columns
 #' @export
+#' @rdname select
 #' @examples
 #' \dontrun{
 #'   select(df, "*")
@@ -819,6 +846,11 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #'   select(df, df$name, df$age + 1)
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
+#'   # Columns can also be selected using `[[` and `[`
+#'   df[[2]] == df[["age"]]
+#'   df[,2] == df[,"age"]
+#'   # Similar to R data frames columns can also be selected using `$`
+#'   df$age
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
@@ -934,6 +966,8 @@ setMethod("withColumnRenamed",
             select(x, cols)
           })
 
+setClassUnion("characterOrColumn", c("character", "Column"))
+
 #' SortDF 
 #'
 #' Sort a DataFrame by the specified column(s).
@@ -954,7 +988,6 @@ setMethod("withColumnRenamed",
 #' sortDF(df, "col1")
 #' sortDF(df, asc(df$col1), desc(abs(df$col2)))
 #' }
-setClassUnion("characterOrColumn", c("character", "Column"))
 setMethod("sortDF",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
@@ -1163,9 +1196,6 @@ setMethod("subtract",
 #' df <- jsonFile(sqlCtx, path)
 #' saveAsTable(df, "myfile")
 #' }
-
-allModes <- c("append", "overwrite", "error", "ignore")
-
 setMethod("saveDF",
           signature(df = "DataFrame", path = 'character', source = 'character',
                     mode = 'character'),
@@ -1175,6 +1205,7 @@ setMethod("saveDF",
               source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
+            allModes <- c("append", "overwrite", "error", "ignore")
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
@@ -1228,6 +1259,7 @@ setMethod("saveAsTable",
               source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
+            allModes <- c("append", "overwrite", "error", "ignore")
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
