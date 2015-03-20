@@ -275,8 +275,12 @@ class StreamingContext private[streaming] (
       }.toMap[String, String].map{case (key, value) => (key.substring(25), value)}
 
     val actorReceiver = new ActorReceiver[T](props, name, storageLevel, supervisorStrategy)
-    actorReceiver.actorReceiverConf = ConfigFactory.parseMap(getAkkaReceiverConf).withFallback(
-      SparkEnv.get.actorSystem.settings.config)
+
+    val akkaReceiverConf = getAkkaReceiverConf
+    if (!akkaReceiverConf.isEmpty) {
+      actorReceiver.actorReceiverConf = ConfigFactory.parseMap(akkaReceiverConf).withFallback(
+        SparkEnv.get.actorSystem.settings.config)
+    }
     receiverStream(actorReceiver)
   }
 
