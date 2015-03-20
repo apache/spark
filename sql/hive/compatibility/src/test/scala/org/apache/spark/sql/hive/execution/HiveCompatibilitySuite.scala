@@ -236,7 +236,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // timestamp in array, the output format of Hive contains double quotes, while
     // Spark SQL doesn't
-    "udf_sort_array"
+    "udf_sort_array",
+
+    // It has a bug and it has been fixed by
+    // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
+    "input46"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
