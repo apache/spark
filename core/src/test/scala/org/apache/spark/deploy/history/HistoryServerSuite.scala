@@ -80,7 +80,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "one stage json" -> "applications/local-1422981780767/stages/1",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
     "stage list with accumulable json" -> "applications/local-1426533911241/stages",
-    "stage with accumulable json" -> "applications/local-1426533911241/stages/0",
+    "stage with accumulable json" -> "applications/local-1426533911241/stages/0/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
     //TODO multi-attempt stages

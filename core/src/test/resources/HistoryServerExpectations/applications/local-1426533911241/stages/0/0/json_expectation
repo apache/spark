@@ -1,4 +1,4 @@
-[ {
+{
   "status" : "Complete",
   "stageId" : 0,
   "attemptId" : 0,
@@ -239,4 +239,4 @@
       "diskBytesSpilled" : 0
     }
   }
-} ]
+}
