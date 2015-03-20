@@ -1,7 +1,20 @@
+import logging
+
 from bash_operator import BashOperator
 from python_operator import PythonOperator
-from mysql_operator import MySqlOperator
-from postgres_operator import PostgresOperator
+
+try:
+    from mysql_operator import MySqlOperator
+except:
+    logging.INFO("Couldn't import MySqlOperator")
+    pass
+
+try:
+    from postgres_operator import PostgresOperator
+except:
+    logging.INFO("Couldn't import PostgresOperator")
+    pass
+
 from hive_operator import HiveOperator
 from presto_check_operator import PrestoCheckOperator
 from presto_check_operator import PrestoIntervalCheckOperator
@@ -10,10 +23,22 @@ from sensors import SqlSensor
 from sensors import ExternalTaskSensor
 from sensors import HivePartitionSensor
 from sensors import HdfsSensor
-from sensors import S3KeySensor
-from sensors import S3PrefixSensor
+
+try:
+    from sensors import S3KeySensor
+    from sensors import S3PrefixSensor
+except:
+    logging.INFO("Couldn't import S3KeySensor, S3PrefixSensor")
+    pass
+
 from sensors import TimeSensor
 from email_operator import EmailOperator
 from dummy_operator import DummyOperator
-from hive2samba_operator import Hive2SambaOperator
+
+try:
+    from hive2samba_operator import Hive2SambaOperator
+except:
+    logging.INFO("Couldn't import Hive2SambaOperator")
+    pass
+
 from subdag_operator import SubDagOperator
