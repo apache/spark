@@ -72,7 +72,8 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "job list json" -> "applications/local-1422981780767/jobs",
     "one job json" -> "applications/local-1422981780767/jobs/0",
     "succeeded job list json" -> "applications/local-1422981780767/jobs?status=succeeded",
-    "succeeded&failed job list json" -> "applications/local-1422981780767/jobs?status=succeeded&status=failed",
+    "succeeded&failed job list json" ->
+      "applications/local-1422981780767/jobs?status=succeeded&status=failed",
     "executor list json" -> "applications/local-1422981780767/executors",
     "stage list json" -> "applications/local-1422981780767/stages",
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
@@ -83,11 +84,11 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "stage with accumulable json" -> "applications/local-1426533911241/stages/0/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
-    //TODO multi-attempt stages
+    // TODO multi-attempt stages
   )
 
-  //run a bunch of characterization tests -- just verify the behavior is the same as what is saved in the test
-  // resource folder
+  //run a bunch of characterization tests -- just verify the behavior is the same as what is saved
+  // in the test resource folder
   cases.foreach { case (name, path) =>
       test(name) {
         val (code, jsonOpt, errOpt) = getContentAndCode(path)
@@ -123,8 +124,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
 
     try {
 
-      //TODO figure out a way to authenticate as the users in the requests
-//      getContentAndCode("applications", securePort)._1 should be (200)
+      // TODO figure out a way to authenticate as the users in the requests
       pending
 
     } finally {
@@ -176,7 +176,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     justHrefs should contain(link)
   }
 
-  def getContentAndCode(path: String): (Int, Option[String], Option[String]) = {
+  def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
   }
 
@@ -198,9 +198,8 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
 
 object HistoryServerSuite {
   def main(args: Array[String]): Unit = {
-    /* generate the "expected" results for the characterization tests.  Just blindly assume the current behavior
-     * is correct, and write out the returned json to the test/resource files
-     */
+    // generate the "expected" results for the characterization tests.  Just blindly assume the
+    // current behavior is correct, and write out the returned json to the test/resource files
 
     val suite = new HistoryServerSuite
     FileUtils.deleteDirectory(suite.expRoot)
