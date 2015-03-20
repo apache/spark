@@ -35,8 +35,8 @@ object MimaExcludes {
     def excludes(version: String) =
       version match {
         case v if v.startsWith("1.4") =>
+          MimaBuild.excludeSparkClass("graphx.VertexRDD") ++
           Seq(
-            MimaBuild.excludeSparkClass("graphx.VertexRDD"),
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
             // These are needed if checking against the sbt build, since they are part of
