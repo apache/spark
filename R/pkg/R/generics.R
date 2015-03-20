@@ -396,13 +396,13 @@ setGeneric("sampleDF",
 #' @export
 setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
 
-#' @rdname save
+#' @rdname saveAsTable
 #' @export
 setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname save
+#' @rdname saveAsTable
 #' @export
 setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 
@@ -418,7 +418,7 @@ setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 #' @export
 setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
 
-#' @rdname show
+#' @rdname showDF
 #' @export
 setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 
@@ -430,7 +430,7 @@ setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
 #' @export
 setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
 
-#' @rdname toJSON
+#' @rdname tojson
 #' @export
 setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 

@@ -40,7 +40,7 @@ groupedData <- function(sgd) {
 }
 
 
-# TODO(davies): show better message
+#' @rdname show
 setMethod("show", "GroupedData",
           function(object) {
             cat("GroupedData\n")
@@ -74,6 +74,7 @@ setMethod("count",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
+#' @rdname agg
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'

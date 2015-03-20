@@ -45,6 +45,7 @@ col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
 
+#' @rdname show
 setMethod("show", "Column",
           function(object) {
             cat("Column", callJMethod(object@jc, "toString"), "\n")
@@ -127,6 +128,9 @@ createMethods <- function() {
 
 createMethods()
 
+#' alias
+#'
+#' Set a new name for a column
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -138,6 +142,9 @@ setMethod("alias",
           })
 
 #' An expression that returns a substring.
+#'
+#' @param start starting position
+#' @param stop ending position
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
             jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
@@ -146,7 +153,7 @@ setMethod("substr", signature(x = "Column"),
 
 #' Casts the column to a different data type.
 #' @examples
-#' \donotrun{
+#' \dontrun{
 #'   cast(df$age, "string")
 #'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
