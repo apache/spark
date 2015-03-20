@@ -249,7 +249,7 @@ setMethod("persist",
 #' Mark the RDD as non-persistent, and remove all blocks for it from memory and
 #' disk.
 #'
-#' @param rdd The RDD to unpersist
+#' @param x The RDD to unpersist
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -275,7 +275,7 @@ setMethod("unpersist",
 #' been executed on this RDD. It is strongly recommended that this RDD is
 #' persisted in memory, otherwise saving it on a file will require recomputation.
 #'
-#' @param rdd The RDD to checkpoint
+#' @param x The RDD to checkpoint
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -602,7 +602,7 @@ setMethod("Filter",
 #' This function reduces the elements of this RDD using the
 #' specified commutative and associative binary operator.
 #'
-#' @param rdd The RDD to reduce
+#' @param x The RDD to reduce
 #' @param func Commutative and associative function to apply on elements
 #'             of the RDD.
 #' @examples
