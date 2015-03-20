@@ -330,6 +330,7 @@ class ListTests(PySparkTestCase):
         except ValueError:
             self.fail()
 
+
 class StatTests(PySparkTestCase):
     # SPARK-4023
     def test_col_with_different_rdds(self):
