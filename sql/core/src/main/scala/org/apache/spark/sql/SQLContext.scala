@@ -975,9 +975,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
-    def codegenEnabled = self.conf.codegenEnabled
+    def codegenEnabled: Boolean = self.conf.codegenEnabled
 
-    def numPartitions = self.conf.numShufflePartitions
+    def numPartitions: Int = self.conf.numShufflePartitions
 
     def strategies: Seq[Strategy] =
       experimental.extraStrategies ++ (
@@ -1070,7 +1070,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {
-      assertAnalyzed
+      assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)

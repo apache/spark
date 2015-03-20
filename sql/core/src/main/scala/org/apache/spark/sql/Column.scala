@@ -59,7 +59,7 @@ class Column(protected[sql] val expr: Expression) {
 
   override def toString: String = expr.prettyString
 
-  override def equals(that: Any) = that match {
+  override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
     case _ => false
   }

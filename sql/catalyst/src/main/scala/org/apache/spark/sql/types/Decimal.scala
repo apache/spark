@@ -246,7 +246,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case d: Decimal =>
       compare(d) == 0
     case _ =>

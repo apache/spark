@@ -33,7 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{expressions, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -722,7 +722,7 @@ class DataFrame private[sql](
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
-    def rowFunction(row: Row) = {
+    def rowFunction(row: Row): TraversableOnce[Row] = {
       f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
@@ -1155,7 +1155,7 @@ class DataFrame private[sql](
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
       new Iterator[String] {
-        override def hasNext = iter.hasNext
+        override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
           JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
           gen.flush()
