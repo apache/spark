@@ -31,7 +31,7 @@ class OneJobResource(uiRoot: UIRoot) {
     @PathParam("jobId") jobId: Int
   ): JobData = {
     uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
+      val statusToJobs: Seq[(JobStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)
       val jobOpt = statusToJobs.map {_._2} .flatten.find { jobInfo => jobInfo.jobId == jobId}
       jobOpt.map { job =>

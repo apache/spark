@@ -18,30 +18,27 @@
 package org.apache.spark.ui
 
 import java.net.URL
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConversions._
 import scala.xml.Node
 
+import org.apache.sparktest.TestTags.ActiveTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods
-import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.openqa.selenium.{By, WebDriver}
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
-
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.api.StageStatus
-import org.apache.spark.status.api.v1.CustomObjectMapper
-import org.apache.sparktest.TestTags.ActiveTag
-
+import org.apache.spark.status.api.v1.{CustomObjectMapper, StageStatus}
 
 /**
  * Selenium tests for the Spark Web UI.
@@ -134,7 +131,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       }
       val stageJson = getJson(sc.ui.get, "stages")
       stageJson.children.length should be (1)
-      (stageJson \ "status").extract[String] should be (StageStatus.Failed.name())
+      (stageJson \ "status").extract[String] should be (StageStatus.Failed.toString)
 
       // Regression test for SPARK-2105
       class NotSerializable
@@ -266,7 +263,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         JInt(attemptId) <- stage \ "attemptId"
       } {
         val exp = if (attemptId == 0 && stageId == 1) StageStatus.Failed else StageStatus.Complete
-        status should be (exp.name())
+        status should be (exp.toString)
       }
 
       for {
@@ -275,7 +272,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       } {
         val exp = if (attemptId == 0 && stageId == 1) StageStatus.Failed else StageStatus.Complete
         val stageJson = getJson(sc.ui.get, s"stages/$stageId/$attemptId")
-        (stageJson \ "status").extract[String] should be (exp.name())
+        (stageJson \ "status").extract[String] should be (exp.toString)
       }
     }
   }

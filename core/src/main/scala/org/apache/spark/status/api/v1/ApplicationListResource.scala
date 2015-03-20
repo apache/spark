@@ -22,7 +22,6 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
-import org.apache.spark.status.api.ApplicationStatus
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 class ApplicationListResource(uiRoot: UIRoot) {
@@ -36,7 +35,7 @@ class ApplicationListResource(uiRoot: UIRoot) {
     val allApps = uiRoot.getApplicationInfoList
     val adjStatus = {
       if (status.isEmpty) {
-        java.util.Arrays.asList(ApplicationStatus.values(): _*)
+        java.util.Arrays.asList(ApplicationStatus.values: _*)
       } else {
         status
       }

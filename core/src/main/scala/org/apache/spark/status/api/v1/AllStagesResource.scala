@@ -22,7 +22,6 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
-import org.apache.spark.status.api._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 
@@ -39,7 +38,7 @@ class AllStagesResource(uiRoot: UIRoot) {
       val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
       val adjStatuses = {
         if (statuses.isEmpty()) {
-          java.util.Arrays.asList(StageStatus.values(): _*)
+          java.util.Arrays.asList(StageStatus.values: _*)
         } else {
           statuses
         }

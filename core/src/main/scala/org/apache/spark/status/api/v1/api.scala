@@ -21,7 +21,7 @@ import java.util.Date
 import scala.collection.Map
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.status.api.StageStatus
+import org.apache.spark.util.{SparkEnum, SparkEnumCompanion}
 
 class ApplicationInfo(
   val id: String,
@@ -70,7 +70,7 @@ class JobData(
   val completionTime: Option[Date],
   val stageIds: Seq[Int],
   val jobGroup: Option[String],
-  val status: JobExecutionStatus,
+  val status: JobStatus,
   val numTasks: Int,
   val numActiveTasks: Int,
   val numCompletedTasks: Int,
@@ -208,3 +208,89 @@ class AccumulableInfo (
   }
 }
 
+
+private[spark] trait JerseyEnum[T <: SparkEnum] extends SparkEnumCompanion[T] {
+  def fromString(s: String): T = {
+    parseIgnoreCase(s).getOrElse { throw new IllegalArgumentException(
+      s"Illegal type=$s. Supported type values: ${values.map{_.toString}}")}
+  }
+}
+
+sealed abstract class JobStatus extends SparkEnum
+object JobStatus extends JerseyEnum[JobStatus] {
+  final val RUNNING = {
+    case object RUNNING extends JobStatus
+    RUNNING
+  }
+  final val SUCCEEDED = {
+    case object SUCCEEDED extends JobStatus
+    SUCCEEDED
+  }
+  final val FAILED = {
+    case object FAILED extends JobStatus
+    FAILED
+  }
+  final val UNKNOWN = {
+    case object UNKNOWN extends JobStatus
+    UNKNOWN
+  }
+
+  val values = Seq(
+    RUNNING,
+    SUCCEEDED,
+    FAILED,
+    UNKNOWN
+  )
+
+  private[spark] def fromInternalStatus(s: JobExecutionStatus): JobStatus = {
+    JobStatus.parse(s.name()).get
+  }
+}
+
+sealed abstract class StageStatus extends SparkEnum
+object StageStatus extends JerseyEnum[StageStatus] {
+  final val Active = {
+    case object Active extends StageStatus
+    Active
+  }
+
+  final val Complete = {
+    case object Complete extends StageStatus
+    Complete
+  }
+
+  final val Failed = {
+    case object Failed extends StageStatus
+    Failed
+  }
+
+  final val Pending = {
+    case object Pending extends StageStatus
+    Pending
+  }
+
+  val values = Seq(
+    Active,
+    Complete,
+    Failed,
+    Pending
+  )
+}
+
+sealed abstract class ApplicationStatus extends SparkEnum
+object ApplicationStatus extends JerseyEnum[SparkEnum] {
+  final val COMPLETED = {
+    case object COMPLETED extends ApplicationStatus
+    COMPLETED
+  }
+
+  final val RUNNING = {
+    case object RUNNING extends ApplicationStatus
+    RUNNING
+  }
+
+  val values = Seq(
+    COMPLETED,
+    RUNNING
+  )
+}
