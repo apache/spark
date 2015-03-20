@@ -156,16 +156,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val vs = new VariableSubstitution()
 
-  protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.SubstitutedHiveQLQueryExecution(vs.substitute(hiveconf, hql))
-
   // we should substitute variables in hql to pass the text to parseSql() as a parameter.
   // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
   // while we need a logicalPlan so we cannot reuse that.
-  protected[hive] class SubstitutedHiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(hql)) {
-    def hiveExec(): Seq[String] = runSqlHive(hql)
-    override def toString: String = hql + "\n" + super.toString
+  protected[hive] class HiveQLQueryExecution(hql: String)
+    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
+    def hiveExec() = runSqlHive(hql)
+    override def toString = hql + "\n" + super.toString
   }
 
   /**
