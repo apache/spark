@@ -201,13 +201,13 @@ private[sql] case class ParquetRelation2(
   override def hashCode(): Int = {
     if (shouldMergeSchemas) {
       com.google.common.base.Objects.hashCode(
-        shouldMergeSchemas : java.lang.Boolean,
+        shouldMergeSchemas: java.lang.Boolean,
         paths.toSet,
         maybeMetastoreSchema,
         maybePartitionSpec)
     } else {
       com.google.common.base.Objects.hashCode(
-        shouldMergeSchemas : java.lang.Boolean,
+        shouldMergeSchemas: java.lang.Boolean,
         schema,
         paths.toSet,
         maybeMetastoreSchema,
