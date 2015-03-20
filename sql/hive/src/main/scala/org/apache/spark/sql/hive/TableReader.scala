@@ -175,7 +175,7 @@ class HadoopTableReader(
           relation.partitionKeys.contains(attr)
         }
 
-      def fillPartitionKeys(rawPartValues: Array[String], row: MutableRow) = {
+      def fillPartitionKeys(rawPartValues: Array[String], row: MutableRow): Unit = {
         partitionKeyAttrs.foreach { case (attr, ordinal) =>
           val partOrdinal = relation.partitionKeys.indexOf(attr)
           row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
