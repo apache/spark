@@ -17,10 +17,11 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.mockito.Mockito._
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
+
+import org.apache.spark.{SparkConf, SparkContext}
 
 class MemoryUtilsSuite extends FunSuite with MockitoSugar {
   test("MesosMemoryUtils should always override memoryOverhead when it's set") {
