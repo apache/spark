@@ -4,8 +4,7 @@ from urlparse import urlparse
 from time import sleep
 
 from airflow import settings
-from airflow.hooks import HiveMetastoreHook
-from airflow.hooks import S3Hook
+from airflow import hooks
 from airflow.models import BaseOperator
 from airflow.models import Connection as DB
 from airflow.models import State
@@ -178,7 +177,8 @@ class HivePartitionSensor(BaseSensorOperator):
         if not partition:
             partition = "ds='{{ ds }}'"
         self.metastore_conn_id = metastore_conn_id
-        self.hook = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
+        self.hook = hooks.HiveMetastoreHook(
+            metastore_conn_id=metastore_conn_id)
         self.table = table
         self.partition = partition
         self.schema = schema
@@ -269,7 +269,7 @@ class S3KeySensor(BaseSensorOperator):
         self.bucket_name = bucket_name
         self.bucket_key = bucket_key
         self.s3_conn_id = s3_conn_id
-        self.hook = S3Hook(s3_conn_id=s3_conn_id)
+        self.hook = hooks.S3Hook(s3_conn_id=s3_conn_id)
         session.commit()
         session.close()
 
@@ -320,7 +320,7 @@ class S3PrefixSensor(BaseSensorOperator):
         self.delimiter = delimiter
         self.full_url = "s3://" + bucket_name + '/' + prefix
         self.s3_conn_id = s3_conn_id
-        self.hook = S3Hook(s3_conn_id=s3_conn_id)
+        self.hook = hooks.S3Hook(s3_conn_id=s3_conn_id)
         session.commit()
         session.close()
 
