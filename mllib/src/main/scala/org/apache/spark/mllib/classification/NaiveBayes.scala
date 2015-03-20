@@ -17,6 +17,10 @@
 
 package org.apache.spark.mllib.classification
 
+import java.lang.{Iterable => JIterable}
+
+import scala.collection.JavaConverters._
+
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -40,6 +44,13 @@ class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]]) extends ClassificationModel with Serializable with Saveable {
+
+  /** A Java-friendly constructor that takes three Iterable parameters. */
+  private[mllib] def this(
+      labels: JIterable[Double],
+      pi: JIterable[Double],
+      theta: JIterable[JIterable[Double]]) =
+    this(labels.asScala.toArray, pi.asScala.toArray, theta.asScala.toArray.map(_.asScala.toArray))
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
