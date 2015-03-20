@@ -24,16 +24,13 @@ import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 
 class MLPairRDDFunctionsSuite extends FunSuite with MLlibTestSparkContext {
   test("topByKey") {
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
-
-    val topMap = pairs.topByKey(2).collectAsMap()
+    val topMap = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
+      .topByKey(2)
+      .collectAsMap()
 
     assert(topMap.size === 3)
-    val valuesFor1 = topMap(1)
-    assert(valuesFor1 === Array(2, 1))
-    val valuesFor3 = topMap(3)
-    assert(valuesFor3 === Array(7, 5))
-    val valuesFor5 = topMap(5)
-    assert(valuesFor5 === Array(3, 1))
+    assert(topMap(1) === Array(2, 1))
+    assert(topMap(3) === Array(7, 5))
+    assert(topMap(5) === Array(3, 1))
   }
 }
