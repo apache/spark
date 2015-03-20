@@ -44,12 +44,12 @@ fi
 SPARK_ASSEMBLY_JAR=
 ASSEMBLY_DIR="$SPARK_HOME/lib"
 num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*\.jar$" | wc -l)"
-ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*\.jar$" || true)"
 if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" ]; then
   echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
   echo "You need to build Spark before running this program." 1>&2
   exit 1
 fi
+ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*\.jar$" || true)"
 if [ "$num_jars" -gt "1" ]; then
   echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
   echo "$ASSEMBLY_JARS" 1>&2
