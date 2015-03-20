@@ -210,9 +210,33 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
+  /**
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. reuse existing started SessionState if any
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
+   */
+  @transient protected[hive] lazy val sessionState: SessionState = {
+    var state = SessionState.get()
+    if (state == null) {
+      state = new SessionState(overrideHiveConf(new HiveConf(classOf[SessionState])))
+      SessionState.start(state)
+    }
+    if (state.out == null) {
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    if (state.err == null) {
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    state
+  }
 
   protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
+
+  // Sub-classes of HiveContext for testing purposes can override Hive configurations here.
+  protected def overrideHiveConf(conf: HiveConf): HiveConf = conf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)

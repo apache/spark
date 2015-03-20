@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -72,13 +73,20 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
-  /** Sets up the system initially or after a RESET command */
-  protected def configure(): Unit = {
-    setConf("javax.jdo.option.ConnectionURL",
+  /** Overrides metastore and warehouse paths */
+  override protected def overrideHiveConf(conf: HiveConf): HiveConf = {
+    conf.set(
+      "javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
+
+    conf.set(
+      "hive.metastore.warehouse.dir",
+      warehousePath)
+
     Utils.registerShutdownDeleteDir(new File(warehousePath))
     Utils.registerShutdownDeleteDir(new File(metastorePath))
+
+    conf
   }
 
   val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
@@ -88,8 +96,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-
-  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -389,9 +395,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
-  // Database default may not exist in 0.13.1, create it if not exist
-  HiveShim.createDefaultDBIfNeeded(this)
-
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -442,7 +445,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-      configure()
 
       runSqlHive("USE default")
 
