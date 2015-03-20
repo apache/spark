@@ -40,36 +40,24 @@ else
   fi
 fi
 
-# Look for the launcher. In non-release mode, add the compiled classes directly to the classpath
-# instead of looking for a jar file.
-SPARK_LAUNCHER_CP=
-if [ -f $SPARK_HOME/RELEASE ]; then
-  LAUNCHER_DIR="$SPARK_HOME/lib"
-  num_jars="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" | wc -l)"
-  if [ "$num_jars" -eq "0" -a -z "$SPARK_LAUNCHER_CP" ]; then
-    echo "Failed to find Spark launcher in $LAUNCHER_DIR." 1>&2
-    echo "You need to build Spark before running this program." 1>&2
-    exit 1
-  fi
-
-  LAUNCHER_JARS="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" || true)"
-  if [ "$num_jars" -gt "1" ]; then
-    echo "Found multiple Spark launcher jars in $LAUNCHER_DIR:" 1>&2
-    echo "$LAUNCHER_JARS" 1>&2
-    echo "Please remove all but one jar." 1>&2
-    exit 1
-  fi
-
-  SPARK_LAUNCHER_CP="${LAUNCHER_DIR}/${LAUNCHER_JARS}"
-else
-  LAUNCHER_DIR="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION"
-  if [ ! -d "$LAUNCHER_DIR/classes" ]; then
-    echo "Failed to find Spark launcher classes in $LAUNCHER_DIR." 1>&2
-    echo "You need to build Spark before running this program." 1>&2
-    exit 1
-  fi
-  SPARK_LAUNCHER_CP="$LAUNCHER_DIR/classes"
+# Find assembly jar
+SPARK_ASSEMBLY_JAR=
+ASSEMBLY_DIR="$SPARK_HOME/lib"
+num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*\.jar$" | wc -l)"
+ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*\.jar$" || true)"
+if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" ]; then
+  echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
+  echo "You need to build Spark before running this program." 1>&2
+  exit 1
 fi
+if [ "$num_jars" -gt "1" ]; then
+  echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
+  echo "$ASSEMBLY_JARS" 1>&2
+  echo "Please remove all but one jar." 1>&2
+  exit 1
+fi
+
+SPARK_ASSEMBLY_JAR="${ASSEMBLY_DIR}/${ASSEMBLY_JARS}"
 
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
@@ -77,7 +65,7 @@ fi
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$SPARK_LAUNCHER_CP" org.apache.spark.launcher.Main "$@")
+done < <("$RUNNER" -cp "$SPARK_ASSEMBLY_JAR" org.apache.spark.launcher.Main "$@")
 
 if [ "${CMD[0]}" = "usage" ]; then
   "${CMD[@]}"
