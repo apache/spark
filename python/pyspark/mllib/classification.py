@@ -364,14 +364,14 @@ class NaiveBayesModel(Saveable, Loader):
         java_labels = _py2java(sc, self.labels.tolist())
         java_pi = _py2java(sc, self.pi.tolist())
         java_theta = _py2java(sc, self.theta.tolist())
-        java_model = sc._jvm\
-            .org.apache.spark.mllib.classification.NaiveBayesModel(java_labels, java_pi, java_theta)
+        java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel(
+            java_labels, java_pi, java_theta)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
     def load(cls, sc, path):
-        java_model = sc._jvm.\
-            org.apache.spark.mllib.classification.NaiveBayesModel.load(sc._jsc.sc(), path)
+        java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
+            sc._jsc.sc(), path)
         py_labels = _java2py(sc, java_model.labels())
         py_pi = _java2py(sc, java_model.pi())
         py_theta = _java2py(sc, java_model.theta())
