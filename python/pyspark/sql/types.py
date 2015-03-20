@@ -970,7 +970,7 @@ def _infer_schema_type(obj, dataType):
         return ArrayType(eType, True)
 
     elif isinstance(dataType, MapType):
-        k, v = obj.iteritems().next()
+        k, v = next(obj.iteritems())
         return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 

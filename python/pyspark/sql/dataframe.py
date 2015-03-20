@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 import itertools
 import warnings
@@ -259,9 +261,9 @@ class DataFrame(object):
         == RDD ==
         """
         if extended:
-            print self._jdf.queryExecution().toString()
+            print(self._jdf.queryExecution().toString())
         else:
-            print self._jdf.queryExecution().executedPlan().toString()
+            print(self._jdf.queryExecution().executedPlan().toString())
 
     def isLocal(self):
         """
@@ -281,7 +283,7 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print self._jdf.showString(n).encode('utf8', 'ignore')
+        print(self._jdf.showString(n).encode('utf8', 'ignore'))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -450,7 +452,7 @@ class DataFrame(object):
         1L
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 

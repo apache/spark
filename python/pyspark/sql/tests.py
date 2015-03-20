@@ -235,7 +235,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema(self):
         from datetime import date, datetime
-        rdd = self.sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
+        rdd = self.sc.parallelize([(127, -128, -32768, 32767, 2147483647, 1.0,
                                     date(2010, 1, 1), datetime(2010, 1, 1, 1, 1, 1),
                                     {"a": 1}, (2,), [1, 2, 3], None)])
         schema = StructType([

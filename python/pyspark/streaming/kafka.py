@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 from py4j.java_collections import MapConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
@@ -67,10 +69,10 @@ class KafkaUtils(object):
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
             helper = helperClass.newInstance()
             jstream = helper.createStream(ssc._jssc, jparam, jtopics, jlevel)
-        except Py4JJavaError, e:
+        except Py4JJavaError as e:
             # TODO: use --jar once it also work on driver
             if 'ClassNotFoundException' in str(e.java_exception):
-                print """
+                print("""
 ________________________________________________________________________________________________
 
   Spark Streaming's Kafka libraries not found in class path. Try one of the following.
@@ -88,8 +90,8 @@ ________________________________________________________________________________
 
 ________________________________________________________________________________________________
 
-""" % (ssc.sparkContext.version, ssc.sparkContext.version)
+""" % (ssc.sparkContext.version, ssc.sparkContext.version))
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
-        return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
+        return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))

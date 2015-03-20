@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import cProfile
 import pstats
 import os
@@ -111,9 +113,9 @@ class Profiler(object):
         """ Print the profile stats to stdout, id is the RDD id """
         stats = self.stats()
         if stats:
-            print "=" * 60
-            print "Profile of RDD<id=%d>" % id
-            print "=" * 60
+            print("=" * 60)
+            print("Profile of RDD<id=%d>" % id)
+            print("=" * 60)
             stats.sort_stats("time", "cumulative").print_stats()
 
     def dump(self, id, path):
