@@ -19,14 +19,13 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.typesafe.config.Config
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import com.typesafe.config.Config
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.StorageLevel
 import java.nio.ByteBuffer
