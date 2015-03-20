@@ -531,6 +531,17 @@ object ALS extends Logging {
     var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
     var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
     var previousCheckpointFile: Option[String] = None
+    val shouldCheckpoint: Int => Boolean = (iter) =>
+      sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)
+    val deletePreviousCheckpointFile: () => Unit = () =>
+      previousCheckpointFile.foreach { file =>
+        try {
+          FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
+        } catch {
+          case e: IOException =>
+            logWarning(s"Cannot delete checkpoint file $file:", e)
+        }
+      }
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
@@ -540,40 +551,26 @@ object ALS extends Logging {
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
-        if (sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)) {
+        if (shouldCheckpoint(iter)) {
           itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
-          // delete previous checkpoint file
-          previousCheckpointFile.foreach { file =>
-            try {
-              FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
-            } catch {
-              case e: IOException =>
-                logWarning(s"Cannot delete checkpoint file $file:", e)
-            }
-          }
-          previousCheckpointFile = itemFactors.getCheckpointFile
         }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+        if (shouldCheckpoint(iter)) {
+          deletePreviousCheckpointFile()
+          previousCheckpointFile = itemFactors.getCheckpointFile
+        }
         previousUserFactors.unpersist()
       }
     } else {
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
-        if (sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)) {
+        if (shouldCheckpoint(iter)) {
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
-          // delete previous checkpoint file
-          previousCheckpointFile.foreach { file =>
-            try {
-              FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
-            } catch {
-              case e: IOException =>
-                logWarning(s"Cannot delete checkpoint file $file:", e)
-            }
-          }
+          deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
