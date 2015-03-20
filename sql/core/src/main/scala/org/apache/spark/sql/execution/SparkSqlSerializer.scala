@@ -39,8 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{IntegerHashSet, LongHa
 
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
-    val kryo = new Kryo()
-    kryo.setRegistrationRequired(false)
+    val kryo = super.newKryo
     kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
@@ -56,9 +55,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
                   new OpenHashSetSerializer)
     kryo.register(classOf[Decimal])
 
-    kryo.setReferences(false)
     kryo.setClassLoader(Utils.getSparkClassLoader)
-    new AllScalaRegistrar().apply(kryo)
     kryo
   }
 }
