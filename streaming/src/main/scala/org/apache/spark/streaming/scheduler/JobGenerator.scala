@@ -82,7 +82,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (eventActor != null) return // generator has already been started
 
     eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
-      def receive = {
+      override def receive: PartialFunction[Any, Unit] = {
         case event: JobGeneratorEvent =>  processEvent(event)
       }
     }), "JobGenerator")
@@ -111,8 +111,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
-      def hasTimedOut = {
-        val timedOut = System.currentTimeMillis() - timeWhenStopStarted > stopTimeout
+      def hasTimedOut: Boolean = {
+        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeout
         if (timedOut) {
           logWarning("Timed out while stopping the job generator (timeout = " + stopTimeout + ")")
         }
@@ -133,7 +133,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       logInfo("Stopped generation timer")
 
       // Wait for the jobs to complete and checkpoints to be written
-      def haveAllBatchesBeenProcessed = {
+      def haveAllBatchesBeenProcessed: Boolean = {
         lastProcessedBatch != null && lastProcessedBatch.milliseconds == stopTime
       }
       logInfo("Waiting for jobs to be processed and checkpoints to be written")

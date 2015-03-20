@@ -104,7 +104,7 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def parentRememberDuration = rememberDuration
 
   /** Return the StreamingContext associated with this DStream */
-  def context = ssc
+  def context: StreamingContext = ssc
 
   /* Set the creation call site */
   private[streaming] val creationSite = DStream.getCreationSite()
@@ -619,14 +619,16 @@ abstract class DStream[T: ClassTag] (
    * operator, so this DStream will be registered as an output stream and there materialized.
    */
   def print(num: Int) {
-    def foreachFunc = (rdd: RDD[T], time: Time) => {
-      val firstNum = rdd.take(num + 1)
-      println ("-------------------------------------------")
-      println ("Time: " + time)
-      println ("-------------------------------------------")
-      firstNum.take(num).foreach(println)
-      if (firstNum.size > num) println("...")
-      println()
+    def foreachFunc: (RDD[T], Time) => Unit = {
+      (rdd: RDD[T], time: Time) => {
+        val firstNum = rdd.take(num + 1)
+        println("-------------------------------------------")
+        println("Time: " + time)
+        println("-------------------------------------------")
+        firstNum.take(num).foreach(println)
+        if (firstNum.size > num) println("...")
+        println()
+      }
     }
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
