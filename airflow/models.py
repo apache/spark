@@ -245,16 +245,19 @@ class Connection(Base):
 
     def get_hook(self):
         from airflow import hooks
-        if self.conn_type == 'mysql':
-            return hooks.MySqlHook(mysql_conn_id=self.conn_id)
-        elif self.conn_type == 'postgres':
-            return hooks.PostgresHook(postgres_conn_id=self.conn_id)
-        elif self.conn_type == 'hive_cli':
-            return hooks.HiveCliHook(hive_cli_conn_id=self.conn_id)
-        elif self.conn_type == 'presto':
-            return hooks.PrestoHook(presto_conn_id=self.conn_id)
-        elif self.conn_type == 'hiveserver2':
-            return hooks.HiveServer2Hook(hiveserver2_conn_id=self.conn_id)
+        try:
+            if self.conn_type == 'mysql':
+                return hooks.MySqlHook(mysql_conn_id=self.conn_id)
+            elif self.conn_type == 'postgres':
+                return hooks.PostgresHook(postgres_conn_id=self.conn_id)
+            elif self.conn_type == 'hive_cli':
+                return hooks.HiveCliHook(hive_cli_conn_id=self.conn_id)
+            elif self.conn_type == 'presto':
+                return hooks.PrestoHook(presto_conn_id=self.conn_id)
+            elif self.conn_type == 'hiveserver2':
+                return hooks.HiveServer2Hook(hiveserver2_conn_id=self.conn_id)
+        except:
+            return None
 
     def __repr__(self):
         return self.conn_id
