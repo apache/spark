@@ -11,18 +11,10 @@ Use Airflow to author workflows as directed acyclic graphs (DAGs) of tasks. The 
 Principles
 ----------
 
-- **Dynamic:** Airflow pipelines are configuration as code (Python), 
-    allowing for dynamic pipeline generation. This allows for writting code
-    that instantiate pipelines dynamically.
-- **Extensible:** easily define your own operators, executors and
-    extend the library so that it fits the level of abstraction that
-    suits your environment.
-- **Elegant:** Airflow pipelines are lean and explicit. Parameterizing your
-    scripts is built in the core of Airflow using powerful **Jinja** 
-    templating engine.
-- **Scalable:** Airflow has a modular architecture and uses a message queue 
-    to talk to orchestrate an arbitrary number of workers. Airflow is 
-    ready to scale to infinity.
+- **Dynamic**:  Airflow pipelines are configuration as code (Python), allowing for dynamic pipeline generation. This allows for writting code that instantiate pipelines dynamically.
+- **Extensible**:  easily define your own operators, executors and extend the library so that it fits the level of abstraction that suits your environment.
+- **Elegant**:  Airflow pipelines are lean and explicit. Parameterizing your scripts is built in the core of Airflow using powerful **Jinja** templating engine.
+- **Scalable**:  Airflow has a modular architecture and uses a message queue to talk to orchestrate an arbitrary number of workers. Airflow is ready to scale to infinity.
 
 Content
 -------
