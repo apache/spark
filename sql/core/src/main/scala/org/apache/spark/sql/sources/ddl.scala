@@ -362,7 +362,7 @@ private[sql] case class CreateTableUsingAsSelect(
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
-  override def output = Seq.empty[Attribute]
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
   // TODO: Override resolved after we support databaseName.
   // override lazy val resolved = databaseName != None && childrenResolved
 }
@@ -373,7 +373,7 @@ private[sql] case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext) = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
@@ -388,7 +388,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext) = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerDataFrameAsTable(
