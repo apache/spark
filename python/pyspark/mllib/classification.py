@@ -377,6 +377,7 @@ class NaiveBayesModel(Saveable, Loader):
         py_theta = _java2py(sc, java_model.theta())
         return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
+
 class NaiveBayes(object):
 
     @classmethod
