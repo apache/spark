@@ -87,7 +87,11 @@ private[mllib] class GridPartitioner(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(rows, cols, rowsPerPart, colsPerPart)
+    com.google.common.base.Objects.hashCode(
+      rows: java.lang.Integer,
+      cols: java.lang.Integer,
+      rowsPerPart: java.lang.Integer,
+      colsPerPart: java.lang.Integer)
   }
 }
 

@@ -57,7 +57,12 @@ class InformationGainStats(
 
   override def hashCode: Int = {
     com.google.common.base.Objects.hashCode(
-      gain, impurity, leftImpurity, rightImpurity, leftPredict, rightPredict)
+      gain: java.lang.Double,
+      impurity: java.lang.Double,
+      leftImpurity: java.lang.Double,
+      rightImpurity: java.lang.Double,
+      leftPredict,
+      rightPredict)
   }
 }
 

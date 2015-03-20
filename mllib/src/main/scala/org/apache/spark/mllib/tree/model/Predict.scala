@@ -41,6 +41,6 @@ class Predict(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(predict, prob)
+    com.google.common.base.Objects.hashCode(predict: java.lang.Double, prob: java.lang.Double)
   }
 }
