@@ -20,6 +20,7 @@ from numpy import array
 
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
@@ -52,10 +53,6 @@ class LabeledPoint(object):
 
     def __repr__(self):
         return "LabeledPoint(%s, %s)" % (self.label, self.features)
-
-
-from pyspark.mllib.util import Saveable
-from pyspark.mllib.util import Loader
 
 
 class LinearModel(object):
@@ -146,7 +143,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
     """
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel(
-            _py2java(sc, self._coeff), _py2java(sc, self.intercept))
+            _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
@@ -154,7 +151,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
         java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
-        intercept = _java2py(sc, java_model.intercept())
+        intercept = java_model.intercept()
         model = LinearRegressionModel(weights, intercept)
         return model
 
@@ -258,7 +255,7 @@ class LassoModel(LinearRegressionModelBase):
     """
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel(
-            _py2java(sc, self._coeff), _py2java(sc, self.intercept))
+            _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
@@ -266,7 +263,7 @@ class LassoModel(LinearRegressionModelBase):
         java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
-        intercept = _java2py(sc, java_model.intercept())
+        intercept = java_model.intercept()
         model = LassoModel(weights, intercept)
         return model
 
@@ -332,7 +329,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     """
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel(
-            _py2java(sc, self._coeff), _py2java(sc, self.intercept))
+            _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
@@ -340,7 +337,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
         java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
-        intercept = _java2py(sc, java_model.intercept())
+        intercept = java_model.intercept()
         model = RidgeRegressionModel(weights, intercept)
         return model
 

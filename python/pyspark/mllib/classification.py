@@ -138,7 +138,7 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
 
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
-            _py2java(sc, self._coeff), _py2java(sc, self.intercept))
+            _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
@@ -146,8 +146,8 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
-        intercept = _java2py(sc, java_model.intercept())
-        threshold = _java2py(sc, java_model.getThreshold().get())
+        intercept = java_model.intercept()
+        threshold = java_model.getThreshold().get()
         model = LogisticRegressionModel(weights, intercept)
         model.setThreshold(threshold)
         return model
@@ -305,7 +305,7 @@ class SVMModel(LinearBinaryClassificationModel):
 
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
-            _py2java(sc, self._coeff), _py2java(sc, self.intercept))
+            _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
@@ -313,8 +313,8 @@ class SVMModel(LinearBinaryClassificationModel):
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
-        intercept = _java2py(sc, java_model.intercept())
-        threshold = _java2py(sc, java_model.getThreshold().get())
+        intercept = java_model.intercept()
+        threshold = java_model.getThreshold().get()
         model = SVMModel(weights, intercept)
         model.setThreshold(threshold)
         return model
