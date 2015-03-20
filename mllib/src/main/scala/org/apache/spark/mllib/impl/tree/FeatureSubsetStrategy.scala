@@ -17,50 +17,72 @@
 
 package org.apache.spark.mllib.impl.tree
 
-import org.apache.spark.mllib.tree.configuration.Algo.Algo
 
-sealed trait FeatureSubsetStrategy {
-//  private[mllib] def featuresPerNode(numFeatures: Int, algo: Algo): Int
+// TODO: Once we move the tree implementation to be in this new API,
+//       create an Algo enum under the new API.
+sealed abstract class FeatureSubsetStrategy {
+  private[mllib] def featuresPerNode(numFeatures: Int): Int
+}
+
+case class FunctionalSubset(f: Int => Int) extends FeatureSubsetStrategy {
+  override private[mllib] def featuresPerNode(numFeatures: Int): Int = f(numFeatures)
+}
+
+case class FractionalSubset(fraction: Double) extends FeatureSubsetStrategy {
+  require(fraction > 0.0 && fraction <= 1.0,
+    s"FeatureSubsetStrategy.Fraction($fraction) is invalid; fraction must be in range (0,1].")
+  override private[mllib] def featuresPerNode(numFeatures: Int): Int = {
+    (fraction * numFeatures).ceil.toInt
+  }
 }
 
 object FeatureSubsetStrategy {
 
   /**
    * This option sets the [[FeatureSubsetStrategy]] based on numTrees and the task.
-   *  - If numTrees == 1, set to [[FeatureSubsetStrategy.All]].
+   *  - If numTrees == 1, set to "all".
    *  - If numTrees > 1 (forest),
-   *     - For Classification, set to [[FeatureSubsetStrategy.Sqrt]].
-   *     - For Regression, set to [[FeatureSubsetStrategy.OneThird]].
+   *     - For Classification, set to "sqrt".
+   *     - For Regression, set to "onethird".
    */
-  case object Auto extends FeatureSubsetStrategy
-
-  case object All extends FeatureSubsetStrategy
-
-  case object Sqrt extends FeatureSubsetStrategy
-
-  case object OneThird extends FeatureSubsetStrategy
-
-  case object Log2 extends FeatureSubsetStrategy
-
-  case class Fraction(fraction: Double) extends FeatureSubsetStrategy {
-    require(fraction > 0.0 && fraction <= 1.0,
-      s"FeatureSubsetStrategy.Fraction($fraction) is invalid; fraction must be in range (0,1].")
+  final val Auto: FeatureSubsetStrategy = {
+    case object Auto extends FeatureSubsetStrategy {
+      override private[mllib] def featuresPerNode(numFeatures: Int): Int = {
+        throw new RuntimeException("FeatureSubsetStrategy.Auto.featuresPerNode was called," +
+          " but this should never happen since Auto should be replaced within each algorithm.")
+      }
+    }
+    Auto
   }
+
+  def Functional(f: Int => Int): FeatureSubsetStrategy = FunctionalSubset(f)
+
+  def Fractional(fraction: Double): FeatureSubsetStrategy = FractionalSubset(fraction)
 
 }
 
-object FeatureSubsetStrategies {
+private[mllib] object FeatureSubsetStrategies {
 
-  final val Auto: FeatureSubsetStrategy = FeatureSubsetStrategy.Auto
+  import FeatureSubsetStrategy._
 
-  final val All: FeatureSubsetStrategy = FeatureSubsetStrategy.All
+  private val supportedValues = Array("auto", "all", "onethird", "sqrt", "log2")
 
-  final val Sqrt: FeatureSubsetStrategy = FeatureSubsetStrategy.Sqrt
-
-  final val OneThird: FeatureSubsetStrategy = FeatureSubsetStrategy.OneThird
-
-  final val Log2: FeatureSubsetStrategy = FeatureSubsetStrategy.Log2
-
-  def Fraction(fraction: Double): FeatureSubsetStrategy = FeatureSubsetStrategy.Fraction(fraction)
-
+  /**
+   * Parse a string-valued FeatureSubsetStrategy.
+   * This method is case-insensitive.
+   */
+  def fromString(featureSubsetStrategy: String): FeatureSubsetStrategy = {
+    featureSubsetStrategy.toLowerCase match {
+      case "auto" => Auto
+      case "all" => Fractional(1.0)
+      case "onethird" => Fractional(1.0 / 3.0)
+      case "sqrt" => Functional(numFeatures => math.sqrt(numFeatures).ceil.toInt)
+      case "log2" =>
+        Functional(numFeatures => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt))
+      case _ =>
+        throw new IllegalArgumentException(s"Tree FeatureSubsetStrategy not recognized:" +
+          s" $featureSubsetStrategy\n" +
+          s"  Supported values: ${supportedValues.mkString(", ")}")
+    }
+  }
 }

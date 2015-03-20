@@ -18,12 +18,18 @@
 package org.apache.spark.mllib.classification.tree
 
 // Marked sealed for now, but could be opened up in the future.
-sealed trait ClassificationImpurity
+sealed abstract class ClassificationImpurity
 
 object ClassificationImpurity {
 
-  case object Entropy extends ClassificationImpurity
+  val Entropy: ClassificationImpurity = {
+    case object Entropy extends ClassificationImpurity
+    Entropy
+  }
 
-  case object Gini extends ClassificationImpurity
+  val Gini: ClassificationImpurity = {
+    case object Gini extends ClassificationImpurity
+    Gini
+  }
 
 }

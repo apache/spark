@@ -17,17 +17,16 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.classification.tree.ClassificationImpurity
-import org.apache.spark.mllib.impl.tree.{TreeClassifierParams, DecisionTreeParams}
+import org.apache.spark.mllib.impl.tree.{Node, TreeClassifier, TreeClassifierParams, DecisionTreeModel}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 
 
 class DecisionTreeClassifier
-  extends DecisionTreeParams[DecisionTreeClassifier]
+  extends TreeClassifier[DecisionTreeClassificationModel]
   with TreeClassifierParams[DecisionTreeClassifier] {
 
   // Override parameter setters from parent trait for Java API compatibility.
@@ -54,31 +53,14 @@ class DecisionTreeClassifier
   override def setImpurity(impurity: ClassificationImpurity): DecisionTreeClassifier =
     super.setImpurity(impurity)
 
-  def run(
+  override def run(
       input: RDD[LabeledPoint],
-      categoricalFeaturesInfo: Map[Int, Int] = Map.empty[Int, Int],
-      numClasses: Int = 2): DecisionTreeClassificationModel = {
-    // TODO
-    new DecisionTreeClassificationModel
-  }
-
-  def run(input: JavaRDD[LabeledPoint]): DecisionTreeClassificationModel = {
-    run(input.rdd)
-  }
-
-  def run(
-      input: JavaRDD[LabeledPoint],
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]):
-        DecisionTreeClassificationModel = {
-    run(input, categoricalFeaturesInfo, numClasses = 2)
-  }
-
-  def run(
-      input: JavaRDD[LabeledPoint],
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      categoricalFeatures: Map[Int, Int],
       numClasses: Int): DecisionTreeClassificationModel = {
-    run(input.rdd, categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      numClasses)
+    val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setSubsamplingRate(1.0) // fixed to 1.0 for individual trees
+    val oldModel = OldDecisionTree.train(input, strategy)
+    DecisionTreeClassificationModel.fromOld(oldModel)
   }
 
 }
@@ -91,6 +73,23 @@ object DecisionTreeClassifier {
 }
 
 
-class DecisionTreeClassificationModel extends Serializable {
+// TODO: Generalize for regression as well
+class DecisionTreeClassificationModel private[mllib] (rootNode: Node)
+  extends DecisionTreeModel(rootNode) with Serializable {
+
+  override def toString: String = {
+    s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
+  }
+
+  // TODO
+  //override def save(sc: SparkContext, path: String): Unit = {
+}
+
+private object DecisionTreeClassificationModel {
+
+  def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeClassificationModel = {
+    val rootNode = Node.fromOld(oldModel.topNode)
+    new DecisionTreeClassificationModel(rootNode)
+  }
 
 }

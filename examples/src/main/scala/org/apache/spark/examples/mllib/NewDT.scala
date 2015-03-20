@@ -39,7 +39,9 @@ object NewDT {
     val conf = new SparkConf().setAppName(s"NewDT")
     val sc = new SparkContext(conf)
 
-    val data = sc.parallelize(Seq(LabeledPoint(1.0, Vectors.dense(1,2,3))))
+    val data = sc.parallelize(Seq(
+      LabeledPoint(1.0, Vectors.dense(1,2,3)),
+      LabeledPoint(0.0, Vectors.dense(2,3,4))))
 
     /****************** EXAMPLE OF Decision Tree **************************/
     val dt = new DecisionTreeClassifier()
@@ -51,12 +53,12 @@ object NewDT {
 
     /****************** EXAMPLE OF Ensemble **************************/
     val rf = new RandomForestClassifier()
-      .setImpurity(RandomForestClassifier.Gini)
+      .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
       .setCheckpointInterval(5)
       .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies.Auto)
-      .setImpurity(RandomForestClassifier.Gini)
+      .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
       .setCheckpointInterval(5)
-      .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies.Fraction(0.2))
+      .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies.Fractional(0.2))
     val rfModel: RandomForestClassificationModel = rf.run(data)
 
     sc.stop()

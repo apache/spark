@@ -21,13 +21,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.classification.tree.ClassificationImpurity
-import org.apache.spark.mllib.impl.tree.{FeatureSubsetStrategies, FeatureSubsetStrategy, TreeClassifierParams, RandomForestParams}
+import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 
 class RandomForestClassifier
-  extends RandomForestParams[RandomForestClassifier]
+  extends TreeClassifier[RandomForestClassificationModel]
+  with RandomForestParams[RandomForestClassifier]
   with TreeClassifierParams[RandomForestClassifier] {
 
   // Override parameter setters from parent trait for Java API compatibility.
@@ -65,31 +66,12 @@ class RandomForestClassifier
 
   override def setSeed(seed: Long): RandomForestClassifier = super.setSeed(seed)
 
-  def run(
+  override def run(
       input: RDD[LabeledPoint],
-      categoricalFeaturesInfo: Map[Int, Int] = Map.empty[Int, Int],
-      numClasses: Int = 2): RandomForestClassificationModel = {
+      categoricalFeaturesInfo: Map[Int, Int],
+      numClasses: Int): RandomForestClassificationModel = {
     // TODO
     new RandomForestClassificationModel
-  }
-
-  def run(input: JavaRDD[LabeledPoint]): RandomForestClassificationModel = {
-    run(input.rdd)
-  }
-
-  def run(
-      input: JavaRDD[LabeledPoint],
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]):
-  RandomForestClassificationModel = {
-    run(input, categoricalFeaturesInfo, numClasses = 2)
-  }
-
-  def run(
-      input: JavaRDD[LabeledPoint],
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-      numClasses: Int): RandomForestClassificationModel = {
-    run(input.rdd, categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      numClasses)
   }
 
 }
@@ -97,11 +79,9 @@ class RandomForestClassifier
 object RandomForestClassifier {
 
   /** Accessor for supported FeatureSubsetStrategy options */
-  final val featureSubsetStrategies = FeatureSubsetStrategies
+  final val featureSubsetStrategies = FeatureSubsetStrategy
 
-  final val Entropy: ClassificationImpurity = ClassificationImpurity.Entropy
-
-  final val Gini: ClassificationImpurity = ClassificationImpurity.Gini
+  def supportedImpurities = ClassificationImpurity
 }
 
 class RandomForestClassificationModel extends Serializable {

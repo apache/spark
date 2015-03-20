@@ -60,12 +60,12 @@ public final class JavaNewDT {
 
     /****************** EXAMPLE OF Ensemble **************************/
     RandomForestClassifier rf = new RandomForestClassifier()
-        .setImpurity(RandomForestClassifier.Gini())
+        .setImpurity(RandomForestClassifier.supportedImpurities().Gini())
         .setCheckpointInterval(5)
         .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies().Auto())
-        .setImpurity(RandomForestClassifier.Gini())
+        .setImpurity(RandomForestClassifier.supportedImpurities().Gini())
         .setCheckpointInterval(5)
-        .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies().Fraction(0.2));
+        .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies().Fractional(0.2));
     RandomForestClassificationModel rfModel = rf.run(data);
 
     sc.stop();

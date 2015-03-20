@@ -19,5 +19,20 @@ package org.apache.spark
 
 /**
  * Spark's machine learning library.
+ *
+ * @groupname run      Methods for running algorithm
+ * @groupprio run      4
+ *
+ * @groupname setParam Parameter setters
+ * @groupprio setParam 5
+ *
+ * @groupname getParam Parameter getters
+ * @groupprio getParam 6
+ *
+ * @groupname expert   Expert methods
+ * @groupprio expert   8
+ *
+ * @groupname Ungrouped Members
+ * @groupprio Ungrouped 0
  */
 package object mllib

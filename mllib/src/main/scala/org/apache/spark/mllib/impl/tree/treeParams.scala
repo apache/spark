@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.impl.tree
 
 import org.apache.spark.mllib.classification.tree.ClassificationImpurity
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy}
 import org.apache.spark.util.Utils
 
 /**
@@ -26,39 +28,25 @@ import org.apache.spark.util.Utils
  */
 private[mllib] trait DecisionTreeParams[M] {
 
-    protected var maxDepth: Int = 5
+  protected var maxDepth: Int = 5
 
-    protected var maxBins: Int = 32
+  protected var maxBins: Int = 32
 
-    protected var minInstancesPerNode: Int = 1
+  protected var minInstancesPerNode: Int = 1
 
-    protected var minInfoGain: Double = 0.0
+  protected var minInfoGain: Double = 0.0
 
-    protected var maxMemoryInMB: Int = 256
+  protected var maxMemoryInMB: Int = 256
 
-    protected var cacheNodeIds: Boolean = false
+  protected var cacheNodeIds: Boolean = false
 
-    protected var checkpointInterval: Int = 10
-
-  /*
-private[mllib] trait DecisionTreeParams[M] private (
-//                                               var impurity: Impurity,
-    private var maxDepth: Int,
-    private var maxBins: Int,
-    private var minInstancesPerNode: Int,
-    private var minInfoGain: Double,
-    private var maxMemoryInMB: Int,
-    private var cacheNodeIds: Boolean,
-    private var checkpointInterval: Int) {
-
-  def this() = this(maxDepth = 5, maxBins = 32, minInstancesPerNode = 1, minInfoGain = 0.0,
-    maxMemoryInMB = 256, cacheNodeIds = false, checkpointInterval = 10)
-   */
+  protected var checkpointInterval: Int = 10
 
   /**
    * Maximum depth of the tree.
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
+   * @group setParam
    */
   def setMaxDepth(maxDepth: Int): M = {
     this.maxDepth = maxDepth
@@ -69,6 +57,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * Maximum depth of the tree.
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
+   * @group getParam
    */
   def getMaxDepth: Int = maxDepth
 
@@ -78,6 +67,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * Must be >= 2 and >= number of categories in any categorical feature.
    * Values < 0 are interpreted as "auto" (algorithm chooses automatically).
    * (default = 32)
+   * @group setParam
    */
   def setMaxBins(maxBins: Int): M = {
     this.maxBins = maxBins
@@ -90,6 +80,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * Must be >= 2 and >= number of categories in any categorical feature.
    * Values < 0 are interpreted as "auto" (algorithm chooses automatically).
    * (default = 32)
+   * @group getParam
    */
   def getMaxBins: Int = maxBins
 
@@ -98,6 +89,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * If a split cause left or right child to have less than minInstancesPerNode,
    * this split will not be considered as a valid split.
    * (default = 1)
+   * @group setParam
    */
   def setMinInstancesPerNode(minInstancesPerNode: Int): M = {
     this.minInstancesPerNode = minInstancesPerNode
@@ -109,12 +101,14 @@ private[mllib] trait DecisionTreeParams[M] private (
    * If a split cause left or right child to have less than minInstancesPerNode,
    * this split will not be considered as a valid split.
    * (default = 1)
+   * @group getParam
    */
   def getMinInstancesPerNode: Int = minInstancesPerNode
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
    * (default = 0.0)
+   * @group setParam
    */
   def setMinInfoGain(minInfoGain: Double): M = {
     this.minInfoGain = minInfoGain
@@ -124,12 +118,14 @@ private[mllib] trait DecisionTreeParams[M] private (
   /**
    * Minimum information gain for a split to be considered at a tree node.
    * (default = 0.0)
+   * @group getParam
    */
   def getMinInfoGain: Double = minInfoGain
 
   /**
    * Maximum memory in MB allocated to histogram aggregation.
    * (default = 256 MB)
+   * @group expert
    */
   def setMaxMemoryInMB(maxMemoryInMB: Int): M = {
     this.maxMemoryInMB = maxMemoryInMB
@@ -139,6 +135,7 @@ private[mllib] trait DecisionTreeParams[M] private (
   /**
    * Maximum memory in MB allocated to histogram aggregation.
    * (default = 256 MB)
+   * @group expert
    */
   def getMaxMemoryInMB: Int = maxMemoryInMB
 
@@ -147,6 +144,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * If true, the algorithm will cache node IDs for each instance.
    * Caching can speed up training of deeper trees.
    * (default = false)
+   * @group expert
    */
   def setCacheNodeIds(cacheNodeIds: Boolean): M = {
     this.cacheNodeIds = cacheNodeIds
@@ -158,6 +156,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * If true, the algorithm will cache node IDs for each instance.
    * Caching can speed up training of deeper trees.
    * (default = false)
+   * @group expert
    */
   def getCacheNodeIds: Boolean = cacheNodeIds
 
@@ -167,6 +166,7 @@ private[mllib] trait DecisionTreeParams[M] private (
    * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
    * [[org.apache.spark.SparkContext]].
    * (default = 10)
+   * @group expert
    */
   def setCheckpointInterval(checkpointInterval: Int): M = {
     this.checkpointInterval = checkpointInterval
@@ -179,20 +179,40 @@ private[mllib] trait DecisionTreeParams[M] private (
    * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
    * [[org.apache.spark.SparkContext]].
    * (default = 10)
+   * @group expert
    */
   def getCheckpointInterval: Int = checkpointInterval
 
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set subsamplingRate by hand based on the model type!
+   */
+  protected def getOldStrategy(categoricalFeatures: Map[Int, Int], numClasses: Int): OldStrategy = {
+    val strategy = OldStrategy.defaultStategy(OldAlgo.Classification)
+    strategy.checkpointInterval = checkpointInterval
+    strategy.maxBins = maxBins
+    strategy.maxDepth = maxDepth
+    strategy.maxMemoryInMB = maxMemoryInMB
+    strategy.minInfoGain = minInfoGain
+    strategy.minInstancesPerNode = minInstancesPerNode
+    strategy.useNodeIdCache = cacheNodeIds
+    strategy.numClasses = numClasses
+    strategy.subsamplingRate = 1.0 // default for individual trees
+    strategy
+  }
+
 }
 
-private[mllib] trait TreeClassifierParams[M] {
+private[mllib] trait TreeClassifierParams[M] extends DecisionTreeParams[M] {
 
   protected var impurity: ClassificationImpurity = ClassificationImpurity.Gini
 
   /**
    * Criterion used for information gain calculation.
    * Supported: [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Gini]],
-   *            [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
+   * [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
    * (default = Gini)
+   * @group setParam
    */
   def setImpurity(impurity: ClassificationImpurity): M = {
     this.impurity = impurity
@@ -202,17 +222,36 @@ private[mllib] trait TreeClassifierParams[M] {
   /**
    * Criterion used for information gain calculation.
    * Supported: [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Gini]],
-   *            [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
+   * [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
    * (default = Gini)
+   * @group getParam
    */
   def getImpurity: ClassificationImpurity = impurity
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set subsamplingRate by hand based on the model type!
+   */
+  override protected def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    val oldImpurity = impurity match {
+      case ClassificationImpurity.Entropy => OldEntropy
+      case ClassificationImpurity.Gini => OldGini
+      case _ => throw new RuntimeException(
+        s"TreeClassifierParams was given unrecognized impurity: $impurity")
+    }
+    strategy.setImpurity(oldImpurity)
+    strategy
+  }
 }
 
 /**
  * (private trait) Parameters for Decision Trees.
  * @tparam M  Concrete class implementing this parameter trait
  */
-private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
+private[mllib] trait TreeEnsembleParams[M] {
 
   protected var subsamplingRate: Double = 1.0
 
@@ -221,6 +260,7 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
   /**
    * Fraction of the training data used for learning each decision tree.
    * (default = 1.0)
+   * @group setParam
    */
   def setSubsamplingRate(subsamplingRate: Double): M = {
     this.subsamplingRate = subsamplingRate
@@ -230,16 +270,23 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
   /**
    * Fraction of the training data used for learning each decision tree.
    * (default = 1.0)
+   * @group getParam
    */
   def getSubsamplingRate: Double = subsamplingRate
 
-  /** Random seed. */
+  /**
+   * Random seed.
+   * @group setParam
+   */
   def setSeed(seed: Long): M = {
     this.seed = seed
     this.asInstanceOf[M]
   }
 
-  /** Random seed. */
+  /**
+   * Random seed.
+   * @group getParam
+   */
   def getSeed: Long = seed
 
 }
@@ -255,6 +302,7 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).
    * (default = 20)
+   * @group setParam
    */
   def setNumTrees(numTrees: Int): M = {
     require(numTrees >= 1,
@@ -268,6 +316,7 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).
    * (default = 20)
+   * @group getParam
    */
   def getNumTrees: Int = numTrees
 
@@ -275,6 +324,7 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
    * Specifies the number of features to consider for splits at each tree node.
    * Use featureSubsetStrategies to select supported options.
    * (default = [[FeatureSubsetStrategy.Auto]])
+   * @group setParam
    */
   def setFeatureSubsetStrategy(featureSubsetStrategy: FeatureSubsetStrategy): M = {
     this.featureSubsetStrategy = featureSubsetStrategy
@@ -285,6 +335,7 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
    * Specifies the number of features to consider for splits at each tree node.
    * Use featureSubsetStrategies to select supported options.
    * (default = [[FeatureSubsetStrategy.Auto]])
+   * @group getParam
    */
   def getFeatureSubsetStrategy: FeatureSubsetStrategy = featureSubsetStrategy
 }
@@ -296,6 +347,7 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
   /**
    * Number of trees to train (>= 1).
    * (default = 20)
+   * @group setParam
    */
   def setNumIterations(numIterations: Int): M = {
     require(numIterations >= 1,
@@ -307,6 +359,7 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
   /**
    * Number of trees to train (>= 1).
    * (default = 20)
+   * @group getParam
    */
   def getNumIterations: Int = numIterations
 }
