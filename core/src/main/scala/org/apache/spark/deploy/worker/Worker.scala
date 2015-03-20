@@ -42,7 +42,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 /**
   * @param masterAkkaUrls Each url should be a valid akka url.
   */
-private[spark] class Worker(
+private[worker] class Worker(
     host: String,
     port: Int,
     webUiPort: Int,
@@ -60,85 +60,90 @@ private[spark] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
+  // For worker and executor IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
-  val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
+  private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
   // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
   // Afterwards, the next 10 attempts are between 30 and 90 seconds.
   // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
   // the same time.
-  val INITIAL_REGISTRATION_RETRIES = 6
-  val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
-  val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
-  val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
+  private val INITIAL_REGISTRATION_RETRIES = 6
+  private val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
+  private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
+  private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
     randomNumberGenerator.nextDouble + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
   }
-  val INITIAL_REGISTRATION_RETRY_INTERVAL = (math.round(10 *
+  private val INITIAL_REGISTRATION_RETRY_INTERVAL = (math.round(10 *
     REGISTRATION_RETRY_FUZZ_MULTIPLIER)).seconds
-  val PROLONGED_REGISTRATION_RETRY_INTERVAL = (math.round(60
+  private val PROLONGED_REGISTRATION_RETRY_INTERVAL = (math.round(60
     * REGISTRATION_RETRY_FUZZ_MULTIPLIER)).seconds
 
-  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
+  private val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
-  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
+  private val CLEANUP_INTERVAL_MILLIS = 
+    conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
+  private val APP_DATA_RETENTION_SECS = 
+    conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
-  val testing: Boolean = sys.props.contains("spark.testing")
-  var master: ActorSelection = null
-  var masterAddress: Address = null
-  var activeMasterUrl: String = ""
-  var activeMasterWebUiUrl : String = ""
-  val akkaUrl = AkkaUtils.address(
+  private val testing: Boolean = sys.props.contains("spark.testing")
+  private var master: ActorSelection = null
+  private var masterAddress: Address = null
+  private var activeMasterUrl: String = ""
+  private[worker] var activeMasterWebUiUrl : String = ""
+  private val akkaUrl = AkkaUtils.address(
     AkkaUtils.protocol(context.system),
     actorSystemName,
     host,
     port,
     actorName)
-  @volatile var registered = false
-  @volatile var connected = false
-  val workerId = generateWorkerId()
-  val sparkHome =
+  @volatile private var registered = false
+  @volatile private var connected = false
+  private val workerId = generateWorkerId()
+  private val sparkHome =
     if (testing) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
       new File(sys.env.get("SPARK_HOME").getOrElse("."))
     }
+  
   var workDir: File = null
-  val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
+  val executors = new HashMap[String, ExecutorRunner]
   val finishedDrivers = new HashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 
   // The shuffle service is not actually started unless configured.
-  val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
+  private val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
 
-  val publicAddress = {
+  private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
-  var webUi: WorkerWebUI = null
+  private var webUi: WorkerWebUI = null
+
+  private var connectionAttemptCount = 0
+
+  private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
+  private val workerSource = new WorkerSource(this)
+  
+  private var registrationRetryTimer: Option[Cancellable] = None
 
   var coresUsed = 0
   var memoryUsed = 0
-  var connectionAttemptCount = 0
-
-  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
-  val workerSource = new WorkerSource(this)
-
-  var registrationRetryTimer: Option[Cancellable] = None
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
-  def createWorkDir() {
+  private def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
@@ -175,7 +180,7 @@ private[spark] class Worker(
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
-  def changeMaster(url: String, uiUrl: String) {
+  private def changeMaster(url: String, uiUrl: String) {
     // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
@@ -252,7 +257,7 @@ private[spark] class Worker(
     }
   }
 
-  def registerWithMaster() {
+  private def registerWithMaster() {
     // DisassociatedEvent may be triggered multiple times, so don't attempt registration
     // if there are outstanding registration attempts scheduled.
     registrationRetryTimer match {
@@ -506,7 +511,7 @@ private[spark] class Worker(
     }
   }
 
-  def generateWorkerId(): String = {
+  private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
@@ -521,7 +526,7 @@ private[spark] class Worker(
   }
 }
 
-private[spark] object Worker extends Logging {
+private[deploy] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -554,7 +559,7 @@ private[spark] object Worker extends Logging {
     (actorSystem, boundPort)
   }
 
-  private[spark] def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
+  def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
     val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
       case pattern(_result) => _result.toBoolean
@@ -562,7 +567,7 @@ private[spark] object Worker extends Logging {
     result.getOrElse(false)
   }
 
-  private[spark] def maybeUpdateSSLSettings(cmd: Command, conf: SparkConf): Command = {
+  def maybeUpdateSSLSettings(cmd: Command, conf: SparkConf): Command = {
     val prefix = "spark.ssl."
     val useNLC = "spark.ssl.useNodeLocalConf"
     if (isUseLocalNodeSSLConfig(cmd)) {

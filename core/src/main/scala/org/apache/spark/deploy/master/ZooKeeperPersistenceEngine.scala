@@ -28,12 +28,12 @@ import org.apache.zookeeper.CreateMode
 import org.apache.spark.{Logging, SparkConf}
 
 
-private[spark] class ZooKeeperPersistenceEngine(conf: SparkConf, val serialization: Serialization)
+private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serialization: Serialization)
   extends PersistenceEngine
-  with Logging
-{
-  val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
-  val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
+  with Logging {
+  
+  private val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
+  private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
   SparkCuratorUtil.mkdir(zk, WORKING_DIR)
 
@@ -61,7 +61,7 @@ private[spark] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializati
     zk.create().withMode(CreateMode.PERSISTENT).forPath(path, serialized)
   }
 
-  def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
+  private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(WORKING_DIR + "/" + filename)
     val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)

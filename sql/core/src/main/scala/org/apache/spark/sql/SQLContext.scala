@@ -242,8 +242,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sqlContext = new SQLContext
-   *   import sqlContext._
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
    * }}}
    *
    * @group basic

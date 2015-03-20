@@ -48,7 +48,7 @@ private[spark] class WorkerWatcher(workerUrl: String)
   private val expectedHostPort = AddressFromURIString(workerUrl).hostPort
   private def isWorker(address: Address) = address.hostPort == expectedHostPort
 
-  def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
+  private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
   override def receiveWithLogging = {
     case AssociatedEvent(localAddress, remoteAddress, inbound) if isWorker(remoteAddress) =>

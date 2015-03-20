@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.spark.sql.AnalysisException
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
@@ -32,7 +31,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   var path: File = null
 
   override def beforeAll(): Unit = {
-    path = util.getTempFilePath("jsonCTAS").getCanonicalFile
+    path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     jsonRDD(rdd).registerTempTable("jt")
   }
@@ -42,7 +41,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   after {
-    if (path.exists()) Utils.deleteRecursively(path)
+    Utils.deleteRecursively(path)
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {

@@ -170,14 +170,14 @@ df.select("name").show()
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df("age") + 1).show()
+df.select(df("name"), df("age") + 1).show()
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show()
+df.filter(df("age") > 21).show()
 // age name
 // 30  Andy
 
@@ -220,14 +220,14 @@ df.select("name").show();
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df.col("age").plus(1)).show();
+df.select(df.col("name"), df.col("age").plus(1)).show();
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show();
+df.filter(df.col("age").gt(21)).show();
 // age name
 // 30  Andy
 
@@ -270,14 +270,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select("name", df.age + 1).show()
+df.select(df.name, df.age + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.name > 21).show()
+df.filter(df.age > 21).show()
 ## age name
 ## 30  Andy
 
