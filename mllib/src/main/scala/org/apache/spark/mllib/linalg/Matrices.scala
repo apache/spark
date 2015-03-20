@@ -21,12 +21,12 @@ import java.util.{Arrays, Random}
 
 import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHashSet, ArrayBuffer}
 
+import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-
-import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 /**
  * Trait for a local matrix.
@@ -184,6 +184,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       case _ => false
     }
   }
+
+  override def hashCode(): Int = 1994
 
   private[spark] override def asNullable: MatrixUDT = this
 }
