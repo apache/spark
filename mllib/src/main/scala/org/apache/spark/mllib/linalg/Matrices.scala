@@ -146,10 +146,14 @@ class DenseMatrix(
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
-  override def equals(o: Any) = o match {
+  override def equals(o: Any): Boolean = o match {
     case m: DenseMatrix =>
       m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
   }
 
   private[mllib] def toBreeze: BM[Double] = {
@@ -173,7 +177,7 @@ class DenseMatrix(
     values(index(i, j)) = v
   }
 
-  override def copy = new DenseMatrix(numRows, numCols, values.clone())
+  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
   private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f))
 
@@ -431,7 +435,9 @@ class SparseMatrix(
     }
   }
 
-  override def copy = new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+  override def copy: SparseMatrix = {
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+  }
 
   private[mllib] def map(f: Double => Double) =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))

@@ -79,7 +79,7 @@ object RandomForestModel extends Loader[RandomForestModel] {
 
   private object SaveLoadV1_0 {
     // Hard-code class name string in case it changes in the future
-    def thisClassName = "org.apache.spark.mllib.tree.model.RandomForestModel"
+    def thisClassName: String = "org.apache.spark.mllib.tree.model.RandomForestModel"
   }
 
 }
@@ -130,7 +130,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   private object SaveLoadV1_0 {
     // Hard-code class name string in case it changes in the future
-    def thisClassName = "org.apache.spark.mllib.tree.model.GradientBoostedTreesModel"
+    def thisClassName: String = "org.apache.spark.mllib.tree.model.GradientBoostedTreesModel"
   }
 
 }
@@ -257,7 +257,7 @@ private[tree] object TreeEnsembleModel extends Logging {
 
     import org.apache.spark.mllib.tree.model.DecisionTreeModel.SaveLoadV1_0.{NodeData, constructTrees}
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     case class Metadata(
         algo: String,

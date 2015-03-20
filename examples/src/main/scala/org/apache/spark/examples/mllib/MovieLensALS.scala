@@ -175,7 +175,8 @@ object MovieLensALS {
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
+  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean)
+    : Double = {
 
     def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
 

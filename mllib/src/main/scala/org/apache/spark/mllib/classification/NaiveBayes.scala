@@ -83,10 +83,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
   private object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Hard-code class name string in case it changes in the future */
-    def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
+    def thisClassName: String = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
     case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]])
@@ -174,7 +174,7 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
    *
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
-  def run(data: RDD[LabeledPoint]) = {
+  def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case SparseVector(size, indices, values) =>
