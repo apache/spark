@@ -93,7 +93,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def getRunner(operateFun: () => Unit): Runnable = {
     new Runnable() {
-      override def run() = Utils.logUncaughtExceptions {
+      override def run() = Utils.tryOrExit {
         operateFun()
       }
     }
