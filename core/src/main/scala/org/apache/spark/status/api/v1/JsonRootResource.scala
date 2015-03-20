@@ -86,7 +86,8 @@ class JsonRootResource extends UIRootFromServletContext {
 }
 
 object JsonRootResource {
-  def getJsonServlet(uiRoot: UIRoot) = {
+
+  def getJsonServlet(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/json")
     val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
