@@ -23,7 +23,11 @@ import javax.ws.rs.core.MediaType
 import javax.ws.rs.ext.{ContextResolver, Provider}
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.{JsonSerializer, ObjectMapper, SerializationFeature, SerializerProvider}
+import com.fasterxml.jackson.databind.module.SimpleModule
+
+import org.apache.spark.util.SparkEnum
 
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -38,10 +42,13 @@ class CustomObjectMapper extends ContextResolver[ObjectMapper]{
   mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
   mapper.setDateFormat(CustomObjectMapper.makeISODateFormat)
 
+  val sparkEnumModule = new SimpleModule()
+  sparkEnumModule.addSerializer(classOf[SparkEnum], new SparkEnumSerializer)
+  mapper.registerModule(sparkEnumModule)
+
   override def getContext(tpe: Class[_]): ObjectMapper = {
     mapper
   }
-
 }
 
 object CustomObjectMapper {
@@ -51,5 +58,10 @@ object CustomObjectMapper {
     iso8601.setCalendar(cal);
     iso8601;
   }
+}
 
+class SparkEnumSerializer extends JsonSerializer[SparkEnum] {
+  def serialize(se: SparkEnum, jgen: JsonGenerator, provider: SerializerProvider): Unit = {
+    jgen.writeString(se.toString)
+  }
 }
