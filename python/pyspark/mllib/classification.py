@@ -21,7 +21,7 @@ import numpy
 from numpy import array
 
 from pyspark import RDD
-from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
@@ -99,6 +99,18 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
     1
     >>> lrm.predict(SparseVector(2, {0: 1.0}))
     0
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LogisticRegressionModel.load(sc, path)
+    >>> sameModel.predict(array([0.0, 1.0]))
+    1
+    >>> sameModel.predict(SparseVector(2, {0: 1.0}))
+    0
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     """
     def __init__(self, weights, intercept):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
@@ -123,6 +135,22 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
             return prob
         else:
             return 1 if prob > self._threshold else 0
+
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        threshold = java_model.getThreshold().get()
+        model = LogisticRegressionModel(weights, intercept)
+        model.setThreshold(threshold)
+        return model
 
 
 class LogisticRegressionWithSGD(object):
@@ -243,6 +271,18 @@ class SVMModel(LinearBinaryClassificationModel):
     1
     >>> svm.predict(SparseVector(2, {0: -1.0}))
     0
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> svm.save(sc, path)
+    >>> sameModel = SVMModel.load(sc, path)
+    >>> sameModel.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> sameModel.predict(SparseVector(2, {0: -1.0}))
+    0
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     """
     def __init__(self, weights, intercept):
         super(SVMModel, self).__init__(weights, intercept)
@@ -262,6 +302,22 @@ class SVMModel(LinearBinaryClassificationModel):
             return margin
         else:
             return 1 if margin > self._threshold else 0
+
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        threshold = java_model.getThreshold().get()
+        model = SVMModel(weights, intercept)
+        model.setThreshold(threshold)
+        return model
 
 
 class SVMWithSGD(object):

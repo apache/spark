@@ -18,8 +18,9 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callMLlibFunc, inherit_doc
+from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
@@ -114,6 +115,20 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LinearRegressionModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
@@ -126,6 +141,19 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = LinearRegressionModel(weights, intercept)
+        return model
 
 
 # train_func should take two parameters, namely data and initial_weights, and
@@ -199,6 +227,20 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = LassoModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
@@ -211,6 +253,19 @@ class LassoModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = LassoModel(weights, intercept)
+        return model
 
 
 class LassoWithSGD(object):
@@ -246,6 +301,20 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> lrm.save(sc, path)
+    >>> sameModel = RidgeRegressionModel.load(sc, path)
+    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    True
+    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> try:
+    ...    os.removedirs(path)
+    ... except:
+    ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
@@ -258,6 +327,19 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     """
+    def save(self, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel(
+            _py2java(sc, self._coeff), self.intercept)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel.load(
+            sc._jsc.sc(), path)
+        weights = _java2py(sc, java_model.weights())
+        intercept = java_model.intercept()
+        model = RidgeRegressionModel(weights, intercept)
+        return model
 
 
 class RidgeRegressionWithSGD(object):
