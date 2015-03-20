@@ -360,7 +360,20 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def newInstance() = new SumFunction(child, this)
 }
 
-
+/**
+ * Sum should satisfy 3 cases:
+ * 1) sum of all null values = zero
+ * 2) sum for table column with no data = null
+ * 3) sum of column with null and not null values = sum of not null values
+ * Require separate CombineSum Expression and function as it has to distinguish "No data" case
+ * versus "data equals null" case, while aggregating results and at each partial expression.i.e.,
+ * Combining    PartitionLevel   InputData
+ *                           <-- null
+ * Zero     <-- Zero         <-- null
+ *                              
+ *          <-- null         <-- no data
+ * null     <-- null         <-- no data 
+ */
 case class CombineSum(child: Expression) extends AggregateExpression {
   def this() = this(null)
   
