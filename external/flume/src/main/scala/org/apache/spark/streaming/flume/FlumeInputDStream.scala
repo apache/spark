@@ -51,7 +51,7 @@ class FlumeInputDStream[T: ClassTag](
     enableDecompression: Boolean
   ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
-  super.setPreferredLocation(Some(host));
+  super.setPreferredLocation(host)
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel, enableDecompression)
