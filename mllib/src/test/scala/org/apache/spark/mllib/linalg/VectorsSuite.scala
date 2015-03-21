@@ -187,6 +187,7 @@ class VectorsSuite extends FunSuite {
     for (v <- Seq(dv0, dv1, sv0, sv1)) {
       assert(v === udt.deserialize(udt.serialize(v)))
     }
+    assert(udt.typeName == "vector")
   }
 
   test("fromBreeze") {

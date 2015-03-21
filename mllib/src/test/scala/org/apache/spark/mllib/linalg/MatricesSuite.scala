@@ -436,5 +436,6 @@ class MatricesSuite extends FunSuite {
     Seq(dm1, dm2, dm3, sm1, sm2, sm3).foreach {
         mat => assert(mat.toArray === mUDT.deserialize(mUDT.serialize(mat)).toArray)
     }
+    assert(mUDT.typeName == "matrix")
   }
 }
