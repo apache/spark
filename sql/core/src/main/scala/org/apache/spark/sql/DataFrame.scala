@@ -89,7 +89,7 @@ private[sql] object DataFrame {
  *   val people = sqlContext.parquetFile("...")
  *   val department = sqlContext.parquetFile("...")
  *
- *   people.filter("age" > 30)
+ *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
  *     .groupBy(department("name"), "gender")
  *     .agg(avg(people("salary")), max(people("age")))
