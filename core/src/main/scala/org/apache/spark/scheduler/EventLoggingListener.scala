@@ -208,9 +208,7 @@ private[spark] class EventLoggingListener(
         logInfo(s"Ignoring failure to delete on stop for path $target")
       }
     }
-
   }
-
 }
 
 private[spark] object EventLoggingListener extends Logging {
