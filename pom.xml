@@ -158,6 +158,7 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+    <maven-jar-plugin.version>2.6</maven-jar-plugin.version>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -1265,6 +1266,7 @@
               <id>create-source-jar</id>
               <goals>
                 <goal>jar-no-fork</goal>
+                <goal>test-jar-no-fork</goal>
               </goals>
             </execution>
           </executions>
@@ -1471,6 +1473,46 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+      </plugin>
+      <!-- Build the JARs-->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>${maven-jar-plugin.version}</version>
+        <configuration>
+          <!-- Configuration of the archiver -->
+          <archive>
+            <manifestEntries>
+              <mode>development</mode>
+              <url>${project.url}</url>
+            </manifestEntries>
+            <manifest>
+              <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
+          </archive>
+        </configuration>
+        <executions>
+        <execution>
+          <id>prepare-jar</id>
+          <phase>prepare-package</phase>
+          <goals>
+            <goal>jar</goal>
+          </goals>
+        </execution>
+        <execution>
+          <id>prepare-test-jar</id>
+          <phase>prepare-package</phase>
+          <goals>
+            <goal>test-jar</goal>
+          </goals>
+          <configuration>
+            <excludes>
+              <exclude>log4j.properties</exclude>
+            </excludes>
+          </configuration>
+        </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
