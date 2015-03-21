@@ -681,7 +681,7 @@ private[sql] case class ParquetRelation2(
   }
 }
 
-private[sql] object ParquetRelation2 {
+private[sql] object ParquetRelation2 extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 
@@ -701,7 +701,26 @@ private[sql] object ParquetRelation2 {
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .map(DataType.fromJson(_).asInstanceOf[StructType])
+        .flatMap { serializedSchema =>
+          // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
+          // whatever is available.
+          Try(DataType.fromJson(serializedSchema))
+            .recover { case _: Throwable =>
+              logInfo(
+                s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
+                  "falling back to the deprecated DataType.fromCaseClassString parser.")
+              DataType.fromCaseClassString(serializedSchema)
+            }
+            .recover { case cause: Throwable =>
+              logWarning(
+                s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
+                   |\t$serializedSchema
+                 """.stripMargin,
+                cause)
+            }
+            .map(_.asInstanceOf[StructType])
+            .toOption
+        }
 
       maybeSparkSchema.getOrElse {
         // Falls back to Parquet schema if Spark SQL schema is absent.

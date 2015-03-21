@@ -28,8 +28,8 @@ import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.{ParquetFileWriter, ParquetWriter}
+import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData, CompressionCodecName}
+import parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -330,6 +330,42 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
   }
 
+  test("SPARK-6315 regression test") {
+    // Spark 1.1 and prior versions write Spark schema as case class string into Parquet metadata.
+    // This has been deprecated by JSON format since 1.2.  Notice that, 1.3 further refactored data
+    // types API, and made StructType.fields an array.  This makes the result of StructType.toString
+    // different from prior versions: there's no "Seq" wrapping the fields part in the string now.
+    val sparkSchema =
+      "StructType(Seq(StructField(a,BooleanType,false),StructField(b,IntegerType,false)))"
+
+    // The Parquet schema is intentionally made different from the Spark schema.  Because the new
+    // Parquet data source simply falls back to the Parquet schema once it fails to parse the Spark
+    // schema.  By making these two different, we are able to assert the old style case class string
+    // is parsed successfully.
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 c;
+        |}
+      """.stripMargin)
+
+    withTempPath { location =>
+      val extraMetadata = Map(RowReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val path = new Path(location.getCanonicalPath)
+
+      ParquetFileWriter.writeMetadataFile(
+        sparkContext.hadoopConfiguration,
+        path,
+        new Footer(path, new ParquetMetadata(fileMetadata, Nil)) :: Nil)
+
+      assertResult(parquetFile(path.toString).schema) {
+        StructType(
+          StructField("a", BooleanType, nullable = false) ::
+          StructField("b", IntegerType, nullable = false) ::
+          Nil)
+      }
+    }
+  }
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
