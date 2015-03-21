@@ -228,14 +228,18 @@ private[sql] class JDBCRDD(
   }
 
   /**
+   * Converts value to SQL expression.
+   */
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case _ => value
+  }
+
+  /**
    * Turns a single Filter into a String representing a SQL expression.
    * Returns null for an unhandled filter.
    */
   private def compileFilter(f: Filter): String = {
-    def compileValue(value: Any): Any = value match {
-      case stringValue: String => s"'${escapeSql(stringValue)}'"
-      case _ => value
-    }
     f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
       case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
