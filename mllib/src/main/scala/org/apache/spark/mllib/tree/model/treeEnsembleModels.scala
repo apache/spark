@@ -28,9 +28,11 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
+import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
@@ -108,6 +110,58 @@ class GradientBoostedTreesModel(
   }
 
   override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
+
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param loss evaluation metric.
+   * @return an array with index i having the losses or errors for the ensemble
+   *         containing the first i+1 trees
+   */
+  def evaluateEachIteration(
+      data: RDD[LabeledPoint],
+      loss: Loss): Array[Double] = {
+
+    val sc = data.sparkContext
+    val remappedData = algo match {
+      case Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+      case _ => data
+    }
+
+    val numIterations = trees.length
+    val evaluationArray = Array.fill(numIterations)(0.0)
+
+    var predictionAndError: RDD[(Double, Double)] = remappedData.map { i =>
+      val pred = treeWeights(0) * trees(0).predict(i.features)
+      val error = loss.computeError(pred, i.label)
+      (pred, error)
+    }
+    evaluationArray(0) = predictionAndError.values.mean()
+
+    // Avoid the model being copied across numIterations.
+    val broadcastTrees = sc.broadcast(trees)
+    val broadcastWeights = sc.broadcast(treeWeights)
+
+    (1 until numIterations).map { nTree =>
+      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
+        val currentTree = broadcastTrees.value(nTree)
+        val currentTreeWeight = broadcastWeights.value(nTree)
+        iter.map {
+          case (point, (pred, error)) => {
+            val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+            val newError = loss.computeError(newPred, point.label)
+            (newPred, newError)
+          }
+        }
+      }
+      evaluationArray(nTree) = predictionAndError.values.mean()
+    }
+
+    broadcastTrees.unpersist()
+    broadcastWeights.unpersist()
+    evaluationArray
+  }
+
 }
 
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
