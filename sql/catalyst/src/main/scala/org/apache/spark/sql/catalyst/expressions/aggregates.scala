@@ -247,7 +247,7 @@ case class CombineSetsAndCountFunction(
 }
 
 /** The data type of ApproxCountDistinctPartition since its output is a HyperLogLog object. */
-private[sql] class HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
+private[sql] case object HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
 
   override def sqlType: DataType = BinaryType
 
@@ -261,15 +261,13 @@ private[sql] class HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
     HyperLogLog.Builder.build(datum.asInstanceOf[Array[Byte]])
 
   override def userClass = classOf[HyperLogLog]
-
-  private[spark] override def asNullable: HyperLogLogUDT = this
 }
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
   override def nullable = false
-  override def dataType = new HyperLogLogUDT
+  override def dataType = HyperLogLogUDT
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
   override def newInstance() = new ApproxCountDistinctPartitionFunction(child, this, relativeSD)
 }

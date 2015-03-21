@@ -124,7 +124,7 @@ class UserDefinedTypeSuite extends QueryTest {
   }
 
   test("HyperLogLogUDT") {
-    val hyperLogLogUDT = new HyperLogLogUDT
+    val hyperLogLogUDT = HyperLogLogUDT
     val hyperLogLog = new HyperLogLog(0.4)
     (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
 
