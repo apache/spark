@@ -39,6 +39,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
+  private[streaming] var _preferredLocation: Option[String] = None
   /** This is an unique identifier for the receiver input stream. */
   val id = ssc.getNewReceiverStreamId()
 
@@ -53,6 +54,14 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
   def start() {}
 
   def stop() {}
+
+  def setPreferredLocation(_preferredLocation: String){
+    if (null != _preferredLocation){
+      this._preferredLocation = Some(_preferredLocation)
+    }
+  }
+
+  def preferredLocation = _preferredLocation
 
   /**
    * Generates RDDs with blocks received by the receiver of this stream. */

@@ -268,19 +268,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val receivers = receiverInputStreams.map(nis => {
         val rcvr = nis.getReceiver()
         rcvr.setReceiverId(nis.id)
-        rcvr
+        (rcvr, nis.preferredLocation)
       })
 
       // Right now, we only honor preferences if all receivers have them
-      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
+      val hasLocationPreferences = receivers.map(_._2.isDefined).reduce(_ && _)
 
       // Create the parallel collection of receivers to distributed them on the worker nodes
       val tempRDD =
         if (hasLocationPreferences) {
-          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
+          val receiversWithPreferences = receivers.map(r => (r._1, Seq(r._2.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
         } else {
-          ssc.sc.makeRDD(receivers, receivers.size)
+          ssc.sc.makeRDD(receivers.map(r => r._1), receivers.size)
         }
 
       val checkpointDirOption = Option(ssc.checkpointDir)
