@@ -36,6 +36,8 @@ trait Catalog {
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
+  // TODO should we create the trait for MetaStoreXXXRelation(XXX = Table / View / Cache)
+  // and returned by lookupRelation? This is very helpful for `DESCRIBE [EXTENDED] table` etc.
   def lookupRelation(
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan

@@ -23,7 +23,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
@@ -239,17 +239,29 @@ private[hive] trait HiveStrategies {
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
-        val resolvedTable = context.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(
-              DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
-
+        val command = describe.table match {
+          case UnresolvedRelation(tableIdentifier, alias) =>
+            val relation = context.catalog.lookupRelation(tableIdentifier, alias)
+            relation match {
+              case _: MetastoreRelation |
+                   _: MetastoreDataSourceRelation |
+                   _: MetaStoreViewRelation =>
+                  DescribeHiveTableCommand(
+                    relation,
+                    describe.output,
+                    describe.isExtended)
+                // TODO ideally we should able to iterate all of the possible MetastoreRelation
+                // currently we are not able to get the cached relation as MetaStoreRelation
+              case o: LogicalPlan =>
+                val resultPlan = context.executePlan(o).executedPlan
+                RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)
+            }
           case o: LogicalPlan =>
             val resultPlan = context.executePlan(o).executedPlan
-            ExecutedCommand(RunnableDescribeCommand(
-              resultPlan, describe.output, describe.isExtended)) :: Nil
+            RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)
         }
+
+        ExecutedCommand(command) :: Nil
 
       case _ => Nil
     }

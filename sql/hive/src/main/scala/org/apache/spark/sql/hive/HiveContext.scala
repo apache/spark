@@ -238,6 +238,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
+        catalog.ExtractLogicalRelation ::
         ExtractPythonUdfs ::
         ResolveUdtfsAlias ::
         sources.PreInsertCastAndRename ::
