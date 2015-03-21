@@ -29,131 +29,131 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("simple bytes") {
-    testParser(in = "500", expectedResult = ByteQuantity(500))
+    testParser(in = "$500", expectedResult = ByteQuantity(500))
   }
 
   test("kbytes") {
-    testParser(in = "5 KB", expectedResult = ByteQuantity(5 * 1000))
+    testParser(in = "$5 KB", expectedResult = ByteQuantity(5 * 1000))
   }
 
   test("jvm kbytes") {
-    testParser(in = "5 K", expectedResult = ByteQuantity(5 * 1024))
+    testParser(in = "$5 K", expectedResult = ByteQuantity(5 * 1024))
   }
 
   test("kbytes2") {
-    testParser(in = "5KB", expectedResult =  ByteQuantity(5 * 1000))
+    testParser(in = "$5KB", expectedResult =  ByteQuantity(5 * 1000))
   }
 
   test("mbytes") {
-    testParser(in = "5 MB", expectedResult =  ByteQuantity(5 * Math.pow(1000,2)))
+    testParser(in = "$5 MB", expectedResult =  ByteQuantity(5 * Math.pow(1000,2)))
   }
 
   test("jvm mbytes") {
-    testParser(in = "5 M", expectedResult =  ByteQuantity(5 * Math.pow(1024,2)))
+    testParser(in = "$5 M", expectedResult =  ByteQuantity(5 * Math.pow(1024,2)))
   }
 
   test("gbytes") {
-    testParser(in = "5 GB", expectedResult =  ByteQuantity(5 * Math.pow(1000,3)))
+    testParser(in = "$5 GB", expectedResult =  ByteQuantity(5 * Math.pow(1000,3)))
   }
 
   test("jvm gbytes") {
-    testParser(in = "5 G", expectedResult =  ByteQuantity(5 * Math.pow(1024,3)))
+    testParser(in = "$5 G", expectedResult =  ByteQuantity(5 * Math.pow(1024,3)))
   }
 
   test("tbytes") {
-    testParser(in = "5 tB", expectedResult =  ByteQuantity(5 * Math.pow(1000,4)))
+    testParser(in = "$5 tB", expectedResult =  ByteQuantity(5 * Math.pow(1000,4)))
   }
 
   test("jvm tbytes") {
-    testParser(in = "5 t", expectedResult =  ByteQuantity(5 * Math.pow(1024,4)))
+    testParser(in = "$5 t", expectedResult =  ByteQuantity(5 * Math.pow(1024,4)))
   }
 
   test("pbytes") {
-    testParser(in = "5 pb", expectedResult =  ByteQuantity(5 * Math.pow(1000,5)))
+    testParser(in = "$5 pb", expectedResult =  ByteQuantity(5 * Math.pow(1000,5)))
   }
 
   test("ebytes") {
-    testParser(in = "5 eb", expectedResult =  ByteQuantity(5 * Math.pow(1000,6)))
+    testParser(in = "$5 eb", expectedResult =  ByteQuantity(5 * Math.pow(1000,6)))
   }
 
   test("kibytes") {
-    testParser(in = "5 KiB", expectedResult = ByteQuantity(5 * 1024))
+    testParser(in = "$5 KiB", expectedResult = ByteQuantity(5 * 1024))
   }
 
   test("mibytes") {
-    testParser(in = "5 MiB", expectedResult = ByteQuantity(5 * Math.pow(1024,2)))
+    testParser(in = "$5 MiB", expectedResult = ByteQuantity(5 * Math.pow(1024,2)))
   }
 
   test("gibytes") {
-    testParser(in = "5 GiB", expectedResult = ByteQuantity(5 * Math.pow(1024,3)))
+    testParser(in = "$5 GiB", expectedResult = ByteQuantity(5 * Math.pow(1024,3)))
   }
 
   test("tibytes") {
-    testParser(in = "5 TiB", expectedResult = ByteQuantity(5 * Math.pow(1024,4)))
+    testParser(in = "$5 TiB", expectedResult = ByteQuantity(5 * Math.pow(1024,4)))
   }
 
   test("pibytes") {
-    testParser(in = "5 PiB", expectedResult = ByteQuantity(5 * Math.pow(1024,5)))
+    testParser(in = "$5 PiB", expectedResult = ByteQuantity(5 * Math.pow(1024,5)))
   }
 
   test("eibytes") {
-    testParser(in = "5 EiB", expectedResult = ByteQuantity(5 * Math.pow(1024,6)))
+    testParser(in = "$5 EiB", expectedResult = ByteQuantity(5 * Math.pow(1024,6)))
   }
 
   test("kbytes arithmetic") {
-    testParser(in = "5 KB * 5", expectedResult = ByteQuantity(5 * 5 * 1000))
+    testParser(in = "$5 KB * 5", expectedResult = ByteQuantity(5 * 5 * 1000))
   }
 
   test("kbytes arithmetic2") {
-    testParser(in = "5 * 5 KB ", expectedResult = ByteQuantity(5 * 5 * 1000))
+    testParser(in = "$5 * 5 KB ", expectedResult = ByteQuantity(5 * 5 * 1000))
   }
 
   test("kbytes divide") {
-    testParser(in = "10 kb / 2 ", expectedResult = ByteQuantity( 5 * 1000))
+    testParser(in = "$10 kb / 2 ", expectedResult = ByteQuantity( 5 * 1000))
   }
 
   test("kbytes divide2") {
-    testParser(in = "10 kb * 0.5 ", expectedResult = ByteQuantity( 5 * 1000))
+    testParser(in = "$10 kb * 0.5 ", expectedResult = ByteQuantity( 5 * 1000))
   }
 
   test("kbytes addition") {
-    testParser(in = "10 kb + 5 MB ", expectedResult = ByteQuantity(5 * Math.pow(1000,2) + 10000))
+    testParser(in = "$10 kb + 5 MB ", expectedResult = ByteQuantity(5 * Math.pow(1000,2) + 10000))
   }
 
   test("test totalMemoryBytes arith") {
-    testParser(in = "JVMmaxMemoryBytes*10", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory*10.0))
+    testParser(in = "$JVMmaxMemoryBytes*10", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory*10.0))
   }
 
   test("test totalMemoryBytes arith2") {
-    testParser(in = "JVMmaxMemoryBytes/1", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory))
+    testParser(in = "$JVMmaxMemoryBytes/1", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory))
   }
 
   test("StandAlone byte quantity") {
-    testParser(in = "KB", expectedResult = ByteQuantity(1,"KB"))
+    testParser(in = "$KB", expectedResult = ByteQuantity(1,"KB"))
   }
 
   // The following tests are not strict as they involve them querying system state,
   // and thus there is no reliable means to verify that the returned values are correct
   test("test totalMemoryBytes") {
-    val parseResult = parser.parse("JVMTotalMemoryBytes")
+    val parseResult = parser.parse("$JVMTotalMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
   test("test totalFreeBytes") {
-    val parseResult = parser.parse("JVMfreeMemoryBytes")
+    val parseResult = parser.parse("$JVMfreeMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
   test("test maxMemoryBytes") {
-    val parseResult = parser.parse("JVMMaxMemoryBytes")
+    val parseResult = parser.parse("$JVMMaxMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
   test("test physicalMemoryBytes") {
-    val parseResult = parser.parse("physicalMemoryBytes")
+    val parseResult = parser.parse("$physicalMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }

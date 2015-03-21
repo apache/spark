@@ -48,8 +48,18 @@ private[spark] abstract class BaseParser extends JavaTokenParsers {
 
   private def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => -num}
 
-  private[spark] def parse(expression: String) = parseAll(expr, expression) match {
-    case Success(result, _) => Some(result)
-    case _ => None
-  }
+  /**
+   * A dollar sign indicates that the string is an expression, otherwise it
+   * should be treated as a double and parsed appropriately
+   * @param expression Expression to be parsed: Must start with a '$' character
+   *                   to be considered a valid expression
+   * @return Some[Double] if parsable as a double, otherwise None
+   */
+  private[spark] def parse(expression: String): Option[Double] =
+    if (expression.head == '$') parseAll(expr, expression.tail) match {
+      case Success(result, _) => Some(result)
+      case _ => None
+    } else {
+      try { Some(expression.toDouble) } catch { case _: Throwable => None }
+    }
 }

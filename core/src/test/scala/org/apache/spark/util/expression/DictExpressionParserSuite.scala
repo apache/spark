@@ -35,23 +35,23 @@ class DictExpressionParserSuite  extends FunSuite {
   }
 
   test("simple expansion") {
-    testParser(in = "one", 1)
+    testParser(in = "$one", 1)
   }
 
   test("config style expansion") {
-    testParser(in = s"$sparkConfig + 1", 3)
+    testParser(in = s"$$$sparkConfig + 1", 3)
   }
 
   test("test for regexp conflicts") {
-    testParser(in = s"$SymbolWithRegexChars * 2", 6)
+    testParser(in = s"$$$SymbolWithRegexChars * 2", 6)
   }
 
   test("test for earlier symbols match before later ones do") {
-    testParser(in = s"$sparkConfigCommonPrefix", 4)
+    testParser(in = s"$$$sparkConfigCommonPrefix", 4)
   }
 
   test("test for precedence of byte units against dict entries") {
-    testParser(in = "1 KB", 1000)
+    testParser(in = "$1 KB", 1000)
   }
 
 }
