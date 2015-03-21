@@ -194,6 +194,24 @@ span.additional-metric-title {
   color: #777;
 }
 
+#additional-metrics {
+  float: left;
+  padding-bottom: 10px;
+}
+
+#links {
+  float: left;
+  padding-left: 100px;
+}
+
+#links a {
+  padding-left: 10px;
+}
+
+.clear {
+  clear: both;
+}
+
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
 .scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,

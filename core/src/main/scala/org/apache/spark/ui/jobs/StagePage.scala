@@ -110,7 +110,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         </div>
 
       val showAdditionalMetrics =
-        <div>
+        <div id="additional-metrics">
           <span class="expand-additional-metrics">
             <span class="expand-additional-metrics-arrow arrow-closed"></span>
             <strong>Show additional metrics</strong>
@@ -168,6 +168,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </ul>
           </div>
         </div>
+
+      val quickLinks: Seq[Elem] =
+        (Some(<a href="#executors">Executors</a>) ::
+          (if (accumulables.nonEmpty)
+            Some(<a href="#accumulators">Accumulators</a>)
+          else
+            None) ::
+          Some(<a href="#tasks">Tasks</a>) :: Nil).flatten
+
+      val showQuickLinks = <div id="links">Jump to: {quickLinks}</div>
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
@@ -431,16 +441,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
-        if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+        if (accumulables.size > 0) { <h4 id="accumulators">Accumulators</h4> ++ accumulableTable } else Seq()
 
       val content =
         summary ++
         showAdditionalMetrics ++
-        <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
+        showQuickLinks ++
+        <h4 class="clear">Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        <h4 id="executors">Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4>Tasks</h4> ++ taskTable
+        <h4 id="tasks">Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
