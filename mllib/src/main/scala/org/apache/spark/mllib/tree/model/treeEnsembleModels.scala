@@ -295,12 +295,12 @@ private[tree] sealed class TreeEnsembleModel(
   }
 
   /**
-   * Get number of trees in forest.
+   * Get number of trees in ensemble.
    */
   def numTrees: Int = trees.size
 
   /**
-   * Get total number of nodes, summed over all trees in the forest.
+   * Get total number of nodes, summed over all trees in the ensemble.
    */
   def totalNumNodes: Int = trees.map(_.numNodes).sum
 }

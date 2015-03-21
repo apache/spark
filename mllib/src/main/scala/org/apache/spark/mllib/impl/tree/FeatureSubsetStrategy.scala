@@ -21,6 +21,7 @@ package org.apache.spark.mllib.impl.tree
 // TODO: Once we move the tree implementation to be in this new API,
 //       create an Algo enum under the new API.
 sealed abstract class FeatureSubsetStrategy {
+  /** Compute the number of features to test at each node */
   private[mllib] def featuresPerNode(numFeatures: Int): Int
 }
 
@@ -29,8 +30,10 @@ case class FunctionalSubset(f: Int => Int) extends FeatureSubsetStrategy {
 }
 
 case class FractionalSubset(fraction: Double) extends FeatureSubsetStrategy {
+
   require(fraction > 0.0 && fraction <= 1.0,
     s"FeatureSubsetStrategy.Fraction($fraction) is invalid; fraction must be in range (0,1].")
+
   override private[mllib] def featuresPerNode(numFeatures: Int): Int = {
     (fraction * numFeatures).ceil.toInt
   }

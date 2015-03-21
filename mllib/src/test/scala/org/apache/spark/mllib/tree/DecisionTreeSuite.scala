@@ -344,6 +344,76 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(topNode.rightNode.get.impurity === 0.0)
   }
 
+  test("Second level node building with vs. without groups") {
+    val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
+    assert(arr.length === 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
+    val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
+    assert(splits.length === 2)
+    assert(splits(0).length === 99)
+    assert(bins.length === 2)
+    assert(bins(0).length === 100)
+
+    // Train a 1-node model
+    val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
+      numClasses = 2, maxBins = 100)
+    val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
+    val rootNode1 = modelOneNode.topNode.deepCopy()
+    val rootNode2 = modelOneNode.topNode.deepCopy()
+    assert(rootNode1.leftNode.nonEmpty)
+    assert(rootNode1.rightNode.nonEmpty)
+
+    val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
+
+    // Single group second level tree construction.
+    val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
+      (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
+    val children1 = new Array[Node](2)
+    children1(0) = rootNode1.leftNode.get
+    children1(1) = rootNode1.rightNode.get
+
+    // Train one second-level node at a time.
+    val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
+    val treeToNodeToIndexInfoA = Map((0, Map(
+      (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
+    nodeQueue.clear()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
+      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
+    val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
+    val treeToNodeToIndexInfoB = Map((0, Map(
+      (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
+    nodeQueue.clear()
+    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
+      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
+    val children2 = new Array[Node](2)
+    children2(0) = rootNode2.leftNode.get
+    children2(1) = rootNode2.rightNode.get
+
+    // Verify whether the splits obtained using single group and multiple group level
+    // construction strategies are the same.
+    for (i <- 0 until 2) {
+      assert(children1(i).stats.nonEmpty && children1(i).stats.get.gain > 0)
+      assert(children2(i).stats.nonEmpty && children2(i).stats.get.gain > 0)
+      assert(children1(i).split === children2(i).split)
+      assert(children1(i).stats.nonEmpty && children2(i).stats.nonEmpty)
+      val stats1 = children1(i).stats.get
+      val stats2 = children2(i).stats.get
+      assert(stats1.gain === stats2.gain)
+      assert(stats1.impurity === stats2.impurity)
+      assert(stats1.leftImpurity === stats2.leftImpurity)
+      assert(stats1.rightImpurity === stats2.rightImpurity)
+      assert(children1(i).predict.predict === children2(i).predict.predict)
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
@@ -529,76 +599,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
     assert(rootNode.predict.predict === 1)
-  }
-
-  test("Second level node building with vs. without groups") {
-    val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
-    assert(arr.length === 1000)
-    val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
-    val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
-    assert(splits.length === 2)
-    assert(splits(0).length === 99)
-    assert(bins.length === 2)
-    assert(bins(0).length === 100)
-
-    // Train a 1-node model
-    val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
-      numClasses = 2, maxBins = 100)
-    val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
-    val rootNode1 = modelOneNode.topNode.deepCopy()
-    val rootNode2 = modelOneNode.topNode.deepCopy()
-    assert(rootNode1.leftNode.nonEmpty)
-    assert(rootNode1.rightNode.nonEmpty)
-
-    val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
-
-    // Single group second level tree construction.
-    val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
-      (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
-    val nodeQueue = new mutable.Queue[(Int, Node)]()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
-      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
-    val children1 = new Array[Node](2)
-    children1(0) = rootNode1.leftNode.get
-    children1(1) = rootNode1.rightNode.get
-
-    // Train one second-level node at a time.
-    val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
-    val treeToNodeToIndexInfoA = Map((0, Map(
-      (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    nodeQueue.clear()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
-    val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
-    val treeToNodeToIndexInfoB = Map((0, Map(
-      (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    nodeQueue.clear()
-    DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
-    val children2 = new Array[Node](2)
-    children2(0) = rootNode2.leftNode.get
-    children2(1) = rootNode2.rightNode.get
-
-    // Verify whether the splits obtained using single group and multiple group level
-    // construction strategies are the same.
-    for (i <- 0 until 2) {
-      assert(children1(i).stats.nonEmpty && children1(i).stats.get.gain > 0)
-      assert(children2(i).stats.nonEmpty && children2(i).stats.get.gain > 0)
-      assert(children1(i).split === children2(i).split)
-      assert(children1(i).stats.nonEmpty && children2(i).stats.nonEmpty)
-      val stats1 = children1(i).stats.get
-      val stats2 = children2(i).stats.get
-      assert(stats1.gain === stats2.gain)
-      assert(stats1.impurity === stats2.impurity)
-      assert(stats1.leftImpurity === stats2.leftImpurity)
-      assert(stats1.rightImpurity === stats2.rightImpurity)
-      assert(children1(i).predict.predict === children2(i).predict.predict)
-    }
   }
 
   test("Multiclass classification stump with 3-ary (unordered) categorical features") {
@@ -1028,7 +1028,7 @@ object DecisionTreeSuite extends FunSuite {
    *       make mistakes such as creating loops of Nodes.
    * If the trees are not equal, this prints the two trees and throws an exception.
    */
-  private[tree] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
+  private[mllib] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
     try {
       assert(a.algo === b.algo)
       checkEqual(a.topNode, b.topNode)

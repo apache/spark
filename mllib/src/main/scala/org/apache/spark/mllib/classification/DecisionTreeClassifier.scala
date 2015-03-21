@@ -18,9 +18,11 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.mllib.classification.tree.ClassificationImpurity
-import org.apache.spark.mllib.impl.tree.{Node, TreeClassifier, TreeClassifierParams, DecisionTreeModel}
+import org.apache.spark.mllib.impl.tree.{DecisionTreeModel, Node, TreeClassifier,
+  TreeClassifierParams}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 
@@ -67,9 +69,8 @@ class DecisionTreeClassifier
 
 object DecisionTreeClassifier {
 
-  final val Entropy: ClassificationImpurity = ClassificationImpurity.Entropy
-
-  final val Gini: ClassificationImpurity = ClassificationImpurity.Gini
+  /** Accessor for supported ClassificationImpurity types */
+  final val Impurities = ClassificationImpurity
 }
 
 
@@ -85,9 +86,12 @@ class DecisionTreeClassificationModel private[mllib] (rootNode: Node)
   //override def save(sc: SparkContext, path: String): Unit = {
 }
 
-private object DecisionTreeClassificationModel {
+private[mllib] object DecisionTreeClassificationModel {
 
   def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeClassificationModel = {
+    require(oldModel.algo == OldAlgo.Classification,
+      s"Cannot convert non-classification DecisionTreeModel (old API) to" +
+        s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode)
     new DecisionTreeClassificationModel(rootNode)
   }

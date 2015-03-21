@@ -45,9 +45,9 @@ object NewDT {
 
     /****************** EXAMPLE OF Decision Tree **************************/
     val dt = new DecisionTreeClassifier()
-      .setImpurity(DecisionTreeClassifier.Gini)
+      .setImpurity(DecisionTreeClassifier.Impurities.Gini)
       .setCheckpointInterval(5)
-      .setImpurity(DecisionTreeClassifier.Gini)
+      .setImpurity(DecisionTreeClassifier.Impurities.Gini)
       .setCheckpointInterval(5)
     val dtModel: DecisionTreeClassificationModel = dt.run(data)
 
@@ -55,10 +55,10 @@ object NewDT {
     val rf = new RandomForestClassifier()
       .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
       .setCheckpointInterval(5)
-      .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies.Auto)
+      .setFeatureSubsetStrategy("auto")
       .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
       .setCheckpointInterval(5)
-      .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies.Fractional(0.2))
+      .setFeatureSubsetStrategy("onethird")
     val rfModel: RandomForestClassificationModel = rf.run(data)
 
     sc.stop()

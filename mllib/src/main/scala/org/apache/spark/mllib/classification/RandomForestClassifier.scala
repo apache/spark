@@ -17,12 +17,15 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.classification.tree.ClassificationImpurity
 import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
 
 
@@ -57,8 +60,7 @@ class RandomForestClassifier
 
   override def setNumTrees(numTrees: Int): RandomForestClassifier = super.setNumTrees(numTrees)
 
-  override def setFeatureSubsetStrategy(
-      featureSubsetStrategy: FeatureSubsetStrategy): RandomForestClassifier =
+  override def setFeatureSubsetStrategy(featureSubsetStrategy: String): RandomForestClassifier =
     super.setFeatureSubsetStrategy(featureSubsetStrategy)
 
   override def setSubsamplingRate(subsamplingRate: Double): RandomForestClassifier =
@@ -68,10 +70,25 @@ class RandomForestClassifier
 
   override def run(
       input: RDD[LabeledPoint],
-      categoricalFeaturesInfo: Map[Int, Int],
+      categoricalFeatures: Map[Int, Int],
       numClasses: Int): RandomForestClassificationModel = {
-    // TODO
-    new RandomForestClassificationModel
+    val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    val oldModel = OldRandomForest.trainClassifier(
+      input, strategy, getNumTrees, getFeatureSubsetStrategyStr, getSeed.toInt)
+    RandomForestClassificationModel.fromOld(oldModel)
+  }
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set subsamplingRate by hand based on the model type!
+   * TODO: Make this protected once we deprecate the old API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setSubsamplingRate(getSubsamplingRate)
+    strategy
   }
 
 }
@@ -84,6 +101,38 @@ object RandomForestClassifier {
   def supportedImpurities = ClassificationImpurity
 }
 
-class RandomForestClassificationModel extends Serializable {
+class RandomForestClassificationModel(
+    val trees: Array[DecisionTreeClassificationModel],
+    val treeWeights: Array[Double])
+  extends TreeEnsembleModel with Serializable {
+
+  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+
+  override def getTreeWeights: Array[Double] = treeWeights
+
+  override def predict(features: Vector): Double = {
+    // Classifies using (weighted) majority votes
+    val votes = mutable.Map.empty[Int, Double]
+    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+      val prediction = tree.predict(features).toInt
+      votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
+    }
+    votes.maxBy(_._2)._1
+  }
+
+  override def toString: String = {
+    s"RandomForestClassificationModel with $numTrees trees"
+  }
+}
+
+private[mllib] object RandomForestClassificationModel {
+
+  def fromOld(oldModel: OldRandomForestModel): RandomForestClassificationModel = {
+    require(oldModel.algo == OldAlgo.Classification,
+      s"Cannot convert non-classification RandomForestModel (old API) to" +
+        s" RandomForestClassificationModel (new API).  Algo is: ${oldModel.algo}")
+    new RandomForestClassificationModel(oldModel.trees.map(DecisionTreeClassificationModel.fromOld),
+      Array.fill(oldModel.trees.size)(1.0))
+  }
 
 }

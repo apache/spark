@@ -20,48 +20,40 @@ package org.apache.spark.mllib.impl.tree
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.model.{Node => OldNode}
 
-// TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
-//       code into the new API and deprecate the old API.
 
 /**
- * Decision tree node.  This serves as both the API for tree nodes and a leaf node.
- * Internal tree nodes extend this API.
- * @param prediction  Prediction this node makes (or would make, if it is an internal node)
- * @param impurity  Impurity measure at this node (for training data)
+ * Decision tree node interface.
+ * TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
+ *       code into the new API and deprecate the old API.
  */
-class Node private[mllib] (
-    val prediction: Double,
-    val impurity: Double) {
+sealed trait Node {
 
-  override def toString = s"LeafNode(prediction = $prediction, impurity = $impurity)"
+  /** Prediction this node makes (or would make, if it is an internal node) */
+  def prediction: Double
 
-  /**
-   * predict value if node is not leaf
-   * @param features feature value
-   * @return predicted value
-   */
+  /** Impurity measure at this node (for training data) */
+  def impurity: Double
+
+  /** Recursive prediction helper method */
   private[mllib] def predict(features: Vector): Double = prediction
 
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
    */
-  private[tree] def numDescendants: Int = 0
+  private[tree] def numDescendants: Int
 
   /**
    * Recursive print function.
    * @param indentFactor  The number of spaces to add to each level of indentation.
    */
-  private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val prefix: String = " " * indentFactor
-    prefix + s"Predict: $prediction\n"
-  }
+  private[tree] def subtreeToString(indentFactor: Int = 0): String
 
   /**
    * Get depth of tree from this node.
    * E.g.: Depth 0 means this is a leaf node.  Depth 1 means 1 internal and 2 leaf nodes.
    */
-  private[tree] def subtreeDepth: Int = 0
+  private[tree] def subtreeDepth: Int
 }
 
 private[mllib] object Node {
@@ -73,7 +65,7 @@ private[mllib] object Node {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new Node(prediction = oldNode.predict.predict, impurity = oldNode.impurity)
+      new LeafNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity)
     } else {
       new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
         leftChild = fromOld(oldNode.leftNode.get), rightChild = fromOld(oldNode.rightNode.get),
@@ -108,19 +100,42 @@ private[mllib] object Node {
 }
 
 /**
+ * Decision tree leaf node.
+ * @param prediction  Prediction this node makes
+ * @param impurity  Impurity measure at this node (for training data)
+ */
+class LeafNode private[mllib] (
+    override val prediction: Double,
+    override val impurity: Double) extends Node {
+
+  override def toString = s"LeafNode(prediction = $prediction, impurity = $impurity)"
+
+  override private[mllib] def predict(features: Vector): Double = prediction
+
+  override private[tree] def numDescendants: Int = 0
+
+  override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
+    val prefix: String = " " * indentFactor
+    prefix + s"Predict: $prediction\n"
+  }
+
+  override private[tree] def subtreeDepth: Int = 0
+}
+
+/**
  * Internal Decision Tree node
- * @param prediction  Prediction this node makes (or would make, if it is an internal node)
+ * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
  * @param leftChild  Left-hand child node
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
 class InternalNode private[mllib] (
-    prediction: Double,
-    impurity: Double,
+    override val prediction: Double,
+    override val impurity: Double,
     val leftChild: Node,
     val rightChild: Node,
-    val split: Split) extends Node(prediction, impurity) {
+    val split: Split) extends Node {
 
   override def toString = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"

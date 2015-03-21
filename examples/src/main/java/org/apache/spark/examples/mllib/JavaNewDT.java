@@ -51,7 +51,7 @@ public final class JavaNewDT {
 
     /****************** EXAMPLE OF Decision Tree **************************/
     DecisionTreeClassifier dt = new DecisionTreeClassifier()
-        .setImpurity(DecisionTreeClassifier.Gini())
+        .setImpurity(DecisionTreeClassifier.Impurities().Gini())
         .setMaxBins(5);
     DecisionTreeClassificationModel dtModel1 = dt.run(data);
     java.util.Map<Integer, Integer> catMap = new HashMap<Integer, Integer>();
@@ -62,10 +62,10 @@ public final class JavaNewDT {
     RandomForestClassifier rf = new RandomForestClassifier()
         .setImpurity(RandomForestClassifier.supportedImpurities().Gini())
         .setCheckpointInterval(5)
-        .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies().Auto())
+        .setFeatureSubsetStrategy("auto")
         .setImpurity(RandomForestClassifier.supportedImpurities().Gini())
         .setCheckpointInterval(5)
-        .setFeatureSubsetStrategy(RandomForestClassifier.featureSubsetStrategies().Fractional(0.2));
+        .setFeatureSubsetStrategy("onethird");
     RandomForestClassificationModel rfModel = rf.run(data);
 
     sc.stop();

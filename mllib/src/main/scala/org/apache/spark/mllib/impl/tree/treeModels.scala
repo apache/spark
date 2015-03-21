@@ -17,7 +17,12 @@
 
 package org.apache.spark.mllib.impl.tree
 
+import scala.collection.mutable
+
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
+
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.mllib.classification.DecisionTreeClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
@@ -81,8 +86,33 @@ abstract class DecisionTreeModel(val rootNode: Node) extends PredictionModel wit
   }
 }
 
-abstract class TreeEnsembleModel
+private[mllib] abstract class TreeEnsembleModel extends PredictionModel with Serializable {
 
-abstract class RandomForestModel extends TreeEnsembleModel
+  require(numTrees > 0, "TreeEnsembleModel requires at least 1 tree.")
 
-abstract class GBTModel extends TreeEnsembleModel
+  /** Trees in this ensemble */
+  def getTrees: Array[DecisionTreeModel]
+
+  /** Weights for each tree, zippable with [[getTrees]] */
+  def getTreeWeights: Array[Double]
+
+  /** Summary of the model */
+  override def toString: String = {
+    // Implementing classes should generally override this method to be more descriptive.
+    s"TreeEnsembleModel with $numTrees trees"
+  }
+
+  /** Full description of model */
+  def toDebugString: String = {
+    val header = toString + "\n"
+    header + getTrees.zip(getTreeWeights).zipWithIndex.map { case ((tree, weight), treeIndex) =>
+      s"  Tree $treeIndex (weight $weight):\n" + tree.rootNode.subtreeToString(4)
+    }.fold("")(_ + _)
+  }
+
+  /** Number of trees in ensemble */
+  def numTrees: Int = getTreeWeights.size
+
+  /** Total number of nodes, summed over all trees in the ensemble. */
+  def totalNumNodes: Int = getTrees.map(_.numNodes).sum
+}

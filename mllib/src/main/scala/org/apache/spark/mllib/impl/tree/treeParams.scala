@@ -22,6 +22,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy}
 import org.apache.spark.util.Utils
 
+
 /**
  * (private trait) Parameters for Decision Trees.
  * @tparam M  Concrete class implementing this parameter trait
@@ -186,8 +187,11 @@ private[mllib] trait DecisionTreeParams[M] {
   /**
    * Create a Strategy instance to use with the old API.
    * NOTE: The caller should set subsamplingRate by hand based on the model type!
+   * TODO: Make this protected once we deprecate the old API.
    */
-  protected def getOldStrategy(categoricalFeatures: Map[Int, Int], numClasses: Int): OldStrategy = {
+  private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
     val strategy = OldStrategy.defaultStategy(OldAlgo.Classification)
     strategy.checkpointInterval = checkpointInterval
     strategy.maxBins = maxBins
@@ -231,8 +235,9 @@ private[mllib] trait TreeClassifierParams[M] extends DecisionTreeParams[M] {
   /**
    * Create a Strategy instance to use with the old API.
    * NOTE: The caller should set subsamplingRate by hand based on the model type!
+   * TODO: Make this protected once we deprecate the old API.
    */
-  override protected def getOldStrategy(
+  override private[mllib] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
@@ -297,6 +302,9 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
 
   protected var featureSubsetStrategy: FeatureSubsetStrategy = FeatureSubsetStrategy.Auto
 
+  /** Paired with [[featureSubsetStrategy]] to track built-in named options */
+  protected var featureSubsetStrategyStr: String = "auto"
+
   /**
    * Number of trees to train (>= 1).
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
@@ -326,18 +334,21 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
    * (default = [[FeatureSubsetStrategy.Auto]])
    * @group setParam
    */
-  def setFeatureSubsetStrategy(featureSubsetStrategy: FeatureSubsetStrategy): M = {
-    this.featureSubsetStrategy = featureSubsetStrategy
+  def setFeatureSubsetStrategy(featureSubsetStrategy: String): M = {
+    this.featureSubsetStrategy = FeatureSubsetStrategies.fromString(featureSubsetStrategy)
+    this.featureSubsetStrategyStr = featureSubsetStrategy
     this.asInstanceOf[M]
   }
 
   /**
    * Specifies the number of features to consider for splits at each tree node.
    * Use featureSubsetStrategies to select supported options.
-   * (default = [[FeatureSubsetStrategy.Auto]])
+   * (default = "auto")
+   * Note: This returns the strategy as a String to permit us to make this strategy
+   *       more pluggable in the future.
    * @group getParam
    */
-  def getFeatureSubsetStrategy: FeatureSubsetStrategy = featureSubsetStrategy
+  def getFeatureSubsetStrategyStr: String = featureSubsetStrategyStr
 }
 
 private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {

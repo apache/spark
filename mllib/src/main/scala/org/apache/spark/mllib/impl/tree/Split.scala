@@ -51,11 +51,29 @@ class CategoricalSplit(override val feature: Int, val categories: Set[Int]) exte
   override private[mllib] def goLeft(features: Vector): Boolean = {
     categories.contains(features(feature).toInt)
   }
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case other: CategoricalSplit =>
+        feature == other.feature && categories == other.categories
+      case _ =>
+        false
+    }
+  }
 }
 
 class ContinuousSplit(override val feature: Int, val threshold: Double) extends Split {
 
   override private[mllib] def goLeft(features: Vector): Boolean = {
     features(feature) <= threshold
+  }
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case other: ContinuousSplit =>
+        feature == other.feature && threshold == other.threshold
+      case _ =>
+        false
+    }
   }
 }
