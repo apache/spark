@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{Vector, Matrices}
+import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -103,7 +103,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Double])
+    case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Matrix])
 
     def formatVersionV1_0 = "1.0"
 
@@ -118,9 +118,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
 
-      // DataFrame does not recognize MultiVariateGaussian or Matrix as of now.
-      val mus = gaussians.map(i => i.mu)
-      val sigmas = gaussians.flatMap(i => i.sigma.toArray)
+      val (mus, sigmas) = gaussians.map(i => (i.mu, i.sigma)).unzip
 
       // Create JSON metadata.
       val metadata = compact(render
@@ -128,7 +126,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, mus, sigmas)
+      val data = Data(weights, mus.toArray, sigmas.toArray)
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
@@ -143,14 +141,10 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val data = dataArray(0)
       val weights = data.getAs[Seq[Double]](0).toArray
       val mus = data.getAs[Seq[Vector]](1).toArray
-      val sigmas = data.getAs[Seq[Double]](2).toArray
-      val numFeatures = mus(0).size
+      val sigmas = data.getAs[Seq[Matrix]](2).toArray
 
       val gaussians = Array.tabulate(weights.length) { i =>
-        val startIndex = i * numFeatures * numFeatures
-        val stopIndex = startIndex + numFeatures
-        val mat = Matrices.dense(numFeatures, numFeatures, sigmas.slice(startIndex, stopIndex))
-        new MultivariateGaussian(mus(i), mat)
+        new MultivariateGaussian(mus(i), sigmas(i))
       }
 
       return new GaussianMixtureModel(weights, gaussians)
