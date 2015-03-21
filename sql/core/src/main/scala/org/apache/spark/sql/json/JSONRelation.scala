@@ -68,9 +68,23 @@ private[sql] class DefaultSource
       mode match {
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-        case SaveMode.Overwrite =>
-          fs.delete(filesystemPath, true)
+        case SaveMode.Overwrite => {
+          var success: Boolean = false
+          try {
+            success = fs.delete(filesystemPath, true)
+          } catch {
+            case e: IOException =>
+              throw new IOException(
+                s"Unable to clear output directory ${filesystemPath.toString} prior"
+                  + s" to writing to JSON table:\n${e.toString}")
+          }
+          if (!success) {
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table.")
+          }
           true
+        }
         case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
         case SaveMode.Ignore => false
@@ -114,13 +128,21 @@ private[sql] case class JSONRelation(
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
-      try {
-        fs.delete(filesystemPath, true)
-      } catch {
-        case e: IOException =>
+      if (fs.exists(filesystemPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(filesystemPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table:\n${e.toString}")
+        }
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+              + s" to writing to JSON table.")
+        }
       }
       // Write the data.
       data.toJSON.saveAsTextFile(path)

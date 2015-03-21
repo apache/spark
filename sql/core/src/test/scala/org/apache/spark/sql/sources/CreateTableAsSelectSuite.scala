@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
+import java.io.{IOException, File}
 
 import org.apache.spark.sql.AnalysisException
 import org.scalatest.BeforeAndAfterAll
@@ -60,6 +60,29 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jt").collect())
 
     dropTempTable("jsonTable")
+  }
+
+  test("CREATE TEMPORARY TABLE AS SELECT based on the file without write permission") {
+    val childPath = new File(path.toString, "child")
+    path.mkdir()
+    childPath.createNewFile()
+    path.setWritable(false)
+
+    val e = intercept[IOException] {
+      sql(
+        s"""
+           |CREATE TEMPORARY TABLE jsonTable
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '${path.toString}'
+           |) AS
+           |SELECT a, b FROM jt
+        """.stripMargin)
+      sql("SELECT a, b FROM jsonTable").collect()
+    }
+    assert(e.getMessage().contains("Unable to clear output directory"))
+
+    path.setWritable(true)
   }
 
   test("create a table, drop it and create another one with the same name") {
