@@ -479,7 +479,7 @@ private[spark] class ApplicationMaster(
           args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
           mainMethod.invoke(null, mainArgs)
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
-          logDebug("Done running users class")
+          logDebug("Done running user's class")
         } catch {
           case e: InvocationTargetException =>
             e.getCause match {
@@ -491,6 +491,11 @@ private[spark] class ApplicationMaster(
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
                   "User class threw exception: " + cause)
             }
+          case e: Throwable =>
+            logError(s"Driver thread threw exception: ${e.getCause}", e.getCause)
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
+              s"Driver thread threw exception: ${e.getCause}")
         }
       }
     }
