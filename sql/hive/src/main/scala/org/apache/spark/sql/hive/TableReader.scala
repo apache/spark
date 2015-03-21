@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
@@ -102,24 +102,28 @@ class HadoopTableReader(
     val broadcastedHiveConf = _broadcastedHiveConf
 
     val tablePath = hiveTable.getPath
-    val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
+    applyFilterIfNeeded(tablePath, filterOpt) match {
+      case Some(inputPathStr) =>
+        // logDebug("Table input: %s".format(tablePath))
+        val ifc = hiveTable.getInputFormatClass
+        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
 
-    // logDebug("Table input: %s".format(tablePath))
-    val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
+        val hadoopRDD = createHadoopRdd (tableDesc, inputPathStr, ifc)
 
-    val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+        val attrsWithIndex = attributes.zipWithIndex
+        val mutableRow = new SpecificMutableRow (attributes.map (_.dataType) )
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHiveConf.value.value
-      val deserializer = deserializerClass.newInstance()
-      deserializer.initialize(hconf, tableDesc.getProperties)
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)
+        val deserializedHadoopRDD = hadoopRDD.mapPartitions {
+        iter =>
+        val hconf = broadcastedHiveConf.value.value
+        val deserializer = deserializerClass.newInstance ()
+        deserializer.initialize (hconf, tableDesc.getProperties)
+        HadoopTableReader.fillObject (iter, deserializer, attrsWithIndex, mutableRow)
+        }
+
+        deserializedHadoopRDD
+      case None => new EmptyRDD[Row](sc.sparkContext)
     }
-
-    deserializedHadoopRDD
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[Row] = {
@@ -142,56 +146,62 @@ class HadoopTableReader(
       partitionToDeserializer: Map[HivePartition,
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
-    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
+    val hivePartitionRDDs = partitionToDeserializer.flatMap { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = HiveShim.getDataLocationPath(partition)
-      val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-      val ifc = partDesc.getInputFileFormatClass
-        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      // Get partition field info
-      val partSpec = partDesc.getPartSpec
-      val partProps = partDesc.getProperties
+      applyFilterIfNeeded(partPath, filterOpt) match {
+        case Some(inputPathStr) =>
+          val ifc = partDesc.getInputFileFormatClass
+            .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+          // Get partition field info
+          val partSpec = partDesc.getPartSpec
+          val partProps = partDesc.getProperties
 
-      val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
-      // Partitioning columns are delimited by "/"
-      val partCols = partColsDelimited.trim().split("/").toSeq
-      // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.
-      val partValues = if (partSpec == null) {
-        Array.fill(partCols.size)(new String)
-      } else {
-        partCols.map(col => new String(partSpec.get(col))).toArray
-      }
+          val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
+          // Partitioning columns are delimited by "/"
+          val partCols = partColsDelimited.trim().split("/").toSeq
+          // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.
+          val partValues = if (partSpec == null) {
+            Array.fill(partCols.size)(new String)
+          } else {
+            partCols.map(col => new String(partSpec.get(col))).toArray
+          }
 
-      // Create local references so that the outer object isn't serialized.
-      val tableDesc = relation.tableDesc
-      val broadcastedHiveConf = _broadcastedHiveConf
-      val localDeserializer = partDeserializer
-      val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+          // Create local references so that the outer object isn't serialized.
+          val tableDesc = relation.tableDesc
+          val broadcastedHiveConf = _broadcastedHiveConf
+          val localDeserializer = partDeserializer
+          val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
 
-      // Splits all attributes into two groups, partition key attributes and those that are not.
-      // Attached indices indicate the position of each attribute in the output schema.
-      val (partitionKeyAttrs, nonPartitionKeyAttrs) =
-        attributes.zipWithIndex.partition { case (attr, _) =>
-          relation.partitionKeys.contains(attr)
-        }
+          // Splits all attributes into two groups, partition key attributes and those that are not.
+          // Attached indices indicate the position of each attribute in the output schema.
+          val (partitionKeyAttrs, nonPartitionKeyAttrs) =
+            attributes.zipWithIndex.partition {
+              case (attr, _) =>
+                relation.partitionKeys.contains(attr)
+            }
 
-      def fillPartitionKeys(rawPartValues: Array[String], row: MutableRow) = {
-        partitionKeyAttrs.foreach { case (attr, ordinal) =>
-          val partOrdinal = relation.partitionKeys.indexOf(attr)
-          row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
-        }
-      }
+          def fillPartitionKeys(rawPartValues: Array[String], row: MutableRow) = {
+            partitionKeyAttrs.foreach {
+              case (attr, ordinal) =>
+                val partOrdinal = relation.partitionKeys.indexOf(attr)
+                row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
+            }
+          }
 
-      // Fill all partition keys to the given MutableRow object
-      fillPartitionKeys(partValues, mutableRow)
+          // Fill all partition keys to the given MutableRow object
+          fillPartitionKeys(partValues, mutableRow)
 
-      createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions { iter =>
-        val hconf = broadcastedHiveConf.value.value
-        val deserializer = localDeserializer.newInstance()
-        deserializer.initialize(hconf, partProps)
+          Some(createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions {
+            iter =>
+              val hconf = broadcastedHiveConf.value.value
+              val deserializer = localDeserializer.newInstance()
+              deserializer.initialize(hconf, partProps)
 
-        // fill the non partition key attributes
-        HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs, mutableRow)
+              // fill the non partition key attributes
+              HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs, mutableRow)
+          })
+        case None => None
       }
     }.toSeq
 
@@ -207,13 +217,22 @@ class HadoopTableReader(
    * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
    * returned in a single, comma-separated string.
    */
-  private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
-    filterOpt match {
-      case Some(filter) =>
-        val fs = path.getFileSystem(sc.hiveconf)
-        val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
-        filteredFiles.mkString(",")
-      case None => path.toString
+  private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): Option[String] = {
+    val fs = path.getFileSystem(sc.hiveconf)
+    if (fs.exists(path)) {
+      // if the file exists
+      filterOpt match {
+        case Some(filter) =>
+          val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
+          if (filteredFiles.length > 0) {
+            Some(filteredFiles.mkString(","))
+          } else {
+            None
+          }
+        case None => Some(path.toString)
+      }
+    } else {
+      None
     }
   }
 
