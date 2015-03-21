@@ -193,15 +193,22 @@ private[spark] class EventLoggingListener(
     writer.foreach(_.close())
 
     val target = new Path(logPath)
-    if (fileSystem.exists(target)) {
-      if (shouldOverwrite) {
-        logWarning(s"Event log $target already exists. Overwriting...")
-        fileSystem.delete(target, true)
-      } else {
-        throw new IOException("Target log file already exists (%s)".format(logPath))
+    try {
+      if (fileSystem.exists(target)) {
+        if (shouldOverwrite) {
+          logWarning(s"Event log $target already exists. Overwriting...")
+          fileSystem.delete(target, true)
+        } else {
+          throw new IOException("Target log file already exists (%s)".format(logPath))
+        }
+      }
+      fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    } catch {
+      case ex: IOException => {
+        logInfo(s"Ignoring failure to delete on stop for path $target")
       }
     }
-    fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+
   }
 
 }
