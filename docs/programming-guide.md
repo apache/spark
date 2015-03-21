@@ -836,7 +836,7 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -949,7 +949,7 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1028,7 +1028,7 @@ replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-proj
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/pyspark.storagelevel.StorageLevel-class.html))
+[Python](api/python/pyspark.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
