@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -171,10 +171,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val quickLinks: Seq[Elem] =
         (Some(<a href="#executors">Executors</a>) ::
-          (if (accumulables.nonEmpty)
+          (if (accumulables.nonEmpty) {
             Some(<a href="#accumulators">Accumulators</a>)
-          else
-            None) ::
+          } else {
+            None
+          }) ::
           Some(<a href="#tasks">Tasks</a>) :: Nil).flatten
 
       val showQuickLinks = <div id="links">Jump to: {quickLinks}</div>
@@ -441,7 +442,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
-        if (accumulables.size > 0) { <h4 id="accumulators">Accumulators</h4> ++ accumulableTable } else Seq()
+        if (accumulables.size > 0) {
+          <h4 id="accumulators">Accumulators</h4> ++ accumulableTable
+        } else {
+          Seq()
+        }
 
       val content =
         summary ++
