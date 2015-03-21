@@ -58,7 +58,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   // TODO: Use this everywhere instead of tuples or databaseName, tableName,.
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String) {
-    def toLowerCase = QualifiedTableName(database.toLowerCase, name.toLowerCase)
+    def toLowerCase: QualifiedTableName = QualifiedTableName(database.toLowerCase, name.toLowerCase)
   }
 
   /** A cache of Spark SQL data source tables that have been accessed. */
@@ -629,7 +629,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         castChildOutput(p, table, child)
     }
 
-    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {
+    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
+      : LogicalPlan = {
       val childOutputDataTypes = child.output.map(_.dataType)
       val tableOutputDataTypes =
         (table.attributes ++ table.partitionKeys).take(child.output.length).map(_.dataType)
@@ -667,7 +668,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
 
-  override def unregisterAllTables() = {}
+  override def unregisterAllTables(): Unit = {}
 }
 
 /**
@@ -682,10 +683,10 @@ private[hive] case class InsertIntoHiveTable(
     overwrite: Boolean)
   extends LogicalPlan {
 
-  override def children = child :: Nil
-  override def output = child.output
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = child.output
 
-  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }
@@ -704,13 +705,13 @@ private[hive] case class MetastoreRelation
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
 
-  @transient val hiveQlTable = new Table(table)
+  @transient val hiveQlTable: Table = new Table(table)
 
-  @transient val hiveQlPartitions = partitions.map { p =>
+  @transient val hiveQlPartitions: Seq[Partition] = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
 
-  @transient override lazy val statistics = Statistics(
+  @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstTotalSize)
       val rawDataSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstRawDataSize)
@@ -754,7 +755,7 @@ private[hive] case class MetastoreRelation
   )
 
   implicit class SchemaAttribute(f: FieldSchema) {
-    def toAttribute = AttributeReference(
+    def toAttribute: AttributeReference = AttributeReference(
       f.getName,
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.

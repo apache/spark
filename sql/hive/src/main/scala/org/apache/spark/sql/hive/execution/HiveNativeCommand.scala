@@ -26,9 +26,9 @@ import org.apache.spark.sql.types.StringType
 private[hive]
 case class HiveNativeCommand(sql: String) extends RunnableCommand {
 
-  override def output =
+  override def output: Seq[AttributeReference] =
     Seq(AttributeReference("result", StringType, nullable = false)())
 
-  override def run(sqlContext: SQLContext) =
+  override def run(sqlContext: SQLContext): Seq[Row] =
     sqlContext.asInstanceOf[HiveContext].runSqlHive(sql).map(Row(_))
 }

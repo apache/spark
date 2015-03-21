@@ -155,8 +155,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   protected[hive] class HiveQLQueryExecution(hql: String)
     extends this.QueryExecution(HiveQl.parseSql(hql)) {
-    def hiveExec() = runSqlHive(hql)
-    override def toString = hql + "\n" + super.toString
+    def hiveExec(): Seq[String] = runSqlHive(hql)
+    override def toString: String = hql + "\n" + super.toString
   }
 
   /**
@@ -186,7 +186,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   case class TestTable(name: String, commands: (()=>Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
-    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    def cmd: () => Unit = {
+      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    }
   }
 
   /**
@@ -194,7 +196,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * demand when a query are run against it.
    */
   lazy val testTables = new mutable.HashMap[String, TestTable]()
-  def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
+
+  def registerTestTable(testTable: TestTable): Unit = {
+    testTables += (testTable.name -> testTable)
+  }
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
