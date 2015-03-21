@@ -756,7 +756,7 @@ private[hive] case class MetastoreRelation
   implicit class SchemaAttribute(f: FieldSchema) {
     def toAttribute = AttributeReference(
       f.getName,
-      sqlContext.ddlParser.parseType(f.getType),
+      HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
@@ -779,11 +779,7 @@ private[hive] case class MetastoreRelation
 
 
 private[hive] object HiveMetastoreTypes {
-  protected val ddlParser = new DDLParser(HiveQl.parseSql(_))
-
-  def toDataType(metastoreType: String): DataType = synchronized {
-    ddlParser.parseType(metastoreType)
-  }
+  def toDataType(metastoreType: String): DataType = DataTypeParser(metastoreType)
 
   def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
