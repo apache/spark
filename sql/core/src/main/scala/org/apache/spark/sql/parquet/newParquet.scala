@@ -611,13 +611,22 @@ private[sql] case class ParquetRelation2(
     val destinationPath = new Path(paths.head)
 
     if (overwrite) {
-      try {
-        destinationPath.getFileSystem(conf).delete(destinationPath, true)
-      } catch {
-        case e: IOException =>
+      val fs = destinationPath.getFileSystem(conf)
+      if (fs.exists(destinationPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(destinationPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${destinationPath.toString} prior" +
+                s" to writing to Parquet table:\n${e.toString}")
+        }
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${destinationPath.toString} prior" +
-              s" to writing to Parquet file:\n${e.toString}")
+              s" to writing to Parquet table.")
+        }
       }
     }
 
