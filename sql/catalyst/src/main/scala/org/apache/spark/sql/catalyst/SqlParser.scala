@@ -61,6 +61,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
+  protected val CUBE = Keyword("CUBE")
   protected val DATE = Keyword("DATE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
@@ -74,6 +75,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
+  protected val GROUPING = Keyword("GROUPING")
   protected val HAVING = Keyword("HAVING")
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
@@ -102,8 +104,10 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val REGEXP = Keyword("REGEXP")
   protected val RIGHT = Keyword("RIGHT")
   protected val RLIKE = Keyword("RLIKE")
+  protected val ROLLUP = Keyword("ROLLUP")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
+  protected val SETS = Keyword("SETS")
   protected val SQRT = Keyword("SQRT")
   protected val STRING = Keyword("STRING")
   protected val SUBSTR = Keyword("SUBSTR")
@@ -117,6 +121,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val WITH = Keyword("WITH")
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -140,7 +145,7 @@ class SqlParser extends AbstractSparkSQLParser {
       repsep(projection, ",") ~
       (FROM   ~> relations).? ~
       (WHERE  ~> expression).? ~
-      (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
+      groupType.? ~
       (HAVING ~> expression).? ~
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
@@ -148,7 +153,7 @@ class SqlParser extends AbstractSparkSQLParser {
           val base = r.getOrElse(NoRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
-            .map(Aggregate(_, assignAliases(p), withFilter))
+            .map(_(withFilter, assignAliases(p)))
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
@@ -203,6 +208,57 @@ class SqlParser extends AbstractSparkSQLParser {
     | RIGHT ~ OUTER.? ^^^ RightOuter
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
+
+  protected lazy val groupType: Parser[(LogicalPlan, Seq[NamedExpression]) => LogicalPlan] =
+    GROUP ~ BY ~> (
+      rep1sep(expression, ",") <~ WITH ~ ROLLUP ^^ { case r =>
+        (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+          Rollup(r, child, aggregations, groupings = VirtualColumn.newGroupings(r))
+      }
+      | rep1sep(expression, ",") <~ WITH ~ CUBE ^^ { case c =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Cube(c, child, aggregations, groupings = VirtualColumn.newGroupings(c))
+      }
+      | rep1sep(expression, ",") ~ (GROUPING ~ SETS ~ "(" ~> rep1sep(groupingsets, ",") <~ ")")
+          ^^ { case e ~ g =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            calGroupingSets(child, aggregations, g, Some(e))
+      }
+      | rep1sep(expression, ",") ^^ { case g =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Aggregate(g, aggregations, child)
+      }
+      | ROLLUP ~ "(" ~> rep1sep(expression, ",") <~ ")" ^^ { case r =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Rollup(r, child, aggregations, groupings = VirtualColumn.newGroupings(r))
+      }
+      | CUBE ~ "(" ~> rep1sep(expression, ",") <~ ")" ^^ { case c =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Cube(c, child, aggregations, groupings = VirtualColumn.newGroupings(c))
+      }
+      | GROUPING ~ SETS ~ "(" ~> rep1sep(groupingsets, ",") <~ ")" ^^ { case g =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            calGroupingSets(child, aggregations, g)
+      }
+    )
+
+  protected lazy val groupingsets: Parser[Seq[Expression]] =
+    ( "(" ~> repsep(expression, ",") <~ ")"
+    | rep1sep(expression, ",")
+    )
+
+  private def calGroupingSets(child: LogicalPlan, aggregations: Seq[NamedExpression],
+    groupingSets: List[Seq[Expression]], groupByExprs: Option[Seq[Expression]] = None):
+      GroupingSets = {
+    val keys = groupByExprs.getOrElse(groupingSets.flatten.toSet.toSeq)
+    val keyMap = keys.zipWithIndex.toMap
+    val bitmasks: Seq[Int] = groupingSets.map(set => set.foldLeft(0)((bitmap, col) => {
+      require(keyMap.contains(col), s"$col doesn't show up in the GROUP BY list")
+      bitmap | 1 << keyMap(col)
+    }))
+    GroupingSets(bitmasks, keys, child, aggregations,
+      groupings = VirtualColumn.newGroupings(keys))
+  }
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
     ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
@@ -286,6 +342,7 @@ class SqlParser extends AbstractSparkSQLParser {
       { case exp => ApproxCountDistinct(exp) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
       { case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble) }
+    | GROUPING ~ "(" ~> ident <~ ")" ^^ { case ident => UnresolvedGrouping(ident) }
     | FIRST ~ "(" ~> expression <~ ")" ^^ { case exp => First(exp) }
     | LAST  ~ "(" ~> expression <~ ")" ^^ { case exp => Last(exp) }
     | AVG   ~ "(" ~> expression <~ ")" ^^ { case exp => Average(exp) }

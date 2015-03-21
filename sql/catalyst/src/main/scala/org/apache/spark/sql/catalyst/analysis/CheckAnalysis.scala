@@ -86,7 +86,7 @@ class CheckAnalysis {
             cleaned.foreach(checkValidAggregateExpression)
 
           case o if o.children.nonEmpty &&
-            !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
+            !o.references.filter(x => exceptColumns(x.name)).subsetOf(o.inputSet) =>
             val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
             val input = o.inputSet.map(_.prettyString).mkString(",")
 
@@ -101,5 +101,9 @@ class CheckAnalysis {
         }
     }
     extendedCheckRules.foreach(_(plan))
+  }
+
+  def exceptColumns(name: String): Boolean = {
+    !(name == VirtualColumn.groupingIdName || name.startsWith(GroupingAttributeName.nameMarker))
   }
 }

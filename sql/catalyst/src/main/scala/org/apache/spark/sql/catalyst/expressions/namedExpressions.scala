@@ -230,4 +230,25 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
 object VirtualColumn {
   val groupingIdName = "grouping__id"
   def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()
+
+  def newGroupings(groupByExprs: Seq[Expression]) = {
+    groupByExprs.collect {
+      case x: NamedExpression => AttributeReference(GroupingAttributeName(x.name), IntegerType, false)()
+    }
+  }
+}
+
+object GroupingAttributeName {
+  val nameMarker = "grouping_"
+  def apply(name: String): String = {
+    nameMarker + name
+  }
+
+  def unapply(expr: Expression): Option[AttributeReference] = {
+    expr match {
+      case x: AttributeReference =>
+        if (x.name.startsWith(nameMarker)) Some(x) else None
+      case _ => None
+    }
+  }
 }

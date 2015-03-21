@@ -196,6 +196,7 @@ case class Expand(
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>
   def gid: AttributeReference
+  def groupings: Seq[AttributeReference]
   def groupByExprs: Seq[Expression]
   def aggregations: Seq[NamedExpression]
 
@@ -224,7 +225,9 @@ case class GroupingSets(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId,
+    groupings: Seq[AttributeReference] = Seq.empty) extends GroupingAnalytics
+
 
 /**
  * Cube is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -242,7 +245,8 @@ case class Cube(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId,
+    groupings: Seq[AttributeReference] = Seq.empty) extends GroupingAnalytics
 
 /**
  * Rollup is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -261,7 +265,8 @@ case class Rollup(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId,
+    groupings: Seq[AttributeReference] = Seq.empty) extends GroupingAnalytics
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
