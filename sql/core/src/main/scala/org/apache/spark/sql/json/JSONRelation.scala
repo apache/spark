@@ -20,6 +20,8 @@ package org.apache.spark.sql.json
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.Row
 
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
@@ -104,10 +106,10 @@ private[sql] case class JSONRelation(
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)))
 
-  override def buildScan() =
+  override def buildScan(): RDD[Row] =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 
-  override def insert(data: DataFrame, overwrite: Boolean) = {
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 

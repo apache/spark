@@ -88,7 +88,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     } finally {
       // Clean up our sorter, which may have its own intermediate files
       if (sorter != null) {
+        val startTime = System.nanoTime()
         sorter.stop()
+        context.taskMetrics.shuffleWriteMetrics.foreach(
+          _.incShuffleWriteTime(System.nanoTime - startTime))
         sorter = null
       }
     }

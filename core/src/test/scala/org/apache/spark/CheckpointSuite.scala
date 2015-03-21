@@ -33,8 +33,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   override def beforeEach() {
     super.beforeEach()
-    checkpointDir = File.createTempFile("temp", "")
-    checkpointDir.deleteOnExit()
+    checkpointDir = File.createTempFile("temp", "", Utils.createTempDir())
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)

@@ -377,6 +377,12 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a sampled subset of this RDD.
+   * 
+   * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
+   * @param fraction expected size of the sample as a fraction of this RDD's size
+   *  without replacement: probability that each element is chosen; fraction must be [0, 1]
+   *  with replacement: expected number of times each element is chosen; fraction must be >= 0
+   * @param seed seed for the random number generator
    */
   def sample(withReplacement: Boolean,
       fraction: Double,
@@ -960,7 +966,7 @@ abstract class RDD[T: ClassTag](
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)

@@ -202,20 +202,21 @@ private[hive] object SparkSQLCLIDriver {
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
-      if (prefix.nonEmpty) {
-        prefix += '\n'
-      }
+      if (!line.startsWith("--")) {
+        if (prefix.nonEmpty) {
+          prefix += '\n'
+        }
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
-        currentPrompt = promptWithCurrentDB
-      } else {
-        prefix = prefix + line
-        currentPrompt = continuedPromptWithDBSpaces
+        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
+          line = prefix + line
+          ret = cli.processLine(line, true)
+          prefix = ""
+          currentPrompt = promptWithCurrentDB
+        } else {
+          prefix = prefix + line
+          currentPrompt = continuedPromptWithDBSpaces
+        }
       }
-
       line = reader.readLine(currentPrompt + "> ")
     }
 
