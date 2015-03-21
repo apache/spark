@@ -71,14 +71,20 @@ private[sql] case class ParquetRelation(
       sqlContext.conf.isParquetINT96AsTimestamp)
   lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
-  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance(): this.type = {
+    ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  }
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case p: ParquetRelation =>
       p.path == path && p.output == output
     case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(path, output)
   }
 
   // TODO: Use data from the footers.
