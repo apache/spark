@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -36,8 +35,9 @@ private[sql] object InMemoryRelation {
       useCompression: Boolean,
       batchSize: Int,
       storageLevel: StorageLevel,
-      child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child)()
+      child: SparkPlan,
+      tableName: Option[String]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
@@ -47,7 +47,8 @@ private[sql] case class InMemoryRelation(
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    child: SparkPlan)(
+    child: SparkPlan,
+    tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
     private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
@@ -80,7 +81,7 @@ private[sql] case class InMemoryRelation(
     if (batchStats.value.isEmpty) {
       // Underlying columnar RDD hasn't been materialized, no useful statistics information
       // available, return the default statistics.
-      Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
     } else {
       // Underlying columnar RDD has been materialized, required information has also been collected
       // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
@@ -118,6 +119,17 @@ private[sql] case class InMemoryRelation(
           var rowCount = 0
           while (rowIterator.hasNext && rowCount < batchSize) {
             val row = rowIterator.next()
+
+            // Added for SPARK-6082. This assertion can be useful for scenarios when something
+            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+            // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+            // hard to decipher.
+            assert(
+              row.size == columnBuilders.size,
+              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.size}.
+                 |Row content: $row
+               """.stripMargin)
+
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
@@ -126,8 +138,7 @@ private[sql] case class InMemoryRelation(
             rowCount += 1
           }
 
-          val stats = Row.fromSeq(
-            columnBuilders.map(_.columnStats.collectedStatistics).foldLeft(Seq.empty[Any])(_ ++ _))
+          val stats = Row.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)
@@ -137,13 +148,13 @@ private[sql] case class InMemoryRelation(
       }
     }.persist(storageLevel)
 
-    cached.setName(child.toString)
+    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
     _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
-      newOutput, useCompression, batchSize, storageLevel, child)(
+      newOutput, useCompression, batchSize, storageLevel, child, tableName)(
       _cachedColumnBuffers, statisticsToBePropagated)
   }
 
@@ -155,7 +166,8 @@ private[sql] case class InMemoryRelation(
       useCompression,
       batchSize,
       storageLevel,
-      child)(
+      child,
+      tableName)(
       _cachedColumnBuffers,
       statisticsToBePropagated).asInstanceOf[this.type]
   }
@@ -171,8 +183,6 @@ private[sql] case class InMemoryColumnarTableScan(
     predicates: Seq[Expression],
     relation: InMemoryRelation)
   extends LeafNode {
-
-  @transient override val sqlContext = relation.child.sqlContext
 
   override def output: Seq[Attribute] = attributes
 
@@ -232,7 +242,7 @@ private[sql] case class InMemoryColumnarTableScan(
   val readPartitions = sparkContext.accumulator(0)
   val readBatches = sparkContext.accumulator(0)
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   override def execute() = {
     readPartitions.setValue(0)
@@ -270,9 +280,10 @@ private[sql] case class InMemoryColumnarTableScan(
 
           // Extract rows via column accessors
           new Iterator[Row] {
+            private[this] val rowLen = nextRow.length
             override def next() = {
               var i = 0
-              while (i < nextRow.length) {
+              while (i < rowLen) {
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
@@ -296,7 +307,7 @@ private[sql] case class InMemoryColumnarTableScan(
           cachedBatchIterator.filter { cachedBatch =>
             if (!partitionFilter(cachedBatch.stats)) {
               def statsString = relation.partitionStatistics.schema
-                .zip(cachedBatch.stats)
+                .zip(cachedBatch.stats.toSeq)
                 .map { case (a, s) => s"${a.name}: $s" }
                 .mkString(", ")
               logInfo(s"Skipping partition based on stats $statsString")

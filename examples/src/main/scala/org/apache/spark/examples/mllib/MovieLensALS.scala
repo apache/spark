@@ -20,14 +20,10 @@ package org.apache.spark.examples.mllib
 import scala.collection.mutable
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
-import org.apache.spark.mllib.optimization.Constraint._
-import org.apache.spark.mllib.optimization.Constraint
+import breeze.optimize.proximal.Constraint
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.evaluation.RankingMetrics
-import org.jblas.DoubleMatrix
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -51,12 +47,11 @@ object MovieLensALS {
     delimiter: String = "::",
     numUserBlocks: Int = -1,
     numProductBlocks: Int = -1,
-    implicitPrefs: Boolean = false,
-    validateRecommendation: Boolean = false) extends AbstractParams[Params]
+    implicitPrefs: Boolean = false) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
-
+    
     val userConstraints = Constraint.values.toList.mkString(",")
     val productConstraints = Constraint.values.toList.mkString(",")
 
@@ -95,9 +90,6 @@ object MovieLensALS {
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
-      opt[Unit]("validateRecommendation")
-        .text("validate recommendation using MAP measures")
-        .action((_, c) => c.copy(validateRecommendation = true))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -206,12 +198,6 @@ object MovieLensALS {
 
     println(s"Test RMSE = $rmse.")
 
-    if (params.validateRecommendation) {
-      val (map, users) = computeRankingMetrics(model,
-        training, test, numMovies.toInt)
-      println(s"Test users $users MAP $map")
-    }
-    
     sc.stop()
   }
 
@@ -228,41 +214,5 @@ object MovieLensALS {
   def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
     else r
-  }
-
-  /**
-   * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
-   */
-  def computeRankingMetrics(model: MatrixFactorizationModel,
-    train: RDD[Rating], test: RDD[Rating], n: Int) = {
-
-    val ord = Ordering.by[(Int, Double), Double](x => x._2)
-
-    val testUserLabels = test.map {
-      x => (x.user, (x.product, x.rating))
-    }.groupByKey.map {
-      case (userId, products) =>
-        val sortedProducts = products.toArray.sorted(ord.reverse)
-        (userId, sortedProducts.map { _._1 })
-    }
-    
-    val trainUserLabels = train.map {
-      x => (x.user, x.product)
-    }.groupByKey.map {
-      case (userId, products) => (userId, products.toArray)
-    }
-    
-    val rankings = model.recommendProductsForUsers(n).join(trainUserLabels).map {
-      case (userId, (pred, train)) => {
-        val predictedProducts = pred.map { _.product }
-        val trainSet = train.toSet
-        (userId, predictedProducts.filterNot { x => trainSet.contains(x) })
-      }
-    }.join(testUserLabels).map {
-      case (user, (pred, lab)) => (pred, lab)
-    }
-
-    val metrics = new RankingMetrics(rankings)
-    (metrics.meanAveragePrecision, testUserLabels.count)
   }
 }

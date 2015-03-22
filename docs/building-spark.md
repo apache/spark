@@ -9,6 +9,19 @@ redirect_from: "building-with-maven.html"
 
 Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
+**Note:** Building Spark with Java 7 or later can create JAR files that may not be
+readable with early versions of Java 6, due to the large number of files in the JAR
+archive. Build with Java 6 if this is an issue for your deployment.
+
+# Building with `build/mvn`
+
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+
+{% highlight bash %}
+build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+{% endhighlight %}
+
+Other build examples can be found below.
 
 # Setting up Maven's Memory Usage
 
@@ -28,7 +41,9 @@ If you don't run this, you may see errors like the following:
 
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
-**Note:** *For Java 8 and above this step is not required.*
+**Note:**
+* *For Java 8 and above this step is not required.*
+* *If using `build/mvn` and `MAVEN_OPTS` were not already set, the script will automate this for you.*
 
 # Specifying the Hadoop Version
 
@@ -60,70 +75,53 @@ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn-alpha" or "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". The additional build profile required depends on the YARN version:
-
-<table class="table">
-  <thead>
-    <tr><th>YARN version</th><th>Profile required</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha (Deprecated.)</td></tr>
-    <tr><td>2.2.x and later</td><td>yarn</td></tr>
-  </tbody>
-</table>
-
-Note: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).
+You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
 {% highlight bash %}
-# Apache Hadoop 2.0.5-alpha
-mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -DskipTests clean package
-
-# Cloudera CDH 4.2.0
-mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
-
-# Apache Hadoop 0.23.x
-mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
-
 # Apache Hadoop 2.2.X
 mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
-# Apache Hadoop 2.4.X
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+# Apache Hadoop 2.4.X or 2.5.X
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
+
+Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
+released after this version of Spark).
 
 # Different versions of HDFS and YARN.
-mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
+mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
 {% endhighlight %}
 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings. You can also build for 
+By default Spark will build with Hive 0.13.1 bindings. You can also build for
 Hive 0.12.0 using the `-Phive-0.12.0` profile.
 {% highlight bash %}
 # Apache Hadoop 2.4.X with Hive 13 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 
 # Apache Hadoop 2.4.X with Hive 12 support
-mvn -Pyarn -Phive -Phive-thriftserver-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-0.12.0 -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
 # Building for Scala 2.11
 To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
 
+    dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
-Scala 2.11 support in Spark is experimental and does not support a few features.
-Specifically, Spark's external Kafka library and JDBC component are not yet
-supported in Scala 2.11 builds.
+Scala 2.11 support in Spark does not support a few features due to dependencies
+which are themselves not Scala 2.11 ready. Specifically, Spark's external 
+Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
 
 # Spark Tests in Maven
 
-Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). 
+Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
 
 Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
 
@@ -141,28 +139,38 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
     mvn scala:cc
 
-should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
+should run continuous compilation (i.e. wait for changes). However, this has not been tested
+extensively. A couple of gotchas to note:
 
-# Using With IntelliJ IDEA
+* it only scans the paths `src/main` and `src/test` (see
+[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+from within certain submodules that have that structure.
 
-This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate either the hadoop1 or hadoop2 profile in the "Maven Properties" popout. We have not tried Eclipse/Scala IDE with this.
+* you'll typically need to run `mvn install` from the project root for compilation within
+specific submodules to work; this is because submodules that depend on other submodules do so via
+the `spark-parent` module).
 
-# Building Spark Debian Packages
+Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
 
-The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
+```
+ $ mvn install
+ $ cd core
+ $ mvn scala:cc
+```
 
-    mvn -Pdeb -DskipTests clean package
+# Building Spark with IntelliJ IDEA or Eclipse
 
-The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
 
 # Running Java 8 Test Suites
 
 Running only Java 8 tests and nothing else.
 
     mvn install -DskipTests -Pjava8-tests
-    
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`. 
-For these tests to run your system must have a JDK 8 installation. 
+
+Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
+For these tests to run your system must have a JDK 8 installation.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
 # Building for PySpark on YARN
@@ -174,7 +182,7 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 # Packaging without Hadoop Dependencies for YARN
 
-The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
+The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
 
 # Building with SBT
 
@@ -185,22 +193,22 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 assembly
+    build/sbt -Pyarn -Phadoop-2.3 assembly
 
 # Testing with SBT
 
-Some of the tests require Spark to be packaged first, so always run `sbt/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
+Some of the tests require Spark to be packaged first, so always run `build/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
 
 To run test suites of a specific sub project as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
 
 # Speeding up Compilation with Zinc
 
@@ -209,3 +217,9 @@ compiler. When run locally as a background process, it speeds up builds of Scala
 like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
 Zinc. The project site gives instructions for building and running `zinc`; OS X users can
 install it using `brew install zinc`.
+
+If using the `build/mvn` package `zinc` will automatically be downloaded and leveraged for all
+builds. This process will auto-start after the first time `build/mvn` is called and bind to port
+3030 unless the `ZINC_PORT` environment variable is set. The `zinc` process can subsequently be
+shut down at any time by running `build/zinc-<version>/bin/zinc -shutdown` and will automatically
+restart whenever `build/mvn` is called.

@@ -22,7 +22,6 @@ import scala.math.abs
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 

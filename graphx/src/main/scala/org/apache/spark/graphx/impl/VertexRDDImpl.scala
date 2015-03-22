@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class VertexRDDImpl[VD] private[graphx] (
-    val partitionsRDD: RDD[ShippableVertexPartition[VD]],
+    @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   (implicit override protected val vdTag: ClassTag[VD])
   extends VertexRDD[VD](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
@@ -71,6 +71,20 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
+  override def getStorageLevel = partitionsRDD.getStorageLevel
+
+  override def checkpoint() = {
+    partitionsRDD.checkpoint()
+  }
+
+  override def isCheckpointed: Boolean = {
+    firstParent[ShippableVertexPartition[VD]].isCheckpointed
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)
@@ -90,8 +104,14 @@ class VertexRDDImpl[VD] private[graphx] (
     this.mapVertexPartitions(_.map(f))
 
   override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
+    val otherPartition = other match {
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
+        other.partitionsRDD
+      case _ =>
+        VertexRDD(other.partitionBy(this.partitioner.get)).partitionsRDD
+    }
     val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
+      otherPartition, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
       val thisPart = thisIter.next()
       val otherPart = otherIter.next()
@@ -119,7 +139,7 @@ class VertexRDDImpl[VD] private[graphx] (
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient leftZipJoin
     other match {
-      case other: VertexRDD[_] =>
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
         leftZipJoin(other)(f)
       case _ =>
         this.withPartitionsRDD[VD3](
@@ -148,7 +168,7 @@ class VertexRDDImpl[VD] private[graphx] (
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
     other match {
-      case other: VertexRDD[_] =>
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
         innerZipJoin(other)(f)
       case _ =>
         this.withPartitionsRDD(

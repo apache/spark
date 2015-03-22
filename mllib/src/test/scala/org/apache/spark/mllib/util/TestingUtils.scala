@@ -178,17 +178,17 @@ object TestingUtils {
   implicit class MatrixWithAlmostEquals(val x: Matrix) {
 
     /**
-     * When the difference of two vectors are within eps, returns true; otherwise, returns false.
+     * When the difference of two matrices are within eps, returns true; otherwise, returns false.
      */
     def ~=(r: CompareMatrixRightSide): Boolean = r.fun(x, r.y, r.eps)
 
     /**
-     * When the difference of two vectors are within eps, returns false; otherwise, returns true.
+     * When the difference of two matrices are within eps, returns false; otherwise, returns true.
      */
     def !~=(r: CompareMatrixRightSide): Boolean = !r.fun(x, r.y, r.eps)
 
     /**
-     * Throws exception when the difference of two vectors are NOT within eps;
+     * Throws exception when the difference of two matrices are NOT within eps;
      * otherwise, returns true.
      */
     def ~==(r: CompareMatrixRightSide): Boolean = {

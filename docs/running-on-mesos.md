@@ -2,6 +2,8 @@
 layout: global
 title: Running Spark on Mesos
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 
@@ -182,6 +184,57 @@ node. Please refer to [Hadoop on Mesos](https://github.com/mesos/hadoop).
 
 In either case, HDFS runs separately from Hadoop MapReduce, without being scheduled through Mesos.
 
+
+# Configuration
+
+See the [configuration page](configuration.html) for information on Spark configurations.  The following configs are specific for Spark on Mesos.
+
+#### Spark Properties
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.mesos.coarse</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
+    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
+    for the whole duration of the Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.extra.cores</code></td>
+  <td>0</td>
+  <td>
+    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
+    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
+    Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.memoryOverhead</code></td>
+  <td>executor memory * 0.10, with minimum of 384</td>
+  <td>
+    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
+    which is used to calculate the total Mesos task memory. A value of <code>384</code>
+    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
+    overhead. The final overhead will be the larger of either
+    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
+  </td>
+</tr>
+</table>
 
 # Troubleshooting and Debugging
 

@@ -18,12 +18,13 @@
 package org.apache.spark.deploy.master
 
 import java.io._
-import java.nio.ByteBuffer
-
-import org.apache.spark.Logging
-import org.apache.spark.serializer.Serializer
 
 import scala.reflect.ClassTag
+
+import akka.serialization.Serialization
+
+import org.apache.spark.Logging
+
 
 /**
  * Stores data in a single on-disk directory with one file per application and worker.
@@ -34,10 +35,9 @@ import scala.reflect.ClassTag
  */
 private[spark] class FileSystemPersistenceEngine(
     val dir: String,
-    val serialization: Serializer)
+    val serialization: Serialization)
   extends PersistenceEngine with Logging {
 
-  val serializer = serialization.newInstance()
   new File(dir).mkdir()
 
   override def persist(name: String, obj: Object): Unit = {
@@ -56,17 +56,17 @@ private[spark] class FileSystemPersistenceEngine(
   private def serializeIntoFile(file: File, value: AnyRef) {
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
-
-    val out = serializer.serializeStream(new FileOutputStream(file))   
+    val serializer = serialization.findSerializerFor(value)
+    val serialized = serializer.toBinary(value)
+    val out = new FileOutputStream(file)
     try {
-      out.writeObject(value)
+      out.write(serialized)
     } finally {
       out.close()
     }
-
   }
 
-  def deserializeFromFile[T](file: File): T = {
+  private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     val fileData = new Array[Byte](file.length().asInstanceOf[Int])
     val dis = new DataInputStream(new FileInputStream(file))
     try {
@@ -74,7 +74,9 @@ private[spark] class FileSystemPersistenceEngine(
     } finally {
       dis.close()
     }
-
-    serializer.deserializeStream(dis).readObject()
+    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
+    val serializer = serialization.serializerFor(clazz)
+    serializer.fromBinary(fileData).asInstanceOf[T]
   }
+
 }

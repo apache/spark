@@ -24,10 +24,9 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
- * an implicit conversion. Import `org.apache.spark.SparkContext._` at the top of your program to
- * use these functions. They will work with any key type `K` that has an implicit `Ordering[K]` in
- * scope.  Ordering objects already exist for all of the standard primitive types.  Users can also
- * define their own orderings for custom types, or to override the default ordering.  The implicit
+ * an implicit conversion. They will work with any key type `K` that has an implicit `Ordering[K]`
+ * in scope. Ordering objects already exist for all of the standard primitive types. Users can also
+ * define their own orderings for custom types, or to override the default ordering. The implicit
  * ordering that is in the closest scope will be used.
  *
  * {{{
@@ -74,6 +73,29 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = {
     new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
+  }
+
+  /**
+   * Returns an RDD containing only the elements in the the inclusive range `lower` to `upper`.
+   * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
+   * performed efficiently by only scanning the partitions that might contain matching elements.
+   * Otherwise, a standard `filter` is applied to all partitions.
+   */
+  def filterByRange(lower: K, upper: K): RDD[P] = {
+
+    def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
+
+    val rddToFilter: RDD[P] = self.partitioner match {
+      case Some(rp: RangePartitioner[K, V]) => {
+        val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
+          case (l, u) => Math.min(l, u) to Math.max(l, u)
+        }
+        PartitionPruningRDD.create(self, partitionIndicies.contains)
+      }
+      case _ =>
+        self
+    }
+    rddToFilter.filter { case (k, v) => inRange(k) }
   }
 
 }

@@ -61,11 +61,24 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       command( """
-         @transient val sc = org.apache.spark.repl.Main.createSparkContext();
-               """)
+         @transient val sc = {
+           val _sc = org.apache.spark.repl.Main.createSparkContext()
+           println("Spark context available as sc.")
+           _sc
+         }
+        """)
+      command( """
+         @transient val sqlContext = {
+           val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
+           println("SQL context available as sqlContext.")
+           _sqlContext
+         }
+        """)
       command("import org.apache.spark.SparkContext._")
+      command("import sqlContext.implicits._")
+      command("import sqlContext.sql")
+      command("import org.apache.spark.sql.functions._")
     }
-    echo("Spark context available as sc.")
   }
 
   /** Print a welcome message */

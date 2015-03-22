@@ -26,7 +26,7 @@ import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.util.logging.FileAppender
 
@@ -43,10 +43,13 @@ private[spark] class ExecutorRunner(
     val worker: ActorRef,
     val workerId: String,
     val host: String,
+    val webUiPort: Int,
+    val publicAddress: String,
     val sparkHome: File,
     val executorDir: File,
     val workerUrl: String,
     val conf: SparkConf,
+    val appLocalDirs: Seq[String],
     var state: ExecutorState.Value)
   extends Logging {
 
@@ -77,20 +80,19 @@ private[spark] class ExecutorRunner(
   /**
    * Kill executor process, wait for exit and notify worker to update resource status.
    *
-   * @param message the exception message which caused the executor's death 
+   * @param message the exception message which caused the executor's death
    */
   private def killProcess(message: Option[String]) {
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
-      process.destroy()
-      process.waitFor()
       if (stdoutAppender != null) {
         stdoutAppender.stop()
       }
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
+      process.destroy()
       exitCode = Some(process.waitFor())
     }
     worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
@@ -103,7 +105,11 @@ private[spark] class ExecutorRunner(
       workerThread.interrupt()
       workerThread = null
       state = ExecutorState.KILLED
-      Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      try {
+        Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      } catch {
+        case e: IllegalStateException => None
+      }
     }
   }
 
@@ -129,9 +135,17 @@ private[spark] class ExecutorRunner(
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 
       builder.directory(executorDir)
+      builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
+
+      // Add webUI log urls
+      val baseUrl =
+        s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+      builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
+      builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
+
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)
@@ -144,8 +158,6 @@ private[spark] class ExecutorRunner(
       Files.write(header, stderr, UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
-      state = ExecutorState.RUNNING
-      worker ! ExecutorStateChanged(appId, execId, state, None, None)
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()

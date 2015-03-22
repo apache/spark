@@ -52,7 +52,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data
@@ -84,7 +84,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data
@@ -118,7 +118,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model initialized with true weights
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(10.0, 10.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data for testing
