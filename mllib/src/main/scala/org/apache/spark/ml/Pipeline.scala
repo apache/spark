@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
 abstract class PipelineStage extends Serializable with Logging {
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    *
    * Derives the output schema from the input schema and parameters.
    * The schema describes the columns and types of the data.
