@@ -35,7 +35,7 @@ rm -rf metastore warehouse
 function run_test() {
     echo "Running test: $1" | tee -a $LOG_FILE
 
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a $LOG_FILE
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
@@ -64,14 +64,18 @@ function run_core_tests() {
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql.py"
-    run_test "pyspark/sql_tests.py"
+    run_test "pyspark/sql/types.py"
+    run_test "pyspark/sql/context.py"
+    run_test "pyspark/sql/dataframe.py"
+    run_test "pyspark/sql/functions.py"
+    run_test "pyspark/sql/tests.py"
 }
 
 function run_mllib_tests() {
     echo "Run mllib tests ..."
     run_test "pyspark/mllib/classification.py"
     run_test "pyspark/mllib/clustering.py"
+    run_test "pyspark/mllib/evaluation.py"
     run_test "pyspark/mllib/feature.py"
     run_test "pyspark/mllib/linalg.py"
     run_test "pyspark/mllib/rand.py"

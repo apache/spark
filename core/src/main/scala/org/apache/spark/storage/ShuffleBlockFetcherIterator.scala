@@ -234,6 +234,7 @@ final class ShuffleBlockFetcherIterator(
       try {
         val buf = blockManager.getBlockData(blockId)
         shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
         results.put(new SuccessFetchResult(blockId, 0, buf))
       } catch {

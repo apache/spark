@@ -177,8 +177,8 @@ class TaskMetrics extends Serializable {
    * Once https://issues.apache.org/jira/browse/SPARK-5225 is addressed,
    * we can store all the different inputMetrics (one per readMethod).
    */
-  private[spark] def getInputMetricsForReadMethod(readMethod: DataReadMethod):
-    InputMetrics =synchronized {
+  private[spark] def getInputMetricsForReadMethod(
+      readMethod: DataReadMethod): InputMetrics = synchronized {
     _inputMetrics match {
       case None =>
         val metrics = new InputMetrics(readMethod)
@@ -195,15 +195,18 @@ class TaskMetrics extends Serializable {
    * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
    */
   private[spark] def updateShuffleReadMetrics(): Unit = synchronized {
-    val merged = new ShuffleReadMetrics()
-    for (depMetrics <- depsShuffleReadMetrics) {
-      merged.incFetchWaitTime(depMetrics.fetchWaitTime)
-      merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
-      merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
-      merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-      merged.incRecordsRead(depMetrics.recordsRead)
+    if (!depsShuffleReadMetrics.isEmpty) {
+      val merged = new ShuffleReadMetrics()
+      for (depMetrics <- depsShuffleReadMetrics) {
+        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
+        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
+        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
+        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
+        merged.incLocalBytesRead(depMetrics.localBytesRead)
+        merged.incRecordsRead(depMetrics.recordsRead)
+      }
+      _shuffleReadMetrics = Some(merged)
     }
-    _shuffleReadMetrics = Some(merged)
   }
 
   private[spark] def updateInputMetrics(): Unit = synchronized {
@@ -340,6 +343,18 @@ class ShuffleReadMetrics extends Serializable {
   def remoteBytesRead = _remoteBytesRead
   private[spark] def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
   private[spark] def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
+
+  /**
+   * Shuffle data that was read from the local disk (as opposed to from a remote executor).
+   */
+  private var _localBytesRead: Long = _
+  def localBytesRead = _localBytesRead
+  private[spark] def incLocalBytesRead(value: Long) = _localBytesRead += value
+
+  /**
+   * Total bytes fetched in the shuffle by this task (both remote and local).
+   */
+  def totalBytesRead = _remoteBytesRead + _localBytesRead
 
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)

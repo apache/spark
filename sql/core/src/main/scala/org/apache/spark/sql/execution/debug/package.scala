@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.Attribute
+
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
+import org.apache.spark.{AccumulatorParam, Accumulator}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.SparkContext._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{SQLConf, SQLContext, DataFrame, Row}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
 
@@ -32,10 +34,21 @@ import org.apache.spark.sql.types._
  *
  * Usage:
  * {{{
- *   sql("SELECT key FROM src").debug
+ *   import org.apache.spark.sql.execution.debug._
+ *   sql("SELECT key FROM src").debug()
+ *   dataFrame.typeCheck()
  * }}}
  */
 package object debug {
+
+  /**
+   * Augments [[SQLContext]] with debug methods.
+   */
+  implicit class DebugSQLContext(sqlContext: SQLContext) {
+    def debug(): Unit = {
+      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    }
+  }
 
   /**
    * :: DeveloperApi ::
@@ -77,7 +90,7 @@ package object debug {
   }
 
   private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-    def output = child.output
+    def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
       def zero(initialValue: HashSet[String]): HashSet[String] = {
@@ -98,10 +111,10 @@ package object debug {
      */
     case class ColumnMetrics(
         elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
-    val tupleCount = sparkContext.accumulator[Int](0)
+    val tupleCount: Accumulator[Int] = sparkContext.accumulator[Int](0)
 
-    val numColumns = child.output.size
-    val columnStats = Array.fill(child.output.size)(new ColumnMetrics())
+    val numColumns: Int = child.output.size
+    val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
       println(s"== ${child.simpleString} ==")
@@ -112,11 +125,11 @@ package object debug {
       }
     }
 
-    def execute() = {
+    def execute(): RDD[Row] = {
       child.execute().mapPartitions { iter =>
         new Iterator[Row] {
-          def hasNext = iter.hasNext
-          def next() = {
+          def hasNext: Boolean = iter.hasNext
+          def next(): Row = {
             val currentRow = iter.next()
             tupleCount += 1
             var i = 0
@@ -135,11 +148,9 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
    * Helper functions for checking that runtime types match a given schema.
    */
-  @DeveloperApi
-  object TypeCheck {
+  private[sql] object TypeCheck {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
@@ -159,31 +170,30 @@ package object debug {
       case (_: Short, ShortType) =>
       case (_: Boolean, BooleanType) =>
       case (_: Double, DoubleType) =>
+      case (v, udt: UserDefinedType[_]) => typeCheck(v, udt.sqlType)
 
       case (d, t) => sys.error(s"Invalid data found: got $d (${d.getClass}) expected $t")
     }
   }
 
   /**
-   * :: DeveloperApi ::
    * Augments [[DataFrame]]s with debug methods.
    */
-  @DeveloperApi
   private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
     import TypeCheck._
 
-    override def nodeName  = ""
+    override def nodeName: String = ""
 
     /* Only required when defining this class in a REPL.
     override def makeCopy(args: Array[Object]): this.type =
       TypeCheck(args(0).asInstanceOf[SparkPlan]).asInstanceOf[this.type]
     */
 
-    def output = child.output
+    def output: Seq[Attribute] = child.output
 
-    def children = child :: Nil
+    def children: List[SparkPlan] = child :: Nil
 
-    def execute() = {
+    def execute(): RDD[Row] = {
       child.execute().map { row =>
         try typeCheck(row, child.schema) catch {
           case e: Exception =>

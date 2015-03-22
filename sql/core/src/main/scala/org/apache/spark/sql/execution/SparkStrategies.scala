@@ -154,7 +154,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
+    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
       case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
@@ -162,7 +162,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => true
     }
 
-    def allAggregates(exprs: Seq[Expression]) =
+    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
 
@@ -257,7 +257,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions = self.numPartitions
+    def numPartitions: Int = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
@@ -309,7 +309,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false, _) =>
         ExecutedCommand(
           CreateTempTableUsing(
             tableName, userSpecifiedSchema, provider, opts)) :: Nil
@@ -318,29 +318,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableName, provider, true, opts, false, query) =>
-        val logicalPlan = sqlContext.parseSql(query)
+      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
         val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, opts, logicalPlan)
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-      case c: CreateTableUsingAsSelect if c.temporary && c.allowExisting =>
-        sys.error("allowExisting should be set to false when creating a temporary table.")
-
-      case CreateTableUsingAsLogicalPlan(tableName, provider, true, opts, false, query) =>
-        val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, opts, query)
-        ExecutedCommand(cmd) :: Nil
-      case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
-        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-      case c: CreateTableUsingAsLogicalPlan if c.temporary && c.allowExisting =>
-        sys.error("allowExisting should be set to false when creating a temporary table.")
-
-      case LogicalDescribeCommand(table, isExtended) =>
-        val resultPlan = self.sqlContext.executePlan(table).executedPlan
-        ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
 
       case LogicalDescribeCommand(table, isExtended) =>
         val resultPlan = self.sqlContext.executePlan(table).executedPlan

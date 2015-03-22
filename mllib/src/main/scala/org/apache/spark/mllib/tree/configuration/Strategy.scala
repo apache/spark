@@ -83,10 +83,13 @@ class Strategy (
     @BeanProperty var useNodeIdCache: Boolean = false,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
-  def isMulticlassClassification =
+  def isMulticlassClassification: Boolean = {
     algo == Classification && numClasses > 2
-  def isMulticlassWithCategoricalFeatures
-    = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+  }
+
+  def isMulticlassWithCategoricalFeatures: Boolean = {
+    isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+  }
 
   /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]

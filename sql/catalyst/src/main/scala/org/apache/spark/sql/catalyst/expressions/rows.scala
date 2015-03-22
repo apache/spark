@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.{StructType, NativeType}
 
 
 /**
@@ -146,7 +146,32 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     result
   }
 
+  override def equals(o: Any): Boolean = o match {
+    case other: Row =>
+      if (values.length != other.length) {
+        return false
+      }
+
+      var i = 0
+      while (i < values.length) {
+        if (isNullAt(i) != other.isNullAt(i)) {
+          return false
+        }
+        if (apply(i) != other.apply(i)) {
+          return false
+        }
+        i += 1
+      }
+      true
+
+    case _ => false
+  }
+
   def copy() = this
+}
+
+class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericRow(values) {
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {

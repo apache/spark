@@ -19,7 +19,6 @@ import copy
 from collections import defaultdict
 from itertools import chain, ifilter, imap
 import operator
-import os
 import sys
 import shlex
 from subprocess import Popen, PIPE
@@ -29,6 +28,7 @@ import warnings
 import heapq
 import bisect
 import random
+import socket
 from math import sqrt, log, isinf, isnan, pow, ceil
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
@@ -111,6 +111,30 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
+def _load_from_socket(port, serializer):
+    sock = socket.socket()
+    try:
+        sock.connect(("localhost", port))
+        rf = sock.makefile("rb", 65536)
+        for item in serializer.load_stream(rf):
+            yield item
+    finally:
+        sock.close()
+
+
+class Partitioner(object):
+    def __init__(self, numPartitions, partitionFunc):
+        self.numPartitions = numPartitions
+        self.partitionFunc = partitionFunc
+
+    def __eq__(self, other):
+        return (isinstance(other, Partitioner) and self.numPartitions == other.numPartitions
+                and self.partitionFunc == other.partitionFunc)
+
+    def __call__(self, k):
+        return self.partitionFunc(k) % self.numPartitions
+
+
 class RDD(object):
 
     """
@@ -126,7 +150,7 @@ class RDD(object):
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
-        self._partitionFunc = None
+        self.partitioner = None
 
     def _pickled(self):
         return self._reserialize(AutoBatchedSerializer(PickleSerializer()))
@@ -322,6 +346,12 @@ class RDD(object):
         """
         Return a sampled subset of this RDD.
 
+        :param withReplacement: can elements be sampled multiple times (replaced when sampled out)
+        :param fraction: expected size of the sample as a fraction of this RDD's size
+            without replacement: probability that each element is chosen; fraction must be [0, 1]
+            with replacement: expected number of times each element is chosen; fraction must be >= 0
+        :param seed: seed for the random number generator
+
         >>> rdd = sc.parallelize(range(100), 4)
         >>> rdd.sample(False, 0.1, 81).count()
         10
@@ -450,14 +480,17 @@ class RDD(object):
         if self._jrdd_deserializer == other._jrdd_deserializer:
             rdd = RDD(self._jrdd.union(other._jrdd), self.ctx,
                       self._jrdd_deserializer)
-            return rdd
         else:
             # These RDDs contain data in different serialized formats, so we
             # must normalize them to the default serializer.
             self_copy = self._reserialize()
             other_copy = other._reserialize()
-            return RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
-                       self.ctx.serializer)
+            rdd = RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
+                      self.ctx.serializer)
+        if (self.partitioner == other.partitioner and
+                self.getNumPartitions() == rdd.getNumPartitions()):
+            rdd.partitioner = self.partitioner
+        return rdd
 
     def intersection(self, other):
         """
@@ -682,21 +715,8 @@ class RDD(object):
         Return a list that contains all of the elements in this RDD.
         """
         with SCCallSiteSync(self.context) as css:
-            bytesInJava = self._jrdd.collect().iterator()
-        return list(self._collect_iterator_through_file(bytesInJava))
-
-    def _collect_iterator_through_file(self, iterator):
-        # Transferring lots of data through Py4J can be slow because
-        # socket.readline() is inefficient.  Instead, we'll dump the data to a
-        # file and read it back.
-        tempFile = NamedTemporaryFile(delete=False, dir=self.ctx._temp_dir)
-        tempFile.close()
-        self.ctx._writeToFile(iterator, tempFile.name)
-        # Read the data into Python and deserialize it:
-        with open(tempFile.name, 'rb') as tempFile:
-            for item in self._jrdd_deserializer.load_stream(tempFile):
-                yield item
-        os.unlink(tempFile.name)
+            port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(port, self._jrdd_deserializer))
 
     def reduce(self, f):
         """
@@ -1588,6 +1608,9 @@ class RDD(object):
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
+        partitioner = Partitioner(numPartitions, partitionFunc)
+        if self.partitioner == partitioner:
+            return self
 
         # Transferring O(n) objects to Java is too expensive.
         # Instead, we'll form the hash buckets in Python,
@@ -1632,18 +1655,16 @@ class RDD(object):
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
-        keyed = self.mapPartitionsWithIndex(add_shuffle_key)
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
         with SCCallSiteSync(self.context) as css:
             pairRDD = self.ctx._jvm.PairwiseRDD(
                 keyed._jrdd.rdd()).asJavaPairRDD()
-            partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
-                                                          id(partitionFunc))
-        jrdd = pairRDD.partitionBy(partitioner).values()
+            jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
+                                                           id(partitionFunc))
+        jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
         rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
-        # This is required so that id(partitionFunc) remains unique,
-        # even if partitionFunc is a lambda:
-        rdd._partitionFunc = partitionFunc
+        rdd.partitioner = partitioner
         return rdd
 
     # TODO: add control over map-side aggregation
@@ -1689,7 +1710,7 @@ class RDD(object):
             merger.mergeValues(iterator)
             return merger.iteritems()
 
-        locally_combined = self.mapPartitions(combineLocally)
+        locally_combined = self.mapPartitions(combineLocally, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
@@ -1698,7 +1719,7 @@ class RDD(object):
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
-        return shuffled.mapPartitions(_mergeCombiners, True)
+        return shuffled.mapPartitions(_mergeCombiners, preservesPartitioning=True)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
         """
@@ -1933,7 +1954,7 @@ class RDD(object):
 
         my_batch = get_batch_size(self._jrdd_deserializer)
         other_batch = get_batch_size(other._jrdd_deserializer)
-        if my_batch != other_batch:
+        if my_batch != other_batch or not my_batch:
             # use the smallest batchSize for both of them
             batchSize = min(my_batch, other_batch)
             if batchSize <= 0:
@@ -2077,8 +2098,8 @@ class RDD(object):
         """
         values = self.filter(lambda (k, v): k == key).values()
 
-        if self._partitionFunc is not None:
-            return self.ctx.runJob(values, lambda x: x, [self._partitionFunc(key)], False)
+        if self.partitioner is not None:
+            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)], False)
 
         return values.collect()
 
@@ -2094,6 +2115,7 @@ class RDD(object):
     def countApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
@@ -2107,6 +2129,7 @@ class RDD(object):
     def sumApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate operation to return the sum within a timeout
         or meet the confidence.
 
@@ -2123,6 +2146,7 @@ class RDD(object):
     def meanApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
@@ -2139,6 +2163,7 @@ class RDD(object):
     def countApproxDistinct(self, relativeSD=0.05):
         """
         .. note:: Experimental
+
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of
@@ -2243,7 +2268,7 @@ class PipelinedRDD(RDD):
         self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
-        self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self.partitioner = prev.partitioner if self.preservesPartitioning else None
         self._broadcast = None
 
     def __del__(self):
