@@ -446,30 +446,4 @@ object NaiveBayes {
   /** Java-friendly accessor for supported ModelType options */
   final val modelTypes = ModelType
 
-  /*
-  object MODELTYPE extends Serializable{
-    final val MULTINOMIAL_STRING = "multinomial"
-    final val BERNOULLI_STRING = "bernoulli"
-
-    def fromString(modelType: String): ModelType = modelType match {
-      case MULTINOMIAL_STRING => Multinomial
-      case BERNOULLI_STRING => Bernoulli
-      case _ =>
-        throw new IllegalArgumentException(s"Cannot recognize NaiveBayes ModelType: $modelType")
-    }
-  }
-
-  final val ModelType = MODELTYPE
-
-  /** Constant for specifying ModelType parameter: multinomial model */
-  final val Multinomial: ModelType = new ModelType {
-    override def toString: String = ModelType.MULTINOMIAL_STRING
-  }
-
-  /** Constant for specifying ModelType parameter: bernoulli model */
-  final val Bernoulli: ModelType = new ModelType {
-    override def toString: String = ModelType.BERNOULLI_STRING
-  }
-  */
 }
-
