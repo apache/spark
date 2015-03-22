@@ -199,4 +199,21 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(3).dataType == DecimalType.Unlimited)
     assert(pl(4).dataType == DoubleType)
   }
+
+  test("SPARK-6452: CheckAnalysis should throw when Aggregate contains missing attributes") {
+    val plan =
+      Aggregate(
+        Nil,
+        Alias(Sum(AttributeReference("a", StringType)(exprId = ExprId(1))), "b")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", StringType)(exprId = ExprId(2))))
+
+    assert(plan.resolved)
+
+    val message = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan)
+    }.getMessage
+
+    assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
+  }
 }
