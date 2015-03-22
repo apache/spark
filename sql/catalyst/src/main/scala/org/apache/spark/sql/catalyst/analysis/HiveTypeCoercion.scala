@@ -69,8 +69,8 @@ trait HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
-    WidenTypes ::
     PromoteStrings ::
+    WidenTypes ::
     DecimalPrecision ::
     BooleanComparisons ::
     BooleanCasts ::

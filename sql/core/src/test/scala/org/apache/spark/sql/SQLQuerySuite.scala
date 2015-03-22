@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+import org.apache.spark.sql.types._
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -1089,5 +1086,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
     sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
     sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
+  }
+
+  test("SPARK-6444: SUM argument should be converted to double") {
+    Seq.empty[(String, String)].toDF("c1", "c2").registerTempTable("t")
+
+    val df = sql(
+      """SELECT SUM(c3) FROM (
+        |  SELECT SUM(c1) AS c3, 0 AS c4 FROM t
+        |  UNION ALL
+        |  SELECT 0 AS c3, COUNT(c2) AS c4 FROM t
+        |) a
+      """.stripMargin)
+
+    // This shouldn't throw
+    df.queryExecution.optimizedPlan
   }
 }
