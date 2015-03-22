@@ -437,5 +437,6 @@ class MatricesSuite extends FunSuite {
         mat => assert(mat.toArray === mUDT.deserialize(mUDT.serialize(mat)).toArray)
     }
     assert(mUDT.typeName == "matrix")
+    assert(mUDT.simpleString == "matrix")
   }
 }

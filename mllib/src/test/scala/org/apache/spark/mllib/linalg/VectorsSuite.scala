@@ -188,6 +188,7 @@ class VectorsSuite extends FunSuite {
       assert(v === udt.deserialize(udt.serialize(v)))
     }
     assert(udt.typeName == "vector")
+    assert(udt.simpleString == "vector")
   }
 
   test("fromBreeze") {
