@@ -509,8 +509,11 @@ val people = sc.textFile("examples/src/main/resources/people.txt")
 // The schema is encoded in a string
 val schemaString = "name age"
 
-// Import Spark SQL data types and Row.
-import org.apache.spark.sql._
+// Import Row.
+import org.apache.spark.sql.Row;
+
+// Import Spark SQL data types
+import org.apache.spark.sql.types.{StructType,StructField,StringType};
 
 // Generate the schema based on the string of schema
 val schema =
