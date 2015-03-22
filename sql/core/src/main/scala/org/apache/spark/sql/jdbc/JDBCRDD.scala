@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 
+import org.apache.commons.lang.StringEscapeUtils.escapeSql
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
@@ -227,15 +228,23 @@ private[sql] class JDBCRDD(
   }
 
   /**
+   * Converts value to SQL expression.
+   */
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case _ => value
+  }
+
+  /**
    * Turns a single Filter into a String representing a SQL expression.
    * Returns null for an unhandled filter.
    */
   private def compileFilter(f: Filter): String = f match {
-    case EqualTo(attr, value) => s"$attr = $value"
-    case LessThan(attr, value) => s"$attr < $value"
-    case GreaterThan(attr, value) => s"$attr > $value"
-    case LessThanOrEqual(attr, value) => s"$attr <= $value"
-    case GreaterThanOrEqual(attr, value) => s"$attr >= $value"
+    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case _ => null
   }
 
