@@ -38,7 +38,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   var masterActor: ActorSelection = _
   val timeout = AkkaUtils.askTimeout(conf)
 
-  override def preStart() = {
+  override def preStart(): Unit = {
     masterActor = context.actorSelection(
       Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
 
@@ -118,7 +118,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     }
   }
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)

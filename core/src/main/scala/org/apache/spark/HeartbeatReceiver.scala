@@ -65,7 +65,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     super.preStart()
   }
   
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val unknownExecutor = !scheduler.executorHeartbeatReceived(
         executorId, taskMetrics, blockManagerId)
