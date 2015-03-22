@@ -18,6 +18,9 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.InetAddress
+
+import com.google.common.net.InetAddresses
 
 import org.eclipse.jetty.server.ssl.SslSocketConnector
 import org.eclipse.jetty.util.security.{Constraint, Password}
@@ -160,7 +163,8 @@ private[spark] class HttpServer(
       throw new ServerStateException("Server is not started")
     } else {
       val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
-      s"$scheme://${Utils.localIpAddress}:$port"
+      val hostUri = InetAddresses.toUriString(InetAddress.getByName(Utils.localIpAddress))
+      s"$scheme://${hostUri}:$port"
     }
   }
 }
