@@ -313,15 +313,15 @@ object ALS extends Logging {
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
-    def solveTime: Long = 0L
   }
 
   /** Breeze NNLS solver. */
   private[recommendation] class BrzNNLSSolver(rank: Int) extends LeastSquaresNESolver {
-    private val ata = new BrzMatrix[Double](rank, rank)
-    private val nnls = new BrzNNLS()
-    private val init = nnls.initialState(rank)
-    private var innerSolve = 0L
+    private val nnls: BrzNNLS = new BrzNNLS()
+    private val init = nnls.initialize(rank)
+    private val ata = new Array[Double](rank * rank)
+    private val brzata = new BrzMatrix[Double](rank, rank, ata)
+
     /**
      * Solves a nonnegative least squares problem with L2 regularizatin:
      *
@@ -330,11 +330,9 @@ object ALS extends Logging {
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       fillAtA(ne.ata, lambda * ne.n)
-      val resultState = nnls.minimizeAndReturnState(ata, new BrzVector(ne.atb), init.reset())
-      val x = resultState.x.data
-      innerSolve += resultState.solveTime
+      val x = nnls.minimize(brzata, BrzVector(ne.atb), init)
       ne.reset()
-      x.map(x => x.toFloat)
+      x.data.map(x => x.toFloat)
     }
 
     /**
@@ -349,17 +347,15 @@ object ALS extends Logging {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          ata(i, j) = a
-          ata(j, i) = a
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
           pos += 1
           j += 1
         }
-        ata(i, i) += lambda
+        ata(i * rank + i) += lambda
         i += 1
       }
     }
-
-    override def solveTime = innerSolve
   }
 
   /** Cholesky solver for least square problems. */
@@ -572,7 +568,7 @@ object ALS extends Logging {
       makeBlocks("item", swappedBlockRatings, itemPart, userPart, intermediateRDDStorageLevel)
     // materialize item blocks
     itemOutBlocks.count()
-    val seedGen = new XORShiftRandom(seed)
+    val seedGen = new XORShiftRandom(0L)
     var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
     var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
     if (implicitPrefs) {
@@ -1156,7 +1152,6 @@ object ALS extends Logging {
           j += 1
         }
         logInfo(s"solveTime ${solveTime/1e6} ms")
-        logInfo(s"innerTime ${solver.solveTime/1e6} ms")
         dstFactors
     }
   }
