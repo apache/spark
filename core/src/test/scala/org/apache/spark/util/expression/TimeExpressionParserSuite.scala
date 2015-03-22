@@ -41,50 +41,50 @@ class TimeExpressionParserSuite extends FunSuite {
   }
 
   test("ms") {
-    testParser(in = "$10ms", expectedResult = 10)
+    testParser(in = "!10ms", expectedResult = 10)
   }
 
   test("seconds") {
-    testParser(in = "$10 seconds", expectedResult = 10 * secMs)
+    testParser(in = "!10 seconds", expectedResult = 10 * secMs)
   }
 
   test("minutes") {
-    testParser(in = "$1 * 0.5 m", expectedResult = 30 * secMs)
+    testParser(in = "!1 * 0.5 m", expectedResult = 30 * secMs)
   }
 
   test("hours") {
-    testParser(in = "$5 hours", expectedResult = 5 * hourMs)
+    testParser(in = "!5 hours", expectedResult = 5 * hourMs)
   }
 
   test("days") {
-    testParser(in = "$5 day", expectedResult = 5 * dayMs)
+    testParser(in = "!5 day", expectedResult = 5 * dayMs)
   }
 
   test("weeks") {
-    testParser(in = "$5 weeks", expectedResult = 5 * weekMS)
+    testParser(in = "!5 weeks", expectedResult = 5 * weekMS)
   }
 
   test("addition") {
-    testParser(in = "$5 weeks + 3 days", expectedResult = 5 * weekMS + 3 * dayMs)
+    testParser(in = "!5 weeks + 3 days", expectedResult = 5 * weekMS + 3 * dayMs)
   }
 
   test("subtraction") {
-    testParser(in = "$5 weeks - 3 days", expectedResult = 5 * weekMS - 3 * dayMs)
+    testParser(in = "!5 weeks - 3 days", expectedResult = 5 * weekMS - 3 * dayMs)
   }
 
   test("division") {
-    testParser(in = "$5 weeks / 5", expectedResult = 1 * weekMS )
+    testParser(in = "!5 weeks / 5", expectedResult = 1 * weekMS )
   }
 
   test("multiplication") {
-    testParser(in = "$5 * 5 weeks", expectedResult = 25 * weekMS )
+    testParser(in = "!5 * 5 weeks", expectedResult = 25 * weekMS )
   }
 
   test("standalone ") {
-    testParser(in = "$5 + 5 ms", expectedResult = 10 )
+    testParser(in = "!5 + 5 ms", expectedResult = 10 )
   }
 
   test("SecondsParser Seconds ") {
-    testSecParser(in = "$5 + 5 Sec", expectedResult = 10 )
+    testSecParser(in = "!5 + 5 Sec", expectedResult = 10 )
   }
 }

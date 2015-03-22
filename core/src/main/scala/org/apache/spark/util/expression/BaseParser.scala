@@ -56,10 +56,17 @@ private[spark] abstract class BaseParser extends JavaTokenParsers {
    * @return Some[Double] if parsable as a double, otherwise None
    */
   private[spark] def parse(expression: String): Option[Double] =
-    if (expression.head == '$') parseAll(expr, expression.tail) match {
+    if (expression.head == BaseParser.EXP_TAG) parseAll(expr, expression.tail) match {
       case Success(result, _) => Some(result)
       case _ => None
     } else {
       try { Some(expression.toDouble) } catch { case _: Throwable => None }
     }
+}
+
+private[spark] object BaseParser {
+  /**
+   * Strings prepended with this tag indicate that they are expressions
+   */
+  var EXP_TAG = '!'
 }
