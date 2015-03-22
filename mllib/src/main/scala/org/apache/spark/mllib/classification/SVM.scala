@@ -17,11 +17,13 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.DataValidators
+import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -33,7 +35,8 @@ import org.apache.spark.rdd.RDD
 class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
+  with Saveable {
 
   private var threshold: Option[Double] = Some(0.0)
 
@@ -48,6 +51,13 @@ class SVMModel (
     this.threshold = Some(threshold)
     this
   }
+
+  /**
+   * :: Experimental ::
+   * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
+   */
+  @Experimental
+  def getThreshold: Option[Double] = threshold
 
   /**
    * :: Experimental ::
@@ -67,6 +77,45 @@ class SVMModel (
     threshold match {
       case Some(t) => if (margin > t) 1.0 else 0.0
       case None => margin
+    }
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
+      numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
+  }
+
+  override protected def formatVersion: String = "1.0"
+
+  override def toString: String = {
+    s"${super.toString}, numClasses = 2, threshold = ${threshold.get}"
+  }
+}
+
+object SVMModel extends Loader[SVMModel] {
+
+  override def load(sc: SparkContext, path: String): SVMModel = {
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    // Hard-code class name string in case it changes in the future
+    val classNameV1_0 = "org.apache.spark.mllib.classification.SVMModel"
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
+        val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
+        val model = new SVMModel(data.weights, data.intercept)
+        assert(model.weights.size == numFeatures, s"SVMModel.load with numFeatures=$numFeatures" +
+          s" was given non-matching weights vector of size ${model.weights.size}")
+        assert(numClasses == 2,
+          s"SVMModel.load was given numClasses=$numClasses but only supports 2 classes")
+        data.threshold match {
+          case Some(t) => model.setThreshold(t)
+          case None => model.clearThreshold()
+        }
+        model
+      case _ => throw new Exception(
+        s"SVMModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
     }
   }
 }

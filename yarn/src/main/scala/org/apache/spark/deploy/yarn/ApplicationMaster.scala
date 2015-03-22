@@ -19,9 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import scala.util.control.NonFatal
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.Socket
+import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
@@ -34,24 +34,28 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader,
+  SignalLogger, Utils}
 
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
-  client: YarnRMClient) extends Logging {
+private[spark] class ApplicationMaster(
+    args: ApplicationMasterArguments,
+    client: YarnRMClient)
+  extends Logging {
+
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
   private val sparkConf = new SparkConf()
   private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
     .asInstanceOf[YarnConfiguration]
-  private val isDriver = args.userClass != null
+  private val isClusterMode = args.userClass != null
 
   // Default to numExecutors * 2, with minimum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
@@ -64,8 +68,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
-  private var reporterThread: Thread = _
-  private var allocator: YarnAllocator = _
+  @volatile private var reporterThread: Thread = _
+  @volatile private var allocator: YarnAllocator = _
 
   // Fields used in client mode.
   private var actorSystem: ActorSystem = null
@@ -78,7 +82,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     try {
       val appAttemptId = client.getAttemptId()
 
-      if (isDriver) {
+      if (isClusterMode) {
         // Set the web ui port to be ephemeral for yarn so we don't conflict with
         // other spark processes running on the same box
         System.setProperty("spark.ui.port", "0")
@@ -132,11 +136,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
       // Call this to force generation of secret so it gets populated into the
-      // Hadoop UGI. This has to happen before the startUserClass which does a
+      // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
 
-      if (isDriver) {
+      if (isClusterMode) {
         runDriver(securityMgr)
       } else {
         runExecutorLauncher(securityMgr)
@@ -147,7 +151,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + e.getMessage())
+          "Uncaught exception: " + e)
     }
     exitCode
   }
@@ -159,7 +163,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    * from the application code.
    */
   final def getDefaultFinalStatus() = {
-    if (isDriver) {
+    if (isClusterMode) {
       FinalApplicationStatus.SUCCEEDED
     } else {
       FinalApplicationStatus.UNDEFINED
@@ -231,9 +235,28 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     reporterThread = launchReporterThread()
   }
 
+  /**
+   * Create an actor that communicates with the driver.
+   *
+   * In cluster mode, the AM and the driver belong to same process
+   * so the AM actor need not monitor lifecycle of the driver.
+   */
+  private def runAMActor(
+      host: String,
+      port: String,
+      isClusterMode: Boolean): Unit = {
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(actorSystem),
+      SparkEnv.driverActorSystemName,
+      host,
+      port,
+      YarnSchedulerBackend.ACTOR_NAME)
+    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, isClusterMode)), name = "YarnAM")
+  }
+
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    userClassThread = startUserClass()
+    userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
     // been set by the Thread executing the user class.
@@ -245,6 +268,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
+      actorSystem = sc.env.actorSystem
+      runAMActor(
+        sc.getConf.get("spark.driver.host"),
+        sc.getConf.get("spark.driver.port"),
+        isClusterMode = true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -253,7 +281,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
     actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
       conf = sparkConf, securityManager = securityMgr)._1
-    actor = waitForSparkDriver()
+    waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
@@ -367,7 +395,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  private def waitForSparkDriver(): ActorRef = {
+  private def waitForSparkDriver(): Unit = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -399,12 +427,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      driverHost,
-      driverPort.toString,
-      YarnSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new AMActor(driverUrl)), name = "YarnAM")
+    runAMActor(driverHost, driverPort.toString, isClusterMode = false)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -412,7 +435,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
-    if (isDriver) {
+    if (isClusterMode) {
       System.setProperty("spark.ui.filters", amFilter)
       params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
@@ -427,11 +450,27 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    *
    * Returns the user thread that was started.
    */
-  private def startUserClass(): Thread = {
-    logInfo("Starting the user JAR in a separate Thread")
+  private def startUserApplication(): Thread = {
+    logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
-    val mainMethod = Class.forName(args.userClass, false,
-      Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
+
+    val classpath = Client.getUserClasspath(sparkConf)
+    val urls = classpath.map { entry =>
+      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
+    }
+    val userClassLoader =
+      if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
+        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      } else {
+        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      }
+
+    if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
+      System.setProperty("spark.submit.pyFiles",
+        PythonRunner.formatPaths(args.pyFiles).mkString(","))
+    }
+    val mainMethod = userClassLoader.loadClass(args.userClass)
+      .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
       override def run() {
@@ -446,25 +485,25 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case e: Exception =>
+              case cause: Throwable =>
+                logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + e.getMessage)
-                // re-throw to get it logged
-                throw e
+                  "User class threw exception: " + cause)
             }
         }
       }
     }
+    userThread.setContextClassLoader(userClassLoader)
     userThread.setName("Driver")
     userThread.start()
     userThread
   }
 
   /**
-   * Actor that communicates with the driver in client deploy mode.
+   * An actor that communicates with the driver's scheduler backend.
    */
-  private class AMActor(driverUrl: String) extends Actor {
+  private class AMActor(driverUrl: String, isClusterMode: Boolean) extends Actor {
     var driver: ActorSelection = _
 
     override def preStart() = {
@@ -474,20 +513,27 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // we can monitor Lifecycle Events.
       driver ! "Hello"
       driver ! RegisterClusterManager
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      // In cluster mode, the AM can directly monitor the driver status instead
+      // of trying to deduce it from the lifecycle of the driver's actor
+      if (!isClusterMode) {
+        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      }
     }
 
     override def receive = {
       case x: DisassociatedEvent =>
         logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        // In cluster mode, do not rely on the disassociated event to exit
+        // This avoids potentially reporting incorrect exit codes if the driver fails
+        if (!isClusterMode) {
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        }
 
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
 
       case RequestExecutors(requestedTotal) =>
-        logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
         Option(allocator) match {
           case Some(a) => a.requestTotalExecutors(requestedTotal)
           case None => logWarning("Container allocator is not ready to request executors yet.")

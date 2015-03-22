@@ -61,8 +61,8 @@ case class Aggregator[K, V, C] (
       // Update task metrics if context is not null
       // TODO: Make context non optional in a future release
       Option(context).foreach { c =>
-        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
-        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
+        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
+        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
       }
       combiners.iterator
     }
@@ -95,8 +95,8 @@ case class Aggregator[K, V, C] (
       // Update task metrics if context is not null
       // TODO: Make context non-optional in a future release
       Option(context).foreach { c =>
-        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
-        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
+        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
+        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
       }
       combiners.iterator
     }

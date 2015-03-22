@@ -28,7 +28,6 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
- * :: Experimental ::
  * Create table and insert the query result into it.
  * @param database the database name of the new relation
  * @param tableName the table name of the new relation
@@ -38,7 +37,7 @@ import org.apache.spark.sql.hive.MetastoreRelation
  * @param desc the CreateTableDesc, which may contains serde, storage handler etc.
 
  */
-@Experimental
+private[hive]
 case class CreateTableAsSelect(
     database: String,
     tableName: String,
@@ -46,21 +45,21 @@ case class CreateTableAsSelect(
     allowExisting: Boolean,
     desc: Option[CreateTableDesc]) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
       // Create Hive Table
       hiveContext.catalog.createTable(database, tableName, query.output, allowExisting, desc)
 
       // Get the Metastore Relation
-      hiveContext.catalog.lookupRelation(Some(database), tableName, None) match {
+      hiveContext.catalog.lookupRelation(Seq(database, tableName), None) match {
         case r: MetastoreRelation => r
       }
     }
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    if (hiveContext.catalog.tableExists(Some(database), tableName)) {
+    if (hiveContext.catalog.tableExists(Seq(database, tableName))) {
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {

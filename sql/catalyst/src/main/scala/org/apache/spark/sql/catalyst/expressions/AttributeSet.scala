@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.Star
 
 protected class AttributeEquals(val a: Attribute) {
-  override def hashCode() = a.exprId.hashCode()
+  override def hashCode() = a match {
+    case ar: AttributeReference => ar.exprId.hashCode()
+    case a => a.hashCode()
+  }
+
   override def equals(other: Any) = (a, other.asInstanceOf[AttributeEquals].a) match {
     case (a1: AttributeReference, a2: AttributeReference) => a1.exprId == a2.exprId
     case (a1, a2) => a1 == a2
@@ -111,7 +114,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   // sorts of things in its closure.
   override def toSeq: Seq[Attribute] = baseSet.map(_.a).toArray.toSeq
 
-  override def toString = "{" + baseSet.map(_.a).mkString(", ") + "}"
+  override def toString: String = "{" + baseSet.map(_.a).mkString(", ") + "}"
 
   override def isEmpty: Boolean = baseSet.isEmpty
 }

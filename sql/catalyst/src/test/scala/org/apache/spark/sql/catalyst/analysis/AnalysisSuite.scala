@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -30,10 +30,20 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
   val caseInsensitiveCatalog = new SimpleCatalog(false)
-  val caseSensitiveAnalyze =
+
+  val caseSensitiveAnalyzer =
     new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
-  val caseInsensitiveAnalyze =
+  val caseInsensitiveAnalyzer =
     new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+
+  val checkAnalysis = new CheckAnalysis
+
+
+  def caseSensitiveAnalyze(plan: LogicalPlan) =
+    checkAnalysis(caseSensitiveAnalyzer(plan))
+
+  def caseInsensitiveAnalyze(plan: LogicalPlan) =
+    checkAnalysis(caseInsensitiveAnalyzer(plan))
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
   val testRelation2 = LocalRelation(
@@ -44,85 +54,127 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("e", ShortType)())
 
   before {
-    caseSensitiveCatalog.registerTable(None, "TaBlE", testRelation)
-    caseInsensitiveCatalog.registerTable(None, "TaBlE", testRelation)
+    caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
+    caseInsensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
   }
 
   test("union project *") {
     val plan = (1 to 100)
       .map(_ => testRelation)
-      .fold[LogicalPlan](testRelation)((a,b) => a.select(Star(None)).select('a).unionAll(b.select(Star(None))))
+      .fold[LogicalPlan](testRelation) { (a, b) =>
+        a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
+      }
 
-    assert(caseInsensitiveAnalyze(plan).resolved)
+    assert(caseInsensitiveAnalyzer(plan).resolved)
+  }
+
+  test("check project's resolved") {
+    assert(Project(testRelation.output, testRelation).resolved)
+
+    assert(!Project(Seq(UnresolvedAttribute("a")), testRelation).resolved)
+
+    val explode = Explode(Nil, AttributeReference("a", IntegerType, nullable = true)())
+    assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
+
+    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {
     assert(
-      caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
+      caseSensitiveAnalyzer(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseSensitiveAnalyze(
+      caseSensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
-    val e = intercept[TreeNodeException[_]] {
+    val e = intercept[AnalysisException] {
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL"))))
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL"))))
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved"))
+    assert(e.getMessage().toLowerCase.contains("cannot resolve"))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
   }
 
   test("resolve relations") {
     val e = intercept[RuntimeException] {
-      caseSensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None))
+      caseSensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None))
     }
     assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
-      caseSensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
-        testRelation)
+      caseSensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("tAbLe"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
   }
 
-  test("throw errors for unresolved attributes during analysis") {
-    val e = intercept[TreeNodeException[_]] {
-      caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("abcd")), testRelation))
+  def errorTest(
+      name: String,
+      plan: LogicalPlan,
+      errorMessages: Seq[String],
+      caseSensitive: Boolean = true) = {
+    test(name) {
+      val error = intercept[AnalysisException] {
+        if(caseSensitive) {
+          caseSensitiveAnalyze(plan)
+        } else {
+          caseInsensitiveAnalyze(plan)
+        }
+      }
+
+      errorMessages.foreach(m => assert(error.getMessage contains m))
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved attribute"))
   }
 
-  test("throw errors for unresolved plans during analysis") {
-    case class UnresolvedTestPlan() extends LeafNode {
-      override lazy val resolved = false
-      override def output = Nil
-    }
-    val e = intercept[TreeNodeException[_]] {
-      caseSensitiveAnalyze(UnresolvedTestPlan())
-    }
-    assert(e.getMessage().toLowerCase.contains("unresolved plan"))
+  errorTest(
+    "unresolved attributes",
+    testRelation.select('abcd),
+    "cannot resolve" :: "abcd" :: Nil)
+
+  errorTest(
+    "bad casts",
+    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
+    "invalid cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
+
+  errorTest(
+    "non-boolean filters",
+    testRelation.where(Literal(1)),
+    "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+
+  errorTest(
+    "missing group by",
+    testRelation2.groupBy('a)('b),
+    "'b'" :: "group by" :: Nil
+  )
+
+  case class UnresolvedTestPlan() extends LeafNode {
+    override lazy val resolved = false
+    override def output = Nil
   }
+
+  errorTest(
+    "catch all unresolved plan",
+    UnresolvedTestPlan(),
+    "unresolved" :: Nil)
+
 
   test("divide should be casted into fractional types") {
     val testRelation2 = LocalRelation(
@@ -132,18 +184,15 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
-    val expr0 = 'a / 2
-    val expr1 = 'a / 'b
-    val expr2 = 'a / 'c
-    val expr3 = 'a / 'd
-    val expr4 = 'e / 'e
-    val plan = caseInsensitiveAnalyze(Project(
-      Alias(expr0, s"Analyzer($expr0)")() ::
-      Alias(expr1, s"Analyzer($expr1)")() ::
-      Alias(expr2, s"Analyzer($expr2)")() ::
-      Alias(expr3, s"Analyzer($expr3)")() ::
-      Alias(expr4, s"Analyzer($expr4)")() :: Nil, testRelation2))
+    val plan = caseInsensitiveAnalyzer(
+      testRelation2.select(
+        'a / Literal(2) as 'div1,
+        'a / 'b as 'div2,
+        'a / 'c as 'div3,
+        'a / 'd as 'div4,
+        'e / 'e as 'div5))
     val pl = plan.asInstanceOf[Project].projectList
+
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)

@@ -27,8 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.util.{Clock, WriteAheadLogManager}
-import org.apache.spark.util.Utils
+import org.apache.spark.streaming.util.WriteAheadLogManager
+import org.apache.spark.util.{Clock, Utils}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
 private[streaming] sealed trait ReceivedBlockTrackerLogEvent
@@ -67,7 +67,7 @@ private[streaming] class ReceivedBlockTracker(
   extends Logging {
 
   private type ReceivedBlockQueue = mutable.Queue[ReceivedBlockInfo]
-  
+
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
   private val logManagerOption = createLogManager()
@@ -107,8 +107,14 @@ private[streaming] class ReceivedBlockTracker(
       lastAllocatedBatchTime = batchTime
       allocatedBlocks
     } else {
-      throw new SparkException(s"Unexpected allocation of blocks, " +
-        s"last batch = $lastAllocatedBatchTime, batch time to allocate = $batchTime  ")
+      // This situation occurs when:
+      // 1. WAL is ended with BatchAllocationEvent, but without BatchCleanupEvent,
+      // possibly processed batch job or half-processed batch job need to be processed again,
+      // so the batchTime will be equal to lastAllocatedBatchTime.
+      // 2. Slow checkpointing makes recovered batch time older than WAL recovered
+      // lastAllocatedBatchTime.
+      // This situation will only occurs in recovery time.
+      logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
     }
   }
 
@@ -144,13 +150,12 @@ private[streaming] class ReceivedBlockTracker(
    * returns only after the files are cleaned up.
    */
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
-    assert(cleanupThreshTime.milliseconds < clock.currentTime())
+    assert(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
     timeToAllocatedBlocks --= timesToCleanup
     logManagerOption.foreach(_.cleanupOldLogs(cleanupThreshTime.milliseconds, waitForCompletion))
-    log
   }
 
   /** Stop the block tracker. */
@@ -203,9 +208,11 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Write an update to the tracker to the write ahead log */
   private def writeToLog(record: ReceivedBlockTrackerLogEvent) {
-    logDebug(s"Writing to log $record")
-    logManagerOption.foreach { logManager =>
+    if (isLogManagerEnabled) {
+      logDebug(s"Writing to log $record")
+      logManagerOption.foreach { logManager =>
         logManager.writeToLog(ByteBuffer.wrap(Utils.serialize(record)))
+      }
     }
   }
 

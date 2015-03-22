@@ -19,10 +19,20 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
+
+  override lazy val resolved: Boolean = {
+    val containsAggregatesOrGenerators = projectList.exists ( _.collect {
+        case agg: AggregateExpression => agg
+        case generator: Generator => generator
+      }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !containsAggregatesOrGenerators
+  }
 }
 
 /**
@@ -71,6 +81,11 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override lazy val resolved =
     childrenResolved &&
     !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(
@@ -93,6 +108,13 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  def selfJoinResolved = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -110,7 +132,8 @@ case class InsertIntoTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
   }
 }
 
@@ -163,7 +186,12 @@ case class Aggregate(
 case class Expand(
     projections: Seq[GroupExpression],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan) extends UnaryNode {
+  override def statistics: Statistics = {
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
 
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>
@@ -238,16 +266,11 @@ case class Rollup(
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 
-  override lazy val statistics: Statistics =
-    if (output.forall(_.dataType.isInstanceOf[NativeType])) {
-      val limit = limitExpr.eval(null).asInstanceOf[Int]
-      val sizeInBytes = (limit: Long) * output.map { a =>
-        NativeType.defaultSizeOf(a.dataType.asInstanceOf[NativeType])
-      }.sum
-      Statistics(sizeInBytes = sizeInBytes)
-    } else {
-      Statistics(sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
-    }
+  override lazy val statistics: Statistics = {
+    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
@@ -266,6 +289,15 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 
 case object NoRelation extends LeafNode {
   override def output = Nil
+
+  /**
+   * Computes [[Statistics]] for this plan. The default implementation assumes the output
+   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * of cartesian joins.
+   *
+   * [[LeafNode]]s must override this.
+   */
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {

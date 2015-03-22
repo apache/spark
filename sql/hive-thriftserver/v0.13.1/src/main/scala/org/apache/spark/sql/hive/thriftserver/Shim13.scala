@@ -18,24 +18,30 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.Executors
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
+
+import org.apache.commons.logging.Log
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.cli.thrift.TProtocolVersion
+import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-import scala.math._
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.session.{SessionManager, HiveSession}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.plans.logical.SetCommand
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
+import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
+import org.apache.spark.sql.types._
 
 /**
  * A compatibility layer for interacting with Hive version 0.13.1.
@@ -73,7 +79,7 @@ private[hive] class SparkExecuteStatementOperation(
   // NOTE: `runInBackground` is set to `false` intentionally to disable asynchronous execution
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, false) with Logging {
 
-  private var result: SchemaRDD = _
+  private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
@@ -95,7 +101,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.getAs[BigDecimal](ordinal).bigDecimal
+        to += from.getDecimal(ordinal)
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>
@@ -157,26 +163,24 @@ private[hive] class SparkExecuteStatementOperation(
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    hiveContext.sparkContext.setJobDescription(statement)
+    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
-        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
           sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
-      }
-
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
-      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
-        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.toLocalIterator
+          result.rdd.toLocalIterator
         } else {
           result.collect().iterator
         }
@@ -192,5 +196,45 @@ private[hive] class SparkExecuteStatementOperation(
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
+  }
+}
+
+private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
+  extends SessionManager
+  with ReflectedCompositeService {
+
+  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
+
+  override def init(hiveConf: HiveConf) {
+    setSuperField(this, "hiveConf", hiveConf)
+
+    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
+    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
+    getAncestorField[Log](this, 3, "LOG").info(
+      s"HiveServer2: Async execution pool size $backgroundPoolSize")
+
+    setSuperField(this, "operationManager", sparkSqlOperationManager)
+    addService(sparkSqlOperationManager)
+
+    initCompositeService(hiveConf)
+  }
+
+  override def openSession(
+      protocol: TProtocolVersion,
+      username: String,
+      passwd: String,
+      sessionConf: java.util.Map[String, String],
+      withImpersonation: Boolean,
+      delegationToken: String): SessionHandle = {
+    hiveContext.openSession()
+
+    super.openSession(protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+  }
+
+  override def closeSession(sessionHandle: SessionHandle) {
+    super.closeSession(sessionHandle)
+    sparkSqlOperationManager.sessionToActivePool -= sessionHandle
+
+    hiveContext.detachSession()
   }
 }

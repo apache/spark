@@ -27,6 +27,8 @@ private[spark] object TaskState extends Enumeration {
 
   type TaskState = Value
 
+  def isFailed(state: TaskState) = (LOST == state) || (FAILED == state)
+
   def isFinished(state: TaskState) = FINISHED_STATES.contains(state)
 
   def toMesos(state: TaskState): MesosTaskState = state match {
@@ -46,5 +48,6 @@ private[spark] object TaskState extends Enumeration {
     case MesosTaskState.TASK_FAILED => FAILED
     case MesosTaskState.TASK_KILLED => KILLED
     case MesosTaskState.TASK_LOST => LOST
+    case MesosTaskState.TASK_ERROR => LOST
   }
 }
