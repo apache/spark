@@ -21,6 +21,8 @@ import java.lang.management.ManagementFactory
 
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 import org.apache.spark.SparkConf
+import org.apache.spark.util.expression.{BaseParser, Parsers}
+import org.apache.spark.util.expression.quantity.ByteQuantity
 
 /**
  * Command-line parser for the worker.
@@ -29,8 +31,8 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
-  var cores = inferDefaultCores()
-  var memory = inferDefaultMemory()
+  var workerCores: String = System.getenv("SPARK_WORKER_CORES")
+  var workerMem: String = conf.getenv("SPARK_WORKER_MEMORY")
   var masters: Array[String] = null
   var workDir: String = null
   var propertiesFile: String = null
@@ -39,12 +41,7 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   if (System.getenv("SPARK_WORKER_PORT") != null) {
     port = System.getenv("SPARK_WORKER_PORT").toInt
   }
-  if (System.getenv("SPARK_WORKER_CORES") != null) {
-    cores = System.getenv("SPARK_WORKER_CORES").toInt
-  }
-  if (conf.getenv("SPARK_WORKER_MEMORY") != null) {
-    memory = Utils.memoryStringToMb(conf.getenv("SPARK_WORKER_MEMORY"))
-  }
+
   if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
   }
@@ -53,6 +50,27 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
 
   parse(args.toList)
+
+  val cores: Int = Option(workerCores)
+    .flatMap(Parsers.NumberParser.parse)
+    // cores should always be at least 1 if an expression is given
+    .map(x => if (x.round >= 1) x.round.toInt else 1)
+    .getOrElse(inferDefaultCores)
+
+  def getNewStyleMemMB(mem: String): Option[Int] = {
+    Parsers.ByteParser.parse(mem).map(x => ByteQuantity(x, "B").toMB.toInt)
+  }
+
+  def getOldStyleMemMB(mem: String): Option[Int] = {
+    Some(Utils.memoryStringToMb(mem))
+  }
+
+  val memory: Int = Option(workerMem)
+    // Explicitly revert to old code path if string does not have tag indicating expression
+    .flatMap(x => if (x.head == BaseParser.EXP_TAG) getNewStyleMemMB(x) else getOldStyleMemMB(x))
+    .getOrElse(inferDefaultMemory())
+
+  // NB - We are currently not parsing expressions from Spark defaults file
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
@@ -78,12 +96,12 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       port = value
       parse(tail)
 
-    case ("--cores" | "-c") :: IntParam(value) :: tail =>
-      cores = value
+    case ("--cores" | "-c") :: value :: tail =>
+      workerCores = value
       parse(tail)
 
-    case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
-      memory = value
+    case ("--memory" | "-m") :: value :: tail =>
+      workerMem = value
       parse(tail)
 
     case ("--work-dir" | "-d") :: value :: tail =>
