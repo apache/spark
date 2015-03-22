@@ -142,8 +142,8 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 
 <div data-lang="python"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.context.SparkContext-class.html) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.conf.SparkConf-class.html) object
+The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.html#pyspark.SparkConf) object
 that contains information about your application.
 
 {% highlight python %}
@@ -1291,7 +1291,7 @@ scala> accum.value
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/python/pyspark.accumulators.AccumulatorParam-class.html).
+create their own types by subclassing [AccumulatorParam](api/python/pyspark.html#pyspark.AccumulatorParam).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:

@@ -187,7 +187,7 @@ create sparse vectors.
 
 We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to
 the label and the rest are features.  This representation is replaced by class
-[`LabeledPoint`](api/python/pyspark.mllib.regression.LabeledPoint-class.html), which takes both
+[`LabeledPoint`](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint), which takes both
 dense and sparse feature vectors.
 
 {% highlight python %}
