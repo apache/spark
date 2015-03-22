@@ -82,7 +82,7 @@ System.out.println(summary.numNonzeros()); // number of nonzeros in each column
 
 <div data-lang="python" markdown="1">
 [`colStats()`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics.colStats) returns an instance of
-[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.stat.MultivariateStatisticalSummary-class.html),
+[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
