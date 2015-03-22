@@ -27,9 +27,10 @@ Content
 .. toctree::
     :maxdepth: 4
 
-    installation
-    ui
+    start
     tutorial
+    ui
+    installation
     concepts
     profiling
     cli

@@ -1,5 +1,5 @@
 
-Airflow Tutorial
+Tutorial
 ================
 
 This tutorial walks you through some of the fundamental Airflow concepts, 
