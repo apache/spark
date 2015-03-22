@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.mesos
+package org.apache.spark.scheduler.cluster.mesos
 
 import java.nio.ByteBuffer
 
 import org.scalatest.FunSuite
-
-import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 
 class MesosTaskLaunchDataSuite extends FunSuite {
   test("serialize and deserialize data must be same") {
