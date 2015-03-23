@@ -224,7 +224,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  df.select($"id", sqlctx.callUdf("simpleUdf", $"value"))
    * }}}
    */
-  def callUdf(udfName: String, cols: Column*) =
+  def callUdf(udfName: String, cols: Column*): Column =
     Column(UnresolvedFunction(udfName, cols.map(_.expr)))
 
   /**
