@@ -157,7 +157,7 @@ for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"
   # Ensure the test can be found and is a file
   if [ -f "${this_test}" ]; then
-    this_mssg="$(bash \"${this_test}\" \"${ghprbActualCommit}\" \"${sha1}\")"
+    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}")"
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
