@@ -17,15 +17,21 @@
 
 package org.apache.spark.ml.feature
 
+import scala.beans.BeanInfo
+
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-case class TextData(rawText: String, wantedTokens: Seq[String])
+@BeanInfo
+case class TextData(rawText: String, wantedTokens: Seq[String]) {
+  /** Constructor used in [[org.apache.spark.ml.feature.JavaTokenizerSuite]] */
+  def this(rawText: String, wantedTokens: Array[String]) = this(rawText, wantedTokens.toSeq)
+}
 
-class TokenizerSuite extends FunSuite with MLlibTestSparkContext {
+class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
+  import org.apache.spark.ml.feature.RegexTokenizerSuite._
   
   @transient var sqlContext: SQLContext = _
 
@@ -35,66 +41,45 @@ class TokenizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("RegexTokenizer") {
-    val myRegExTokenizer = new RegexTokenizer()
+    val tokenizer = new RegexTokenizer()
       .setInputCol("rawText")
       .setOutputCol("tokens")
 
-    var dataset = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        TextData("Test for tokenization.", Seq("Test", "for", "tokenization", ".")),
-        TextData("Te,st. punct", Seq("Te", ",", "st", ".", "punct"))
-    )))
-    testRegexTokenizer(myRegExTokenizer, dataset)
+    val dataset0 = sqlContext.createDataFrame(Seq(
+      TextData("Test for tokenization.", Seq("Test", "for", "tokenization", ".")),
+      TextData("Te,st. punct", Seq("Te", ",", "st", ".", "punct"))
+    ))
+    testRegexTokenizer(tokenizer, dataset0)
 
-    dataset = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        TextData("Test for tokenization.", Seq("Test", "for", "tokenization")),
-        TextData("Te,st. punct", Seq("punct"))
-    )))
-    myRegExTokenizer.asInstanceOf[RegexTokenizer]
-      .setMinTokenLength(3)
-    testRegexTokenizer(myRegExTokenizer, dataset)
+    val dataset1 = sqlContext.createDataFrame(Seq(
+      TextData("Test for tokenization.", Seq("Test", "for", "tokenization")),
+      TextData("Te,st. punct", Seq("punct"))
+    ))
 
-    myRegExTokenizer.asInstanceOf[RegexTokenizer]
+    tokenizer.setMinTokenLength(3)
+    testRegexTokenizer(tokenizer, dataset1)
+
+    tokenizer
       .setPattern("\\s")
       .setGaps(true)
       .setMinTokenLength(0)
-    dataset = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        TextData("Test for tokenization.", Seq("Test", "for", "tokenization.")),
-        TextData("Te,st.  punct", Seq("Te,st.", "", "punct"))
-    )))
-    testRegexTokenizer(myRegExTokenizer, dataset)
+    val dataset2 = sqlContext.createDataFrame(Seq(
+      TextData("Test for tokenization.", Seq("Test", "for", "tokenization.")),
+      TextData("Te,st.  punct", Seq("Te,st.", "", "punct"))
+    ))
+    testRegexTokenizer(tokenizer, dataset2)
   }
+}
 
-  test("Tokenizer") {
-    val oldTokenizer =  new Tokenizer()
-      .setInputCol("rawText")
-      .setOutputCol("tokens")
-    var dataset = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        TextData("Test for tokenization.", Seq("test", "for", "tokenization.")),
-        TextData("Te,st.  punct", Seq("te,st.", "", "punct"))
-    )))
-    testTokenizer(oldTokenizer, dataset)
-  }
-
-  def testTokenizer(t: Tokenizer, dataset: DataFrame): Unit = {
-    t.transform(dataset)
-      .select("tokens", "wantedTokens")
-      .collect().foreach { 
-        case Row(tokens: Seq[Any], wantedTokens: Seq[Any]) =>
-          assert(tokens === wantedTokens)
-      }
-  }
+object RegexTokenizerSuite extends FunSuite {
 
   def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
     t.transform(dataset)
       .select("tokens", "wantedTokens")
-      .collect().foreach { 
-        case Row(tokens: Seq[Any], wantedTokens: Seq[Any]) =>
+      .collect()
+      .foreach {
+        case Row(tokens, wantedTokens) =>
           assert(tokens === wantedTokens)
-      }
+    }
   }
-
 }

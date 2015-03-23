@@ -17,9 +17,7 @@
 
 package org.apache.spark.ml.feature;
 
-import java.util.Arrays;
-import java.util.List;
-
+import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -36,38 +34,38 @@ public class JavaTokenizerSuite {
   private transient SQLContext jsql;
 
   @Before
-  public void setUp() {
+	public void setUp() {
     jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
-    jsql = new SQLContext(jsc);
-  }
+		jsql = new SQLContext(jsc);
+	}
 
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
+	@After
+	public void tearDown() {
+		jsc.stop();
+		jsc = null;
   }
 
   @Test
-  public void RegexTokenizer() {
+	public void regexTokenizer() {
     RegexTokenizer myRegExTokenizer = new RegexTokenizer()
       .setInputCol("rawText")
-      .setOutputCol("tokens")
-      .setPattern("\\s")
-      .setGaps(true)
-      .setMinTokenLength(0);
+			.setOutputCol("tokens")
+			.setPattern("\\s")
+			.setGaps(true)
+      .setMinTokenLength(3);
 
-    List<String> t = Arrays.asList(
-      "{\"rawText\": \"Test of tok.\", \"wantedTokens\": [\"Test\", \"of\", \"tok.\"]}",
-      "{\"rawText\": \"Te,st.  punct\", \"wantedTokens\": [\"Te,st.\", \"\", \"punct\"]}");
+		JavaRDD<TextData> rdd = jsc.parallelize(Lists.newArrayList(
+			new TextData("Test of tok.", new String[] {"Test", "tok."}),
+			new TextData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+		));
+    DataFrame dataset = jsql.createDataFrame(rdd, TextData.class);
 
-    JavaRDD<String> myRdd = jsc.parallelize(t);
-    DataFrame dataset = jsql.jsonRDD(myRdd);
-
-    Row[] pairs = myRegExTokenizer.transform(dataset)
-      .select("tokens","wantedTokens")
+		Row[] pairs = myRegExTokenizer.transform(dataset)
+			.select("tokens","wantedTokens")
       .collect();
 
-    Assert.assertEquals(pairs[0].get(0), pairs[0].get(1));
-    Assert.assertEquals(pairs[1].get(0), pairs[1].get(1));
+		for (Row r: pairs) {
+			Assert.assertEquals(r.get(0), r.get(1));
+		}
   }
 }
