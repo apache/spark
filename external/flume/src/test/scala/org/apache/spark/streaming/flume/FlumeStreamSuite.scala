@@ -20,14 +20,13 @@ package org.apache.spark.streaming.flume
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
 
-import org.apache.commons.lang3.RandomUtils
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.base.Charsets
+import org.apache.commons.lang3.RandomUtils
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.flume.source.avro
