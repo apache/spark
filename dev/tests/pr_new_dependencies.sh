@@ -35,6 +35,8 @@ MVN_BIN="`pwd`/../../build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
+echo "new dep output"
+
 ${MVN_BIN} clean compile dependency:build-classpath | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
@@ -66,8 +68,15 @@ if [ -z "${DIFF_RESULTS}" ]; then
   echo " * This patch adds no new dependencies."
 else
   # Pretty print the new dependencies
-  new_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
-  echo " * This patch **adds the following new dependencies:**\n${new_deps}"
+  added_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
+  removed_deps=$(echo ${DIFF_RESULTS} | grep ">" | cut -d" " -f2 | awk '{print "   * "$1}')
+  added_deps_text=" * This patch **adds the following new dependencies:**\n${added_deps}"
+  removed_deps_text=" * This patch **removes the following dependencies:**\n${removed_deps}"
+
+  echo "${added_deps_text}\n${removed_deps_text}\n"
+  # Construct the final returned message
+  #return_mssg=""
+  #[ -n "${added_deps}" ] && return_mssg="${return_mssg}"
 fi
   
 # Remove the files we've left over
