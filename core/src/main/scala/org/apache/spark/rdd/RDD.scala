@@ -596,11 +596,12 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String, env: Map[String, String]): RDD[String] =
-    new PipedRDD(this, command, env)
+    new PipedRDD(this, command, (_) => env)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    * The print behavior can be customized by providing two functions.
+   *
    *
    * @param command command to run in forked process.
    * @param env environment variables to set.
@@ -617,13 +618,42 @@ abstract class RDD[T: ClassTag](
    * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */
+
   def pipe(
       command: Seq[String],
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false): RDD[String] = {
-    new PipedRDD(this, command, env,
+    pipeWithPartition((_) => command, (_) => env, printPipeContext, printRDDElement, separateWorkingDir)
+  }
+
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   * The print behavior can be customized by providing two functions.
+   *
+   * @param command function accepting `Partition` and returning command to run in forked process.
+   * @param env function accepting `Partition` and returning environment variables to set.
+   * @param printPipeContext Before piping elements, this function is called as an oppotunity
+   *                         to pipe context data. Print line function (like out.println) will be
+   *                         passed as printPipeContext's parameter.
+   * @param printRDDElement Use this function to customize how to pipe elements. This function
+   *                        will be called with each RDD element as the 1st parameter, and the
+   *                        print line function (like out.println()) as the 2nd parameter.
+   *                        An example of pipe the RDD data of groupBy() in a streaming way,
+   *                        instead of constructing a huge String to concat all the elements:
+   *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
+   *                          for (e &lt;- record._2){f(e)}
+   * @param separateWorkingDir Use separate working directories for each task.
+   * @return the result RDD
+   */
+  def pipeWithPartition(
+      command: (Partition) => Seq[String],
+      env: (Partition) => Map[String, String],
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null,
+      separateWorkingDir: Boolean = false): RDD[String] = {
+    new PipedRDD(this, sc.clean(command), sc.clean(env),
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
       separateWorkingDir)
