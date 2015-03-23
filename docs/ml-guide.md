@@ -565,6 +565,11 @@ import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
+// Labeled and unlabeled instance types.
+// Spark SQL can infer schema from case classes.
+case class LabeledDocument(id: Long, text: String, label: Double)
+case class Document(id: Long, text: String)
+
 val conf = new SparkConf().setAppName("CrossValidatorExample")
 val sc = new SparkContext(conf)
 val sqlContext = new SQLContext(sc)
@@ -654,6 +659,36 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+
+// Labeled and unlabeled instance types.
+// Spark SQL can infer schema from Java Beans.
+public class Document implements Serializable {
+  private Long id;
+  private String text;
+
+  public Document(Long id, String text) {
+    this.id = id;
+    this.text = text;
+  }
+
+  public Long getId() { return this.id; }
+  public void setId(Long id) { this.id = id; }
+
+  public String getText() { return this.text; }
+  public void setText(String text) { this.text = text; }
+}
+
+public class LabeledDocument extends Document implements Serializable {
+  private Double label;
+
+  public LabeledDocument(Long id, String text, Double label) {
+    super(id, text);
+    this.label = label;
+  }
+
+  public Double getLabel() { return this.label; }
+  public void setLabel(Double label) { this.label = label; }
+}
 
 SparkConf conf = new SparkConf().setAppName("JavaCrossValidatorExample");
 JavaSparkContext jsc = new JavaSparkContext(conf);
