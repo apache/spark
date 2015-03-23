@@ -185,12 +185,14 @@ def clear(args):
         args.end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
 
     if args.task_regex:
-        dag = dag.sub_dag(task_regex=args.task_regex)
+        dag = dag.sub_dag(
+            task_regex=args.task_regex,
+            include_downstream=args.downstream,
+            include_upstream=args.upstream,
+        )
     dag.clear(
         start_date=args.start_date,
         end_date=args.end_date,
-        upstream=args.upstream,
-        downstream=args.downstream,
         only_failed=args.only_failed,
         only_running=args.only_running,
         confirm_prompt=True)
