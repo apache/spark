@@ -220,6 +220,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Row(1,3), Row(2,3), Row(3,3)))
   }
 
+  test("SPARK-6451 SUM agg with code generation") {
+    val originalValue = conf.codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      sql("SELECT a, SUM(b), SUM(CAST(b as Double)) FROM testData2 GROUP BY a"),
+      Seq(Row(1, 3, 3.0), Row(2, 3, 3.0), Row(3, 3, 3.0)))
+
+    checkAnswer(
+      sql("SELECT  sum('a'), avg('a') FROM testData"),
+      Row(0, null))
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)      
+  }
+  
   test("literal in agg grouping expressions") {
     checkAnswer(
       sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
