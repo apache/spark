@@ -1,31 +1,17 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package breeze.optimize.proximal
 
 import breeze.linalg._
-import breeze.optimize.linear.PowerMethod
+import breeze.numerics._
+import breeze.optimize.linear.{ConjugateGradient, PowerMethod}
 import breeze.optimize.proximal.Constraint._
+import breeze.optimize.{DiffFunction, LBFGS, OWLQN}
 import breeze.stats.distributions.Rand
 import breeze.util.SerializableLogging
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 import spire.syntax.cfor._
+
 import scala.math.{abs, sqrt}
 
 /**
@@ -37,7 +23,7 @@ import scala.math.{abs, sqrt}
  * It solves problem that has the following structure
  * 
  * 1/2 x'Hx + f'x + g(x)
- * s.t Aeqx = b
+ * s.t Aeqx = beq
  *
  * g(x) represents the following constraints which covers ALS based matrix factorization use-cases
  * 
@@ -76,9 +62,6 @@ class QuadraticMinimizer(nGram: Int,
 
   val n = nGram + linearEquality
   val full = n * n
-
-  //TO DO: Tune alpha based on Nesterov's acceleration
-  val alpha: Double = 1.0
 
   /**
    * wsH is the workspace for gram matrix / quasi definite system based on the problem definition
@@ -119,19 +102,9 @@ class QuadraticMinimizer(nGram: Int,
   def getProximal = proximal
 
   /**
-   * updateGram API is meant to be called iteratively from the user and the user should guarantee correctness
-   * of update.
-   *
-   * @param row gram matrix row
-   * @param col gram matrix column
-   * @param value gram matrix update value for row, column
+   * updateGram API is meant to be called iteratively from Normal Equations constructed by the user
+   * @param H rank * rank size full gram matrix
    */
-  def updateGram(row: Int, col: Int, value: Double) {
-    require(row >= 0 && row < n, s"QuadraticMinimizer:updateGram row index out of bounds")
-    require(col >= 0 && col < n, s"QuadraticMinimizer:updateGram col index out of bounds")
-    wsH.update(row, col, value)
-  }
-
   def updateGram(H: DenseMatrix[Double]): Unit = {
     wsH(0 until nGram, 0 until nGram) := H
   }
@@ -173,6 +146,7 @@ class QuadraticMinimizer(nGram: Int,
     val nlinear = q.length
     val info = new intW(0)
 
+    //TO DO : Mutate wsH and put the factors in it, the arraycopy is not required
     if (linearEquality > 0) {
       val equality = nlinear + beq.length
       require(wsH.rows == equality && wsH.cols == equality, s"QuadraticMinimizer:reset quasi definite and linear size mismatch")
@@ -215,10 +189,23 @@ class QuadraticMinimizer(nGram: Int,
     cforRange(0 until x.length) { i => x.update(i, scale(i)) }
   }
 
+  /**
+   * iterations API gives an advanced control for users who would like to use QuadraticMinimizer in 2 steps, update
+   * the gram matrix first using updateGram API and followed by doing the solve by providing a user defined
+   * initialState. It also exposes alpha and rho control to users who would like to experiment with rho and alpha
+   * parameters of the admm algorithm
+   * @param q linear term for the quadratic optimization
+   * @param rho rho parameter for ADMM algorithm
+   * @param alpha over-relaxation alpha parameter for admm algorithm, default 1.0
+   * @param initialState provide a initialState using initialState API
+   * @param resetState use true if you want to hot start based on the provided state
+   * @return converged state from ADMM algorithm
+   */
   def iterations(q: DenseVector[Double],
                  rho: Double,
                  initialState: State,
-                 resetState: Boolean = true): State = {
+                 resetState: Boolean = true,
+                 alpha: Double = 1.0): State = {
     val startState = if (resetState) reset(q, initialState) else initialState
     import startState._
 
@@ -307,23 +294,60 @@ class QuadraticMinimizer(nGram: Int,
     }
   }
 
-  def iterations(q: DenseVector[Double], initialState: State): State = {
+  private def iterations(q: DenseVector[Double], initialState: State): State = {
     val rho = computeRho(wsH)
     cforRange(0 until q.length) { i => wsH.update(i, i, wsH(i, i) + rho) }
     iterations(q, rho, initialState)
   }
 
-  def iterations(H: DenseMatrix[Double], q: DenseVector[Double], initialState: State): State = {
+  private def iterations(H: DenseMatrix[Double], q: DenseVector[Double], initialState: State): State = {
     updateGram(H)
     iterations(q, initialState)
   }
 
+  /**
+   * minimize API allows users to provide a gram matrix and the linear term for solving the quadratic
+   * problem with constraints provided as proximal algorithm
+   * @param H gram matrix
+   * @param q linear term
+   * @param initialState provide a workspace for the solver when the problem dimension did not change
+   * @return solution of the constrained quadratic problem
+   */
+  def minimize(H: DenseMatrix[Double], q: DenseVector[Double], initialState: State): DenseVector[Double] = {
+    minimizeAndReturnState(H, q, initialState).x
+  }
+
+  def minimizeAndReturnState(H: DenseMatrix[Double], q: DenseVector[Double], initialState: State): State = {
+    iterations(H, q, initialState)
+  }
+
+  /**
+   * minimize API allows users to provide a gram matrix and the linear term for solving the quadratic
+   * problem with constraints provided as proximal algorithm
+   * @param H gram matrix
+   * @param q linear term
+   * @return solution of the constrained quadratic problem
+   */
   def minimize(H: DenseMatrix[Double], q: DenseVector[Double]): DenseVector[Double] = {
     minimizeAndReturnState(H, q).x
   }
-  
+
   def minimizeAndReturnState(H: DenseMatrix[Double], q: DenseVector[Double]): State = {
-    iterations(H, q, initialize)
+    iterations(H, q, initialState=initialize)
+  }
+
+  /**
+   * minimize API allows user to provide linear term for solving the quadratic problem with constraints provided as
+   * proximal algorithm. The gram matrix must be updated using updateGram API before minimization is called
+   * @param q linear term
+   * @return solution of the constrained quadratic problem
+   */
+  def minimize(q: DenseVector[Double]): DenseVector[Double]  = {
+    minimizeAndReturnState(q).x
+  }
+
+  def minimizeAndReturnState(q: DenseVector[Double]): State = {
+    iterations(q, initialState=initialize)
   }
 }
 

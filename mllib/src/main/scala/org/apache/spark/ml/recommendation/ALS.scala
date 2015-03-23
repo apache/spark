@@ -19,7 +19,7 @@ package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
 
-import breeze.optimize.proximal.QuadraticMinimizer
+import breeze.optimize.proximal.{ProximalL1, QuadraticMinimizer}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
@@ -329,11 +329,13 @@ object ALS extends Logging {
   }
 
   /** QuadraticMinimization solver for least square problems. */
-  private[recommendation] class QuadraticSolver(rank: Int) extends LeastSquaresNESolver {
-    private val qm = QuadraticMinimizer(rank, SMOOTH)
+  private[recommendation] class QuadraticSolver(rank: Int, constraint: Constraint) extends LeastSquaresNESolver {
+    private val qm = QuadraticMinimizer(rank, constraint)
     private val init = qm.initialize
     private val ata = new Array[Double](rank * rank)
     private val brzata = new BrzMatrix[Double](rank, rank, ata)
+    // Elastic Net beta parameter for L1 regularization
+    private val beta = if (constraint==SPARSE) 0.99 else 0.0
 
     /**
      * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
@@ -377,10 +379,17 @@ object ALS extends Logging {
       */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       require(ne.k == rank, s"ALS:QuadraticSolver rank $rank expected ${ne.k}")
-      fillAtA(ne.ata, lambda * ne.n)
+
+      // If Elastic Net formulation is being run, give (1-beta)*lambda to L2 and
+      // beta*lambda to L1. The nomenclature used here is exactly same as GLMNET
+      fillAtA(ne.ata, (1 - beta) * lambda * ne.n)
+      if (constraint == SPARSE) {
+        val regParamL1 = beta * lambda * ne.n
+        qm.getProximal.asInstanceOf[ProximalL1].setLambda(regParamL1)
+      }
       val q = new BrzVector(ne.atb)
       q *= -1.0
-      val x = qm.iterations(brzata, q, init).x
+      val x = qm.minimize(brzata, q, init)
       ne.reset()
       x.data.map(x => x.toFloat)
     }
@@ -583,8 +592,8 @@ object ALS extends Logging {
       else {
         if (solver == "mllib") new CholeskySolver
         else {
-          println("Running Breeze QuadraticMinimizer")
-          new QuadraticSolver(rank)
+          println(s"Running Breeze QuadraticMinimizer for users with constraint ${userConstraint.toString}")
+          new QuadraticSolver(rank, userConstraint)
         }
       }
 
@@ -593,8 +602,8 @@ object ALS extends Logging {
       else {
         if (solver == "mllib") new CholeskySolver
         else {
-          println("Running Breeze QuadraticMinimizer")
-          new QuadraticSolver(rank)
+          println(s"Running Breeze QuadraticMinimizer for items with constraint ${itemConstraint.toString}")
+          new QuadraticSolver(rank, itemConstraint)
         }
       }
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
