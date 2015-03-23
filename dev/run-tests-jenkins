@@ -164,7 +164,7 @@ for t in "${PR_TESTS[@]}"; do
     echo "MSSG: $this_mssg"
     pr_message="${pr_message}\n${this_mssg}"
     # Ensure, after each test, that we're on the current PR
-    git checkout -f "${current_pr_head}"
+#    git checkout -f "${current_pr_head}"
   fi
 done
 
