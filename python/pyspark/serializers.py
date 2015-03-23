@@ -50,21 +50,17 @@ which contains two batches of two objects:
 """
 
 import sys
-if sys.version < '3':
-    import cPickle
-else:
-    import pickle as cPickle
 from itertools import chain, product
-if sys.version < '3':
-    from itertools import izip
-else:
-    izip = zip
 import marshal
 import struct
 import types
 import collections
 import zlib
 import itertools
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from pyspark import cloudpickle
 
@@ -104,7 +100,7 @@ class Serializer(object):
     # subclasses should override __eq__ as appropriate.
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__)
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -219,10 +215,6 @@ class BatchedSerializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         return self.serializer.load_stream(stream)
 
-    def __eq__(self, other):
-        return (isinstance(other, BatchedSerializer) and
-                other.serializer == self.serializer and other.batchSize == self.batchSize)
-
     def __repr__(self):
         return "BatchedSerializer(%s, %d)" % (str(self.serializer), self.batchSize)
 
@@ -254,10 +246,6 @@ class AutoBatchedSerializer(BatchedSerializer):
             elif size > best * 10 and batch > 1:
                 batch /= 2
 
-    def __eq__(self, other):
-        return (isinstance(other, AutoBatchedSerializer) and
-                other.serializer == self.serializer and other.bestSize == self.bestSize)
-
     def __str__(self):
         return "AutoBatchedSerializer(%s)" % str(self.serializer)
 
@@ -269,6 +257,7 @@ class CartesianDeserializer(FramedSerializer):
     """
 
     def __init__(self, key_ser, val_ser):
+        FramedSerializer.__init__(self)
         self.key_ser = key_ser
         self.val_ser = val_ser
 
@@ -277,7 +266,7 @@ class CartesianDeserializer(FramedSerializer):
         val_stream = self.val_ser._load_stream_without_unbatching(stream)
         key_is_batched = isinstance(self.key_ser, BatchedSerializer)
         val_is_batched = isinstance(self.val_ser, BatchedSerializer)
-        for (keys, vals) in izip(key_stream, val_stream):
+        for (keys, vals) in zip(key_stream, val_stream):
             keys = keys if key_is_batched else [keys]
             vals = vals if val_is_batched else [vals]
             yield (keys, vals)
@@ -286,10 +275,6 @@ class CartesianDeserializer(FramedSerializer):
         for (keys, vals) in self.prepare_keys_values(stream):
             for pair in product(keys, vals):
                 yield pair
-
-    def __eq__(self, other):
-        return (isinstance(other, CartesianDeserializer) and
-                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
         return "CartesianDeserializer(%s, %s)" % \
@@ -302,21 +287,13 @@ class PairDeserializer(CartesianDeserializer):
     Deserializes the JavaRDD zip() of two PythonRDDs.
     """
 
-    def __init__(self, key_ser, val_ser):
-        self.key_ser = key_ser
-        self.val_ser = val_ser
-
     def load_stream(self, stream):
         for (keys, vals) in self.prepare_keys_values(stream):
             if len(keys) != len(vals):
                 raise ValueError("Can not deserialize RDD with different number of items"
                                  " in pair: (%d, %d)" % (len(keys), len(vals)))
-            for pair in izip(keys, vals):
+            for pair in zip(keys, vals):
                 yield pair
-
-    def __eq__(self, other):
-        return (isinstance(other, PairDeserializer) and
-                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
         return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
@@ -397,7 +374,7 @@ _hijack_namedtuple()
 class PickleSerializer(FramedSerializer):
 
     """
-    Serializes objects using Python's cPickle serializer:
+    Serializes objects using Python's pickle serializer:
 
         http://docs.python.org/2/library/pickle.html
 
@@ -406,10 +383,10 @@ class PickleSerializer(FramedSerializer):
     """
 
     def dumps(self, obj):
-        return cPickle.dumps(obj, 2)
+        return pickle.dumps(obj, 2)
 
     def loads(self, obj):
-        return cPickle.loads(obj)
+        return pickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -438,7 +415,7 @@ class MarshalSerializer(FramedSerializer):
 class AutoSerializer(FramedSerializer):
 
     """
-    Choose marshal or cPickle as serialization protocol automatically
+    Choose marshal or pickle as serialization protocol automatically
     """
 
     def __init__(self):
@@ -447,19 +424,19 @@ class AutoSerializer(FramedSerializer):
 
     def dumps(self, obj):
         if self._type is not None:
-            return 'P' + cPickle.dumps(obj, -1)
+            return b'P' + pickle.dumps(obj, -1)
         try:
-            return 'M' + marshal.dumps(obj)
+            return b'M' + marshal.dumps(obj)
         except Exception:
-            self._type = 'P'
-            return 'P' + cPickle.dumps(obj, -1)
+            self._type = b'P'
+            return b'P' + pickle.dumps(obj, -1)
 
     def loads(self, obj):
         _type = obj[0]
-        if _type == 'M':
+        if _type == b'M':
             return marshal.loads(obj[1:])
-        elif _type == 'P':
-            return cPickle.loads(obj[1:])
+        elif _type == b'P':
+            return pickle.loads(obj[1:])
         else:
             raise ValueError("invalid sevialization type: %s" % _type)
 
@@ -479,8 +456,8 @@ class CompressedSerializer(FramedSerializer):
     def loads(self, obj):
         return self.serializer.loads(zlib.decompress(obj))
 
-    def __eq__(self, other):
-        return isinstance(other, CompressedSerializer) and self.serializer == other.serializer
+    def __repr__(self):
+        return "CompressedSerializer(%s)" % self.serializer
 
 
 class UTF8Deserializer(Serializer):
@@ -510,8 +487,8 @@ class UTF8Deserializer(Serializer):
         except EOFError:
             return
 
-    def __eq__(self, other):
-        return isinstance(other, UTF8Deserializer) and self.use_unicode == other.use_unicode
+    def __repr__(self):
+        return "UTF8Deserializer(%s)" % self.use_unicode
 
 
 def read_long(stream):

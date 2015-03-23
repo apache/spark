@@ -53,7 +53,8 @@ from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer
+    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
+    PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
@@ -254,6 +255,18 @@ class SerializationTestCase(unittest.TestCase):
         ser.dump_stream(range(1000), io)
         io.seek(0)
         self.assertEqual(["abc", u"123", range(5)] + list(range(1000)), list(ser.load_stream(io)))
+
+    def test_hash_serializer(self):
+        hash(NoOpSerializer())
+        hash(UTF8Deserializer())
+        hash(PickleSerializer())
+        hash(MarshalSerializer())
+        hash(AutoSerializer())
+        hash(BatchedSerializer(PickleSerializer()))
+        hash(AutoBatchedSerializer(MarshalSerializer()))
+        hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
+        hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
+        hash(CompressedSerializer(PickleSerializer()))
 
 
 class PySparkTestCase(unittest.TestCase):
