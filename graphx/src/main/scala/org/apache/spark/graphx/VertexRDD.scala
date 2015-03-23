@@ -164,7 +164,6 @@ abstract class VertexRDD[VD](
    * each vertex in `this`.
    * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
    *
-   *    * TODO: Desc.
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
    * @tparam A the type of the given starting value and accumulator
@@ -203,17 +202,17 @@ abstract class VertexRDD[VD](
 
   /**
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a VertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
-   * used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
+   * backed by a VertexRDD with the same index then the efficient [[leftZipJoinWithFold]] implementation
+   * is used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
    * missing any vertex in this VertexRDD, `f` is passed `None`. If there are duplicates,
    * the vertex is picked arbitrarily.
    *
-   *    * TODO: Desc.
-   *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
+   * @tparam A the type of the given starting value and accumulator
    *
    * @param other the other VertexRDD with which to join
+   * @param acc the initial value for the accumulator
    * @param f the function mapping a vertex id and its attributes in this and the other vertex set
    * to a new vertex attribute.
    * @return a VertexRDD containing all the vertices in this VertexRDD with the attributes emitted
@@ -235,9 +234,7 @@ abstract class VertexRDD[VD](
 
   /**
    * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index. See
-   * [[innerJoin]] for the behavior of the join.
-   *
-   * TODO: Desc.
+   * [[innerJoinWithFold]] for the behavior of the join.
    */
   def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A]
       (other: VertexRDD[U], acc: A)
@@ -261,13 +258,13 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD2]
 
   /**
-   * Inner joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a VertexRDD with the same index then the efficient [[innerZipJoin]] implementation
-   * is used.
+   * Inner joins this VertexRDD with an RDD containing vertex attribute pairs applying the fold
+   * function with the passed in initial value. If the other RDD is backed by a VertexRDD with
+   * the same index then the efficient [[innerZipJoinWithFold]] implementation is used.
    *
-   *    * TODO: Desc.
    * @param other an RDD containing vertices to join. If there are multiple entries for the same
-   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndex]] to merge multiple entries.
+   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndexWithFold]] to merge multiple entries.
+   * @param acc the initial value for the accumulator
    * @param f the join function applied to corresponding values of `this` and `other`
    * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
    *         `this` and `other`, with values supplied by `f`
@@ -288,17 +285,18 @@ abstract class VertexRDD[VD](
    * For those vertices, their values are the result of applying `reduceFunc` to all received
    * messages.
    */
-  def aggregateUsingIndex[VD2: ClassTag](
-      messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
+  def aggregateUsingIndex[VD2: ClassTag]
+      (messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2)
+    : VertexRDD[VD2]
 
   /**
-   * Aggregates vertices in `messages` that have the same ids using `reduceFunc`, returning a
+   * Aggregates vertices in `messages` that have the same ids using `foldFunc`, returning a
    * VertexRDD co-indexed with `this`.
    *
-   * TODO: desc.
    * @param messages an RDD containing messages to aggregate, where each message is a pair of its
    * target vertex ID and the message data
-   * @param foldFunc the associative aggregation function for merging messages to the same vertex
+   * @param acc the initial value for the accumulator
+   * @param foldFunc the fold-style aggregation function for merging messages to the same vertex
    * @return a VertexRDD co-indexed with `this`, containing only vertices that received messages.
    * For those vertices, their values are the result of applying `reduceFunc` to all received
    * messages.
