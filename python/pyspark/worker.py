@@ -38,9 +38,9 @@ utf8_deserializer = UTF8Deserializer()
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
-    write_long(1000 * boot, outfile)
-    write_long(1000 * init, outfile)
-    write_long(1000 * finish, outfile)
+    write_long(int(1000 * boot), outfile)
+    write_long(int(1000 * init), outfile)
+    write_long(int(1000 * finish), outfile)
 
 
 def add_path(path):
@@ -103,7 +103,7 @@ def main(infile, outfile):
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc(), outfile)
+            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass

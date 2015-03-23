@@ -50,6 +50,8 @@ try:
     sqlCtx = HiveContext(sc)
 except py4j.protocol.Py4JError:
     sqlCtx = SQLContext(sc)
+except TypeError:
+    sqlCtx = SQLContext(sc)
 
 print("""Welcome to
       ____              __

@@ -21,6 +21,8 @@ if sys.version < '3':
     import cPickle
 else:
     import pickle as cPickle
+    basestring = str
+    unicode = str
 import gc
 from tempfile import NamedTemporaryFile
 
@@ -74,15 +76,15 @@ class Broadcast(object):
             self._path = path
 
     def dump(self, value, f):
-        if isinstance(value, basestring):
+        if isinstance(value, (str, bytes, unicode)):
             if isinstance(value, unicode):
-                f.write('U')
+                f.write(b'U')
                 value = value.encode('utf8')
             else:
-                f.write('S')
+                f.write(b'B')
             f.write(value)
         else:
-            f.write('P')
+            f.write(b'P')
             cPickle.dump(value, f, 2)
         f.close()
         return f.name
@@ -91,7 +93,7 @@ class Broadcast(object):
         with open(path, 'rb', 1 << 20) as f:
             flag = f.read(1)
             data = f.read()
-            if flag == 'P':
+            if flag == b'P':
                 # cPickle.loads() may create lots of objects, disable GC
                 # temporary for better performance
                 gc.disable()
@@ -100,7 +102,7 @@ class Broadcast(object):
                 finally:
                     gc.enable()
             else:
-                return data.decode('utf8') if flag == 'U' else data
+                return data.decode('utf8') if flag == b'U' else data
 
     @property
     def value(self):

@@ -27,6 +27,7 @@ import gc
 from errno import EINTR, ECHILD, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
+
 from pyspark.worker import main as worker_main
 from pyspark.serializers import read_int, write_int
 
@@ -53,8 +54,9 @@ def worker(sock):
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
-    infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
-    outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
+    infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
+    outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
+
     exit_code = 0
     try:
         worker_main(infile, outfile)
@@ -88,8 +90,10 @@ def manager():
     listen_sock.bind(('127.0.0.1', 0))
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
-    write_int(listen_port, sys.stdout)
-    sys.stdout.flush()
+    # re-open sys.stdout in 'wb' mode
+    f = os.fdopen(sys.stdout.fileno(), 'wb', 4)
+    write_int(listen_port, f)
+    f.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -145,7 +149,7 @@ def manager():
                         time.sleep(1)
                         pid = os.fork()  # error here will shutdown daemon
                     else:
-                        outfile = sock.makefile('w')
+                        outfile = sock.makefile(mode='wb')
                         write_int(e.errno, outfile)  # Signal that the fork failed
                         outfile.flush()
                         outfile.close()
@@ -157,7 +161,7 @@ def manager():
                     listen_sock.close()
                     try:
                         # Acknowledge that the fork was successful
-                        outfile = sock.makefile("w")
+                        outfile = sock.makefile(mode="wb")
                         write_int(os.getpid(), outfile)
                         outfile.flush()
                         outfile.close()

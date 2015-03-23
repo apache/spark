@@ -92,6 +92,16 @@ def islambda(func):
     return getattr(func,'__name__') == '<lambda>'
 
 
+_BUILTIN_TYPE_NAMES = {}
+for k, v in types.__dict__.items():
+    if type(v) is type:
+        _BUILTIN_TYPE_NAMES[v] = k
+
+
+def _builtin_type(name):
+    return getattr(types, name)
+
+
 class CloudPickler(Pickler):
 
     dispatch = Pickler.dispatch.copy()
@@ -159,7 +169,7 @@ class CloudPickler(Pickler):
                 obj.co_consts, obj.co_names, obj.co_varnames, obj.co_filename, obj.co_name,
                 obj.co_firstlineno, obj.co_lnotab, obj.co_freevars, obj.co_cellvars
             )
-        self.save_reduce(_make_code, args, obj=obj)
+        self.save_reduce(types.CodeType, args, obj=obj)
     dispatch[types.CodeType] = save_codeobject
 
     def save_function(self, obj, name=None):
@@ -315,18 +325,8 @@ class CloudPickler(Pickler):
         # defaults requires no processing
         defaults = func.__defaults__
 
-        def get_contents(cell):
-            try:
-                return cell.cell_contents
-            except ValueError as e: #cell is empty error on not yet assigned
-                raise pickle.PicklingError('Function to be pickled has free variables that are'
-                                           ' referenced before assignment in enclosing scope')
-
         # process closure
-        if func.__closure__:
-            closure = map(get_contents, func.__closure__)
-        else:
-            closure = []
+        closure = [c.cell_contents for c in func.__closure__] if func.__closure__ else []
 
         # save the dict
         dct = func.__dict__
@@ -343,8 +343,12 @@ class CloudPickler(Pickler):
     dispatch[types.BuiltinFunctionType] = save_builtin_function
 
     def save_instancemethod(self, obj):
-        #Memoization rarely is ever useful due to python bounding
-        self.save_reduce(types.MethodType, (obj.__func__, obj.__self__,obj.__self__.__class__), obj=obj)
+        # Memoization rarely is ever useful due to python bounding
+        if PY3:
+            self.save_reduce(types.MethodType, (obj.__func__, obj.__self__), obj=obj)
+        else:
+            self.save_reduce(types.MethodType, (obj.__func__, obj.__self__, obj.__self__.__class__),
+                         obj=obj)
     dispatch[types.MethodType] = save_instancemethod
 
     def save_inst(self, obj):
@@ -436,6 +440,13 @@ class CloudPickler(Pickler):
     if type(operator.attrgetter) is type:
         dispatch[operator.attrgetter] = save_attrgetter
 
+    def save_global(self, obj, name=None, pack=struct.pack):
+        if obj.__module__ == "__builtin__" or obj.__module__ == "builtins":
+            if obj in _BUILTIN_TYPE_NAMES:
+                return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
+        return Pickler.save_global(self, obj, name)
+    dispatch[type] = save_global
+
     def save_reduce(self, func, args, state=None,
                     listitems=None, dictitems=None, obj=None):
         """Modified to support __transient__ on new objects
@@ -509,7 +520,10 @@ class CloudPickler(Pickler):
 
     def save_file(self, obj):
         """Save a file"""
-        import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
+        try:
+            import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
+        except ImportError:
+            import io as pystringIO
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
@@ -599,8 +613,6 @@ def dumps(obj, protocol=2):
     cp = CloudPickler(file,protocol)
     cp.dump(obj)
 
-    #print 'cloud dumped', str(obj), str(cp.modules)
-
     return file.getvalue()
 
 
@@ -652,10 +664,6 @@ def _genpartial(func, args, kwds):
     if not kwds:
         kwds = {}
     return partial(func, *args, **kwds)
-
-
-def _make_code(*args):
-    return types.CodeType(*args)
 
 
 def _fill_function(func, globals, defaults, dict):

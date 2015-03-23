@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import decimal
 import datetime
 import keyword
@@ -25,6 +26,9 @@ import weakref
 from array import array
 from operator import itemgetter
 
+if sys.version >= "3":
+    long = int
+    unicode = str
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -497,7 +501,7 @@ class UserDefinedType(DataType):
 
 
 _all_primitive_types = dict((v.typeName(), v)
-                            for v in globals().itervalues()
+                            for v in globals().values()
                             if type(v) is PrimitiveTypeSingleton and
                             v.__base__ == PrimitiveType)
 
@@ -589,10 +593,8 @@ _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
     int: LongType,
-    long: LongType,
     float: DoubleType,
     str: StringType,
-    unicode: StringType,
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
@@ -600,6 +602,11 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
+if sys.version < "3":
+    _type_mappings.update({
+        unicode: StringType,
+        long: LongType,
+    })
 
 def _infer_type(obj):
     """Infer the DataType from obj
@@ -619,7 +626,7 @@ def _infer_type(obj):
         return dataType()
 
     if isinstance(obj, dict):
-        for key, value in obj.iteritems():
+        for key, value in obj.items():
             if key is not None and value is not None:
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
@@ -816,7 +823,7 @@ def _create_converter(dataType):
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
-        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
 
     elif isinstance(dataType, NullType):
         return lambda x: None
@@ -970,7 +977,7 @@ def _infer_schema_type(obj, dataType):
         return ArrayType(eType, True)
 
     elif isinstance(dataType, MapType):
-        k, v = next(obj.iteritems())
+        k, v = next(obj.items())
         return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
@@ -1054,7 +1061,7 @@ def _verify_type(obj, dataType):
             _verify_type(i, dataType.elementType)
 
     elif isinstance(dataType, MapType):
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             _verify_type(k, dataType.keyType)
             _verify_type(v, dataType.valueType)
 

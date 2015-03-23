@@ -149,7 +149,7 @@ class InMemoryMerger(Merger):
 
     def iteritems(self):
         """ Return the merged items ad iterator """
-        return self.data.iteritems()
+        return iter(self.data.items())
 
 
 class ExternalMerger(Merger):
@@ -330,10 +330,10 @@ class ExternalMerger(Merger):
             # above limit at the first time.
 
             # open all the files for writing
-            streams = [open(os.path.join(path, str(i)), 'w')
+            streams = [open(os.path.join(path, str(i)), 'wb')
                        for i in range(self.partitions)]
 
-            for k, v in self.data.iteritems():
+            for k, v in self.data.items():
                 h = self._partition(k)
                 # put one item in batch, make it compatitable with load_stream
                 # it will increase the memory if dump them in batch
@@ -349,9 +349,9 @@ class ExternalMerger(Merger):
         else:
             for i in range(self.partitions):
                 p = os.path.join(path, str(i))
-                with open(p, "w") as f:
+                with open(p, "wb") as f:
                     # dump items in batch
-                    self.serializer.dump_stream(self.pdata[i].iteritems(), f)
+                    self.serializer.dump_stream(iter(self.pdata[i].items()), f)
                 self.pdata[i].clear()
                 DiskBytesSpilled += os.path.getsize(p)
 
@@ -362,7 +362,7 @@ class ExternalMerger(Merger):
     def iteritems(self):
         """ Return all merged items as iterator """
         if not self.pdata and not self.spills:
-            return self.data.iteritems()
+            return iter(self.data.items())
         return self._external_items()
 
     def _external_items(self):
@@ -379,8 +379,8 @@ class ExternalMerger(Merger):
                     path = self._get_spill_dir(j)
                     p = os.path.join(path, str(i))
                     # do not check memory during merging
-                    self.mergeCombiners(self.serializer.load_stream(open(p)),
-                                        False)
+                    with open(p, 'rb') as f:
+                        self.mergeCombiners(self.serializer.load_stream(f), False)
 
                     # limit the total partitions
                     if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
@@ -392,7 +392,7 @@ class ExternalMerger(Merger):
                             yield v
                         return
 
-                for v in self.data.iteritems():
+                for v in self.data.items():
                     yield v
                 self.data.clear()
 
@@ -433,8 +433,8 @@ class ExternalMerger(Merger):
             for j in range(self.spills):
                 path = self._get_spill_dir(j)
                 p = os.path.join(path, str(i))
-                m._partitioned_mergeCombiners(
-                    self.serializer.load_stream(open(p)))
+                with open(p, 'rb') as f:
+                    m._partitioned_mergeCombiners(self.serializer.load_stream(f))
 
                 if get_used_memory() > limit:
                     m._spill()
@@ -507,9 +507,9 @@ class ExternalSorter(object):
                 # sort them inplace will save memory
                 current_chunk.sort(key=key, reverse=reverse)
                 path = self._get_path(len(chunks))
-                with open(path, 'w') as f:
+                with open(path, 'wb') as f:
                     self.serializer.dump_stream(current_chunk, f)
-                chunks.append(self.serializer.load_stream(open(path)))
+                chunks.append(list(self.serializer.load_stream(open(path, 'rb'))))
                 current_chunk = []
                 gc.collect()
                 limit = self._next_limit()

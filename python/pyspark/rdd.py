@@ -19,11 +19,7 @@ import copy
 from collections import defaultdict
 from itertools import chain
 import sys
-if sys.version < '3':
-    from itertools import ifilter, imap
-else:
-    ifilter = filter
-    imap = map
+import re
 import operator
 import sys
 import shlex
@@ -35,7 +31,12 @@ import heapq
 import bisect
 import random
 import socket
+from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
+
+if sys.version >= '3':
+    basestring = str
+    unicode = str
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
@@ -51,7 +52,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
 from pyspark.traceback_utils import SCCallSiteSync
 
 from py4j.java_collections import ListConverter, MapConverter
-from functools import reduce
+
 
 
 __all__ = ["RDD"]
@@ -127,6 +128,13 @@ def _load_from_socket(port, serializer):
             yield item
     finally:
         sock.close()
+
+
+def ignore_unicode_prefix(f):
+    if sys.version >= '3':
+        literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
+        f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
+    return f
 
 
 class Partitioner(object):
@@ -257,7 +265,7 @@ class RDD(object):
         [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(_, iterator):
-            return imap(f, iterator)
+            return map(f, iterator)
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -272,7 +280,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator):
-            return chain.from_iterable(imap(f, iterator))
+            return chain.from_iterable(map(f, iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
@@ -335,7 +343,7 @@ class RDD(object):
         [2, 4]
         """
         def func(iterator):
-            return ifilter(f, iterator)
+            return filter(f, iterator)
         return self.mapPartitions(func, True)
 
     def distinct(self, numPartitions=None):
@@ -354,8 +362,8 @@ class RDD(object):
         Return a sampled subset of this RDD.
 
         >>> rdd = sc.parallelize(range(100), 4)
-        >>> rdd.sample(False, 0.1, 81).count()
-        10
+        >>> 9 <= rdd.sample(False, 0.1, 81).count() <= 11
+        True
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
@@ -368,12 +376,14 @@ class RDD(object):
         :param seed: random seed
         :return: split RDDs in a list
 
-        >>> rdd = sc.parallelize(range(5), 1)
+        >>> rdd = sc.parallelize(range(500), 1)
         >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 17)
-        >>> rdd1.collect()
-        [1, 3]
-        >>> rdd2.collect()
-        [0, 2, 4]
+        >>> len(rdd1.collect() + rdd2.collect())
+        500
+        >>> 180 < rdd1.count() < 220
+        True
+        >>> 280 < rdd2.count() < 320
+        True
         """
         s = float(sum(weights))
         cweights = [0.0]
@@ -599,7 +609,7 @@ class RDD(object):
 
         # we have numPartitions many parts but one of the them has
         # an implicit boundary
-        bounds = [samples[len(samples) * (i + 1) / numPartitions]
+        bounds = [samples[int(len(samples) * (i + 1) / numPartitions)]
                   for i in range(0, numPartitions - 1)]
 
         def rangePartitioner(k):
@@ -662,12 +672,13 @@ class RDD(object):
         """
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
+    @ignore_unicode_prefix
     def pipe(self, command, env={}):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
-        ['1', '2', '', '3']
+        [u'1', u'2', u'', u'3']
         """
         def func(iterator):
             pipe = Popen(
@@ -675,17 +686,18 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    out.write(str(obj).rstrip('\n') + '\n')
+                    s = str(obj).rstrip('\n') + '\n'
+                    out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip('\n') for x in iter(pipe.stdout.readline, ''))
+            return (x.rstrip(b'\n').decode('utf-8') for x in iter(pipe.stdout.readline, b''))
         return self.mapPartitions(func)
 
     def foreach(self, f):
         """
         Applies a function to all elements of this RDD.
 
-        >>> def f(x): print x
+        >>> def f(x): print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
         def processPartition(iterator):
@@ -700,7 +712,7 @@ class RDD(object):
 
         >>> def f(iterator):
         ...      for x in iterator:
-        ...           print x
+        ...           print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
         def func(it):
@@ -874,7 +886,7 @@ class RDD(object):
         # aggregation.
         while numPartitions > scale + numPartitions / scale:
             numPartitions /= scale
-            curNumPartitions = numPartitions
+            curNumPartitions = int(numPartitions)
 
             def mapPartition(i, iterator):
                 for obj in iterator:
@@ -984,7 +996,7 @@ class RDD(object):
         (('a', 'b', 'c'), [2, 2])
         """
 
-        if isinstance(buckets, (int, long)):
+        if isinstance(buckets, int):
             if buckets < 1:
                 raise ValueError("number of buckets must be >= 1")
 
@@ -1012,7 +1024,7 @@ class RDD(object):
                 return [minv, maxv], [filtered.count()]
 
             try:
-                inc = (maxv - minv) / buckets
+                inc = int((maxv - minv) / buckets)
             except TypeError:
                 raise TypeError("Can not generate buckets with non-number in RDD")
 
@@ -1137,7 +1149,7 @@ class RDD(object):
             yield counts
 
         def mergeMaps(m1, m2):
-            for k, v in m2.iteritems():
+            for k, v in m2.items():
                 m1[k] += v
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
@@ -1378,8 +1390,8 @@ class RDD(object):
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
         >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
-        >>> sorted(sc.pickleFile(tmpFile.name, 5).collect())
-        [1, 2, 'rdd', 'spark']
+        >>> sorted(sc.pickleFile(tmpFile.name, 5).map(str).collect())
+        ['1', '2', 'rdd', 'spark']
         """
         if batchSize == 0:
             ser = AutoBatchedSerializer(PickleSerializer())
@@ -1387,6 +1399,7 @@ class RDD(object):
             ser = BatchedSerializer(PickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
+    @ignore_unicode_prefix
     def saveAsTextFile(self, path, compressionCodecClass=None):
         """
         Save this RDD as a text file, using string representations of elements.
@@ -1418,12 +1431,13 @@ class RDD(object):
         >>> codec = "org.apache.hadoop.io.compress.GzipCodec"
         >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
         >>> from fileinput import input, hook_compressed
-        >>> ''.join(sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed)))
-        'bar\\nfoo\\n'
+        >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
+        >>> b''.join(result).decode('utf-8')
+        u'bar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
-                if not isinstance(x, basestring):
+                if not isinstance(x, (basestring, bytes)):
                     x = unicode(x)
                 if isinstance(x, unicode):
                     x = x.encode("utf-8")
@@ -1507,7 +1521,7 @@ class RDD(object):
             yield m
 
         def mergeMaps(m1, m2):
-            for k, v in m2.iteritems():
+            for k, v in m2.items():
                 m1[k] = func(m1[k], v) if k in m1 else v
             return m1
         return self.mapPartitions(reducePartition).reduce(mergeMaps)
@@ -1604,8 +1618,8 @@ class RDD(object):
 
         >>> pairs = sc.parallelize([1, 2, 3, 4, 2, 4, 1]).map(lambda x: (x, x))
         >>> sets = pairs.partitionBy(2).glom().collect()
-        >>> set(sets[0]).intersection(set(sets[1]))
-        set([])
+        >>> len(set(sets[0]).intersection(set(sets[1])))
+        0
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
@@ -1637,22 +1651,22 @@ class RDD(object):
                 if (c % 1000 == 0 and get_used_memory() > limit
                         or c > batch):
                     n, size = len(buckets), 0
-                    for split in buckets.keys():
+                    for split in list(buckets.keys()):
                         yield pack_long(split)
                         d = outputSerializer.dumps(buckets[split])
                         del buckets[split]
                         yield d
                         size += len(d)
 
-                    avg = (size / n) >> 20
+                    avg = int(size / n) >> 20
                     # let 1M < avg < 10M
                     if avg < 1:
                         batch *= 1.5
                     elif avg > 10:
-                        batch = max(batch / 1.5, 1)
+                        batch = max(int(batch / 1.5), 1)
                     c = 0
 
-            for split, items in buckets.iteritems():
+            for split, items in buckets.items():
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
@@ -1747,7 +1761,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> from operator import add
-        >>> rdd.foldByKey(0, add).collect()
+        >>> sorted(rdd.foldByKey(0, add).collect())
         [('a', 2), ('b', 1)]
         """
         def createZero():
@@ -1766,7 +1780,7 @@ class RDD(object):
         provide much better performance.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))
+        >>> [(x, list(y)) for x, y in sorted(x.groupByKey().collect())]
         [('a', [1, 1]), ('b', [1])]
         """
 
@@ -1820,8 +1834,7 @@ class RDD(object):
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
         >>> z = sc.parallelize([("b", 42)])
-        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2]), list(y[3])))), \
-                sorted(list(w.groupWith(x, y, z).collect())))
+        >>> [(x, tuple(map(list, y))) for x, y in sorted(list(w.groupWith(x, y, z).collect()))]
         [('a', ([5], [1], [2], [])), ('b', ([6], [4], [], [42]))]
 
         """
@@ -1836,7 +1849,7 @@ class RDD(object):
 
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
-        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1])))), sorted(list(x.cogroup(y).collect())))
+        >>> [(x, tuple(map(list, y))) for x, y in sorted(list(x.cogroup(y).collect()))]
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup((self, other), numPartitions)
@@ -1896,8 +1909,8 @@ class RDD(object):
 
         >>> x = sc.parallelize(range(0,3)).keyBy(lambda x: x*x)
         >>> y = sc.parallelize(zip(range(0,5), range(0,5)))
-        >>> map((lambda (x,y): (x, (list(y[0]), (list(y[1]))))), sorted(x.cogroup(y).collect()))
-        [(0, ([0], [0])), (1, ([1], [1])), (2, ([], [2])), (3, ([], [3])), (4, ([2], [4]))]
+        >>> [(x, list(map(list, y))) for x, y in sorted(x.cogroup(y).collect())]
+        [(0, [[0], [0]]), (1, [[1], [1]]), (2, [[], [2]]), (3, [[], [3]]), (4, [[2], [4]])]
         """
         return self.map(lambda x: (f(x), x))
 
@@ -2026,17 +2039,18 @@ class RDD(object):
         """
         Return the name of this RDD.
         """
-        name_ = self._jrdd.name()
-        if name_:
-            return name_.encode('utf-8')
+        n = self._jrdd.name()
+        if n:
+            return n
 
+    @ignore_unicode_prefix
     def setName(self, name):
         """
         Assign a name to this RDD.
 
-        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1 = sc.parallelize([1, 2])
         >>> rdd1.setName('RDD1').name()
-        'RDD1'
+        u'RDD1'
         """
         self._jrdd.setName(name)
         return self
@@ -2136,7 +2150,7 @@ class RDD(object):
         or meet the confidence.
 
         >>> rdd = sc.parallelize(range(1000), 10)
-        >>> r = sum(xrange(1000))
+        >>> r = sum(range(1000))
         >>> (rdd.sumApprox(1000) - r) / r < 0.05
         True
         """
@@ -2153,7 +2167,7 @@ class RDD(object):
         or meet the confidence.
 
         >>> rdd = sc.parallelize(range(1000), 10)
-        >>> r = sum(xrange(1000)) / 1000.0
+        >>> r = sum(range(1000)) / 1000.0
         >>> (rdd.meanApprox(1000) - r) / r < 0.05
         True
         """
@@ -2200,8 +2214,7 @@ class RDD(object):
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        partitions = xrange(self.getNumPartitions())
-        for partition in partitions:
+        for partition in range(self.getNumPartitions()):
             rows = self.context.runJob(self, lambda x: x, [partition])
             for row in rows:
                 yield row

@@ -85,6 +85,6 @@ class Params(Identifiable):
         """
         Sets params.
         """
-        for param, value in kwargs.iteritems():
+        for param, value in kwargs.items():
             self.paramMap[getattr(self, param)] = value
         return self

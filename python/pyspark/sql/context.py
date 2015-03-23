@@ -17,7 +17,6 @@
 
 import warnings
 import json
-from itertools import imap
 
 from py4j.protocol import Py4JError
 from py4j.java_collections import MapConverter
@@ -134,7 +133,7 @@ class SQLContext(object):
         >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
         [Row(c0=4)]
         """
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self._sc, command, self)

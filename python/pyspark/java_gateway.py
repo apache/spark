@@ -70,7 +70,7 @@ def launch_gateway():
             if callback_socket in readable:
                 gateway_connection = callback_socket.accept()[0]
                 # Determine which ephemeral port the server started on:
-                gateway_port = read_int(gateway_connection.makefile())
+                gateway_port = read_int(gateway_connection.makefile(mode="rb"))
                 gateway_connection.close()
                 callback_socket.close()
         if gateway_port is None:
