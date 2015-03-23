@@ -345,9 +345,13 @@ private[python] class PythonMLLibAPI extends Serializable {
     def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
       predict(SerDe.asTupleRDD(userAndProducts.rdd))
 
-    def getUserFeatures = SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
+    def getUserFeatures: RDD[Array[Any]] = {
+      SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
+    }
 
-    def getProductFeatures = SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
+    def getProductFeatures: RDD[Array[Any]] = {
+      SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
+    }
 
   }
 
@@ -909,7 +913,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseVector
   private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       val bytes = new Array[Byte](8 * vector.size)
       val bb = ByteBuffer.wrap(bytes)
@@ -941,7 +945,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseMatrix
   private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
       val bytes = new Array[Byte](8 * m.values.size)
       val order = ByteOrder.nativeOrder()
@@ -973,7 +977,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for SparseVector
   private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       val n = v.indices.size
       val indiceBytes = new Array[Byte](4 * n)
@@ -1015,7 +1019,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for LabeledPoint
   private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
       saveObjects(out, pickler, point.label, point.features)
     }
@@ -1031,7 +1035,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for Rating
   private[python] class RatingPickler extends BasePickler[Rating] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val rating: Rating = obj.asInstanceOf[Rating]
       saveObjects(out, pickler, rating.user, rating.product, rating.rating)
     }

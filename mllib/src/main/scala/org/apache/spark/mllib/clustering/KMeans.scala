@@ -536,5 +536,5 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
 }

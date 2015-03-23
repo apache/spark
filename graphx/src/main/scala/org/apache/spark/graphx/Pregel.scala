@@ -78,8 +78,8 @@ object Pregel extends Logging {
    *
    * @param graph the input graph.
    *
-   * @param initialMsg the message each vertex will receive at the on
-   * the first iteration
+   * @param initialMsg the message each vertex will receive at the first
+   * iteration
    *
    * @param maxIterations the maximum number of iterations to run for
    *
