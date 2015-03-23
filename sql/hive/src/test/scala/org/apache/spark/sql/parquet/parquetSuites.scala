@@ -30,8 +30,8 @@ import org.apache.spark.sql.hive.test.TestHive._
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(p:Int, intField: Int, stringField: String)
-case class StructContainer(intStructField :Int, stringStructField: String)
+case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
+case class StructContainer(intStructField: Int, stringStructField: String)
 
 case class ParquetDataWithComplexTypes(
     intField: Int,
@@ -87,7 +87,7 @@ class ParquetMetastoreSuite extends ParquetTest {
       (
         intField INT,
         stringField STRING,
-        structField STRUCT<intStructField :INT, stringStructField :STRING>,
+        structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
       PARTITIONED BY (p int)
@@ -103,7 +103,7 @@ class ParquetMetastoreSuite extends ParquetTest {
       (
         intField INT,
         stringField STRING,
-        structField STRUCT<intStructField :INT, stringStructField :STRING>,
+        structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
       PARTITIONED BY (p int)
