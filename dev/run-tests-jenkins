@@ -148,7 +148,7 @@ function send_archived_logs () {
 }
 
 # Environment variable to capture PR test output
-pr_message="\n"
+pr_message=""
 # Ensure we save off the current HEAD to revert to
 current_pr_head="`git rev-parse HEAD`"
 
