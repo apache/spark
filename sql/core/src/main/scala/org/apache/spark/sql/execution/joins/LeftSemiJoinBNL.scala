@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -35,12 +36,13 @@ case class LeftSemiJoinBNL(
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def output = left.output
+  override def output: Seq[Attribute] = left.output
 
   /** The Streamed Relation */
-  override def left = streamed
+  override def left: SparkPlan = streamed
+
   /** The Broadcast relation */
-  override def right = broadcast
+  override def right: SparkPlan = broadcast
 
   @transient private lazy val boundCondition =
     InterpretedPredicate(
@@ -48,7 +50,7 @@ case class LeftSemiJoinBNL(
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 

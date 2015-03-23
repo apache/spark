@@ -39,6 +39,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -227,24 +228,51 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    * - `mergeCombiners`, to combine two C's into a single one.
    *
-   * In addition, users can control the partitioning of the output RDD, and whether to perform
-   * map-side aggregation (if a mapper can produce multiple items with the same key).
+   * In addition, users can control the partitioning of the output RDD, the serializer that is use
+   * for the shuffle, and whether to perform map-side aggregation (if a mapper can produce multiple
+   * items with the same key).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
-    mergeValue: JFunction2[C, V, C],
-    mergeCombiners: JFunction2[C, C, C],
-    partitioner: Partitioner): JavaPairRDD[K, C] = {
-    implicit val ctag: ClassTag[C] = fakeClassTag
+      mergeValue: JFunction2[C, V, C],
+      mergeCombiners: JFunction2[C, C, C],
+      partitioner: Partitioner,
+      mapSideCombine: Boolean,
+      serializer: Serializer): JavaPairRDD[K, C] = {
+      implicit val ctag: ClassTag[C] = fakeClassTag
     fromRDD(rdd.combineByKey(
       createCombiner,
       mergeValue,
       mergeCombiners,
-      partitioner
+      partitioner,
+      mapSideCombine,
+      serializer
     ))
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the output RDD.
+   * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
+   * "combined type" C * Note that V and C can be different -- for example, one might group an
+   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
+   * functions:
+   *
+   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   * - `mergeCombiners`, to combine two C's into a single one.
+   *
+   * In addition, users can control the partitioning of the output RDD. This method automatically
+   * uses map-side aggregation in shuffling the RDD.
+   */
+  def combineByKey[C](createCombiner: JFunction[V, C],
+      mergeValue: JFunction2[C, V, C],
+      mergeCombiners: JFunction2[C, C, C],
+      partitioner: Partitioner): JavaPairRDD[K, C] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiners, partitioner, true, null)
+  }
+
+  /**
+   * Simplified version of combineByKey that hash-partitions the output RDD and uses map-side
+   * aggregation.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -488,7 +516,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
-   * partitioner/parallelism level.
+   * partitioner/parallelism level and using map-side aggregation.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],

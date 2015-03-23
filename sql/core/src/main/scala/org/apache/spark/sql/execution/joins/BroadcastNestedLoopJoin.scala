@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
@@ -44,7 +45,7 @@ case class BroadcastNestedLoopJoin(
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def output = {
+  override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -63,7 +64,7 @@ case class BroadcastNestedLoopJoin(
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 

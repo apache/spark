@@ -98,7 +98,7 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
    */
   def clone(v: JvmType): JvmType = v
 
-  override def toString = getClass.getSimpleName.stripSuffix("$")
+  override def toString: String = getClass.getSimpleName.stripSuffix("$")
 }
 
 private[sql] abstract class NativeColumnType[T <: NativeType](
@@ -114,7 +114,7 @@ private[sql] abstract class NativeColumnType[T <: NativeType](
 }
 
 private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
-  def append(v: Int, buffer: ByteBuffer): Unit = {
+  override def append(v: Int, buffer: ByteBuffer): Unit = {
     buffer.putInt(v)
   }
 
@@ -122,7 +122,7 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
     buffer.putInt(row.getInt(ordinal))
   }
 
-  def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Int = {
     buffer.getInt()
   }
 
@@ -134,7 +134,7 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
     row.setInt(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getInt(ordinal)
+  override def getField(row: Row, ordinal: Int): Int = row.getInt(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
@@ -150,7 +150,7 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
     buffer.putLong(row.getLong(ordinal))
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Long = {
     buffer.getLong()
   }
 
@@ -162,7 +162,7 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
     row.setLong(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getLong(ordinal)
+  override def getField(row: Row, ordinal: Int): Long = row.getLong(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
@@ -178,7 +178,7 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
     buffer.putFloat(row.getFloat(ordinal))
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Float = {
     buffer.getFloat()
   }
 
@@ -190,7 +190,7 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
     row.setFloat(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getFloat(ordinal)
+  override def getField(row: Row, ordinal: Int): Float = row.getFloat(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
@@ -206,7 +206,7 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
     buffer.putDouble(row.getDouble(ordinal))
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Double = {
     buffer.getDouble()
   }
 
@@ -218,7 +218,7 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
     row.setDouble(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getDouble(ordinal)
+  override def getField(row: Row, ordinal: Int): Double = row.getDouble(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
@@ -234,7 +234,7 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
     buffer.put(if (row.getBoolean(ordinal)) 1: Byte else 0: Byte)
   }
 
-  override def extract(buffer: ByteBuffer) = buffer.get() == 1
+  override def extract(buffer: ByteBuffer): Boolean = buffer.get() == 1
 
   override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int): Unit = {
     row.setBoolean(ordinal, buffer.get() == 1)
@@ -244,7 +244,7 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
     row.setBoolean(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getBoolean(ordinal)
+  override def getField(row: Row, ordinal: Int): Boolean = row.getBoolean(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
@@ -260,7 +260,7 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
     buffer.put(row.getByte(ordinal))
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Byte = {
     buffer.get()
   }
 
@@ -272,7 +272,7 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
     row.setByte(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getByte(ordinal)
+  override def getField(row: Row, ordinal: Int): Byte = row.getByte(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setByte(toOrdinal, from.getByte(fromOrdinal))
@@ -288,7 +288,7 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
     buffer.putShort(row.getShort(ordinal))
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Short = {
     buffer.getShort()
   }
 
@@ -300,7 +300,7 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
     row.setShort(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getShort(ordinal)
+  override def getField(row: Row, ordinal: Int): Short = row.getShort(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setShort(toOrdinal, from.getShort(fromOrdinal))
@@ -317,7 +317,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): String = {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
@@ -328,7 +328,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     row.setString(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int) = row.getString(ordinal)
+  override def getField(row: Row, ordinal: Int): String = row.getString(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
     to.setString(toOrdinal, from.getString(fromOrdinal))
@@ -336,7 +336,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
 }
 
 private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Int = {
     buffer.getInt
   }
 
@@ -344,7 +344,7 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
     buffer.putInt(v)
   }
 
-  override def getField(row: Row, ordinal: Int) = {
+  override def getField(row: Row, ordinal: Int): Int = {
     row(ordinal).asInstanceOf[Int]
   }
 
@@ -354,7 +354,7 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
 }
 
 private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Timestamp = {
     val timestamp = new Timestamp(buffer.getLong())
     timestamp.setNanos(buffer.getInt())
     timestamp
@@ -364,7 +364,7 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
     buffer.putLong(v.getTime).putInt(v.getNanos)
   }
 
-  override def getField(row: Row, ordinal: Int) = {
+  override def getField(row: Row, ordinal: Int): Timestamp = {
     row(ordinal).asInstanceOf[Timestamp]
   }
 
@@ -405,7 +405,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
     defaultSize: Int)
   extends ColumnType[T, Array[Byte]](typeId, defaultSize) {
 
-  override def actualSize(row: Row, ordinal: Int) = {
+  override def actualSize(row: Row, ordinal: Int): Int = {
     getField(row, ordinal).length + 4
   }
 
@@ -413,7 +413,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
     buffer.putInt(v.length).put(v, 0, v.length)
   }
 
-  override def extract(buffer: ByteBuffer) = {
+  override def extract(buffer: ByteBuffer): Array[Byte] = {
     val length = buffer.getInt()
     val bytes = new Array[Byte](length)
     buffer.get(bytes, 0, length)
@@ -426,7 +426,9 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](11, 16) 
     row(ordinal) = value
   }
 
-  override def getField(row: Row, ordinal: Int) = row(ordinal).asInstanceOf[Array[Byte]]
+  override def getField(row: Row, ordinal: Int): Array[Byte] = {
+    row(ordinal).asInstanceOf[Array[Byte]]
+  }
 }
 
 // Used to process generic objects (all types other than those listed above). Objects should be
@@ -437,7 +439,9 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](12, 16) {
     row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
   }
 
-  override def getField(row: Row, ordinal: Int) = SparkSqlSerializer.serialize(row(ordinal))
+  override def getField(row: Row, ordinal: Int): Array[Byte] = {
+    SparkSqlSerializer.serialize(row(ordinal))
+  }
 }
 
 private[sql] object ColumnType {

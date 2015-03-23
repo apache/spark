@@ -85,9 +85,8 @@ class CheckAnalysis {
 
             cleaned.foreach(checkValidAggregateExpression)
 
-          case o if o.children.nonEmpty &&
-            !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
-            val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
+          case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val missingAttributes = o.missingInput.map(_.prettyString).mkString(",")
             val input = o.inputSet.map(_.prettyString).mkString(",")
 
             failAnalysis(s"resolved attributes $missingAttributes missing from $input")
