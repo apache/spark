@@ -161,8 +161,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // while we need a logicalPlan so we cannot reuse that.
   protected[hive] class HiveQLQueryExecution(hql: String)
     extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
-    def hiveExec() = runSqlHive(hql)
-    override def toString = hql + "\n" + super.toString
+    def hiveExec(): Seq[String] = runSqlHive(hql)
+    override def toString: String = hql + "\n" + super.toString
   }
 
   /**
