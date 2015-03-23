@@ -307,7 +307,7 @@ protected[sql] object NativeType {
 
 
 protected[sql] trait PrimitiveType extends DataType {
-  override def isPrimitive = true
+  override def isPrimitive: Boolean = true
 }
 
 
@@ -442,7 +442,7 @@ class TimestampType private() extends NativeType {
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
   private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
+    def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
 
   /**
@@ -542,7 +542,7 @@ class LongType private() extends IntegralType {
    */
   override def defaultSize: Int = 8
 
-  override def simpleString = "bigint"
+  override def simpleString: String = "bigint"
 
   private[spark] override def asNullable: LongType = this
 }
@@ -572,7 +572,7 @@ class IntegerType private() extends IntegralType {
    */
   override def defaultSize: Int = 4
 
-  override def simpleString = "int"
+  override def simpleString: String = "int"
 
   private[spark] override def asNullable: IntegerType = this
 }
@@ -602,7 +602,7 @@ class ShortType private() extends IntegralType {
    */
   override def defaultSize: Int = 2
 
-  override def simpleString = "smallint"
+  override def simpleString: String = "smallint"
 
   private[spark] override def asNullable: ShortType = this
 }
@@ -632,7 +632,7 @@ class ByteType private() extends IntegralType {
    */
   override def defaultSize: Int = 1
 
-  override def simpleString = "tinyint"
+  override def simpleString: String = "tinyint"
 
   private[spark] override def asNullable: ByteType = this
 }
@@ -696,7 +696,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
    */
   override def defaultSize: Int = 4096
 
-  override def simpleString = precisionInfo match {
+  override def simpleString: String = precisionInfo match {
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
     case None => "decimal(10,0)"
   }
@@ -836,7 +836,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    */
   override def defaultSize: Int = 100 * elementType.defaultSize
 
-  override def simpleString = s"array<${elementType.simpleString}>"
+  override def simpleString: String = s"array<${elementType.simpleString}>"
 
   private[spark] override def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)
@@ -1065,7 +1065,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  override def simpleString = {
+  override def simpleString: String = {
     val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
     s"struct<${fieldTypes.mkString(",")}>"
   }
@@ -1142,7 +1142,7 @@ case class MapType(
    */
   override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
 
-  override def simpleString = s"map<${keyType.simpleString},${valueType.simpleString}>"
+  override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
   private[spark] override def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)

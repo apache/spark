@@ -101,12 +101,23 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   /**
    * Return a sampled subset of this RDD.
+   * 
+   * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
+   * @param fraction expected size of the sample as a fraction of this RDD's size
+   *  without replacement: probability that each element is chosen; fraction must be [0, 1]
+   *  with replacement: expected number of times each element is chosen; fraction must be >= 0
    */
   def sample(withReplacement: Boolean, fraction: Double): JavaRDD[T] =
     sample(withReplacement, fraction, Utils.random.nextLong)
     
   /**
    * Return a sampled subset of this RDD.
+   * 
+   * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
+   * @param fraction expected size of the sample as a fraction of this RDD's size
+   *  without replacement: probability that each element is chosen; fraction must be [0, 1]
+   *  with replacement: expected number of times each element is chosen; fraction must be >= 0
+   * @param seed seed for the random number generator
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaRDD[T] =
     wrapRDD(rdd.sample(withReplacement, fraction, seed))

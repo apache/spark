@@ -24,6 +24,7 @@ import java.util.{Calendar, GregorianCalendar}
 import org.apache.spark.sql.test._
 import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
+import TestSQLContext.implicits._
 
 class JDBCSuite extends FunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
@@ -38,7 +39,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     conn.prepareStatement("create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('joe', 3)").executeUpdate()
+    conn.prepareStatement("insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
     conn.commit()
 
     sql(
@@ -129,13 +130,20 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size == 0)
     assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size == 2)
     assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size == 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size == 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size == 2)
+    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size == 2)
+  }
+
+  test("SELECT * WHERE (quoted strings)") {
+    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size == 1)
   }
 
   test("SELECT first field") {
     val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size == 3)
     assert(names(0).equals("fred"))
-    assert(names(1).equals("joe"))
+    assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
   }
 

@@ -26,7 +26,7 @@ private[parquet] class NanoTime extends Serializable {
   private var julianDay = 0
   private var timeOfDayNanos = 0L
 
-  def set(julianDay: Int, timeOfDayNanos: Long) = {
+  def set(julianDay: Int, timeOfDayNanos: Long): this.type = {
     this.julianDay = julianDay
     this.timeOfDayNanos = timeOfDayNanos
     this
@@ -45,11 +45,11 @@ private[parquet] class NanoTime extends Serializable {
     Binary.fromByteBuffer(buf)
   }
 
-  def writeValue(recordConsumer: RecordConsumer) {
+  def writeValue(recordConsumer: RecordConsumer): Unit = {
     recordConsumer.addBinary(toBinary)
   }
 
-  override def toString =
+  override def toString: String =
     "NanoTime{julianDay=" + julianDay + ", timeOfDayNanos=" + timeOfDayNanos + "}"
 }
 

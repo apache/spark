@@ -346,18 +346,42 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
       case DecimalType.Fixed(_, _) =>
         val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
         SplitEvaluation(
-          Cast(Sum(partialSum.toAttribute), dataType),
+          Cast(CombineSum(partialSum.toAttribute), dataType),
           partialSum :: Nil)
 
       case _ =>
         val partialSum = Alias(Sum(child), "PartialSum")()
         SplitEvaluation(
-          Sum(partialSum.toAttribute),
+          CombineSum(partialSum.toAttribute),
           partialSum :: Nil)
     }
   }
 
   override def newInstance() = new SumFunction(child, this)
+}
+
+/**
+ * Sum should satisfy 3 cases:
+ * 1) sum of all null values = zero
+ * 2) sum for table column with no data = null
+ * 3) sum of column with null and not null values = sum of not null values
+ * Require separate CombineSum Expression and function as it has to distinguish "No data" case
+ * versus "data equals null" case, while aggregating results and at each partial expression.i.e.,
+ * Combining    PartitionLevel   InputData
+ *                           <-- null
+ * Zero     <-- Zero         <-- null
+ *                              
+ *          <-- null         <-- no data
+ * null     <-- null         <-- no data 
+ */
+case class CombineSum(child: Expression) extends AggregateExpression {
+  def this() = this(null)
+  
+  override def children = child :: Nil
+  override def nullable = true
+  override def dataType = child.dataType
+  override def toString = s"CombineSum($child)"
+  override def newInstance() = new CombineSumFunction(child, this)
 }
 
 case class SumDistinct(child: Expression)
@@ -565,10 +589,48 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
+  private val addFunction = 
+    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
 
   override def update(input: Row): Unit = {
     sum.update(addFunction, input)
+  }
+
+  override def eval(input: Row): Any = {
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(sum, dataType).eval(null)
+      case _ => sum.eval(null)
+    }
+  }
+}
+
+case class CombineSumFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+  
+  def this() = this(null, null) // Required for serialization.
+
+  private val calcType =
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        DecimalType.Unlimited
+      case _ =>
+        expr.dataType
+    }
+
+  private val zero = Cast(Literal(0), calcType)
+
+  private val sum = MutableLiteral(null, calcType)
+
+  private val addFunction = 
+    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
+  
+  override def update(input: Row): Unit = {
+    val result = expr.eval(input)
+    // partial sum result can be null only when no input rows present 
+    if(result != null) {
+      sum.update(addFunction, input)
+    }
   }
 
   override def eval(input: Row): Any = {
