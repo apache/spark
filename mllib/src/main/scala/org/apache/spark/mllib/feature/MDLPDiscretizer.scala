@@ -23,7 +23,7 @@ import breeze.linalg.{SparseVector => BSV}
 
 import org.apache.spark.SparkContext._ 
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg._
 
