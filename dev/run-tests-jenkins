@@ -199,12 +199,12 @@ done
       failing_test="Python style tests"
     elif [ "$test_result" -eq "$BLOCK_BUILD" ]; then
       failing_test="to build"
+    elif [ "$test_result" -eq "$BLOCK_MIMA" ]; then
+      failing_test="MiMa tests"
     elif [ "$test_result" -eq "$BLOCK_SPARK_UNIT_TESTS" ]; then
       failing_test="Spark unit tests"
     elif [ "$test_result" -eq "$BLOCK_PYSPARK_UNIT_TESTS" ]; then
       failing_test="PySpark unit tests"
-    elif [ "$test_result" -eq "$BLOCK_MIMA" ]; then
-      failing_test="MiMa tests"
     else
       failing_test="some tests"
     fi
