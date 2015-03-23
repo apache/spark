@@ -42,6 +42,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+
+import tachyon.TachyonURI
 import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
@@ -288,7 +290,7 @@ private[spark] object Utils extends Logging {
       } catch { case e: SecurityException => dir = null; }
     }
 
-    dir
+    dir.getCanonicalFile
   }
 
   /**
@@ -970,7 +972,7 @@ private[spark] object Utils extends Logging {
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(dir.getPath(), true)) {
+    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
       throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
@@ -1146,6 +1148,8 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
    * default UncaughtExceptionHandler
+   * 
+   * NOTE: This method is to be called by the spark-started JVM process.
    */
   def tryOrExit(block: => Unit) {
     try {
@@ -1153,6 +1157,32 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: ControlThrowable => throw e
       case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught 
+   * exception
+   *  
+   * NOTE: This method is to be called by the driver-side components to avoid stopping the 
+   * user-started JVM process completely; in contrast, tryOrExit is to be called in the 
+   * spark-started JVM process .
+   */
+  def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
+    try {
+      block
+    } catch {
+      case e: ControlThrowable => throw e
+      case t: Throwable =>
+        val currentThreadName = Thread.currentThread().getName
+        if (sc != null) {
+          logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
+          sc.stop()
+        }
+        if (!NonFatal(t)) {
+          logError(s"throw uncaught fatal error in thread $currentThreadName", t)
+          throw t
+        }
     }
   }
 

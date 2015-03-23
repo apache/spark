@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{VirtualColumn, Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
 
@@ -48,7 +48,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * Subclasses should override this method if they produce attributes internally as it is used by
    * assertions designed to prevent the construction of invalid plans.
    */
-  def missingInput: AttributeSet = references -- inputSet
+  def missingInput: AttributeSet = (references -- inputSet)
+    .filter(_.name != VirtualColumn.groupingIdName)
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.

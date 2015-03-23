@@ -120,10 +120,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
   private[tree] object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     // Hard-code class name string in case it changes in the future
-    def thisClassName = "org.apache.spark.mllib.tree.DecisionTreeModel"
+    def thisClassName: String = "org.apache.spark.mllib.tree.DecisionTreeModel"
 
     case class PredictData(predict: Double, prob: Double) {
       def toPredict: Predict = new Predict(predict, prob)

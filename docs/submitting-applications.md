@@ -133,10 +133,10 @@ The master URL passed to Spark can be in one of the following formats:
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
 </td></tr>
 <tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-client mode. The cluster location will be found based on the HADOOP_CONF_DIR variable.
+client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 <tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-cluster mode. The cluster location will be found based on HADOOP_CONF_DIR.
+cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 </table>
 

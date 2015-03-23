@@ -16,6 +16,7 @@
  */
 
 import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -35,6 +36,16 @@ object MimaExcludes {
       version match {
         case v if v.startsWith("1.4") =>
           Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+          ) ++ Seq(
             //SPARK-4086 Fold-style aggregation for VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.innerJoinWithFold"),
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.leftJoinWithFold"),
@@ -42,7 +53,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.innerZipJoinWithFold"),
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.aggregateUsingIndexWithFold")
           )
-          
+
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
