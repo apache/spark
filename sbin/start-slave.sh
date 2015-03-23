@@ -23,4 +23,45 @@
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+. "$sbin/spark-config.sh"
+
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
+
+
+# First argument should be the master; we need to store it aside because we may
+# need to insert arguments between it and the other arguments
+MASTER=$1
+shift
+
+
+# Determine desired worker port
+if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
+  SPARK_WORKER_WEBUI_PORT=8081
+fi
+
+# Start up the appropriate number of workers on this machine.
+# quick local function to start a worker
+function start_instance {
+  WORKER_NUM=$1
+  shift
+
+  if [ "$SPARK_WORKER_PORT" = "" ]; then
+    PORT_FLAG=
+    PORT_NUM=
+  else
+    PORT_FLAG="--port"
+    PORT_NUM=$(( $SPARK_WORKER_PORT + $WORKER_NUM - 1 ))
+  fi
+  WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
+
+  "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
+}
+
+if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
+  start_instance 1 "$@"
+else
+  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
+    start_instance $(( 1 + $i )) "$@"
+  done
+fi
+

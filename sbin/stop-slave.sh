@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+# Usage: stop-slave.sh
+#   Stops all slaves on this worker machine
+
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
@@ -24,9 +27,11 @@ sbin="`cd "$sbin"; pwd`"
 
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
-# do before the below calls as they exec
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
-fi
 
-"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/stop-slave.sh
+if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
+  "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
+else
+  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
+    "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+  done
+fi
