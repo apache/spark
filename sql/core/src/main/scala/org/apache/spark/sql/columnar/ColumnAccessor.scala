@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
-import org.apache.spark.sql.types.{BinaryType, DataType, NativeType}
+import org.apache.spark.sql.types._
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -89,6 +89,9 @@ private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
 private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, FLOAT)
 
+private[sql] class FixedDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
+  extends NativeColumnAccessor(buffer, FIXED_DECIMAL(precision, scale))
+
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
@@ -107,24 +110,28 @@ private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
-  def apply(buffer: ByteBuffer): ColumnAccessor = {
+  def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
-    // The first 4 bytes in the buffer indicate the column type.
-    val columnTypeId = dup.getInt()
 
-    columnTypeId match {
-      case INT.typeId       => new IntColumnAccessor(dup)
-      case LONG.typeId      => new LongColumnAccessor(dup)
-      case FLOAT.typeId     => new FloatColumnAccessor(dup)
-      case DOUBLE.typeId    => new DoubleColumnAccessor(dup)
-      case BOOLEAN.typeId   => new BooleanColumnAccessor(dup)
-      case BYTE.typeId      => new ByteColumnAccessor(dup)
-      case SHORT.typeId     => new ShortColumnAccessor(dup)
-      case STRING.typeId    => new StringColumnAccessor(dup)
-      case DATE.typeId      => new DateColumnAccessor(dup)
-      case TIMESTAMP.typeId => new TimestampColumnAccessor(dup)
-      case BINARY.typeId    => new BinaryColumnAccessor(dup)
-      case GENERIC.typeId   => new GenericColumnAccessor(dup)
+    // The first 4 bytes in the buffer indicate the column type.  This field is not used now,
+    // because we always know the data type of the column ahead of time.
+    dup.getInt()
+
+    dataType match {
+      case IntegerType => new IntColumnAccessor(dup)
+      case LongType => new LongColumnAccessor(dup)
+      case FloatType => new FloatColumnAccessor(dup)
+      case DoubleType => new DoubleColumnAccessor(dup)
+      case BooleanType => new BooleanColumnAccessor(dup)
+      case ByteType => new ByteColumnAccessor(dup)
+      case ShortType => new ShortColumnAccessor(dup)
+      case StringType => new StringColumnAccessor(dup)
+      case BinaryType => new BinaryColumnAccessor(dup)
+      case DateType => new DateColumnAccessor(dup)
+      case TimestampType => new TimestampColumnAccessor(dup)
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
+        new FixedDecimalColumnAccessor(dup, precision, scale)
+      case _ => new GenericColumnAccessor(dup)
     }
   }
 }

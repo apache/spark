@@ -27,7 +27,6 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.jblas.DoubleMatrix
 import org.netlib.util.intW
 
 import org.apache.spark.{Logging, Partitioner}
@@ -332,32 +331,8 @@ object ALS extends Logging {
   private[recommendation] class QuadraticSolver(rank: Int, constraint: Constraint) extends LeastSquaresNESolver {
     private val qm = QuadraticMinimizer(rank, constraint)
     private val init = qm.initialize
-    private val ata = new Array[Double](rank * rank)
-    private val brzata = new BrzMatrix[Double](rank, rank, ata)
     // Elastic Net beta parameter for L1 regularization
     private val beta = if (constraint==SPARSE) 0.99 else 0.0
-
-    /**
-     * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
-     * matrix that it represents, storing it into destMatrix.
-     */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
-      var i = 0
-      var pos = 0
-      var a = 0.0
-      while (i < rank) {
-        var j = 0
-        while (j <= i) {
-          a = triAtA(pos)
-          ata(i * rank + j) = a
-          ata(j * rank + i) = a
-          pos += 1
-          j += 1
-        }
-        ata(i * rank + i) += lambda
-        i += 1
-      }
-    }
 
     /** Quadratic Minimization solver for least square problems with non-smooth constraints (L1)
       *
@@ -382,14 +357,21 @@ object ALS extends Logging {
 
       // If Elastic Net formulation is being run, give (1-beta)*lambda to L2 and
       // beta*lambda to L1. The nomenclature used here is exactly same as GLMNET
-      fillAtA(ne.ata, (1 - beta) * lambda * ne.n)
+      val scaledlambda = lambda * (1- beta) * ne.n
+      var i = 0
+      var j = 2
+      while (i < ne.triK) {
+        ne.ata(i) += scaledlambda
+        i += j
+        j += 1
+      }
       if (constraint == SPARSE) {
         val regParamL1 = beta * lambda * ne.n
         qm.getProximal.asInstanceOf[ProximalL1].setLambda(regParamL1)
       }
       val q = new BrzVector(ne.atb)
       q *= -1.0
-      val x = qm.minimize(brzata, q, init)
+      val x = qm.minimize(ne.ata, q, init)
       ne.reset()
       x.data.map(x => x.toFloat)
     }
@@ -439,14 +421,14 @@ object ALS extends Logging {
   private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
-    private var ata: DoubleMatrix = _
+    private var ata: Array[Double] = _
     private var initialized: Boolean = false
 
     private def initialize(rank: Int): Unit = {
       if (!initialized) {
         this.rank = rank
         workspace = NNLS.createWorkspace(rank)
-        ata = new DoubleMatrix(rank, rank)
+        ata = new Array[Double](rank * rank)
         initialized = true
       } else {
         require(this.rank == rank)
@@ -463,7 +445,7 @@ object ALS extends Logging {
       val rank = ne.k
       initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
-      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -476,17 +458,16 @@ object ALS extends Logging {
       var i = 0
       var pos = 0
       var a = 0.0
-      val data = ata.data
       while (i < rank) {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          data(i * rank + j) = a
-          data(j * rank + i) = a
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
           pos += 1
           j += 1
         }
-        data(i * rank + i) += lambda
+        ata(i * rank + i) += lambda
         i += 1
       }
     }
