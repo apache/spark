@@ -31,13 +31,13 @@ __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegr
            'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
 
-class LinearBinaryClassificationModel(LinearModel):
+class LinearClassificationModel(LinearModel):
     """
     Represents a linear binary classification model that predicts to whether an
     example is positive (1.0) or negative (0.0).
     """
     def __init__(self, weights, intercept):
-        super(LinearBinaryClassificationModel, self).__init__(weights, intercept)
+        super(LinearClassificationModel, self).__init__(weights, intercept)
         self._threshold = None
 
     def setThreshold(self, value):
@@ -49,6 +49,15 @@ class LinearBinaryClassificationModel(LinearModel):
         to this threshold is identified as an positive, and negative otherwise.
         """
         self._threshold = value
+
+    def getThreshold(self):
+        """
+        .. note:: Experimental
+
+        Returns the threshold (if any) used for converting raw prediction scores
+        into 0/1 predictions.
+        """
+        return self._threshold
 
     def clearThreshold(self):
         """
@@ -66,7 +75,7 @@ class LinearBinaryClassificationModel(LinearModel):
         raise NotImplementedError
 
 
-class LogisticRegressionModel(LinearBinaryClassificationModel):
+class LogisticRegressionModel(LinearClassificationModel):
 
     """A linear binary classification model derived from logistic regression.
 
@@ -113,8 +122,10 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
     ... except:
     ...    pass
     """
-    def __init__(self, weights, intercept):
+    def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
+        self.numFeatures = numFeatures
+        self.numClasses = numClasses
         self._threshold = 0.5
 
     def predict(self, x):
@@ -148,8 +159,10 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
         intercept = java_model.intercept()
+        numFeatures = java_model.numFeatures()
+        numClasses = java_model.numClasses()
         threshold = java_model.getThreshold().get()
-        model = LogisticRegressionModel(weights, intercept)
+        model = LogisticRegressionModel(weights, intercept, numFeatures, numClasses)
         model.setThreshold(threshold)
         return model
 
@@ -158,7 +171,8 @@ class LogisticRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=0.01, regType="l2", intercept=False):
+              initialWeights=None, regParam=0.01, regType="l2", intercept=False,
+              validateData=True):
         """
         Train a logistic regression model on the given data.
 
@@ -184,11 +198,14 @@ class LogisticRegressionWithSGD(object):
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
+        :param validateData:      Boolean parameter which indicates if the
+                                  algorithm should validate data before training.
+                                  (default: True)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
-                                 bool(intercept))
+                                 bool(intercept), bool(validateData))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -197,7 +214,7 @@ class LogisticRegressionWithLBFGS(object):
 
     @classmethod
     def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
-              intercept=False, corrections=10, tolerance=1e-4):
+              intercept=False, corrections=10, tolerance=1e-4, validateData=True, numClasses=2):
         """
         Train a logistic regression model on the given data.
 
@@ -223,6 +240,12 @@ class LogisticRegressionWithLBFGS(object):
                                update (default: 10).
         :param tolerance:      The convergence tolerance of iterations for
                                L-BFGS (default: 1e-4).
+        :param validateData:   Boolean parameter which indicates if the
+                               algorithm should validate data before training.
+                               (default: True)
+        :param numClasses:     The number of possible outcomes for k classes
+                               classification problem in Multinomial Logistic
+                               Regression (default: 2).
 
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -237,12 +260,12 @@ class LogisticRegressionWithLBFGS(object):
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
                                  float(regParam), regType, bool(intercept), int(corrections),
-                                 float(tolerance))
+                                 float(tolerance), bool(validateData), int(numClasses))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
-class SVMModel(LinearBinaryClassificationModel):
+class SVMModel(LinearClassificationModel):
 
     """A support vector machine.
 
@@ -325,7 +348,8 @@ class SVMWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None, regType="l2", intercept=False):
+              miniBatchFraction=1.0, initialWeights=None, regType="l2",
+              intercept=False, validateData=True):
         """
         Train a support vector machine on the given data.
 
@@ -351,11 +375,14 @@ class SVMWithSGD(object):
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
+        :param validateData:      Boolean parameter which indicates if the
+                                  algorithm should validate data before training.
+                                  (default: True)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, regType,
-                                 bool(intercept))
+                                 bool(intercept), bool(validateData))
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
