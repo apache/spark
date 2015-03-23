@@ -31,7 +31,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 class Main {
 
   /**
-   * Usage: Main [class] [class args]
+   * Usage: Main [uberJarPath] [class] [class args]
    * <p/>
    * This CLI works in two different modes:
    * <ul>
@@ -47,10 +47,14 @@ class Main {
    * character. On Windows, the output is a command line suitable for direct execution from the
    * script.
    */
+
+  static String uberJarPath;
+
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
     List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
+    uberJarPath = args.remove(0);
     String className = args.remove(0);
 
     boolean printLaunchCommand;

@@ -86,10 +86,14 @@ abstract class AbstractCommandBuilder {
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
-    if (javaHome == null) {
-      cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
-    } else {
+    String envJavaHome;
+
+    if (javaHome != null) {
       cmd.add(join(File.separator, javaHome, "bin", "java"));
+    } else if ((envJavaHome = System.getenv("JAVA_HOME")) != null) {
+        cmd.add(join(File.separator, envJavaHome, "bin", "java"));
+    } else {
+        cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
     }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
@@ -182,7 +186,7 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    String assembly = findAssembly(scala);
+    final String assembly = Main.uberJarPath;
     addToClassPath(cp, assembly);
 
     // When Hive support is needed, Datanucleus jars must be included on the classpath. Datanucleus
@@ -270,7 +274,6 @@ abstract class AbstractCommandBuilder {
     if (scala != null) {
       return scala;
     }
-
     String sparkHome = getSparkHome();
     File scala210 = new File(sparkHome, "assembly/target/scala-2.10");
     File scala211 = new File(sparkHome, "assembly/target/scala-2.11");
@@ -328,30 +331,6 @@ abstract class AbstractCommandBuilder {
 
   String getenv(String key) {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
-  }
-
-  private String findAssembly(String scalaVersion) {
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-          libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", scalaVersion));
-    }
-
-    final Pattern re = Pattern.compile("spark-assembly.*\\.jar");
-    FileFilter filter = new FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        return file.isFile() && re.matcher(file.getName()).matches();
-      }
-    };
-    File[] assemblies = libdir.listFiles(filter);
-    checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
-    checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
-    return assemblies[0].getAbsolutePath();
   }
 
   private String getConfDir() {
