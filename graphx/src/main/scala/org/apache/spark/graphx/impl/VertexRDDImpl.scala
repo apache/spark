@@ -247,11 +247,21 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
-  override def aggregateUsingIndex[VD2: ClassTag](
-      messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
+  override def aggregateUsingIndex[VD2: ClassTag]
+      (messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
     val shuffled = messages.partitionBy(this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc))
+    }
+    this.withPartitionsRDD[VD2](parts)
+  }
+
+  override def aggregateUsingIndexWithFold[VD2: ClassTag, A]
+      (messages: RDD[(VertexId, VD2)], acc: A)
+      (foldFunc: (A, VD2, VD2) => VD2): VertexRDD[VD2] = {
+    val shuffled = messages.partitionBy(this.partitioner.get)
+    val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
+      thisIter.map(_.aggregateUsingIndexWithFold(msgIter, acc)(foldFunc))
     }
     this.withPartitionsRDD[VD2](parts)
   }

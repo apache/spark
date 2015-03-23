@@ -275,6 +275,27 @@ private[graphx] abstract class VertexPartitionBaseOps
     this.withValues(newValues).withMask(newMask)
   }
 
+  def aggregateUsingIndexWithFold[VD2: ClassTag, A]
+      (iter: Iterator[Product2[VertexId, VD2]], acc: A)
+      (foldFunc: (A, VD2, VD2) => VD2): Self[VD2] = {
+    val newMask = new BitSet(self.capacity)
+    val newValues = new Array[VD2](self.capacity)
+    iter.foreach { product =>
+      val vid = product._1
+      val vdata = product._2
+      val pos = self.index.getPos(vid)
+      if (pos >= 0) {
+        if (newMask.get(pos)) {
+          newValues(pos) = foldFunc(acc, newValues(pos), vdata)
+        } else { // otherwise just store the new value
+          newMask.set(pos)
+          newValues(pos) = vdata
+        }
+      }
+    }
+    this.withValues(newValues).withMask(newMask)
+  }
+
   /**
    * Construct a new VertexPartition whose index contains only the vertices in the mask.
    */

@@ -208,6 +208,19 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("aggregateUsingIndexWithFold") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val messageTargets = (0 to n) ++ (0 to n by 2)
+      val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
+      assert(verts.aggregateUsingIndexWithFold(messages, 0) { (acc, aVal, bVal) =>
+        acc + aVal + bVal
+      }.collect.toSet ===
+        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+    }
+  }
+
   test("mergeFunc") {
     // test to see if the mergeFunc is working correctly
     withSpark { sc =>

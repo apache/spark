@@ -292,6 +292,23 @@ abstract class VertexRDD[VD](
       messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
 
   /**
+   * Aggregates vertices in `messages` that have the same ids using `reduceFunc`, returning a
+   * VertexRDD co-indexed with `this`.
+   *
+   * TODO: desc.
+   * @param messages an RDD containing messages to aggregate, where each message is a pair of its
+   * target vertex ID and the message data
+   * @param foldFunc the associative aggregation function for merging messages to the same vertex
+   * @return a VertexRDD co-indexed with `this`, containing only vertices that received messages.
+   * For those vertices, their values are the result of applying `reduceFunc` to all received
+   * messages.
+   */
+  def aggregateUsingIndexWithFold[VD2: ClassTag, A]
+      (messages: RDD[(VertexId, VD2)], acc: A)
+      (foldFunc: (A, VD2, VD2) => VD2)
+    : VertexRDD[VD2]
+
+  /**
    * Returns a new `VertexRDD` reflecting a reversal of all edge directions in the corresponding
    * [[EdgeRDD]].
    */
