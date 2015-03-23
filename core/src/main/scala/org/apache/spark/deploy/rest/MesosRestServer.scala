@@ -167,7 +167,7 @@ class MesosKillRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
     val response = scheduler.killDriver(submissionId)
     val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
-    k.message = response.message.orNull
+    k.message = response.message
     k.submissionId = submissionId
     k.success = response.success
     k

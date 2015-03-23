@@ -381,11 +381,13 @@ object SparkSubmit {
 
       // Standalone cluster only
       // Do not set CL arguments here because there are multiple possibilities for the main class
-      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
-      OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.cores"),
+      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
 
       // Yarn client only

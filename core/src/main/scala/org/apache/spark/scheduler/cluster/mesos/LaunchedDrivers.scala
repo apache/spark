@@ -18,9 +18,13 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import scala.collection.mutable
-import org.apache.mesos.Protos.{TaskID, SlaveID}
+import org.apache.mesos.Protos.SlaveID
 
-class LaunchedDrivers(state: ClusterPersistenceEngine) {
+/**
+ * Tracks all the launched or running drivers in the Mesos cluster scheduler.
+ * @param state Persistence engine to store state.
+ */
+private[mesos] class LaunchedDrivers(state: ClusterPersistenceEngine) {
   private val drivers = new mutable.HashMap[String, ClusterTaskState]
 
   // Holds the list of tasks that needs to reconciliation from the master.

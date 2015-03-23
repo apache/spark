@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import scala.collection.mutable
-import javax.annotation.concurrent.NotThreadSafe
 
 /**
  * A request queue for launching drivers in Mesos cluster mode.
@@ -27,8 +26,7 @@ import javax.annotation.concurrent.NotThreadSafe
  * This queue is also bounded and rejects offers when it's full.
  * @param state Mesos state abstraction to fetch persistent state.
  */
-@NotThreadSafe
-class DriverQueue(state: ClusterPersistenceEngine, capacity: Int) {
+private[mesos] class DriverQueue(state: ClusterPersistenceEngine, capacity: Int) {
   var queue: mutable.Queue[DriverSubmission] = new mutable.Queue[DriverSubmission]()
   private var count = 0
 

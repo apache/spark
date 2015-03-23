@@ -20,7 +20,7 @@ package org.apache.spark.deploy.mesos.ui
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
-import org.apache.spark.scheduler.cluster.mesos.{ClusterTaskState, DriverSubmission}
+import org.apache.spark.scheduler.cluster.mesos.{RetryState, ClusterTaskState, DriverSubmission}
 import org.apache.mesos.Protos.TaskStatus
 
 class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
@@ -31,10 +31,13 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     val queuedHeaders = Seq("DriverID", "Submit Date", "Description")
     val driverHeaders = queuedHeaders ++
       Seq("Start Date", "Mesos Slave ID", "State")
+    val retryHeaders = Seq("DriverID", "Submit Date", "Description") ++
+      Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
 
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
     val launchedTable = UIUtils.listingTable(driverHeaders, driverRow, state.launchedDrivers)
     val finishedTable = UIUtils.listingTable(driverHeaders, driverRow, state.finishedDrivers)
+    val retryTable = UIUtils.listingTable(retryHeaders, retryRow, state.retryList)
     val content =
       <p>Mesos Framework ID: {state.appId}</p>
       <div class="row-fluid">
@@ -45,6 +48,8 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
           {launchedTable}
           <h4>Finished Drivers:</h4>
           {finishedTable}
+          <h4>Supervise drivers waiting for retry:</h4>
+          {retryTable}
         </div>
       </div>;
     UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
@@ -66,6 +71,17 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
       <td>{state.startDate}</td>
       <td>{state.slaveId.getValue}</td>
       <td>{stateString(state.taskState)}</td>
+    </tr>
+  }
+
+  def retryRow(state: RetryState): Seq[Node] = {
+    <tr>
+      <td>{state.submission.submissionId}</td>
+      <td>{state.submission.submitDate}</td>
+      <td>{state.submission.desc.desc.command.mainClass}</td>
+      <td>{state.lastFailureStatus}</td>
+      <td>{state.nextRetry}</td>
+      <td>{state.retries}</td>
     </tr>
   }
 
