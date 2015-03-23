@@ -758,12 +758,13 @@ private[sql] object ParquetRelation2 extends Logging {
          |${parquetSchema.prettyJson}
        """.stripMargin
 
-    assert(metastoreSchema.size == parquetSchema.size, schemaConflictMessage)
+    assert(metastoreSchema.size <= parquetSchema.size, schemaConflictMessage)
 
     val ordinalMap = metastoreSchema.zipWithIndex.map {
       case (field, index) => field.name.toLowerCase -> index
     }.toMap
-    val reorderedParquetSchema = parquetSchema.sortBy(f => ordinalMap(f.name.toLowerCase))
+    val reorderedParquetSchema = parquetSchema.sortBy(f => 
+      ordinalMap.getOrElse(f.name.toLowerCase, metastoreSchema.size + 1))
 
     StructType(metastoreSchema.zip(reorderedParquetSchema).map {
       // Uses Parquet field names but retains Metastore data types.
