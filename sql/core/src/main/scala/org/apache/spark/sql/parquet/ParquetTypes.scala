@@ -64,6 +64,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
       case ParquetPrimitiveTypeName.FLOAT => FloatType
+      case ParquetPrimitiveTypeName.INT32
+        if originalType == ParquetOriginalType.DATE => DateType
       case ParquetPrimitiveTypeName.INT32 => IntegerType
       case ParquetPrimitiveTypeName.INT64 => LongType
       case ParquetPrimitiveTypeName.INT96 if int96AsTimestamp => TimestampType
@@ -222,6 +224,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     // There is no type for Byte or Short so we promote them to INT32.
     case ShortType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
     case ByteType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case DateType => Some(ParquetTypeInfo(
+      ParquetPrimitiveTypeName.INT32, Some(ParquetOriginalType.DATE)))
     case LongType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT64))
     case TimestampType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT96))
     case DecimalType.Fixed(precision, scale) if precision <= 18 =>
