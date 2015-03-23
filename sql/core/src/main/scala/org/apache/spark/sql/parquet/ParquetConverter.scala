@@ -127,6 +127,12 @@ private[sql] object CatalystConverter {
             parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
         }
       }
+      case DateType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addInt(value: Int): Unit =
+            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
+        }
+      }
       case d: DecimalType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addBinary(value: Binary): Unit =
@@ -190,6 +196,9 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
     updateField(fieldIndex, value)
 
   protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
+    updateField(fieldIndex, value)
+
+  protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
     updateField(fieldIndex, value)
 
   protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
@@ -387,6 +396,9 @@ private[parquet] class CatalystPrimitiveRowConverter(
 
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
     current.setInt(fieldIndex, value)
+
+  override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
+    current.update(fieldIndex, value)
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
