@@ -17,8 +17,6 @@
 
 package org.apache.spark.graphx.impl
 
-import org.apache.spark.rdd.RDD
-
 import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
