@@ -1226,9 +1226,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
-    val result = memoryStore.putBytes(blockId, 13000) {
+    val result = memoryStore.putBytes(blockId, 13000, () => {
       fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
-    }
+    })
     assert(result.size === 13000)
     assert(result.data === null)
     assert(result.droppedBlocks === Nil)
@@ -1239,10 +1239,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
     var bytes: ByteBuffer = null
-    val result = memoryStore.putBytes(blockId, 10000) {
+    val result = memoryStore.putBytes(blockId, 10000, () => {
       bytes = ByteBuffer.allocate(10000)
       bytes
-    }
+    })
     assert(result.size === 10000)
     assert(result.data === Right(bytes))
     assert(result.droppedBlocks === Nil)
