@@ -21,6 +21,8 @@ import java.net.{URI, ServerSocket}
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+import org.apache.commons.lang3.RandomUtils
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -113,7 +115,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   }
 
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
