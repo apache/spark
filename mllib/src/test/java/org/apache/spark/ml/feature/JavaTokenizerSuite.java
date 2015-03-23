@@ -58,7 +58,7 @@ public class JavaTokenizerSuite {
 
     List<String> t = Arrays.asList(
       "{\"rawText\": \"Test of tok.\", \"wantedTokens\": [\"Test\", \"of\", \"tok.\"]}",
-      "{\"rawText\": \"Te,st.  punct\", \"wantedTokens\": [\"Te,st.\",\"\",\"punct\"]}");
+      "{\"rawText\": \"Te,st.  punct\", \"wantedTokens\": [\"Te,st.\", \"\", \"punct\"]}");
 
     JavaRDD<String> myRdd = jsc.parallelize(t);
     DataFrame dataset = jsql.jsonRDD(myRdd);

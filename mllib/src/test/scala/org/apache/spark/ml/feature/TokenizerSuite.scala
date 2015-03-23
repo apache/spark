@@ -23,7 +23,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-case class TextData(rawText : String, wantedTokens: Seq[String])
+case class TextData(rawText: String, wantedTokens: Seq[String])
+
 class TokenizerSuite extends FunSuite with MLlibTestSparkContext {
   
   @transient var sqlContext: SQLContext = _
@@ -33,37 +34,37 @@ class TokenizerSuite extends FunSuite with MLlibTestSparkContext {
     sqlContext = new SQLContext(sc)
   }
 
-  test("RegexTokenizer"){
+  test("RegexTokenizer") {
     val myRegExTokenizer = new RegexTokenizer()
       .setInputCol("rawText")
       .setOutputCol("tokens")
 
     var dataset = sqlContext.createDataFrame(
-      sc.parallelize(List(
-        TextData("Test for tokenization.",List("Test","for","tokenization",".")),
-        TextData("Te,st. punct",List("Te",",","st",".","punct"))
+      sc.parallelize(Seq(
+        TextData("Test for tokenization.", Seq("Test", "for", "tokenization", ".")),
+        TextData("Te,st. punct", Seq("Te", ",", "st", ".", "punct"))
     )))
-    testRegexTokenizer(myRegExTokenizer,dataset)
+    testRegexTokenizer(myRegExTokenizer, dataset)
 
     dataset = sqlContext.createDataFrame(
-      sc.parallelize(List(
-        TextData("Test for tokenization.",List("Test","for","tokenization")),
-        TextData("Te,st. punct",List("punct"))
+      sc.parallelize(Seq(
+        TextData("Test for tokenization.", Seq("Test", "for", "tokenization")),
+        TextData("Te,st. punct", Seq("punct"))
     )))
     myRegExTokenizer.asInstanceOf[RegexTokenizer]
       .setMinTokenLength(3)
-    testRegexTokenizer(myRegExTokenizer,dataset)
+    testRegexTokenizer(myRegExTokenizer, dataset)
 
     myRegExTokenizer.asInstanceOf[RegexTokenizer]
       .setPattern("\\s")
       .setGaps(true)
       .setMinTokenLength(0)
     dataset = sqlContext.createDataFrame(
-      sc.parallelize(List(
-        TextData("Test for tokenization.",List("Test","for","tokenization.")),
-        TextData("Te,st.  punct",List("Te,st.","","punct"))
+      sc.parallelize(Seq(
+        TextData("Test for tokenization.", Seq("Test", "for", "tokenization.")),
+        TextData("Te,st.  punct", Seq("Te,st.", "", "punct"))
     )))
-    testRegexTokenizer(myRegExTokenizer,dataset)
+    testRegexTokenizer(myRegExTokenizer, dataset)
   }
 
   test("Tokenizer") {
@@ -71,32 +72,28 @@ class TokenizerSuite extends FunSuite with MLlibTestSparkContext {
       .setInputCol("rawText")
       .setOutputCol("tokens")
     var dataset = sqlContext.createDataFrame(
-      sc.parallelize(List(
-        TextData("Test for tokenization.",List("test","for","tokenization.")),
-        TextData("Te,st.  punct",List("te,st.","","punct"))
+      sc.parallelize(Seq(
+        TextData("Test for tokenization.", Seq("test", "for", "tokenization.")),
+        TextData("Te,st.  punct", Seq("te,st.", "", "punct"))
     )))
-    testTokenizer(oldTokenizer,dataset)
+    testTokenizer(oldTokenizer, dataset)
   }
 
-  def testTokenizer(t: Tokenizer,dataset: DataFrame): Unit = {
+  def testTokenizer(t: Tokenizer, dataset: DataFrame): Unit = {
     t.transform(dataset)
-      .select("tokens","wantedTokens")
-      .collect().foreach{ 
+      .select("tokens", "wantedTokens")
+      .collect().foreach { 
         case Row(tokens: Seq[Any], wantedTokens: Seq[Any]) =>
           assert(tokens === wantedTokens)
-        case e =>
-          throw new SparkException(s"Row $e should contain only tokens and wantedTokens columns")
       }
   }
 
-  def testRegexTokenizer(t: RegexTokenizer,dataset: DataFrame): Unit = {
+  def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
     t.transform(dataset)
-      .select("tokens","wantedTokens")
-      .collect().foreach{ 
+      .select("tokens", "wantedTokens")
+      .collect().foreach { 
         case Row(tokens: Seq[Any], wantedTokens: Seq[Any]) =>
           assert(tokens === wantedTokens)
-        case e => 
-          throw new SparkException(s"Row $e should contain only tokens and wantedTokens columns")
       }
   }
 
