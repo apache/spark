@@ -142,7 +142,7 @@ case class CreateTableAsSelect[T](
     tableName: String,
     child: LogicalPlan,
     allowExisting: Boolean,
-    desc: Option[T] = None) extends UnaryNode {
+    desc: T) extends UnaryNode {
   override def output = Seq.empty[Attribute]
   override lazy val resolved = databaseName != None && childrenResolved
 }
