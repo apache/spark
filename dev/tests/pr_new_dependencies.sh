@@ -35,7 +35,7 @@ MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-${MVN_BIN} clean compile dependency:build-classpath | \
+${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
   head -n 3 | \
@@ -49,7 +49,7 @@ ${MVN_BIN} clean compile dependency:build-classpath | \
 # Checkout the master branch to compare against
 git checkout master
 
-${MVN_BIN} clean compile dependency:build-classpath | \
+${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
   head -n 3 | \
@@ -82,4 +82,4 @@ fi
 [ -f "${MASTER_CP_FILE}" ] && rm -f "${MASTER_CP_FILE}"
 
 # Clean up our mess from the Maven builds just in case
-${MVN_BIN} clean
+${MVN_BIN} clean &>/dev/null
