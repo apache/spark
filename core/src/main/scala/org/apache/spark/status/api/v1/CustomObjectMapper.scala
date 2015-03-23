@@ -31,7 +31,7 @@ import org.apache.spark.util.SparkEnum
 
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))
-class CustomObjectMapper extends ContextResolver[ObjectMapper]{
+private[v1] class CustomObjectMapper extends ContextResolver[ObjectMapper]{
   val mapper = new ObjectMapper() {
     override def writeValueAsString(t: Any): String = {
       super.writeValueAsString(t)
@@ -51,16 +51,16 @@ class CustomObjectMapper extends ContextResolver[ObjectMapper]{
   }
 }
 
-object CustomObjectMapper {
+private[spark] object CustomObjectMapper {
   def makeISODateFormat: SimpleDateFormat = {
-    val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'");
-    val cal = Calendar.getInstance(new SimpleTimeZone(0, "GMT"));
-    iso8601.setCalendar(cal);
-    iso8601;
+    val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'")
+    val cal = Calendar.getInstance(new SimpleTimeZone(0, "GMT"))
+    iso8601.setCalendar(cal)
+    iso8601
   }
 }
 
-class SparkEnumSerializer extends JsonSerializer[SparkEnum] {
+private[v1] class SparkEnumSerializer extends JsonSerializer[SparkEnum] {
   def serialize(se: SparkEnum, jgen: JsonGenerator, provider: SerializerProvider): Unit = {
     jgen.writeString(se.toString)
   }

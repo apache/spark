@@ -22,7 +22,7 @@ import javax.ws.rs.core.MediaType
 import org.apache.spark.ui.exec.ExecutorsPage
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class ExecutorListResource(uiRoot: UIRoot) {
+private[v1] class ExecutorListResource(uiRoot: UIRoot) {
 
   @GET
   def jobsList(

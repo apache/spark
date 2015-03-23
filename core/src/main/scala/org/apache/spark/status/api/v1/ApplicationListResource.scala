@@ -24,7 +24,7 @@ import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class ApplicationListResource(uiRoot: UIRoot) {
+private[v1] class ApplicationListResource(uiRoot: UIRoot) {
 
   @GET
   def appList(
@@ -52,7 +52,7 @@ class ApplicationListResource(uiRoot: UIRoot) {
   }
 }
 
-object ApplicationsListResource {
+private[spark] object ApplicationsListResource {
   def appHistoryInfoToPublicAppInfo(app: ApplicationHistoryInfo): ApplicationInfo = {
     new ApplicationInfo(
       id = app.id,

@@ -29,7 +29,7 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.ui.SparkUI
 
 @Path("/v1")
-class JsonRootResource extends UIRootFromServletContext {
+private[v1] class JsonRootResource extends UIRootFromServletContext {
 
   @Path("applications")
   def getApplicationList(): ApplicationListResource = {
@@ -85,7 +85,7 @@ class JsonRootResource extends UIRootFromServletContext {
 
 }
 
-object JsonRootResource {
+private[spark] object JsonRootResource {
 
   def getJsonServlet(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
@@ -122,7 +122,7 @@ private[spark] trait UIRoot {
   def securityManager: SecurityManager
 }
 
-object UIRootFromServletContext {
+private[v1] object UIRootFromServletContext {
   private val attribute = getClass.getCanonicalName
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
     contextHandler.setAttribute(attribute, uiRoot)
@@ -132,14 +132,14 @@ object UIRootFromServletContext {
   }
 }
 
-trait UIRootFromServletContext {
+private[v1] trait UIRootFromServletContext {
   @Context
   var servletContext: ServletContext = _
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
 }
 
-class NotFoundException(msg: String) extends WebApplicationException(
+private[v1] class NotFoundException(msg: String) extends WebApplicationException(
   new IllegalArgumentException(msg),
     Response
       .status(Response.Status.NOT_FOUND)

@@ -22,7 +22,7 @@ import javax.ws.rs.{GET, PathParam, Produces}
 import org.apache.spark.SparkException
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class OneStageAttemptResource(uiRoot: UIRoot) {
+private[v1] class OneStageAttemptResource(uiRoot: UIRoot) {
 
   @GET
   def stageData(

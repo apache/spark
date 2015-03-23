@@ -19,11 +19,10 @@ package org.apache.spark.status.api.v1
 import javax.ws.rs.{PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class OneJobResource(uiRoot: UIRoot) {
+private[v1] class OneJobResource(uiRoot: UIRoot) {
 
   @GET
   def jobsList(

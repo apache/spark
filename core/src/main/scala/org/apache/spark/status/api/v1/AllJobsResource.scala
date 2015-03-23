@@ -26,7 +26,7 @@ import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class AllJobsResource(uiRoot: UIRoot) {
+private[v1] class AllJobsResource(uiRoot: UIRoot) {
 
   @GET
   def jobsList(
@@ -56,7 +56,7 @@ class AllJobsResource(uiRoot: UIRoot) {
 
 }
 
-object AllJobsResource {
+private[v1] object AllJobsResource {
 
   def getStatusToJobs(ui: SparkUI): Seq[(JobStatus, Seq[JobUIData])] = {
     val statusToJobs = ui.jobProgressListener.synchronized {

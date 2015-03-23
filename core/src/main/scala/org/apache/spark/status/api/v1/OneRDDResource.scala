@@ -20,7 +20,7 @@ import javax.ws.rs.{PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class OneRDDResource(uiRoot: UIRoot) {
+private[v1] class OneRDDResource(uiRoot: UIRoot) {
 
     @GET
     def rddData(

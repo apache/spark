@@ -23,7 +23,7 @@ import javax.ws.rs.core.Response.Status
 
 import scala.util.Try
 
-private[api] class SimpleDateParam(val originalValue: String) {
+private[v1] class SimpleDateParam(val originalValue: String) {
   val timestamp: Long = {
     SimpleDateParam.formats.collectFirst {
       case fmt if Try{ fmt.parse(originalValue) }.isSuccess =>
@@ -39,7 +39,7 @@ private[api] class SimpleDateParam(val originalValue: String) {
   }
 }
 
-private[api] object SimpleDateParam {
+private[v1] object SimpleDateParam {
   val formats = Seq(
     "yyyy-MM-dd'T'HH:mm:ss.SSSz",
     "yyyy-MM-dd"

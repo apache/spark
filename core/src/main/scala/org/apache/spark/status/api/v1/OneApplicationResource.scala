@@ -20,7 +20,7 @@ import javax.ws.rs.core.MediaType
 import javax.ws.rs.{Produces, PathParam, GET}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class OneApplicationResource(uiRoot: UIRoot) {
+private[v1] class OneApplicationResource(uiRoot: UIRoot) {
 
   @GET
   def getApp(@PathParam("appId") appId: String): ApplicationInfo = {

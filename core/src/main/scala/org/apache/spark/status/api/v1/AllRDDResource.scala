@@ -23,7 +23,7 @@ import org.apache.spark.storage.{RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.storage.StorageListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class AllRDDResource(uiRoot: UIRoot) {
+private[v1] class AllRDDResource(uiRoot: UIRoot) {
 
   @GET
   def jobsList(
@@ -43,7 +43,7 @@ class AllRDDResource(uiRoot: UIRoot) {
 
 }
 
-object AllRDDResource {
+private[spark] object AllRDDResource {
 
   def getRDDStorageInfo(
       rddId: Int,
