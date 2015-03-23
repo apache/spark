@@ -214,10 +214,10 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val verts = vertices(sc, n)
       val messageTargets = (0 to n) ++ (0 to n by 2)
       val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
-      assert(verts.aggregateUsingIndexWithFold(messages, 0) { (acc, aVal, bVal) =>
+      assert(verts.aggregateUsingIndexWithFold(messages, 10) { (acc, aVal, bVal) =>
         acc + aVal + bVal
       }.collect.toSet ===
-        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 12 else 1)).toSet)
     }
   }
 
