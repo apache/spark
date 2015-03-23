@@ -35,8 +35,6 @@ MVN_BIN="`pwd`/../../build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-echo "new dep output"
-
 ${MVN_BIN} clean compile dependency:build-classpath | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
