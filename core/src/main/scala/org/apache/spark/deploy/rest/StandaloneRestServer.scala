@@ -58,7 +58,7 @@ import org.apache.spark.deploy.ClientArguments._
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
  * @param masterConf the conf used by the Master
  */
-private[spark] class StandaloneRestServer(
+private[deploy] class StandaloneRestServer(
     host: String,
     requestedPort: Int,
     masterActor: ActorRef,

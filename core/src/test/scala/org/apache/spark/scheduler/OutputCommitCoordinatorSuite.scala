@@ -153,7 +153,7 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
-      0 until rdd.partitions.size, resultHandler, 0)
+      0 until rdd.partitions.size, resultHandler, () => Unit)
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {

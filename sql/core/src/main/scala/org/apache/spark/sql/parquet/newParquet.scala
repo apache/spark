@@ -19,6 +19,7 @@ package org.apache.spark.sql.parquet
 import java.io.IOException
 import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, List => JList}
 
@@ -180,7 +181,7 @@ private[sql] case class ParquetRelation2(
   private val defaultPartitionName = parameters.getOrElse(
     ParquetRelation2.DEFAULT_PARTITION_NAME, "__HIVE_DEFAULT_PARTITION__")
 
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case relation: ParquetRelation2 =>
       // If schema merging is required, we don't compare the actual schemas since they may evolve.
       val schemaEquality = if (shouldMergeSchemas) {
@@ -195,6 +196,23 @@ private[sql] case class ParquetRelation2(
         maybePartitionSpec == relation.maybePartitionSpec
 
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (shouldMergeSchemas) {
+      com.google.common.base.Objects.hashCode(
+        shouldMergeSchemas: java.lang.Boolean,
+        paths.toSet,
+        maybeMetastoreSchema,
+        maybePartitionSpec)
+    } else {
+      com.google.common.base.Objects.hashCode(
+        shouldMergeSchemas: java.lang.Boolean,
+        schema,
+        paths.toSet,
+        maybeMetastoreSchema,
+        maybePartitionSpec)
+    }
   }
 
   private[sql] def sparkContext = sqlContext.sparkContext
@@ -244,11 +262,10 @@ private[sql] case class ParquetRelation2(
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
-
       // Support either reading a collection of raw Parquet part-files, or a collection of folders
       // containing Parquet files (e.g. partitioned Parquet table).
       val baseStatuses = paths.distinct.map { p =>
+        val fs = FileSystem.get(URI.create(p), sparkContext.hadoopConfiguration)
         val qualified = fs.makeQualified(new Path(p))
 
         if (!fs.exists(qualified) && maybeSchema.isDefined) {
@@ -262,6 +279,7 @@ private[sql] case class ParquetRelation2(
 
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
       val leaves = baseStatuses.flatMap { f =>
+        val fs = FileSystem.get(f.getPath.toUri, sparkContext.hadoopConfiguration)
         SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
@@ -369,19 +387,19 @@ private[sql] case class ParquetRelation2(
   @transient private val metadataCache = new MetadataCache
   metadataCache.refresh()
 
-  def partitionSpec = metadataCache.partitionSpec
+  def partitionSpec: PartitionSpec = metadataCache.partitionSpec
 
-  def partitionColumns = metadataCache.partitionSpec.partitionColumns
+  def partitionColumns: StructType = metadataCache.partitionSpec.partitionColumns
 
-  def partitions = metadataCache.partitionSpec.partitions
+  def partitions: Seq[Partition] = metadataCache.partitionSpec.partitions
 
-  def isPartitioned = partitionColumns.nonEmpty
+  def isPartitioned: Boolean = partitionColumns.nonEmpty
 
   private def partitionKeysIncludedInDataSchema = metadataCache.partitionKeysIncludedInParquetSchema
 
   private def parquetSchema = metadataCache.parquetSchema
 
-  override def schema = metadataCache.schema
+  override def schema: StructType = metadataCache.schema
 
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
@@ -424,8 +442,10 @@ private[sql] case class ParquetRelation2(
       .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
 
     if (isPartitioned) {
-      def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
-      logInfo(s"Reading $percentRead% of partitions")
+      logInfo {
+        val percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
+        s"Reading $percentRead% of partitions"
+      }
     }
 
     val requiredColumns = output.map(_.name)
@@ -591,13 +611,22 @@ private[sql] case class ParquetRelation2(
     val destinationPath = new Path(paths.head)
 
     if (overwrite) {
-      try {
-        destinationPath.getFileSystem(conf).delete(destinationPath, true)
-      } catch {
-        case e: IOException =>
+      val fs = destinationPath.getFileSystem(conf)
+      if (fs.exists(destinationPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(destinationPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${destinationPath.toString} prior" +
+                s" to writing to Parquet table:\n${e.toString}")
+        }
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${destinationPath.toString} prior" +
-              s" to writing to Parquet file:\n${e.toString}")
+              s" to writing to Parquet table.")
+        }
       }
     }
 
@@ -652,7 +681,7 @@ private[sql] case class ParquetRelation2(
   }
 }
 
-private[sql] object ParquetRelation2 {
+private[sql] object ParquetRelation2 extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 
@@ -672,7 +701,26 @@ private[sql] object ParquetRelation2 {
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .map(DataType.fromJson(_).asInstanceOf[StructType])
+        .flatMap { serializedSchema =>
+          // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
+          // whatever is available.
+          Try(DataType.fromJson(serializedSchema))
+            .recover { case _: Throwable =>
+              logInfo(
+                s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
+                  "falling back to the deprecated DataType.fromCaseClassString parser.")
+              DataType.fromCaseClassString(serializedSchema)
+            }
+            .recover { case cause: Throwable =>
+              logWarning(
+                s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
+                   |\t$serializedSchema
+                 """.stripMargin,
+                cause)
+            }
+            .map(_.asInstanceOf[StructType])
+            .toOption
+        }
 
       maybeSparkSchema.getOrElse {
         // Falls back to Parquet schema if Spark SQL schema is absent.
@@ -702,7 +750,7 @@ private[sql] object ParquetRelation2 {
   private[parquet] def mergeMetastoreParquetSchema(
       metastoreSchema: StructType,
       parquetSchema: StructType): StructType = {
-    def schemaConflictMessage =
+    def schemaConflictMessage: String =
       s"""Converting Hive Metastore Parquet, but detected conflicting schemas. Metastore schema:
          |${metastoreSchema.prettyJson}
          |

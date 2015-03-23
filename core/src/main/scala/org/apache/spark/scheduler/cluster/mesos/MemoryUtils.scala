@@ -21,15 +21,11 @@ import org.apache.spark.SparkContext
 
 private[spark] object MemoryUtils {
   // These defaults copied from YARN
-  val OVERHEAD_FRACTION = 1.10
+  val OVERHEAD_FRACTION = 0.10
   val OVERHEAD_MINIMUM = 384
 
   def calculateTotalMemory(sc: SparkContext) = {
-    math.max(
-      sc.conf.getOption("spark.mesos.executor.memoryOverhead")
-        .getOrElse(OVERHEAD_MINIMUM.toString)
-        .toInt + sc.executorMemory,
-        OVERHEAD_FRACTION * sc.executorMemory
-    )
+    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
+      math.max(OVERHEAD_FRACTION * sc.executorMemory, OVERHEAD_MINIMUM).toInt) + sc.executorMemory
   }
 }

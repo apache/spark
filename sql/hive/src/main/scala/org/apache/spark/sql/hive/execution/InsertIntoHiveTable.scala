@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
@@ -58,7 +58,7 @@ case class InsertIntoHiveTable(
     serializer
   }
 
-  def output = child.output
+  def output: Seq[Attribute] = child.output
 
   def saveAsHiveFile(
       rdd: RDD[Row],

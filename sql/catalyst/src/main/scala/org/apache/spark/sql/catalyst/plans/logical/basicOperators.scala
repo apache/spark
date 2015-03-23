@@ -81,6 +81,11 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override lazy val resolved =
     childrenResolved &&
     !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(
@@ -102,6 +107,13 @@ case class Join(
       case _ =>
         left.output ++ right.output
     }
+  }
+
+  def selfJoinResolved = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
   }
 }
 
@@ -174,7 +186,12 @@ case class Aggregate(
 case class Expand(
     projections: Seq[GroupExpression],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan) extends UnaryNode {
+  override def statistics: Statistics = {
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
 
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>
@@ -272,6 +289,15 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 
 case object NoRelation extends LeafNode {
   override def output = Nil
+
+  /**
+   * Computes [[Statistics]] for this plan. The default implementation assumes the output
+   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * of cartesian joins.
+   *
+   * [[LeafNode]]s must override this.
+   */
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
