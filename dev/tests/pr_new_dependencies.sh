@@ -31,7 +31,7 @@
 ghprbActualCommit="$1"
 sha1="$2"
 
-MVN_BIN="`pwd`/../../build/mvn"
+MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
@@ -47,7 +47,7 @@ ${MVN_BIN} clean compile dependency:build-classpath | \
   sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
-git checkout apache/master
+git checkout master
 
 ${MVN_BIN} clean compile dependency:build-classpath | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \

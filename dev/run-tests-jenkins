@@ -161,7 +161,6 @@ for t in "${PR_TESTS[@]}"; do
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
-    echo "MSSG: $this_mssg"
     pr_message="${pr_message}\n${this_mssg}"
     # Ensure, after each test, that we're on the current PR
     git checkout -f "${current_pr_head}"
