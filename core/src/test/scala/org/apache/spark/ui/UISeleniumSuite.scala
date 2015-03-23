@@ -419,7 +419,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
     }
   }
 
-  test("stage & job retention", ActiveTag) {
+  test("stage & job retention") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
