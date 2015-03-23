@@ -23,7 +23,6 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConversions._
 import scala.xml.Node
 
-import org.apache.sparktest.TestTags.ActiveTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
