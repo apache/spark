@@ -55,10 +55,8 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   def stop() {}
 
-  def setPreferredLocation(_preferredLocation: String){
-    if (null != _preferredLocation){
-      this._preferredLocation = Some(_preferredLocation)
-    }
+  def setPreferredLocation(_preferredLocation: String) {
+    this._preferredLocation = Option(_preferredLocation)
   }
 
   def preferredLocation = _preferredLocation
