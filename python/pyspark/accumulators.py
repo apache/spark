@@ -251,6 +251,7 @@ class AccumulatorServer(SocketServer.TCPServer):
     def shutdown(self):
         self.server_shutdown = True
         SocketServer.TCPServer.shutdown(self)
+        self.server_close()
 
 
 def _start_update_server():

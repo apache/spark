@@ -1,4 +1,3 @@
-from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,7 +15,9 @@ from __future__ import print_function
 # limitations under the License.
 #
 
-from itertools import chain, ifilter, imap
+from __future__ import print_function
+
+from itertools import chain
 import operator
 import time
 from datetime import datetime
@@ -77,7 +78,7 @@ class DStream(object):
         Return a new DStream containing only the elements that satisfy predicate.
         """
         def func(iterator):
-            return ifilter(f, iterator)
+            return filter(f, iterator)
         return self.mapPartitions(func, True)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -86,7 +87,7 @@ class DStream(object):
         this DStream, and then flattening the results
         """
         def func(s, iterator):
-            return chain.from_iterable(imap(f, iterator))
+            return chain.from_iterable(map(f, iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def map(self, f, preservesPartitioning=False):
@@ -94,7 +95,7 @@ class DStream(object):
         Return a new DStream by applying a function to each element of DStream.
         """
         def func(iterator):
-            return imap(f, iterator)
+            return map(f, iterator)
         return self.mapPartitions(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
