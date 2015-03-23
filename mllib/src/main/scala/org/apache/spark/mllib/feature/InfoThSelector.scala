@@ -242,8 +242,8 @@ object InfoThSelector {
   def train(
       criterionFactory: FT, 
       data: RDD[LabeledPoint],
-      nToSelect: Int = 100,
-      poolSize: Int = 100) = {
+      nToSelect: Int = 25,
+      poolSize: Int = 0) = {
     new InfoThSelector(criterionFactory, data).run(nToSelect, poolSize)
   }
 }

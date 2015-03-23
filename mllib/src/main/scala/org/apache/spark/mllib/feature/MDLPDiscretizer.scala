@@ -390,7 +390,7 @@ class MDLPDiscretizer private (val data: RDD[LabeledPoint]) extends Serializable
     val continuousVars = processContinuousAttributes(contFeat, nFeatures, dense)
     logInfo("Number of continuous attributes: " + continuousVars.distinct.size)
     logInfo("Total number of attributes: " + nFeatures)      
-    if(continuousVars.isEmpty) logWarning("Discretization aborted." +
+    if(continuousVars.isEmpty) logWarning("Discretization aborted. " +
       "No continous attribute in the dataset")
     
     // Generate pairs ((attribute, value), class count)
@@ -495,8 +495,8 @@ object MDLPDiscretizer {
   def train(
       input:
       RDD[LabeledPoint],
-      continuousFeaturesIndexes: Option[Seq[Int]],
-      maxBins: Int = Byte.MaxValue - Byte.MinValue + 1,
+      continuousFeaturesIndexes: Option[Seq[Int]] = None,
+      maxBins: Int = 15,
       elementsByPart: Int = 10000) = {
     new MDLPDiscretizer(input).runAll(continuousFeaturesIndexes, elementsByPart, maxBins)
   }
