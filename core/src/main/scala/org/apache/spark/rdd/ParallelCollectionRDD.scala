@@ -111,7 +111,8 @@ private object ParallelCollectionRDD {
   /**
    * Slice a collection into numSlices sub-collections. One extra thing we do here is to treat Range
    * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes
-   * it efficient to run Spark over RDDs representing large sets of numbers.
+   * it efficient to run Spark over RDDs representing large sets of numbers. And if the collection
+   * is an inclusive Range, we use inclusive range for the last slice.
    */
   def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1) {
@@ -127,19 +128,15 @@ private object ParallelCollectionRDD {
       })
     }
     seq match {
-      case r: Range.Inclusive => {
-        val sign = if (r.step < 0) {
-          -1
-        } else {
-          1
-        }
-        slice(new Range(
-          r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
-      }
       case r: Range => {
-        positions(r.length, numSlices).map({
-          case (start, end) =>
+        positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
+          // If the range is inclusive, use inclusive range for the last slice
+          if (r.isInclusive && index == numSlices - 1) {
+            new Range.Inclusive(r.start + start * r.step, r.end, r.step)
+          }
+          else {
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
+          }
         }).toSeq.asInstanceOf[Seq[Seq[T]]]
       }
       case nr: NumericRange[_] => {

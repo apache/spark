@@ -30,7 +30,9 @@ import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
+import org.apache.hadoop.hive.common.FileUtils
 
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
@@ -208,14 +210,19 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   override def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = {
     val dynamicPartPath = dynamicPartColNames
-      .zip(row.takeRight(dynamicPartColNames.length))
+      .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
         val string = if (rawVal == null) null else String.valueOf(rawVal)
-        s"/$col=${if (string == null || string.isEmpty) defaultPartName else string}"
-      }
-      .mkString
+        val colString = 
+          if (string == null || string.isEmpty) {
+            defaultPartName
+          } else {
+            FileUtils.escapePathName(string)
+          }
+        s"/$col=$colString"
+      }.mkString
 
-    def newWriter = {
+    def newWriter(): FileSinkOperator.RecordWriter = {
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + dynamicPartPath,
         fileSinkConf.getTableInfo,
@@ -239,6 +246,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         Reporter.NULL)
     }
 
-    writers.getOrElseUpdate(dynamicPartPath, newWriter)
+    writers.getOrElseUpdate(dynamicPartPath, newWriter())
   }
 }

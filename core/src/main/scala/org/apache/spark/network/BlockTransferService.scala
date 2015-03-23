@@ -73,6 +73,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
   def uploadBlock(
       hostname: String,
       port: Int,
+      execId: String,
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel): Future[Unit]
@@ -110,9 +111,10 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
   def uploadBlockSync(
       hostname: String,
       port: Int,
+      execId: String,
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel): Unit = {
-    Await.result(uploadBlock(hostname, port, blockId, blockData, level), Duration.Inf)
+    Await.result(uploadBlock(hostname, port, execId, blockId, blockData, level), Duration.Inf)
   }
 }

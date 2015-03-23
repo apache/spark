@@ -18,14 +18,17 @@
 """
 Python package for feature in MLlib.
 """
+from __future__ import absolute_import
+
 import sys
 import warnings
+import random
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD, SparkContext
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.linalg import Vectors, Vector, _convert_to_vector
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
@@ -33,7 +36,7 @@ __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
 
 class VectorTransformer(object):
     """
-    :: DeveloperApi ::
+    .. note:: DeveloperApi
 
     Base class for transformation of a vector or RDD of vector
     """
@@ -48,14 +51,15 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
-    Normalizes samples individually to unit L\ :sup:`p`\ norm
+    Normalizes samples individually to unit L\ :sup:`p`\  norm
 
-    For any 1 <= `p` <= float('inf'), normalizes samples using
-    sum(abs(vector). :sup:`p`) :sup:`(1/p)` as norm.
+    For any 1 <= `p` < float('inf'), normalizes samples using
+    sum(abs(vector) :sup:`p`) :sup:`(1/p)` as norm.
 
-    For `p` = float('inf'), max(abs(vector)) will be used as norm for normalization.
+    For `p` = float('inf'), max(abs(vector)) will be used as norm for
+    normalization.
 
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
@@ -81,12 +85,16 @@ class Normalizer(VectorTransformer):
         """
         Applies unit length normalization on a vector.
 
-        :param vector: vector to be normalized.
+        :param vector: vector or RDD of vector to be normalized.
         :return: normalized vector. If the norm of the input is zero, it
                 will return the input vector.
         """
         sc = SparkContext._active_spark_context
         assert sc is not None, "SparkContext should be initialized first"
+        if isinstance(vector, RDD):
+            vector = vector.map(_convert_to_vector)
+        else:
+            vector = _convert_to_vector(vector)
         return callMLlibFunc("normalizeVector", self.p, vector)
 
 
@@ -95,13 +103,17 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     Wrapper for the model in JVM
     """
 
-    def transform(self, dataset):
-        return self.call("transform", dataset)
+    def transform(self, vector):
+        if isinstance(vector, RDD):
+            vector = vector.map(_convert_to_vector)
+        else:
+            vector = _convert_to_vector(vector)
+        return self.call("transform", vector)
 
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Represents a StandardScaler model that can transform vectors.
     """
@@ -109,16 +121,21 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         Applies standardization transformation on a vector.
 
-        :param vector: Vector to be standardized.
-        :return: Standardized vector. If the variance of a column is zero,
-                it will return default `0.0` for the column with zero variance.
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param vector: Vector or RDD of Vector to be standardized.
+        :return: Standardized vector. If the variance of a column is
+                 zero, it will return default `0.0` for the column with
+                 zero variance.
         """
         return JavaVectorTransformer.transform(self, vector)
 
 
 class StandardScaler(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
@@ -137,9 +154,10 @@ class StandardScaler(object):
         """
         :param withMean: False by default. Centers the data with mean
                  before scaling. It will build a dense output, so this
-                 does not work on sparse input and will raise an exception.
-        :param withStd: True by default. Scales the data to unit standard
-                 deviation.
+                 does not work on sparse input and will raise an
+                 exception.
+        :param withStd: True by default. Scales the data to unit
+                 standard deviation.
         """
         if not (withMean or withStd):
             warnings.warn("Both withMean and withStd are false. The model does nothing.")
@@ -148,21 +166,24 @@ class StandardScaler(object):
 
     def fit(self, dataset):
         """
-        Computes the mean and variance and stores as a model to be used for later scaling.
+        Computes the mean and variance and stores as a model to be used
+        for later scaling.
 
-        :param data: The data used to compute the mean and variance to build
-                    the transformation model.
+        :param data: The data used to compute the mean and variance
+                 to build the transformation model.
         :return: a StandardScalarModel
         """
+        dataset = dataset.map(_convert_to_vector)
         jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
         return StandardScalerModel(jmodel)
 
 
 class HashingTF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
-    Maps a sequence of terms to their term frequencies using the hashing trick.
+    Maps a sequence of terms to their term frequencies using the hashing
+    trick.
 
     Note: the terms must be hashable (can not be dict/set/list...).
 
@@ -183,8 +204,9 @@ class HashingTF(object):
 
     def transform(self, document):
         """
-        Transforms the input document (list of terms) to term frequency vectors,
-        or transform the RDD of document to RDD of term frequency vectors.
+        Transforms the input document (list of terms) to term frequency
+        vectors, or transform the RDD of document to RDD of term
+        frequency vectors.
         """
         if isinstance(document, RDD):
             return document.map(self.transform)
@@ -200,7 +222,7 @@ class IDFModel(JavaVectorTransformer):
     """
     Represents an IDF model that can transform term frequency vectors.
     """
-    def transform(self, dataset):
+    def transform(self, x):
         """
         Transforms term frequency (TF) vectors to TF-IDF vectors.
 
@@ -208,15 +230,24 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        :param dataset: an RDD of term frequency vectors
-        :return: an RDD of TF-IDF vectors
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param x: an RDD of term frequency vectors or a term frequency
+                 vector
+        :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        return JavaVectorTransformer.transform(self, dataset)
+        if isinstance(x, RDD):
+            return JavaVectorTransformer.transform(self, x)
+
+        x = _convert_to_vector(x)
+        return JavaVectorTransformer.transform(self, x)
 
 
 class IDF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Inverse document frequency (IDF).
 
@@ -225,9 +256,9 @@ class IDF(object):
     of documents that contain term `t`.
 
     This implementation supports filtering out terms which do not appear
-    in a minimum number of documents (controlled by the variable `minDocFreq`).
-    For terms that are not in at least `minDocFreq` documents, the IDF is
-    found as 0, resulting in TF-IDFs of 0.
+    in a minimum number of documents (controlled by the variable
+    `minDocFreq`). For terms that are not in at least `minDocFreq`
+    documents, the IDF is found as 0, resulting in TF-IDFs of 0.
 
     >>> n = 4
     >>> freqs = [Vectors.sparse(n, (1, 3), (1.0, 2.0)),
@@ -241,6 +272,12 @@ class IDF(object):
     SparseVector(4, {1: 0.0, 3: 0.5754})
     DenseVector([0.0, 0.0, 1.3863, 0.863])
     SparseVector(4, {1: 0.0})
+    >>> model.transform(Vectors.dense([0.0, 1.0, 2.0, 3.0]))
+    DenseVector([0.0, 0.0, 1.3863, 0.863])
+    >>> model.transform([0.0, 1.0, 2.0, 3.0])
+    DenseVector([0.0, 0.0, 1.3863, 0.863])
+    >>> model.transform(Vectors.sparse(n, (1, 3), (1.0, 2.0)))
+    SparseVector(4, {1: 0.0, 3: 0.5754})
     """
     def __init__(self, minDocFreq=0):
         """
@@ -255,7 +292,9 @@ class IDF(object):
 
         :param dataset: an RDD of term frequency vectors
         """
-        jmodel = callMLlibFunc("fitIDF", self.minDocFreq, dataset)
+        if not isinstance(dataset, RDD):
+            raise TypeError("dataset should be an RDD of term frequency vectors")
+        jmodel = callMLlibFunc("fitIDF", self.minDocFreq, dataset.map(_convert_to_vector))
         return IDFModel(jmodel)
 
 
@@ -287,6 +326,8 @@ class Word2VecModel(JavaVectorTransformer):
 
         Note: local use only
         """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
@@ -299,15 +340,16 @@ class Word2Vec(object):
     The vector representation can be used as features in
     natural language processing and machine learning algorithms.
 
-    We used skip-gram model in our implementation and hierarchical softmax
-    method to train the model. The variable names in the implementation
-    matches the original C implementation.
+    We used skip-gram model in our implementation and hierarchical
+    softmax method to train the model. The variable names in the
+    implementation matches the original C implementation.
 
-    For original C implementation, see https://code.google.com/p/word2vec/
+    For original C implementation,
+    see https://code.google.com/p/word2vec/
     For research papers, see
     Efficient Estimation of Word Representations in Vector Space
-    and
-    Distributed Representations of Words and Phrases and their Compositionality.
+    and Distributed Representations of Words and Phrases and their
+    Compositionality.
 
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
@@ -326,8 +368,6 @@ class Word2Vec(object):
         """
         Construct Word2Vec instance
         """
-        import random  # this can't be on the top because of mllib.random
-
         self.vectorSize = 100
         self.learningRate = 0.025
         self.numPartitions = 1
@@ -350,15 +390,16 @@ class Word2Vec(object):
 
     def setNumPartitions(self, numPartitions):
         """
-        Sets number of partitions (default: 1). Use a small number for accuracy.
+        Sets number of partitions (default: 1). Use a small number for
+        accuracy.
         """
         self.numPartitions = numPartitions
         return self
 
     def setNumIterations(self, numIterations):
         """
-        Sets number of iterations (default: 1), which should be smaller than or equal to number of
-        partitions.
+        Sets number of iterations (default: 1), which should be smaller
+        than or equal to number of partitions.
         """
         self.numIterations = numIterations
         return self
@@ -374,9 +415,11 @@ class Word2Vec(object):
         """
         Computes the vector representation of each word in vocabulary.
 
-        :param data: training data. RDD of subtype of Iterable[String]
+        :param data: training data. RDD of list of string
         :return: Word2VecModel instance
         """
+        if not isinstance(data, RDD):
+            raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), long(self.seed))
@@ -394,8 +437,5 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
-    # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
-    import sys
     sys.path.pop(0)
     _test()

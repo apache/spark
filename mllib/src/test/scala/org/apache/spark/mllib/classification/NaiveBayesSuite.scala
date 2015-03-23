@@ -24,7 +24,9 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.util.Utils
+
 
 object NaiveBayesSuite {
 
@@ -58,9 +60,21 @@ object NaiveBayesSuite {
       LabeledPoint(y, Vectors.dense(xi))
     }
   }
+
+  private val smallPi = Array(0.5, 0.3, 0.2).map(math.log)
+
+  private val smallTheta = Array(
+    Array(0.91, 0.03, 0.03, 0.03), // label 0
+    Array(0.03, 0.91, 0.03, 0.03), // label 1
+    Array(0.03, 0.03, 0.91, 0.03)  // label 2
+  ).map(_.map(math.log))
+
+  /** Binary labels, 3 features */
+  private val binaryModel = new NaiveBayesModel(labels = Array(0.0, 1.0), pi = Array(0.2, 0.8),
+    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)))
 }
 
-class NaiveBayesSuite extends FunSuite with LocalSparkContext {
+class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOfPredictions = predictions.zip(input).count {
@@ -71,15 +85,19 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
     assert(numOfPredictions < input.length / 5)
   }
 
+  test("get, set params") {
+    val nb = new NaiveBayes()
+    nb.setLambda(2.0)
+    assert(nb.getLambda === 2.0)
+    nb.setLambda(3.0)
+    assert(nb.getLambda === 3.0)
+  }
+
   test("Naive Bayes") {
     val nPoints = 10000
 
-    val pi = Array(0.5, 0.3, 0.2).map(math.log)
-    val theta = Array(
-      Array(0.91, 0.03, 0.03, 0.03), // label 0
-      Array(0.03, 0.91, 0.03, 0.03), // label 1
-      Array(0.03, 0.03, 0.91, 0.03)  // label 2
-    ).map(_.map(math.log))
+    val pi = NaiveBayesSuite.smallPi
+    val theta = NaiveBayesSuite.smallTheta
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
@@ -121,6 +139,24 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty)))
     intercept[SparkException] {
       NaiveBayes.train(sc.makeRDD(nan, 2))
+    }
+  }
+
+  test("model save/load") {
+    val model = NaiveBayesSuite.binaryModel
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = NaiveBayesModel.load(sc, path)
+      assert(model.labels === sameModel.labels)
+      assert(model.pi === sameModel.pi)
+      assert(model.theta === sameModel.theta)
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 }

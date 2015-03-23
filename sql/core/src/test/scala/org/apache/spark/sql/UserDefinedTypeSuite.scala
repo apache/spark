@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
+import org.apache.spark.util.Utils
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.types.UserDefinedType
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.types._
+
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
@@ -57,27 +64,59 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   }
 
   override def userClass = classOf[MyDenseVector]
+
+  private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest {
+  val points = Seq(
+    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
+  val pointsRDD = sparkContext.parallelize(points).toDF()
+
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
-    val points = Seq(
-      MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
-      MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-    val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
-
-    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
+    val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[MyDenseVector] =
-      pointsRDD.select('features).map { case Row(v: MyDenseVector) => v }
+      pointsRDD.select('features).rdd.map { case Row(v: MyDenseVector) => v }
     val featuresArrays: Array[MyDenseVector] = features.collect()
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
+  }
+
+  test("UDTs and UDFs") {
+    TestSQLContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    pointsRDD.registerTempTable("points")
+    checkAnswer(
+      sql("SELECT testType(features) from points"),
+      Seq(Row(true), Row(true)))
+  }
+
+
+  test("UDTs with Parquet") {
+    val tempDir = Utils.createTempDir()
+    tempDir.delete()
+    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+  }
+
+  test("Repartition UDTs with Parquet") {
+    val tempDir = Utils.createTempDir()
+    tempDir.delete()
+    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
+  }
+
+  // Tests to make sure that all operators correctly convert types on the way out.
+  test("Local UDTs") {
+    val df = Seq((1, new MyDenseVector(Array(0.1, 1.0)))).toDF("int", "vec")
+    df.collect()(0).getAs[MyDenseVector](1)
+    df.take(1)(0).getAs[MyDenseVector](1)
+    df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
+    df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
   }
 }

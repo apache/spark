@@ -19,4 +19,34 @@ rem
 
 set SPARK_HOME=%~dp0..
 
-cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd --class org.apache.spark.repl.Main %* spark-shell
+echo "%*" | findstr " --help -h" >nul
+if %ERRORLEVEL% equ 0 (
+  call :usage
+  exit /b 0
+)
+
+rem SPARK-4161: scala does not assume use of the java classpath,
+rem so we need to add the "-Dscala.usejavacp=true" flag manually. We
+rem do this specifically for the Spark shell because the scala REPL
+rem has its own class loader, and any additional classpath specified
+rem through spark.driver.extraClassPath is not automatically propagated.
+if "x%SPARK_SUBMIT_OPTS%"=="x" (
+  set SPARK_SUBMIT_OPTS=-Dscala.usejavacp=true
+  goto run_shell
+)
+set SPARK_SUBMIT_OPTS="%SPARK_SUBMIT_OPTS% -Dscala.usejavacp=true"
+
+:run_shell
+call %SPARK_HOME%\bin\spark-submit2.cmd --class org.apache.spark.repl.Main %*
+set SPARK_ERROR_LEVEL=%ERRORLEVEL%
+if not "x%SPARK_LAUNCHER_USAGE_ERROR%"=="x" (
+  call :usage
+  exit /b 1
+)
+exit /b %SPARK_ERROR_LEVEL%
+
+:usage
+echo %SPARK_LAUNCHER_USAGE_ERROR%
+echo "Usage: .\bin\spark-shell.cmd [options]" >&2
+call %SPARK_HOME%\bin\spark-submit2.cmd --help 2>&1 | findstr /V "Usage" 1>&2
+goto :eof

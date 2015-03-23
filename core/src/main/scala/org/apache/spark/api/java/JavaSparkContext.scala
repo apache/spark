@@ -21,11 +21,6 @@ import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
-import java.io.DataInputStream
-
-import org.apache.hadoop.io.{BytesWritable, LongWritable}
-import org.apache.spark.input.{PortableDataStream, FixedLengthBinaryInputFormat}
-
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -33,11 +28,12 @@ import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.input.PortableDataStream
 import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+import org.apache.spark.AccumulatorParam._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
@@ -46,6 +42,9 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
+ *
+ * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
+ * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
  */
 class JavaSparkContext(val sc: SparkContext)
   extends JavaSparkContextVarargsWorkaround with Closeable {
@@ -109,6 +108,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   private[spark] val env = sc.env
 
+  def statusTracker = new JavaSparkStatusTracker(sc)
+
   def isLocal: java.lang.Boolean = sc.isLocal
 
   def sparkUser: String = sc.sparkUser
@@ -137,25 +138,6 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
-
-
-  /**
-   * Return a list of all known jobs in a particular job group.  The returned list may contain
-   * running, failed, and completed jobs, and may vary across invocations of this method.  This
-   * method does not guarantee the order of the elements in its result.
-   */
-  def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.getJobIdsForGroup(jobGroup)
-
-  /**
-   * Returns job information, or `null` if the job info could not be found or was garbage collected.
-   */
-  def getJobInfo(jobId: Int): SparkJobInfo = sc.getJobInfo(jobId).orNull
-
-  /**
-   * Returns stage information, or `null` if the stage info could not be found or was
-   * garbage collected.
-   */
-  def getStageInfo(stageId: Int): SparkStageInfo = sc.getStageInfo(stageId).orNull
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
@@ -286,6 +268,8 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaPairRDD(sc.binaryFiles(path, minPartitions))
 
   /**
+   * :: Experimental ::
+   *
    * Read a directory of binary files from HDFS, a local file system (available on all nodes),
    * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
    * record and returned in a key-value pair, where the key is the path of each file,
@@ -312,15 +296,19 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * @note Small files are preferred; very large files but may cause bad performance.
    */
+  @Experimental
   def binaryFiles(path: String): JavaPairRDD[String, PortableDataStream] =
     new JavaPairRDD(sc.binaryFiles(path, defaultMinPartitions))
 
   /**
+   * :: Experimental ::
+   *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
    * @param path Directory to the input data files
    * @return An RDD of data with values, represented as byte arrays
    */
+  @Experimental
   def binaryRecords(path: String, recordLength: Int): JavaRDD[Array[Byte]] = {
     new JavaRDD(sc.binaryRecords(path, recordLength))
   }
@@ -385,6 +373,15 @@ class JavaSparkContext(val sc: SparkContext)
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    *
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param inputFormatClass Class of the InputFormat
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
+   * @param minPartitions Minimum number of Hadoop Splits to generate.
+   *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
@@ -406,6 +403,14 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
+   *
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param inputFormatClass Class of the InputFormat
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -487,6 +492,14 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
+   *
+   * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param fClass Class of the InputFormat
+   * @param kClass Class of the keys
+   * @param vClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -687,6 +700,9 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   *
+   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration(): Configuration = {
     sc.hadoopConfiguration

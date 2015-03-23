@@ -21,10 +21,9 @@ import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -32,8 +31,8 @@ import scala.util.Random
 import akka.actor._
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
@@ -41,15 +40,15 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 /**
-  * @param masterUrls Each url should look like spark://host:port.
+  * @param masterAkkaUrls Each url should be a valid akka url.
   */
-private[spark] class Worker(
+private[worker] class Worker(
     host: String,
     port: Int,
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterUrls: Array[String],
+    masterAkkaUrls: Array[String],
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
@@ -61,75 +60,90 @@ private[spark] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
+  // For worker and executor IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
-  val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
+  private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
   // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
   // Afterwards, the next 10 attempts are between 30 and 90 seconds.
   // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
   // the same time.
-  val INITIAL_REGISTRATION_RETRIES = 6
-  val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
-  val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
-  val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
+  private val INITIAL_REGISTRATION_RETRIES = 6
+  private val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
+  private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
+  private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
     randomNumberGenerator.nextDouble + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
   }
-  val INITIAL_REGISTRATION_RETRY_INTERVAL = (math.round(10 *
+  private val INITIAL_REGISTRATION_RETRY_INTERVAL = (math.round(10 *
     REGISTRATION_RETRY_FUZZ_MULTIPLIER)).seconds
-  val PROLONGED_REGISTRATION_RETRY_INTERVAL = (math.round(60
+  private val PROLONGED_REGISTRATION_RETRY_INTERVAL = (math.round(60
     * REGISTRATION_RETRY_FUZZ_MULTIPLIER)).seconds
 
-  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
+  private val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
-  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
+  private val CLEANUP_INTERVAL_MILLIS = 
+    conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
+  private val APP_DATA_RETENTION_SECS = 
+    conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
-  val testing: Boolean = sys.props.contains("spark.testing")
-  var master: ActorSelection = null
-  var masterAddress: Address = null
-  var activeMasterUrl: String = ""
-  var activeMasterWebUiUrl : String = ""
-  val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
-  @volatile var registered = false
-  @volatile var connected = false
-  val workerId = generateWorkerId()
-  val sparkHome =
+  private val testing: Boolean = sys.props.contains("spark.testing")
+  private var master: ActorSelection = null
+  private var masterAddress: Address = null
+  private var activeMasterUrl: String = ""
+  private[worker] var activeMasterWebUiUrl : String = ""
+  private val akkaUrl = AkkaUtils.address(
+    AkkaUtils.protocol(context.system),
+    actorSystemName,
+    host,
+    port,
+    actorName)
+  @volatile private var registered = false
+  @volatile private var connected = false
+  private val workerId = generateWorkerId()
+  private val sparkHome =
     if (testing) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
       new File(sys.env.get("SPARK_HOME").getOrElse("."))
     }
+  
   var workDir: File = null
-  val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
+  val executors = new HashMap[String, ExecutorRunner]
   val finishedDrivers = new HashMap[String, DriverRunner]
+  val appDirectories = new HashMap[String, Seq[String]]
+  val finishedApps = new HashSet[String]
 
-  val publicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+  // The shuffle service is not actually started unless configured.
+  private val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
+
+  private val publicAddress = {
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
-  var webUi: WorkerWebUI = null
+  private var webUi: WorkerWebUI = null
+
+  private var connectionAttemptCount = 0
+
+  private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
+  private val workerSource = new WorkerSource(this)
+  
+  private var registrationRetryTimer: Option[Cancellable] = None
 
   var coresUsed = 0
   var memoryUsed = 0
-  var connectionAttemptCount = 0
-
-  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
-  val workerSource = new WorkerSource(this)
-
-  var registrationRetryTimer: Option[Cancellable] = None
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
-  def createWorkDir() {
+  private def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
@@ -151,39 +165,48 @@ private[spark] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
     metricsSystem.start()
+    // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
+    metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
-  def changeMaster(url: String, uiUrl: String) {
+  private def changeMaster(url: String, uiUrl: String) {
+    // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
-    master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = activeMasterUrl match {
-      case Master.sparkUrlRegex(_host, _port) =>
-        Address("akka.tcp", Master.systemName, _host, _port.toInt)
-      case x =>
-        throw new SparkException("Invalid spark URL: " + x)
-    }
+    master = context.actorSelection(
+      Master.toAkkaUrl(activeMasterUrl, AkkaUtils.protocol(context.system)))
+    masterAddress = Master.toAkkaAddress(activeMasterUrl, AkkaUtils.protocol(context.system))
     connected = true
+    // Cancel any outstanding re-registration attempts because we found a new master
+    registrationRetryTimer.foreach(_.cancel())
+    registrationRetryTimer = None
   }
 
   private def tryRegisterAllMasters() {
-    for (masterUrl <- masterUrls) {
-      logInfo("Connecting to master " + masterUrl + "...")
-      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+    for (masterAkkaUrl <- masterAkkaUrls) {
+      logInfo("Connecting to master " + masterAkkaUrl + "...")
+      val actor = context.actorSelection(masterAkkaUrl)
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
     }
   }
 
-  private def retryConnectToMaster() {
+  /**
+   * Re-register with the master because a network failure or a master failure has occurred.
+   * If the re-registration attempt threshold is exceeded, the worker exits with error.
+   * Note that for thread-safety this should only be called from the actor.
+   */
+  private def reregisterWithMaster(): Unit = {
     Utils.tryOrExit {
       connectionAttemptCount += 1
       if (registered) {
@@ -191,12 +214,40 @@ private[spark] class Worker(
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
         logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
-        tryRegisterAllMasters()
+        /**
+         * Re-register with the active master this worker has been communicating with. If there
+         * is none, then it means this worker is still bootstrapping and hasn't established a
+         * connection with a master yet, in which case we should re-register with all masters.
+         *
+         * It is important to re-register only with the active master during failures. Otherwise,
+         * if the worker unconditionally attempts to re-register with all masters, the following
+         * race condition may arise and cause a "duplicate worker" error detailed in SPARK-4592:
+         *
+         *   (1) Master A fails and Worker attempts to reconnect to all masters
+         *   (2) Master B takes over and notifies Worker
+         *   (3) Worker responds by registering with Master B
+         *   (4) Meanwhile, Worker's previous reconnection attempt reaches Master B,
+         *       causing the same Worker to register with Master B twice
+         *
+         * Instead, if we only register with the known active master, we can assume that the
+         * old master must have died because another master has taken over. Note that this is
+         * still not safe if the old master recovers within this interval, but this is a much
+         * less likely scenario.
+         */
+        if (master != null) {
+          master ! RegisterWorker(
+            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+        } else {
+          // We are retrying the initial registration
+          tryRegisterAllMasters()
+        }
+        // We have exceeded the initial registration retry threshold
+        // All retries from now on should use a higher interval
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())
           registrationRetryTimer = Some {
             context.system.scheduler.schedule(PROLONGED_REGISTRATION_RETRY_INTERVAL,
-              PROLONGED_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
+              PROLONGED_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
           }
         }
       } else {
@@ -206,7 +257,7 @@ private[spark] class Worker(
     }
   }
 
-  def registerWithMaster() {
+  private def registerWithMaster() {
     // DisassociatedEvent may be triggered multiple times, so don't attempt registration
     // if there are outstanding registration attempts scheduled.
     registrationRetryTimer match {
@@ -216,7 +267,7 @@ private[spark] class Worker(
         connectionAttemptCount = 0
         registrationRetryTimer = Some {
           context.system.scheduler.schedule(INITIAL_REGISTRATION_RETRY_INTERVAL,
-            INITIAL_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
+            INITIAL_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
         }
       case Some(_) =>
         logInfo("Not spawning another attempt to register with the master, since there is an" +
@@ -253,7 +304,7 @@ private[spark] class Worker(
           val isAppStillRunning = executors.values.map(_.appId).contains(appIdFromDir)
           dir.isDirectory && !isAppStillRunning &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
-        }.foreach { dir => 
+        }.foreach { dir =>
           logInfo(s"Removing directory: ${dir.getPath}")
           Utils.deleteRecursively(dir)
         }
@@ -298,8 +349,31 @@ private[spark] class Worker(
             throw new IOException("Failed to create directory " + executorDir)
           }
 
-          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host, sparkHome, executorDir, akkaUrl, conf, ExecutorState.LOADING)
+          // Create local dirs for the executor. These are passed to the executor via the
+          // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
+          // application finishes.
+          val appLocalDirs = appDirectories.get(appId).getOrElse {
+            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
+              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
+            }.toSeq
+          }
+          appDirectories(appId) = appLocalDirs
+          val manager = new ExecutorRunner(
+            appId,
+            execId,
+            appDesc.copy(command = Worker.maybeUpdateSSLSettings(appDesc.command, conf)),
+            cores_,
+            memory_,
+            self,
+            workerId,
+            host,
+            webUi.boundPort,
+            publicAddress,
+            sparkHome,
+            executorDir,
+            akkaUrl,
+            conf,
+            appLocalDirs, ExecutorState.LOADING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -336,6 +410,7 @@ private[spark] class Worker(
               message.map(" message " + _).getOrElse("") +
               exitStatus.map(" exitStatus " + _).getOrElse(""))
         }
+        maybeCleanupApplication(appId)
       }
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -354,7 +429,14 @@ private[spark] class Worker(
 
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(conf, driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
+      val driver = new DriverRunner(
+        conf,
+        driverId,
+        workDir,
+        sparkHome,
+        driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
+        self,
+        akkaUrl)
       drivers(driverId) = driver
       driver.start()
 
@@ -396,12 +478,18 @@ private[spark] class Worker(
       logInfo(s"$x Disassociated !")
       masterDisconnected()
 
-    case RequestWorkerState => {
+    case RequestWorkerState =>
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
-    }
+
+    case ReregisterWithMaster =>
+      reregisterWithMaster()
+
+    case ApplicationFinished(id) =>
+      finishedApps += id
+      maybeCleanupApplication(id)
   }
 
   private def masterDisconnected() {
@@ -410,7 +498,20 @@ private[spark] class Worker(
     registerWithMaster()
   }
 
-  def generateWorkerId(): String = {
+  private def maybeCleanupApplication(id: String): Unit = {
+    val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
+    if (shouldCleanup) {
+      finishedApps -= id
+      appDirectories.remove(id).foreach { dirList =>
+        logInfo(s"Cleaning up local directories for application $id")
+        dirList.foreach { dir =>
+          Utils.deleteRecursively(new File(dir))
+        }
+      }
+    }
+  }
+
+  private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
@@ -419,12 +520,13 @@ private[spark] class Worker(
     registrationRetryTimer.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
+    shuffleService.stop()
     webUi.stop()
     metricsSystem.stop()
   }
 }
 
-private[spark] object Worker extends Logging {
+private[deploy] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -441,18 +543,42 @@ private[spark] object Worker extends Logging {
       cores: Int,
       memory: Int,
       masterUrls: Array[String],
-      workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workDir: String,
+      workerNumber: Option[Int] = None,
+      conf: SparkConf = new SparkConf): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
+    val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
+  }
+
+  def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
+    val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
+    val result = cmd.javaOpts.collectFirst {
+      case pattern(_result) => _result.toBoolean
+    }
+    result.getOrElse(false)
+  }
+
+  def maybeUpdateSSLSettings(cmd: Command, conf: SparkConf): Command = {
+    val prefix = "spark.ssl."
+    val useNLC = "spark.ssl.useNodeLocalConf"
+    if (isUseLocalNodeSSLConfig(cmd)) {
+      val newJavaOpts = cmd.javaOpts
+          .filter(opt => !opt.startsWith(s"-D$prefix")) ++
+          conf.getAll.collect { case (key, value) if key.startsWith(prefix) => s"-D$key=$value" } :+
+          s"-D$useNLC=true"
+      cmd.copy(javaOpts = newJavaOpts)
+    } else {
+      cmd
+    }
   }
 
 }

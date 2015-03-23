@@ -21,8 +21,8 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
+import org.apache.spark.sql.types.NativeType
 
 private[sql] trait Encoder[T <: NativeType] {
   def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {}

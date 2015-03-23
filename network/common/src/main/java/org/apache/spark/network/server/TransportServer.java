@@ -71,11 +71,14 @@ public class TransportServer implements Closeable {
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
     EventLoopGroup workerGroup = bossGroup;
 
+    PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(
+      conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
+
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
-      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-      .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+      .option(ChannelOption.ALLOCATOR, allocator)
+      .childOption(ChannelOption.ALLOCATOR, allocator);
 
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());
@@ -96,8 +99,7 @@ public class TransportServer implements Closeable {
       }
     });
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(portToBind));
-    channelFuture.syncUninterruptibly();
+    bindRightPort(portToBind);
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port :" + port);
@@ -119,4 +121,37 @@ public class TransportServer implements Closeable {
     bootstrap = null;
   }
 
+  /**
+   * Attempt to bind to the specified port up to a fixed number of retries.
+   * If all attempts fail after the max number of retries, exit.
+   */
+  private void bindRightPort(int portToBind) {
+    int maxPortRetries = conf.portMaxRetries();
+
+    for (int i = 0; i <= maxPortRetries; i++) {
+      int tryPort = -1;
+      if (0 == portToBind) {
+        // Do not increment port if tryPort is 0, which is treated as a special port
+        tryPort = 0;
+      } else {
+        // If the new port wraps around, do not try a privilege port
+        tryPort = ((portToBind + i - 1024) % (65536 - 1024)) + 1024;
+      }
+      try {
+        channelFuture = bootstrap.bind(new InetSocketAddress(tryPort));
+        channelFuture.syncUninterruptibly();
+        return;
+      } catch (Exception e) {
+        logger.warn("Netty service could not bind on port " + tryPort +
+          ". Attempting the next port.");
+        if (i >= maxPortRetries) {
+          logger.error(e.getMessage() + ": Netty server failed after "
+            + maxPortRetries + " retries.");
+
+          // If it can't find a right port, it should exit directly.
+          System.exit(-1);
+        }
+      }
+    }
+  }
 }

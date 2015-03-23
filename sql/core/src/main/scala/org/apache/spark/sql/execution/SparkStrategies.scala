@@ -17,22 +17,29 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.parquet._
-
+import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+          right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+        val semiJoin = joins.BroadcastLeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         val semiJoin = joins.LeftSemiJoinHash(
@@ -74,13 +81,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.autoBroadcastJoinThreshold > 0 &&
-           right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+        if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+           right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.autoBroadcastJoinThreshold > 0 &&
-           left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+        if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+           left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
@@ -147,7 +154,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
+    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
       case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
@@ -155,7 +162,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => true
     }
 
-    def allAggregates(exprs: Seq[Expression]) =
+    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
 
@@ -190,7 +197,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object TakeOrdered extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, child)) =>
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
         execution.TakeOrdered(limit, order, planLater(child)) :: Nil
       case _ => Nil
     }
@@ -208,23 +215,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val prunePushedDownFilters =
-          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-            (filters: Seq[Expression]) => {
-              filters.filter { filter =>
-                // Note: filters cannot be pushed down to Parquet if they contain more complex
-                // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
-                // all filters that have been pushed down. Note that a predicate such as
-                // "(A AND B) OR C" can result in "A OR C" being pushed down.
-                val recordFilter = ParquetFilters.createFilter(filter)
-                if (!recordFilter.isDefined) {
-                  // First case: the pushdown did not result in any record filter.
-                  true
-                } else {
-                  // Second case: a record filter was created; here we are conservative in
-                  // the sense that even if "A" was pushed and we check for "A AND B" we
-                  // still want to keep "A AND B" in the higher-level filter, not just "B".
-                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
-                }
+          if (sqlContext.conf.parquetFilterPushDown) {
+            (predicates: Seq[Expression]) => {
+              // Note: filters cannot be pushed down to Parquet if they contain more complex
+              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove all
+              // filters that have been pushed down. Note that a predicate such as "(A AND B) OR C"
+              // can result in "A OR C" being pushed down. Here we are conservative in the sense
+              // that even if "A" was pushed and we check for "A AND B" we still want to keep
+              // "A AND B" in the higher-level filter, not just "B".
+              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
+                case (predicate, None) => predicate
               }
             }
           } else {
@@ -234,7 +234,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           prunePushedDownFilters,
-          ParquetTableScan(_, relation, filters)) :: Nil
+          ParquetTableScan(
+            _,
+            relation,
+            if (sqlContext.conf.parquetFilterPushDown) filters else Nil)) :: Nil
 
       case _ => Nil
     }
@@ -254,34 +257,35 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions = self.numPartitions
+    def numPartitions: Int = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case r: RunnableCommand => ExecutedCommand(r) :: Nil
+
       case logical.Distinct(child) =>
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
-      case logical.Sort(sortExprs, child) =>
-        // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
-        execution.Sort(sortExprs, global = true, planLater(child)):: Nil
+
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
+      case logical.Sort(sortExprs, global, child) if sqlContext.conf.externalSortEnabled =>
+        execution.ExternalSort(sortExprs, global, planLater(child)):: Nil
+      case logical.Sort(sortExprs, global, child) =>
+        execution.Sort(sortExprs, global, planLater(child)):: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
+      case logical.Expand(projections, output, child) =>
+        execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
-      case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
-        val nPartitions = if (data.isEmpty) 1 else numPartitions
-        PhysicalRDD(
-          output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions),
-            StructType.fromAttributes(output))) :: Nil
+        LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -303,17 +307,29 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case class CommandStrategy(context: SQLContext) extends Strategy {
+  object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case r: RunnableCommand => ExecutedCommand(r) :: Nil
-      case logical.SetCommand(kv) =>
-        Seq(execution.SetCommand(kv, plan.output)(context))
-      case logical.ExplainCommand(logicalPlan, extended) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
-      case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
-        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
-      case logical.UncacheTableCommand(tableName) =>
-        Seq(execution.UncacheTableCommand(tableName))
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false, _) =>
+        ExecutedCommand(
+          CreateTempTableUsing(
+            tableName, userSpecifiedSchema, provider, opts)) :: Nil
+      case c: CreateTableUsing if !c.temporary =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+      case c: CreateTableUsing if c.temporary && c.allowExisting =>
+        sys.error("allowExisting should be set to false when creating a temporary table.")
+
+      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
+        val cmd =
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
+        ExecutedCommand(cmd) :: Nil
+      case c: CreateTableUsingAsSelect if !c.temporary =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
+      case LogicalDescribeCommand(table, isExtended) =>
+        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        ExecutedCommand(
+          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+
       case _ => Nil
     }
   }

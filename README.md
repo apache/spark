@@ -13,7 +13,8 @@ and Spark Streaming for stream processing.
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the [project web page](http://spark.apache.org/documentation.html).
+guide, on the [project web page](http://spark.apache.org/documentation.html)
+and [project wiki](https://cwiki.apache.org/confluence/display/SPARK).
 This README file only contains basic setup instructions.
 
 ## Building Spark
@@ -25,7 +26,7 @@ To build Spark and its example programs, run:
 
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
-["Building Spark with Maven"](http://spark.apache.org/docs/latest/building-with-maven.html).
+["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 
 ## Interactive Scala Shell
 
@@ -84,7 +85,7 @@ storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
-["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-with-maven.html#specifying-the-hadoop-version)
+["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
 for detailed guidance on building for a particular distribution of Hadoop, including
 building for particular Hive and Hive Thriftserver distributions. See also
 ["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)

@@ -116,6 +116,8 @@ private[spark] class TachyonStore(
       case ioe: IOException =>
         logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
         None
+    } finally {
+      is.close()
     }
   }
 

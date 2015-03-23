@@ -48,7 +48,6 @@ class WriteAheadLogBackedBlockRDDPartition(
  * If it does not find them, it looks up the corresponding file segment.
  *
  * @param sc SparkContext
- * @param hadoopConfig Hadoop configuration
  * @param blockIds Ids of the blocks that contains this RDD's data
  * @param segments Segments in write ahead logs that contain this RDD's data
  * @param storeInBlockManager Whether to store in the block manager after reading from the segment
@@ -58,7 +57,6 @@ class WriteAheadLogBackedBlockRDDPartition(
 private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
-    @transient hadoopConfig: Configuration,
     @transient blockIds: Array[BlockId],
     @transient segments: Array[WriteAheadLogFileSegment],
     storeInBlockManager: Boolean,
@@ -71,6 +69,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       s"the same as number of segments (${segments.length}})!")
 
   // Hadoop configuration is not serializable, so broadcast it as a serializable.
+  @transient private val hadoopConfig = sc.hadoopConfiguration
   private val broadcastedHadoopConf = new SerializableWritable(hadoopConfig)
 
   override def getPartitions: Array[Partition] = {

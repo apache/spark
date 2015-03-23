@@ -24,8 +24,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
-import static org.apache.spark.network.shuffle.ExternalShuffleMessages.OpenShuffleBlocks;
-import static org.apache.spark.network.shuffle.ExternalShuffleMessages.RegisterExecutor;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
@@ -36,7 +34,12 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.shuffle.protocol.OpenBlocks;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
+import org.apache.spark.network.shuffle.protocol.StreamHandle;
+import org.apache.spark.network.shuffle.protocol.UploadBlock;
 
 public class ExternalShuffleBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
@@ -57,8 +60,7 @@ public class ExternalShuffleBlockHandlerSuite {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
-    byte[] registerMessage = JavaUtils.serialize(
-      new RegisterExecutor("app0", "exec1", config));
+    byte[] registerMessage = new RegisterExecutor("app0", "exec1", config).toByteArray();
     handler.receive(client, registerMessage, callback);
     verify(blockManager, times(1)).registerExecutor("app0", "exec1", config);
 
@@ -75,9 +77,8 @@ public class ExternalShuffleBlockHandlerSuite {
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
     when(blockManager.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockManager.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    byte[] openBlocksMessage = JavaUtils.serialize(
-      new OpenShuffleBlocks("app0", "exec1", new String[] { "b0", "b1" }));
-    handler.receive(client, openBlocksMessage, callback);
+    byte[] openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" }).toByteArray();
+    handler.receive(client, openBlocks, callback);
     verify(blockManager, times(1)).getBlockData("app0", "exec1", "b0");
     verify(blockManager, times(1)).getBlockData("app0", "exec1", "b1");
 
@@ -85,7 +86,8 @@ public class ExternalShuffleBlockHandlerSuite {
     verify(callback, times(1)).onSuccess(response.capture());
     verify(callback, never()).onFailure((Throwable) any());
 
-    ShuffleStreamHandle handle = JavaUtils.deserialize(response.getValue());
+    StreamHandle handle =
+      (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response.getValue());
     assertEquals(2, handle.numChunks);
 
     ArgumentCaptor<Iterator> stream = ArgumentCaptor.forClass(Iterator.class);
@@ -100,18 +102,17 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testBadMessages() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    byte[] unserializableMessage = new byte[] { 0x12, 0x34, 0x56 };
+    byte[] unserializableMsg = new byte[] { 0x12, 0x34, 0x56 };
     try {
-      handler.receive(client, unserializableMessage, callback);
+      handler.receive(client, unserializableMsg, callback);
       fail("Should have thrown");
     } catch (Exception e) {
       // pass
     }
 
-    byte[] unexpectedMessage = JavaUtils.serialize(
-      new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort"));
+    byte[] unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1], new byte[2]).toByteArray();
     try {
-      handler.receive(client, unexpectedMessage, callback);
+      handler.receive(client, unexpectedMsg, callback);
       fail("Should have thrown");
     } catch (UnsupportedOperationException e) {
       // pass

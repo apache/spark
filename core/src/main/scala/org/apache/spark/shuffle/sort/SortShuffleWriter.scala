@@ -50,9 +50,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
     if (dep.mapSideCombine) {
-      if (!dep.aggregator.isDefined) {
-        throw new IllegalStateException("Aggregator is empty for map-side combine")
-      }
+      require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       sorter = new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
       sorter.insertAll(records)
@@ -90,7 +88,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     } finally {
       // Clean up our sorter, which may have its own intermediate files
       if (sorter != null) {
+        val startTime = System.nanoTime()
         sorter.stop()
+        context.taskMetrics.shuffleWriteMetrics.foreach(
+          _.incShuffleWriteTime(System.nanoTime - startTime))
         sorter = null
       }
     }

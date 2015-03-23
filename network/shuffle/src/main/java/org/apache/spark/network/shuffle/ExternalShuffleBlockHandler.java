@@ -21,10 +21,9 @@ import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import org.apache.spark.network.util.TransportConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.apache.spark.network.shuffle.ExternalShuffleMessages.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -32,7 +31,10 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.OpenBlocks;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
+import org.apache.spark.network.shuffle.protocol.StreamHandle;
 
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
@@ -41,14 +43,14 @@ import org.apache.spark.network.util.JavaUtils;
  * with the "one-for-one" strategy, meaning each Transport-layer Chunk is equivalent to one Spark-
  * level shuffle block.
  */
-public class ExternalShuffleBlockHandler implements RpcHandler {
+public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
   private final ExternalShuffleBlockManager blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler() {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager());
+  public ExternalShuffleBlockHandler(TransportConf conf) {
+    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager(conf));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
@@ -62,12 +64,10 @@ public class ExternalShuffleBlockHandler implements RpcHandler {
 
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    Object msgObj = JavaUtils.deserialize(message);
+    BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteArray(message);
 
-    logger.trace("Received message: " + msgObj);
-
-    if (msgObj instanceof OpenShuffleBlocks) {
-      OpenShuffleBlocks msg = (OpenShuffleBlocks) msgObj;
+    if (msgObj instanceof OpenBlocks) {
+      OpenBlocks msg = (OpenBlocks) msgObj;
       List<ManagedBuffer> blocks = Lists.newArrayList();
 
       for (String blockId : msg.blockIds) {
@@ -75,8 +75,7 @@ public class ExternalShuffleBlockHandler implements RpcHandler {
       }
       long streamId = streamManager.registerStream(blocks.iterator());
       logger.trace("Registered streamId {} with {} buffers", streamId, msg.blockIds.length);
-      callback.onSuccess(JavaUtils.serialize(
-        new ShuffleStreamHandle(streamId, msg.blockIds.length)));
+      callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteArray());
 
     } else if (msgObj instanceof RegisterExecutor) {
       RegisterExecutor msg = (RegisterExecutor) msgObj;
@@ -84,8 +83,7 @@ public class ExternalShuffleBlockHandler implements RpcHandler {
       callback.onSuccess(new byte[0]);
 
     } else {
-      throw new UnsupportedOperationException(String.format(
-        "Unexpected message: %s (class = %s)", msgObj, msgObj.getClass()));
+      throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
   }
 
@@ -94,9 +92,11 @@ public class ExternalShuffleBlockHandler implements RpcHandler {
     return streamManager;
   }
 
-  /** For testing, clears all executors registered with "RegisterExecutor". */
-  @VisibleForTesting
-  public void clearRegisteredExecutors() {
-    blockManager.clearRegisteredExecutors();
+  /**
+   * Removes an application (once it has been terminated), and optionally will clean up any
+   * local directories associated with the executors of that application in a separate thread.
+   */
+  public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+    blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 }

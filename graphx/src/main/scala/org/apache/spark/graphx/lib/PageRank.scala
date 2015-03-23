@@ -25,8 +25,8 @@ import org.apache.spark.graphx._
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
  *
- * The first implementation uses the [[Pregel]] interface and runs PageRank for a fixed number
- * of iterations:
+ * The first implementation uses the standalone [[Graph]] interface and runs PageRank
+ * for a fixed number of iterations:
  * {{{
  * var PR = Array.fill(n)( 1.0 )
  * val oldPR = Array.fill(n)( 1.0 )
@@ -38,7 +38,7 @@ import org.apache.spark.graphx._
  * }
  * }}}
  *
- * The second implementation uses the standalone [[Graph]] interface and runs PageRank until
+ * The second implementation uses the [[Pregel]] interface and runs PageRank until
  * convergence:
  *
  * {{{
@@ -85,7 +85,7 @@ object PageRank extends Logging {
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
+      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => resetProb )
 
@@ -96,8 +96,8 @@ object PageRank extends Logging {
 
       // Compute the outgoing rank contributions of each vertex, perform local preaggregation, and
       // do the final aggregation at the receiving vertices. Requires a shuffle for aggregation.
-      val rankUpdates = rankGraph.mapReduceTriplets[Double](
-        e => Iterator((e.dstId, e.srcAttr * e.attr)), _ + _)
+      val rankUpdates = rankGraph.aggregateMessages[Double](
+        ctx => ctx.sendToDst(ctx.srcAttr * ctx.attr), _ + _, TripletFields.Src)
 
       // Apply the final rank updates to get the new ranks, using join to preserve ranks of vertices
       // that didn't receive a message. Requires a shuffle for broadcasting updated ranks to the

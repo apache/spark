@@ -21,6 +21,7 @@ import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -45,7 +46,7 @@ case class Aggregate(
     child: SparkPlan)
   extends UnaryNode {
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: List[Distribution] = {
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
@@ -55,12 +56,9 @@ case class Aggregate(
         ClusteredDistribution(groupingExpressions) :: Nil
       }
     }
+  }
 
-  // HACK: Generators don't correctly preserve their output through serializations so we grab
-  // out child's output attributes statically here.
-  private[this] val childOutput = child.output
-
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
   /**
    * An aggregate that needs to be computed for each row in a group.
@@ -81,7 +79,7 @@ case class Aggregate(
       case a: AggregateExpression =>
         ComputedAggregate(
           a,
-          BindReferences.bindReference(a, childOutput),
+          BindReferences.bindReference(a, child.output),
           AttributeReference(s"aggResult:$a", a.dataType, a.nullable)())
     }
   }.toArray
@@ -123,7 +121,7 @@ case class Aggregate(
     }
   }
 
-  override def execute() = attachTree(this, "execute") {
+  override def execute(): RDD[Row] = attachTree(this, "execute") {
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
@@ -150,7 +148,7 @@ case class Aggregate(
     } else {
       child.execute().mapPartitions { iter =>
         val hashTable = new HashMap[Row, Array[AggregateFunction]]
-        val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+        val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
         var currentRow: Row = null
         while (iter.hasNext) {

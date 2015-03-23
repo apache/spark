@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.client;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -94,7 +95,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       String remoteAddress = NettyUtils.getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
-      failOutstandingRequests(new RuntimeException("Connection from " + remoteAddress + " closed"));
+      failOutstandingRequests(new IOException("Connection from " + remoteAddress + " closed"));
     }
   }
 

@@ -23,22 +23,33 @@ import org.apache.spark.network.client.TransportClient;
 /**
  * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.TransportClient}s.
  */
-public interface RpcHandler {
+public abstract class RpcHandler {
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
    * the client in string form as a standard RPC failure.
    *
+   * This method will not be called in parallel for a single TransportClient (i.e., channel).
+   *
    * @param client A channel client which enables the handler to make requests back to the sender
-   *               of this RPC.
+   *               of this RPC. This will always be the exact same object for a particular channel.
    * @param message The serialized bytes of the RPC.
    * @param callback Callback which should be invoked exactly once upon success or failure of the
    *                 RPC.
    */
-  void receive(TransportClient client, byte[] message, RpcResponseCallback callback);
+  public abstract void receive(
+      TransportClient client,
+      byte[] message,
+      RpcResponseCallback callback);
 
   /**
    * Returns the StreamManager which contains the state about which streams are currently being
    * fetched by a TransportClient.
    */
-  StreamManager getStreamManager();
+  public abstract StreamManager getStreamManager();
+
+  /**
+   * Invoked when the connection associated with the given client has been invalidated.
+   * No further requests will come from this client.
+   */
+  public void connectionTerminated(TransportClient client) { }
 }

@@ -30,9 +30,20 @@ public class TransportConf {
   /** IO mode: nio or epoll */
   public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
 
-  /** Connect timeout in secs. Default 120 secs. */
+  /** If true, we will prefer allocating off-heap byte buffers within Netty. */
+  public boolean preferDirectBufs() {
+    return conf.getBoolean("spark.shuffle.io.preferDirectBufs", true);
+  }
+
+  /** Connect timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
-    return conf.getInt("spark.shuffle.io.connectionTimeout", 120) * 1000;
+    int defaultTimeout = conf.getInt("spark.network.timeout", 120);
+    return conf.getInt("spark.shuffle.io.connectionTimeout", defaultTimeout) * 1000;
+  }
+
+  /** Number of concurrent connections between two nodes for fetching data. */
+  public int numConnectionsPerPeer() {
+    return conf.getInt("spark.shuffle.io.numConnectionsPerPeer", 1);
   }
 
   /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
@@ -55,4 +66,43 @@ public class TransportConf {
 
   /** Send buffer size (SO_SNDBUF). */
   public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
+
+  /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
+  public int saslRTTimeoutMs() { return conf.getInt("spark.shuffle.sasl.timeout", 30) * 1000; }
+
+  /**
+   * Max number of times we will try IO exceptions (such as connection timeouts) per request.
+   * If set to 0, we will not do any retries.
+   */
+  public int maxIORetries() { return conf.getInt("spark.shuffle.io.maxRetries", 3); }
+
+  /**
+   * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
+   * Only relevant if maxIORetries &gt; 0.
+   */
+  public int ioRetryWaitTimeMs() { return conf.getInt("spark.shuffle.io.retryWait", 5) * 1000; }
+
+  /**
+   * Minimum size of a block that we should start using memory map rather than reading in through
+   * normal IO operations. This prevents Spark from memory mapping very small blocks. In general,
+   * memory mapping has high overhead for blocks close to or below the page size of the OS.
+   */
+  public int memoryMapBytes() {
+    return conf.getInt("spark.storage.memoryMapThreshold", 2 * 1024 * 1024);
+  }
+
+  /**
+   * Whether to initialize shuffle FileDescriptor lazily or not. If true, file descriptors are
+   * created only when data is going to be transferred. This can reduce the number of open files.
+   */
+  public boolean lazyFileDescriptor() {
+    return conf.getBoolean("spark.shuffle.io.lazyFD", true);
+  }
+
+  /**
+   * Maximum number of retries when binding to a port before giving up.
+   */
+  public int portMaxRetries() {
+    return conf.getInt("spark.port.maxRetries", 16);
+  }
 }

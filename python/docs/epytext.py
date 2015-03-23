@@ -1,7 +1,7 @@
 import re
 
 RULES = (
-    (r"<[\w.]+>", r""),
+    (r"<(!BLANKLINE)[\w.]+>", r""),
     (r"L{([\w.()]+)}", r":class:`\1`"),
     (r"[LC]{(\w+\.\w+)\(\)}", r":func:`\1`"),
     (r"C{([\w.()]+)}", r":class:`\1`"),

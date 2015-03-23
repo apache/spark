@@ -21,59 +21,65 @@ import scala.beans.BeanProperty
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
 
 /**
  * :: Experimental ::
- * Stores all the configuration options for the boosting algorithms
- * @param algo  Learning goal.  Supported:
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
- * @param numEstimators Number of estimators used in boosting stages. In other words,
- *                      number of boosting iterations performed.
+ * Configuration options for [[org.apache.spark.mllib.tree.GradientBoostedTrees]].
+ *
+ * @param treeStrategy Parameters for the tree algorithm. We support regression and binary
+ *                     classification for boosting. Impurity setting will be ignored.
  * @param loss Loss function used for minimization during gradient boosting.
+ * @param numIterations Number of iterations of boosting.  In other words, the number of
+ *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
- * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
- * @param numClassesForClassification Number of classes for classification.
- *                                    (Ignored for regression.)
- *                                    Default value is 2 (binary classification).
- * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
- *                                number of discrete values they take. For example, an entry (n ->
- *                                k) implies the feature n is categorical with k categories 0,
- *                                1, 2, ... , k-1. It's important to note that features are
- *                                zero-indexed.
- * @param weakLearnerParams Parameters for weak learners. Currently only decision trees are
- *                          supported.
+ * @param validationTol Useful when runWithValidation is used. If the error rate on the
+ *                      validation input between two iterations is less than the validationTol
+ *                      then stop. Ignored when [[run]] is used.
  */
 @Experimental
 case class BoostingStrategy(
     // Required boosting parameters
-    algo: Algo,
-    @BeanProperty var numEstimators: Int,
+    @BeanProperty var treeStrategy: Strategy,
     @BeanProperty var loss: Loss,
     // Optional boosting parameters
+    @BeanProperty var numIterations: Int = 100,
     @BeanProperty var learningRate: Double = 0.1,
-    @BeanProperty var subsamplingRate: Double = 1.0,
-    @BeanProperty var numClassesForClassification: Int = 2,
-    @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    @BeanProperty var weakLearnerParams: Strategy) extends Serializable {
+    @BeanProperty var validationTol: Double = 1e-5) extends Serializable {
 
-  require(learningRate <= 1, "Learning rate should be <= 1. Provided learning rate is " +
-    s"$learningRate.")
-  require(learningRate > 0, "Learning rate should be > 0. Provided learning rate is " +
-    s"$learningRate.")
-
-  // Ensure values for weak learner are the same as what is provided to the boosting algorithm.
-  weakLearnerParams.categoricalFeaturesInfo = categoricalFeaturesInfo
-  weakLearnerParams.numClassesForClassification = numClassesForClassification
-  weakLearnerParams.subsamplingRate = subsamplingRate
-
+  /**
+   * Check validity of parameters.
+   * Throws exception if invalid.
+   */
+  private[tree] def assertValid(): Unit = {
+    treeStrategy.algo match {
+      case Classification =>
+        require(treeStrategy.numClasses == 2,
+          "Only binary classification is supported for boosting.")
+      case Regression =>
+        // nothing
+      case _ =>
+        throw new IllegalArgumentException(
+          s"BoostingStrategy given invalid algo parameter: ${treeStrategy.algo}." +
+            s"  Valid settings are: Classification, Regression.")
+    }
+    require(learningRate > 0 && learningRate <= 1,
+      "Learning rate should be in range (0, 1]. Provided learning rate is " + s"$learningRate.")
+  }
 }
 
 @Experimental
 object BoostingStrategy {
+
+  /**
+   * Returns default configuration for the boosting algorithm
+   * @param algo Learning goal.  Supported: "Classification" or "Regression"
+   * @return Configuration for boosting algorithm
+   */
+  def defaultParams(algo: String): BoostingStrategy = {
+    defaultParams(Algo.fromString(algo))
+  }
 
   /**
    * Returns default configuration for the boosting algorithm
@@ -83,27 +89,16 @@ object BoostingStrategy {
    * @return Configuration for boosting algorithm
    */
   def defaultParams(algo: Algo): BoostingStrategy = {
-    val treeStrategy = defaultWeakLearnerParams(algo)
+    val treeStragtegy = Strategy.defaultStategy(algo)
+    treeStragtegy.maxDepth = 3
     algo match {
-      case Classification =>
-        new BoostingStrategy(algo, 100, LogLoss, weakLearnerParams = treeStrategy)
-      case Regression =>
-        new BoostingStrategy(algo, 100, SquaredError, weakLearnerParams = treeStrategy)
+      case Algo.Classification =>
+        treeStragtegy.numClasses = 2
+        new BoostingStrategy(treeStragtegy, LogLoss)
+      case Algo.Regression =>
+        new BoostingStrategy(treeStragtegy, SquaredError)
       case _ =>
-        throw new IllegalArgumentException(s"$algo is not supported by the boosting.")
+        throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }
   }
-
-  /**
-   * Returns default configuration for the weak learner (decision tree) algorithm
-   * @param algo   Learning goal.  Supported:
-   *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
-   *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
-   * @return Configuration for weak learner
-   */
-  def defaultWeakLearnerParams(algo: Algo): Strategy = {
-    // Note: Regression tree used even for classification for GBT.
-    new Strategy(Regression, Variance, 3)
-  }
-
 }

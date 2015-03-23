@@ -22,14 +22,19 @@ import scala.util.Random
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite {
+class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
@@ -103,19 +108,20 @@ class UtilsSuite extends FunSuite {
     val hour = minute * 60
     def str = Utils.msDurationToString(_)
 
+    val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
+
     assert(str(123) === "123 ms")
-    assert(str(second) === "1.0 s")
-    assert(str(second + 462) === "1.5 s")
-    assert(str(hour) === "1.00 h")
-    assert(str(minute) === "1.0 m")
-    assert(str(minute + 4 * second + 34) === "1.1 m")
-    assert(str(10 * hour + minute + 4 * second) === "10.02 h")
-    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11.00 h")
+    assert(str(second) === "1" + sep + "0 s")
+    assert(str(second + 462) === "1" + sep + "5 s")
+    assert(str(hour) === "1" + sep + "00 h")
+    assert(str(minute) === "1" + sep + "0 m")
+    assert(str(minute + 4 * second + 34) === "1" + sep + "1 m")
+    assert(str(10 * hour + minute + 4 * second) === "10" + sep + "02 h")
+    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
   test("reading offset bytes of a file") {
     val tmpDir2 = Utils.createTempDir()
-    tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
     f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
@@ -144,7 +150,6 @@ class UtilsSuite extends FunSuite {
 
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
-    tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), UTF_8)
     Files.write("abcdefghij", files(1), UTF_8)
@@ -201,18 +206,18 @@ class UtilsSuite extends FunSuite {
     child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
     // although child1 is old, child2 is still new so return true
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child2.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     parent.setLastModified(System.currentTimeMillis - (1000 * 30))
     // although parent and its immediate children are new, child3 is still old
     // we expect a full recursive search for new files.
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child3.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
   }
 
   test("resolveURI") {
@@ -300,12 +305,11 @@ class UtilsSuite extends FunSuite {
     assert(!Utils.isBindCollision(new Exception))
     assert(!Utils.isBindCollision(new Exception(new Exception)))
     assert(!Utils.isBindCollision(new Exception(new BindException)))
-    assert(!Utils.isBindCollision(new Exception(new BindException("Random message"))))
 
     // Positives
-    val be = new BindException("Address already in use")
-    val be1 = new Exception(new BindException("Address already in use"))
-    val be2 = new Exception(new Exception(new BindException("Address already in use")))
+    val be = new BindException("Random Message")
+    val be1 = new Exception(new BindException("Random Message"))
+    val be2 = new Exception(new Exception(new BindException("Random Message")))
     assert(Utils.isBindCollision(be))
     assert(Utils.isBindCollision(be1))
     assert(Utils.isBindCollision(be2))
@@ -333,25 +337,26 @@ class UtilsSuite extends FunSuite {
     assert(!tempDir1.exists())
 
     val tempDir2 = Utils.createTempDir()
-    val tempFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(tempFile1)
-    assert(tempFile1.exists())
-    Utils.deleteRecursively(tempFile1)
-    assert(!tempFile1.exists())
+    val sourceFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(sourceFile1)
+    assert(sourceFile1.exists())
+    Utils.deleteRecursively(sourceFile1)
+    assert(!sourceFile1.exists())
 
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
-    val tempFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(tempFile2)
-    assert(tempFile2.exists())
+    val sourceFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(sourceFile2)
+    assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
     assert(!tempDir3.exists())
-    assert(!tempFile2.exists())
+    assert(!sourceFile2.exists())
   }
 
   test("loading properties from file") {
-    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    val tmpDir = Utils.createTempDir()
+    val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
@@ -364,7 +369,7 @@ class UtilsSuite extends FunSuite {
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     } finally {
-      outFile.delete()
+      Utils.deleteRecursively(tmpDir)
     }
   }
 
@@ -377,5 +382,43 @@ class UtilsSuite extends FunSuite {
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
     require(time < 500, "preparation time should not count")
+  }
+
+  test("fetch hcfs dir") {
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "source-dir")
+    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
+    val targetDir = new File(tempDir, "target-dir")
+    Files.write("some text", sourceFile, UTF_8)
+
+    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val conf = new Configuration()
+    val fs = Utils.getHadoopFileSystem(path.toString, conf)
+
+    assert(!targetDir.isDirectory())
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+    assert(targetDir.isDirectory())
+
+    // Copy again to make sure it doesn't error if the dir already exists.
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+
+    val destDir = new File(targetDir, sourceDir.getName())
+    assert(destDir.isDirectory())
+
+    val destInnerDir = new File(destDir, innerSourceDir.getName)
+    assert(destInnerDir.isDirectory())
+
+    val destInnerFile = new File(destInnerDir, sourceFile.getName)
+    assert(destInnerFile.isFile())
+
+    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val testFileDir = new File(tempDir, "test-filename")
+    val testFileName = "testFName"
+    val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
+    Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
+                        conf, false, Some(testFileName))
+    val newFileName = new File(testFileDir, testFileName)
+    assert(newFileName.isFile())
   }
 }

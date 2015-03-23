@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import akka.actor.{Actor, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorRef}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
@@ -52,20 +52,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
-  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
-    math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
-
-  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
-
-  var timeoutCheckingTask: Cancellable = null
-
-  override def preStart() {
-    import context.dispatcher
-    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    super.preStart()
-  }
-
   override def receiveWithLogging = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
       register(blockManagerId, maxMemSize, slaveActor)
@@ -73,9 +59,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
-      // TODO: Ideally we want to handle all the message replies in receive instead of in the
-      // individual private methods.
-      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
+      sender ! updateBlockInfo(
+        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
@@ -85,6 +70,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case GetPeers(blockManagerId) =>
       sender ! getPeers(blockManagerId)
+
+    case GetActorSystemHostPortForExecutor(executorId) =>
+      sender ! getActorSystemHostPortForExecutor(executorId)
 
     case GetMemoryStatus =>
       sender ! memoryStatus
@@ -117,13 +105,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case StopBlockManagerMaster =>
       sender ! true
-      if (timeoutCheckingTask != null) {
-        timeoutCheckingTask.cancel()
-      }
       context.stop(self)
-
-    case ExpireDeadHosts =>
-      expireDeadHosts()
 
     case BlockManagerHeartbeat(blockManagerId) =>
       sender ! heartbeatReceived(blockManagerId)
@@ -204,21 +186,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
     logInfo(s"Removing block manager $blockManagerId")
-  }
-
-  private def expireDeadHosts() {
-    logTrace("Checking for hosts with no recent heart beats in BlockManagerMaster.")
-    val now = System.currentTimeMillis()
-    val minSeenTime = now - slaveTimeout
-    val toRemove = new mutable.HashSet[BlockManagerId]
-    for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime && !info.blockManagerId.isDriver) {
-        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
-          + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
-        toRemove += info.blockManagerId
-      }
-    }
-    toRemove.foreach(removeBlockManager)
   }
 
   private def removeExecutor(execId: String) {
@@ -352,23 +319,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long,
-      tachyonSize: Long) {
+      tachyonSize: Long): Boolean = {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
-        sender ! true
+        return true
       } else {
-        sender ! false
+        return false
       }
-      return
     }
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      sender ! true
-      return
+      return true
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(
@@ -392,7 +357,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     if (locations.size == 0) {
       blockLocations.remove(blockId)
     }
-    sender ! true
+    true
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
@@ -410,6 +375,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
     } else {
       Seq.empty
+    }
+  }
+
+  /**
+   * Returns the hostname and port of an executor's actor system, based on the Akka address of its
+   * BlockManagerSlaveActor.
+   */
+  private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    for (
+      blockManagerId <- blockManagerIdByExecutor.get(executorId);
+      info <- blockManagerInfo.get(blockManagerId);
+      host <- info.slaveActor.path.address.host;
+      port <- info.slaveActor.path.address.port
+    ) yield {
+      (host, port)
     }
   }
 }

@@ -17,23 +17,32 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /**
- * Provides experimental support for generating catalyst schemas for scala objects.
+ * A default version of ScalaReflection that uses the runtime universe.
  */
-object ScalaReflection {
+object ScalaReflection extends ScalaReflection {
+  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  import universe._
+
   // The Predef.Map is scala.collection.immutable.Map.
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
-  import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
@@ -47,6 +56,11 @@ object ScalaReflection {
     case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
+    case (s: Array[_], arrayType: ArrayType) => if (arrayType.elementType.isPrimitive) {
+      s.toSeq
+    } else {
+      s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
+    }
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
     }
@@ -56,6 +70,8 @@ object ScalaReflection {
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
+    case (d: java.math.BigDecimal, _) => Decimal(d)
+    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
     case (other, _) => other
   }
 
@@ -68,27 +84,30 @@ object ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toBigDecimal
+    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
+    case (i: Int, DateType) => DateUtils.toJavaDate(i)
     case (other, _) => other
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
-    new GenericRow(
-      r.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
+    // TODO: This is very slow!!!
+    new GenericRowWithSchema(
+      r.toSeq.zip(schema.fields.map(_.dataType))
+        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray, schema)
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+      s.toAttributes
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(typeOf[T]) }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): Schema = {
+  def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
     tpe match {
       case t if Utils.classIsLoadable(className) &&
@@ -103,20 +122,12 @@ object ScalaReflection {
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
-      case t if t <:< typeOf[Product] =>
-        val formalTypeArgs = t.typeSymbol.asClass.typeParams
-        val TypeRef(_, _, actualTypeArgs) = t
-        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
-        Schema(StructType(
-          params.head.map { p =>
-            val Schema(dataType, nullable) =
-              schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
-            StructField(p.name.toString, dataType, nullable)
-          }), nullable = true)
       // Need to decide if we actually need a special type here.
       case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
       case t if t <:< typeOf[Array[_]] =>
-        sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< typeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
@@ -126,10 +137,33 @@ object ScalaReflection {
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
+      case t if t <:< typeOf[Product] =>
+        val formalTypeArgs = t.typeSymbol.asClass.typeParams
+        val TypeRef(_, _, actualTypeArgs) = t
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+            s => s.isMethod && s.asMethod.isPrimaryConstructor)
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
+        Schema(StructType(
+          params.head.map { p =>
+            val Schema(dataType, nullable) =
+              schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
+            StructField(p.name.toString, dataType, nullable)
+          }), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
-      case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
+      case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
@@ -159,8 +193,8 @@ object ScalaReflection {
     case obj: LongType.JvmType => LongType
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
-    case obj: DateType.JvmType => DateType
-    case obj: BigDecimal => DecimalType.Unlimited
+    case obj: java.sql.Date => DateType
+    case obj: java.math.BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
@@ -178,7 +212,7 @@ object ScalaReflection {
      */
     def asRelation: LocalRelation = {
       val output = attributesFor[A]
-      LocalRelation(output, data)
+      LocalRelation.fromProduct(output, data)
     }
   }
 }

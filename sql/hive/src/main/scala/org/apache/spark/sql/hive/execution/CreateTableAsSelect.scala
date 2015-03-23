@@ -17,67 +17,60 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.ql.parse.{SemanticAnalyzer, ASTNode}
+import org.apache.hadoop.hive.ql.plan.CreateTableDesc
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.{SparkPlan, Command, LeafNode}
+import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
- * :: Experimental ::
  * Create table and insert the query result into it.
  * @param database the database name of the new relation
  * @param tableName the table name of the new relation
  * @param query the query whose result will be insert into the new relation
  * @param allowExisting allow continue working if it's already exists, otherwise
  *                      raise exception
- * @param extra the extra information for this Operator, it should be the
- *              ASTNode object for extracting the CreateTableDesc.
+ * @param desc the CreateTableDesc, which may contains serde, storage handler etc.
 
  */
-@Experimental
+private[hive]
 case class CreateTableAsSelect(
     database: String,
     tableName: String,
     query: LogicalPlan,
     allowExisting: Boolean,
-    extra: ASTNode) extends LeafNode with Command {
+    desc: Option[CreateTableDesc]) extends RunnableCommand {
 
-  def output = Seq.empty
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    lazy val metastoreRelation: MetastoreRelation = {
+      // Create Hive Table
+      hiveContext.catalog.createTable(database, tableName, query.output, allowExisting, desc)
 
-  private[this] def sc = sqlContext.asInstanceOf[HiveContext]
-
-  // A lazy computing of the metastoreRelation
-  private[this] lazy val metastoreRelation: MetastoreRelation = {
-    // Get the CreateTableDesc from Hive SemanticAnalyzer
-    val sa = new SemanticAnalyzer(sc.hiveconf)
-
-    sa.analyze(extra, new Context(sc.hiveconf))
-    val desc = sa.getQB().getTableDesc
-    // Create Hive Table
-    sc.catalog.createTable(database, tableName, query.output, allowExisting, Some(desc))
-
-    // Get the Metastore Relation
-    sc.catalog.lookupRelation(Some(database), tableName, None) match {
-      case r: MetastoreRelation => r
+      // Get the Metastore Relation
+      hiveContext.catalog.lookupRelation(Seq(database, tableName), None) match {
+        case r: MetastoreRelation => r
+      }
     }
-  }
-
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    sc.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
-    Seq.empty[Row]
-  }
+    if (hiveContext.catalog.tableExists(Seq(database, tableName))) {
+      if (allowExisting) {
+        // table already exists, will do nothing, to keep consistent with Hive
+      } else {
+        throw
+          new org.apache.hadoop.hive.metastore.api.AlreadyExistsException(s"$database.$tableName")
+      }
+    } else {
+      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
+    }
 
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
+    Seq.empty[Row]
   }
 
   override def argString: String = {

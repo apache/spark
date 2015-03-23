@@ -23,7 +23,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] object TestClient {
 
-  class TestListener extends AppClientListener with Logging {
+  private class TestListener extends AppClientListener with Logging {
     def connected(id: String) {
       logInfo("Connected to master, got app ID " + id)
     }

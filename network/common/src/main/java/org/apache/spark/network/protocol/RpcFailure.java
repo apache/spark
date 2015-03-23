@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
@@ -36,23 +35,19 @@ public final class RpcFailure implements ResponseMessage {
 
   @Override
   public int encodedLength() {
-    return 8 + 4 + errorString.getBytes(Charsets.UTF_8).length;
+    return 8 + Encoders.Strings.encodedLength(errorString);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
-    byte[] errorBytes = errorString.getBytes(Charsets.UTF_8);
-    buf.writeInt(errorBytes.length);
-    buf.writeBytes(errorBytes);
+    Encoders.Strings.encode(buf, errorString);
   }
 
   public static RpcFailure decode(ByteBuf buf) {
     long requestId = buf.readLong();
-    int numErrorStringBytes = buf.readInt();
-    byte[] errorBytes = new byte[numErrorStringBytes];
-    buf.readBytes(errorBytes);
-    return new RpcFailure(requestId, new String(errorBytes, Charsets.UTF_8));
+    String errorString = Encoders.Strings.decode(buf);
+    return new RpcFailure(requestId, errorString);
   }
 
   @Override

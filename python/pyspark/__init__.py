@@ -22,30 +22,20 @@ Public classes:
 
   - :class:`SparkContext`:
       Main entry point for Spark functionality.
-  - L{RDD}
+  - :class:`RDD`:
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast}
+  - :class:`Broadcast`:
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator}
+  - :class:`Accumulator`:
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf}
+  - :class:`SparkConf`:
       For configuring Spark.
-  - L{SparkFiles}
+  - :class:`SparkFiles`:
       Access files shipped with jobs.
-  - L{StorageLevel}
+  - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
 
 """
-
-# The following block allows us to import python's random instead of mllib.random for scripts in
-# mllib that depend on top level pyspark packages, which transitively depend on python's random.
-# Since Python's import logic looks for modules in the current package first, we eliminate
-# mllib.random as a candidate for C{import random} by removing the first search path, the script's
-# location, in order to force the loader to look in Python's top-level modules for C{random}.
-import sys
-s = sys.path.pop(0)
-import random
-sys.path.insert(0, s)
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
@@ -55,6 +45,8 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
+from pyspark.status import *
+from pyspark.profiler import Profiler, BasicProfiler
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
@@ -62,4 +54,5 @@ from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler",
 ]

@@ -29,8 +29,11 @@ import copy_reg
 
 import numpy as np
 
+from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+    IntegerType, ByteType
 
-__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
+
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -106,7 +109,57 @@ def _format_float(f, digits=4):
     return s
 
 
+class VectorUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Vector.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("size", IntegerType(), True),
+            StructField("indices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.VectorUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseVector):
+            indices = [int(i) for i in obj.indices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.size, indices, values)
+        elif isinstance(obj, DenseVector):
+            values = [float(v) for v in obj]
+            return (1, None, None, values)
+        else:
+            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 4, \
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseVector(datum[1], datum[2], datum[3])
+        elif tpe == 1:
+            return DenseVector(datum[3])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+    def simpleString(self):
+        return "vector"
+
+
 class Vector(object):
+
+    __UDT__ = VectorUDT()
+
     """
     Abstract class for DenseVector and SparseVector
     """
@@ -123,12 +176,16 @@ class DenseVector(Vector):
     A dense vector represented by a value array.
     """
     def __init__(self, ar):
-        if not isinstance(ar, array.array):
-            ar = array.array('d', ar)
+        if isinstance(ar, basestring):
+            ar = np.frombuffer(ar, dtype=np.float64)
+        elif not isinstance(ar, np.ndarray):
+            ar = np.array(ar, dtype=np.float64)
+        if ar.dtype != np.float64:
+            ar = ar.astype(np.float64)
         self.array = ar
 
     def __reduce__(self):
-        return DenseVector, (self.array,)
+        return DenseVector, (self.array.tostring(),)
 
     def dot(self, other):
         """
@@ -157,9 +214,10 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray and other.ndim > 1:
-            assert len(self) == other.shape[0], "dimension mismatch"
-            return np.dot(self.toArray(), other)
+        if type(other) == np.ndarray:
+            if other.ndim > 1:
+                assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.array, other)
         elif _have_scipy and scipy.sparse.issparse(other):
             assert len(self) == other.shape[0], "dimension mismatch"
             return other.transpose().dot(self.toArray())
@@ -211,7 +269,7 @@ class DenseVector(Vector):
         return np.dot(diff, diff)
 
     def toArray(self):
-        return np.array(self.array)
+        return self.array
 
     def __getitem__(self, item):
         return self.array[item]
@@ -226,7 +284,7 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        return isinstance(other, DenseVector) and self.array == other.array
+        return isinstance(other, DenseVector) and np.array_equal(self.array, other.array)
 
     def __ne__(self, other):
         return not self == other
@@ -264,18 +322,28 @@ class SparseVector(Vector):
             if type(pairs) == dict:
                 pairs = pairs.items()
             pairs = sorted(pairs)
-            self.indices = array.array('i', [p[0] for p in pairs])
-            self.values = array.array('d', [p[1] for p in pairs])
+            self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
+            self.values = np.array([p[1] for p in pairs], dtype=np.float64)
         else:
-            assert len(args[0]) == len(args[1]), "index and value arrays not same length"
-            self.indices = array.array('i', args[0])
-            self.values = array.array('d', args[1])
+            if isinstance(args[0], basestring):
+                assert isinstance(args[1], str), "values should be string too"
+                if args[0]:
+                    self.indices = np.frombuffer(args[0], np.int32)
+                    self.values = np.frombuffer(args[1], np.float64)
+                else:
+                    # np.frombuffer() doesn't work well with empty string in older version
+                    self.indices = np.array([], dtype=np.int32)
+                    self.values = np.array([], dtype=np.float64)
+            else:
+                self.indices = np.array(args[0], dtype=np.int32)
+                self.values = np.array(args[1], dtype=np.float64)
+            assert len(self.indices) == len(self.values), "index and value arrays not same length"
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")
 
     def __reduce__(self):
-        return (SparseVector, (self.size, self.indices, self.values))
+        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))
 
     def dot(self, other):
         """
@@ -411,8 +479,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(len(self.indices)):
-            arr[self.indices[i]] = self.values[i]
+        arr[self.indices] = self.values
         return arr
 
     def __len__(self):
@@ -443,8 +510,25 @@ class SparseVector(Vector):
         """
         return (isinstance(other, self.__class__)
                 and other.size == self.size
-                and other.indices == self.indices
-                and other.values == self.values)
+                and np.array_equal(other.indices, self.indices)
+                and np.array_equal(other.values, self.values))
+
+    def __getitem__(self, index):
+        inds = self.indices
+        vals = self.values
+        if not isinstance(index, int):
+            raise ValueError(
+                "Indices must be of type integer, got type %s" % type(index))
+        if index < 0:
+            index += self.size
+        if index >= self.size or index < 0:
+            raise ValueError("Index %d out of bounds." % index)
+
+        insert_index = np.searchsorted(inds, index)
+        row_ind = inds[insert_index]
+        if row_ind == index:
+            return vals[insert_index]
+        return 0.
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -527,23 +611,43 @@ class DenseMatrix(Matrix):
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
+        if isinstance(values, basestring):
+            values = np.frombuffer(values, dtype=np.float64)
+        elif not isinstance(values, np.ndarray):
+            values = np.array(values, dtype=np.float64)
         assert len(values) == numRows * numCols
+        if values.dtype != np.float64:
+            values.astype(np.float64)
         self.values = values
 
     def __reduce__(self):
-        return DenseMatrix, (self.numRows, self.numCols, self.values)
+        return DenseMatrix, (self.numRows, self.numCols, self.values.tostring())
 
     def toArray(self):
         """
         Return an numpy.ndarray
 
-        >>> arr = array.array('d', [float(i) for i in range(4)])
-        >>> m = DenseMatrix(2, 2, arr)
+        >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
         array([[ 0.,  2.],
                [ 1.,  3.]])
         """
-        return np.reshape(self.values, (self.numRows, self.numCols), order='F')
+        return self.values.reshape((self.numRows, self.numCols), order='F')
+
+    def __eq__(self, other):
+        return (isinstance(other, DenseMatrix) and
+                self.numRows == other.numRows and
+                self.numCols == other.numCols and
+                all(self.values == other.values))
+
+
+class Matrices(object):
+    @staticmethod
+    def dense(numRows, numCols, values):
+        """
+        Create a DenseMatrix
+        """
+        return DenseMatrix(numRows, numCols, values)
 
 
 def _test():
@@ -553,8 +657,4 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
-    # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
-    import sys
-    sys.path.pop(0)
     _test()

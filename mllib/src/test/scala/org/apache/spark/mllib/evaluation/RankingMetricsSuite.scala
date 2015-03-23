@@ -20,9 +20,9 @@ package org.apache.spark.mllib.evaluation
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class RankingMetricsSuite extends FunSuite with LocalSparkContext {
+class RankingMetricsSuite extends FunSuite with MLlibTestSparkContext {
   test("Ranking metrics: map, ndcg") {
     val predictionAndLabels = sc.parallelize(
       Seq(

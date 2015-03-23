@@ -106,9 +106,11 @@ object MovieLensALS {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
+    val implicitPrefs = params.implicitPrefs
+
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
-      if (params.implicitPrefs) {
+      if (implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see
@@ -173,7 +175,8 @@ object MovieLensALS {
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
+  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean)
+    : Double = {
 
     def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
 

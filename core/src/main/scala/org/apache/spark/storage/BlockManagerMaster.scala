@@ -61,7 +61,7 @@ class BlockManagerMaster(
       tachyonSize: Long): Boolean = {
     val res = askDriverWithReply[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
-    logInfo("Updated info of block " + blockId)
+    logDebug(s"Updated info of block $blockId")
     res
   }
 
@@ -86,6 +86,10 @@ class BlockManagerMaster(
   /** Get ids of other nodes in the cluster from the driver */
   def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
     askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
+  }
+
+  def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    askDriverWithReply[Option[(String, Int)]](GetActorSystemHostPortForExecutor(executorId))
   }
 
   /**
