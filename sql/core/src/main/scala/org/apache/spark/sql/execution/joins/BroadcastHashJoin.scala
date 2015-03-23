@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.rdd.RDD
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Row, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -42,7 +44,7 @@ case class BroadcastHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
-  val timeout = {
+  val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
     if (timeoutValue < 0) {
       Duration.Inf
@@ -53,7 +55,7 @@ case class BroadcastHashJoin(
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
   @transient
@@ -64,7 +66,7 @@ case class BroadcastHashJoin(
     sparkContext.broadcast(hashed)
   }
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>

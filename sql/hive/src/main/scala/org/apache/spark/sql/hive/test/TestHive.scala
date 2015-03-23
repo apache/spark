@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -69,22 +68,19 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
-  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  lazy val warehousePath = Utils.createTempDir()
+  lazy val metastorePath = Utils.createTempDir()
 
   /** Sets up the system initially or after a RESET command */
   protected def configure(): Unit = {
+    warehousePath.delete()
+    metastorePath.delete()
     setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
-    Utils.registerShutdownDeleteDir(new File(warehousePath))
-    Utils.registerShutdownDeleteDir(new File(metastorePath))
+    setConf("hive.metastore.warehouse.dir", warehousePath.toString)
   }
 
-  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
-  testTempDir.delete()
-  testTempDir.mkdir()
-  Utils.registerShutdownDeleteDir(testTempDir)
+  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
@@ -159,8 +155,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   protected[hive] class HiveQLQueryExecution(hql: String)
     extends this.QueryExecution(HiveQl.parseSql(hql)) {
-    def hiveExec() = runSqlHive(hql)
-    override def toString = hql + "\n" + super.toString
+    def hiveExec(): Seq[String] = runSqlHive(hql)
+    override def toString: String = hql + "\n" + super.toString
   }
 
   /**
@@ -190,7 +186,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   case class TestTable(name: String, commands: (()=>Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
-    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    def cmd: () => Unit = {
+      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    }
   }
 
   /**
@@ -198,7 +196,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * demand when a query are run against it.
    */
   lazy val testTables = new mutable.HashMap[String, TestTable]()
-  def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
+
+  def registerTestTable(testTable: TestTable): Unit = {
+    testTables += (testTable.name -> testTable)
+  }
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java

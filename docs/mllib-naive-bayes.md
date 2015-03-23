@@ -106,11 +106,11 @@ NaiveBayesModel sameModel = NaiveBayesModel.load(sc.sc(), "myModelPath");
 
 <div data-lang="python" markdown="1">
 
-[NaiveBayes](api/python/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
+[NaiveBayes](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) implements multinomial
 naive Bayes. It takes an RDD of
-[LabeledPoint](api/python/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
+[LabeledPoint](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint) and an optionally
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
+[NaiveBayesModel](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel), which can be
 used for evaluation and prediction.
 
 Note that the Python API does not yet support model save/load but will in the future.

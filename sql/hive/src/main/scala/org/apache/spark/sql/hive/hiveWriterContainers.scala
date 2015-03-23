@@ -222,7 +222,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         s"/$col=$colString"
       }.mkString
 
-    def newWriter = {
+    def newWriter(): FileSinkOperator.RecordWriter = {
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + dynamicPartPath,
         fileSinkConf.getTableInfo,
@@ -246,6 +246,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         Reporter.NULL)
     }
 
-    writers.getOrElseUpdate(dynamicPartPath, newWriter)
+    writers.getOrElseUpdate(dynamicPartPath, newWriter())
   }
 }

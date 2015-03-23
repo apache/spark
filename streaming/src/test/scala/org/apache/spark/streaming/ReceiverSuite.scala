@@ -24,7 +24,6 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -34,6 +33,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
 class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
@@ -222,7 +222,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
       .set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
     val batchDuration = Milliseconds(500)
-    val tempDirectory = Files.createTempDir()
+    val tempDirectory = Utils.createTempDir()
     val logDirectory1 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 0))
     val logDirectory2 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 1))
     val allLogFiles1 = new mutable.HashSet[String]()
@@ -251,7 +251,6 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     withStreamingContext(new StreamingContext(sparkConf, batchDuration)) { ssc =>
-      tempDirectory.deleteOnExit()
       val receiver1 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
       val receiver2 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
       val receiverStream1 = ssc.receiverStream(receiver1)
