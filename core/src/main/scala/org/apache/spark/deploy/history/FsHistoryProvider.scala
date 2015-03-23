@@ -233,7 +233,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       } catch {
         case e: Exception =>
           logError(
-            s"Exception encountered when attempting to load application log ${fileStatus.getPath}")
+            s"Exception encountered when attempting to load application log ${fileStatus.getPath}",
+            e)
           None
       }
     }.toSeq.sortWith(compareAppInfo)

@@ -402,8 +402,10 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val archives = "file:/archive1,archive2" // spark.yarn.dist.archives
     val pyFiles = "py-file1,py-file2" // spark.submit.pyFiles
 
+    val tmpDir = Utils.createTempDir()
+
     // Test jars and files
-    val f1 = File.createTempFile("test-submit-jars-files", "")
+    val f1 = File.createTempFile("test-submit-jars-files", "", tmpDir)
     val writer1 = new PrintWriter(f1)
     writer1.println("spark.jars " + jars)
     writer1.println("spark.files " + files)
@@ -420,7 +422,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps("spark.files") should be(Utils.resolveURIs(files))
 
     // Test files and archives (Yarn)
-    val f2 = File.createTempFile("test-submit-files-archives", "")
+    val f2 = File.createTempFile("test-submit-files-archives", "", tmpDir)
     val writer2 = new PrintWriter(f2)
     writer2.println("spark.yarn.dist.files " + files)
     writer2.println("spark.yarn.dist.archives " + archives)
@@ -437,7 +439,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
 
     // Test python files
-    val f3 = File.createTempFile("test-submit-python-files", "")
+    val f3 = File.createTempFile("test-submit-python-files", "", tmpDir)
     val writer3 = new PrintWriter(f3)
     writer3.println("spark.submit.pyFiles " + pyFiles)
     writer3.close()
