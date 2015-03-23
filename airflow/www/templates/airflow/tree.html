@@ -148,6 +148,7 @@ function update(source) {
       })
       .attr("height", barHeight)
       .attr("width", function(d, i) {return barWidth - d.y;})
+      .style("fill", function(d) {return d.ui_color;})
       .attr("task_id", function(d){return d.name})
       .on("click", toggles);
 

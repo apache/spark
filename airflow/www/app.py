@@ -929,6 +929,7 @@ class Airflow(BaseView):
                 'start_date': task.start_date,
                 'end_date': task.end_date,
                 'depends_on_past': task.depends_on_past,
+                'ui_color': task.ui_color,
             }
 
         if len(dag.roots) > 1:
