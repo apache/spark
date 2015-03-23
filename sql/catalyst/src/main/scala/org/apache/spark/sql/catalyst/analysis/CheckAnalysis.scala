@@ -89,9 +89,8 @@ class CheckAnalysis {
         }
 
         operator match {
-          case o if o.children.nonEmpty &&
-            !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
-            val missingAttributes = (o.references -- o.inputSet).mkString(",")
+          case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
 
             failAnalysis(

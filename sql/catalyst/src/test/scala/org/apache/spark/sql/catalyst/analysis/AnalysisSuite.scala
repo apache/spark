@@ -200,7 +200,8 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(4).dataType == DoubleType)
   }
 
-  test("SPARK-6452: CheckAnalysis should throw when Aggregate contains missing attributes") {
+  test("SPARK-6452 regression test") {
+    // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     val plan =
       Aggregate(
         Nil,
