@@ -647,22 +647,27 @@ private[sql] case class ParquetRelation2(
 
     def writeShard(context: TaskContext, iterator: Iterator[Row]): Unit = {
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(
-        jobTrackerId, stageId, isMap = false, context.partitionId(), context.attemptNumber())
-      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
-      val format = new AppendingParquetOutputFormat(taskIdOffset)
-      val committer = format.getOutputCommitter(hadoopContext)
-      committer.setupTask(hadoopContext)
-      val writer = format.getRecordWriter(hadoopContext)
       try {
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          writer.write(null, row)
+        val attemptId = newTaskAttemptID(
+          jobTrackerId, stageId, isMap = false, context.partitionId(), context.attemptNumber())
+        val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
+        val format = new AppendingParquetOutputFormat(taskIdOffset)
+        val committer = format.getOutputCommitter(hadoopContext)
+        committer.setupTask(hadoopContext)
+        val writer = format.getRecordWriter(hadoopContext)
+        try {
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            writer.write(null, row)
+          }
+        } finally {
+          writer.close(hadoopContext)
         }
-      } finally {
-        writer.close(hadoopContext)
+        committer.commitTask(hadoopContext)
+      } catch {
+        case e: Throwable =>
+          logError(e.getMessage, e)
       }
-      committer.commitTask(hadoopContext)
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
