@@ -49,7 +49,7 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serial
  * LeaderAgent in this case is a no-op. Since leader is forever leader as the actual
  * recovery is made by restoring from filesystem.
  */
-private[spark] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
+private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
   extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
 
@@ -61,7 +61,7 @@ private[spark] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: 
   def createLeaderElectionAgent(master: LeaderElectable) = new MonarchyLeaderAgent(master)
 }
 
-private[spark] class ZooKeeperRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
+private[master] class ZooKeeperRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
   extends StandaloneRecoveryModeFactory(conf, serializer) {
   def createPersistenceEngine() = new ZooKeeperPersistenceEngine(conf, serializer)
 

@@ -19,13 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
@@ -34,8 +35,6 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
@@ -43,11 +42,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     reset()
-    if (tempPath.exists()) Utils.deleteRecursively(tempPath)
+    Utils.deleteRecursively(tempPath)
   }
 
   val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-  var tempPath: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
+  var tempPath: File = Utils.createTempDir()
+  tempPath.delete()
 
   test ("persistent JSON table") {
     sql(
@@ -154,7 +154,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("check change without refresh") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -192,7 +192,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("drop, change, recreate") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
