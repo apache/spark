@@ -22,9 +22,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.{JobContext, InputSplit, Job}
-import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
-import parquet.hadoop.ParquetInputFormat
+import parquet.hadoop.{ParquetInputSplit, ParquetInputFormat}
 import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.annotation.DeveloperApi
@@ -40,7 +39,7 @@ import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
- * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option 
+ * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option
  * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
@@ -265,7 +264,10 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     // When the data does not include the key and the key is requested then we must fill it in
     // based on information from the input split.
     if (!dataIncludesKey && partitionKeyLocation != -1) {
-      baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
+      val primitiveRow =
+        requestedSchema.toAttributes.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
+      baseRDD.mapPartitionsWithInputSplit { case (split, iterator) =>
         val partValue = "([^=]+)=([^=]+)".r
         val partValues =
           split.asInstanceOf[parquet.hadoop.ParquetInputSplit]
@@ -273,15 +275,34 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
             .toString
             .split("/")
             .flatMap {
-            case partValue(key, value) => Some(key -> value)
-            case _ => None
-          }.toMap
+              case partValue(key, value) => Some(key -> value)
+              case _ => None }
+            .toMap
 
-        val currentValue = partValues.values.head.toInt
-        iter.map { pair =>
-          val res = pair._2.asInstanceOf[SpecificMutableRow]
-          res.setInt(partitionKeyLocation, currentValue)
-          res
+        if (primitiveRow) {
+          iterator.map { pair =>
+            // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+            val mutableRow = pair._2.asInstanceOf[SpecificMutableRow]
+            var i = 0
+            mutableRow.update(partitionKeyLocation, partValues.values.head.toInt)
+            mutableRow
+          }
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(requestedSchema.toAttributes.size)
+
+          iterator.map { pair =>
+            // We are using CatalystGroupConverter and it returns a GenericRow.
+            // Since GenericRow is not mutable, we just cast it to a Row.
+            val row = pair._2.asInstanceOf[Row]
+            var i = 0
+            while (i < row.size) {
+              mutableRow(i) = row(i)
+              i += 1
+            }
+            mutableRow.update(partitionKeyLocation, partValues.values.head.toInt)
+            mutableRow
+          }
         }
       }
     } else {
