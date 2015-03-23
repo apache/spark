@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.IOException
 import java.text.NumberFormat
 import java.util.Date
 
@@ -118,19 +117,7 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   protected def commit() {
-    if (committer.needsTaskCommit(taskContext)) {
-      try {
-        committer.commitTask(taskContext)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException =>
-          logError("Error committing the output of task: " + taID.value, e)
-          committer.abortTask(taskContext)
-          throw e
-      }
-    } else {
-      logInfo("No need to commit output of task: " + taID.value)
-    }
+    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID, attemptID)
   }
 
   private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
@@ -213,7 +200,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
         val string = if (rawVal == null) null else String.valueOf(rawVal)
-        val colString = 
+        val colString =
           if (string == null || string.isEmpty) {
             defaultPartName
           } else {

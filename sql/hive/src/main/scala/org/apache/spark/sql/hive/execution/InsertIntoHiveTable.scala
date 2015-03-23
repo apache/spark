@@ -72,7 +72,6 @@ case class InsertIntoHiveTable(
     val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
     assert(outputFileFormatClassName != null, "Output format class not set")
     conf.value.set("mapred.output.format.class", outputFileFormatClassName)
-    conf.value.setOutputCommitter(classOf[FileOutputCommitter])
 
     FileOutputFormat.setOutputPath(
       conf.value,
