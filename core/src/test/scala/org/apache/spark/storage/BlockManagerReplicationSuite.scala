@@ -27,6 +27,8 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
@@ -40,6 +42,7 @@ import org.apache.spark.util.{AkkaUtils, SizeEstimator}
 class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAndAfter {
 
   private val conf = new SparkConf(false)
+  var rpcEnv: RpcEnv = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(conf)
@@ -69,12 +72,11 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   }
 
   before {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
+    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
     conf.set("spark.authenticate", "false")
-    conf.set("spark.driver.port", boundPort.toString)
+    conf.set("spark.driver.port", rpcEnv.address.port.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
@@ -83,18 +85,17 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     // to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
 
-    master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf, true)
+    master = new BlockManagerMaster(rpcEnv.setupThreadSafeEndpoint("blockmanager",
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
     allStores.clear()
   }
 
   after {
     allStores.foreach { _.stop() }
     allStores.clear()
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
+    rpcEnv.shutdown()
+    rpcEnv.awaitTermination()
+    rpcEnv = null
     master = null
   }
 
