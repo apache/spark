@@ -23,8 +23,7 @@ class SimpleDateParamTest extends FunSuite with Matchers {
   test("date parsing") {
     new SimpleDateParam("2015-02-20T23:21:17.190GMT").timestamp should be (1424474477190l)
     new SimpleDateParam("2015-02-20T17:21:17.190CST").timestamp should be (1424474477190l)
-    new SimpleDateParam("2015-02-20").timestamp should be (1424412000000l)
-
+    new SimpleDateParam("2015-02-20").timestamp should be (1424390400000L)  //GMT
   }
 
 }

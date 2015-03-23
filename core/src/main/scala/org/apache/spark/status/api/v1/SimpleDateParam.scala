@@ -17,6 +17,7 @@
 package org.apache.spark.status.api.v1
 
 import java.text.SimpleDateFormat
+import java.util.TimeZone
 import javax.ws.rs.WebApplicationException
 import javax.ws.rs.core.Response
 import javax.ws.rs.core.Response.Status
@@ -40,8 +41,15 @@ private[v1] class SimpleDateParam(val originalValue: String) {
 }
 
 private[v1] object SimpleDateParam {
-  val formats = Seq(
-    "yyyy-MM-dd'T'HH:mm:ss.SSSz",
-    "yyyy-MM-dd"
-  ).map { new SimpleDateFormat(_) }
+
+  val formats: Seq[SimpleDateFormat] = {
+
+    val gmtDay = new SimpleDateFormat("yyyy-MM-dd")
+    gmtDay.setTimeZone(TimeZone.getTimeZone("GMT"))
+
+    Seq(
+      new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSz"),
+      gmtDay
+    )
+  }
 }
