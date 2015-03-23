@@ -17,15 +17,20 @@
 
 package org.apache.spark.mllib.classification
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import java.lang.{Iterable => JIterable}
 
-import org.apache.spark.{SparkContext, SparkException, Logging}
+import scala.collection.JavaConverters._
+
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
-
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -39,6 +44,13 @@ class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]]) extends ClassificationModel with Serializable with Saveable {
+
+  /** A Java-friendly constructor that takes three Iterable parameters. */
+  private[mllib] def this(
+      labels: JIterable[Double],
+      pi: JIterable[Double],
+      theta: JIterable[JIterable[Double]]) =
+    this(labels.asScala.toArray, pi.asScala.toArray, theta.asScala.toArray.map(_.asScala.toArray))
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
@@ -78,14 +90,14 @@ class NaiveBayesModel private[mllib] (
 
 object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
-  import Loader._
+  import org.apache.spark.mllib.util.Loader._
 
   private object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Hard-code class name string in case it changes in the future */
-    def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
+    def thisClassName: String = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
     case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]])
@@ -95,13 +107,13 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD =
-        sc.parallelize(Seq((thisClassName, thisFormatVersion, data.theta(0).size, data.pi.size)), 1)
-          .toDataFrame("class", "version", "numFeatures", "numClasses")
-      metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       dataRDD.saveAsParquetFile(dataPath(path))
     }
 
@@ -126,8 +138,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val (numFeatures, numClasses) =
-          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
         val model = SaveLoadV1_0.load(sc, path)
         assert(model.pi.size == numClasses,
           s"NaiveBayesModel.load expected $numClasses classes," +
@@ -166,12 +177,15 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
     this
   }
 
+  /** Get the smoothing parameter. Default: 1.0. */
+  def getLambda: Double = lambda
+
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
    *
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
-  def run(data: RDD[LabeledPoint]) = {
+  def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case SparseVector(size, indices, values) =>

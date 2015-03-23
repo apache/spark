@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeComman
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect, CreateTableUsing}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
 import org.apache.spark.sql.types.StringType
 
 
@@ -58,9 +58,9 @@ private[hive] trait HiveStrategies {
   @Experimental
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: DataFrame) {
-      def lowerCase = DataFrame(s.sqlContext, s.logicalPlan)
+      def lowerCase: DataFrame = DataFrame(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]) = {
+      def addPartitioningAttributes(attrs: Seq[Attribute]): DataFrame = {
         // Don't add the partitioning key if its already present in the data.
         if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
           s
@@ -75,7 +75,7 @@ private[hive] trait HiveStrategies {
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
-      def fakeOutput(newOutput: Seq[Attribute]) =
+      def fakeOutput(newOutput: Seq[Attribute]): OutputFaker =
         OutputFaker(
           originalPlan.output.map(a =>
             newOutput.find(a.name.toLowerCase == _.name.toLowerCase)
@@ -139,15 +139,20 @@ private[hive] trait HiveStrategies {
 
             val partitionLocations = partitions.map(_.getLocation)
 
-            hiveContext
-              .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
-              .addPartitioningAttributes(relation.partitionKeys)
-              .lowerCase
-              .where(unresolvedOtherPredicates)
-              .select(unresolvedProjection: _*)
-              .queryExecution
-              .executedPlan
-              .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+            if (partitionLocations.isEmpty) {
+              PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+            } else {
+              hiveContext
+                .parquetFile(partitionLocations: _*)
+                .addPartitioningAttributes(relation.partitionKeys)
+                .lowerCase
+                .where(unresolvedOtherPredicates)
+                .select(unresolvedProjection: _*)
+                .queryExecution
+                .executedPlan
+                .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+            }
+
           } else {
             hiveContext
               .parquetFile(relation.hiveQlTable.getDataLocation.toString)
@@ -216,20 +221,15 @@ private[hive] trait HiveStrategies {
 
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, opts, allowExisting) =>
+      case CreateTableUsing(
+      tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         ExecutedCommand(
           CreateMetastoreDataSource(
-            tableName, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
+            tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, opts, allowExisting, query) =>
-        val logicalPlan = hiveContext.parseSql(query)
+      case CreateTableUsingAsSelect(tableName, provider, false, mode, opts, query) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, logicalPlan)
-        ExecutedCommand(cmd) :: Nil
-
-      case CreateTableUsingAsLogicalPlan(tableName, provider, false, opts, allowExisting, query) =>
-        val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, query)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil

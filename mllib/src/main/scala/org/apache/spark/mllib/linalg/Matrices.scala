@@ -23,9 +23,15 @@ import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHash
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+
 /**
  * Trait for a local matrix.
  */
+@SQLUserDefinedType(udt = classOf[MatrixUDT])
 sealed trait Matrix extends Serializable {
 
   /** Number of rows. */
@@ -50,7 +56,7 @@ sealed trait Matrix extends Serializable {
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
-  private[mllib] def apply(i: Int, j: Int): Double
+  def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
   private[mllib] def index(i: Int, j: Int): Int
@@ -102,6 +108,88 @@ sealed trait Matrix extends Serializable {
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
 }
 
+@DeveloperApi
+private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
+
+  override def sqlType: StructType = {
+    // type: 0 = sparse, 1 = dense
+    // the dense matrix is built by numRows, numCols, values and isTransposed, all of which are
+    // set as not nullable, except values since in the future, support for binary matrices might
+    // be added for which values are not needed.
+    // the sparse matrix needs colPtrs and rowIndices, which are set as
+    // null, while building the dense matrix.
+    StructType(Seq(
+      StructField("type", ByteType, nullable = false),
+      StructField("numRows", IntegerType, nullable = false),
+      StructField("numCols", IntegerType, nullable = false),
+      StructField("colPtrs", ArrayType(IntegerType, containsNull = false), nullable = true),
+      StructField("rowIndices", ArrayType(IntegerType, containsNull = false), nullable = true),
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true),
+      StructField("isTransposed", BooleanType, nullable = false)
+      ))
+  }
+
+  override def serialize(obj: Any): Row = {
+    val row = new GenericMutableRow(7)
+    obj match {
+      case sm: SparseMatrix =>
+        row.setByte(0, 0)
+        row.setInt(1, sm.numRows)
+        row.setInt(2, sm.numCols)
+        row.update(3, sm.colPtrs.toSeq)
+        row.update(4, sm.rowIndices.toSeq)
+        row.update(5, sm.values.toSeq)
+        row.setBoolean(6, sm.isTransposed)
+
+      case dm: DenseMatrix =>
+        row.setByte(0, 1)
+        row.setInt(1, dm.numRows)
+        row.setInt(2, dm.numCols)
+        row.setNullAt(3)
+        row.setNullAt(4)
+        row.update(5, dm.values.toSeq)
+        row.setBoolean(6, dm.isTransposed)
+    }
+    row
+  }
+
+  override def deserialize(datum: Any): Matrix = {
+    datum match {
+      // TODO: something wrong with UDT serialization, should never happen.
+      case m: Matrix => m
+      case row: Row =>
+        require(row.length == 7,
+          s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
+        val tpe = row.getByte(0)
+        val numRows = row.getInt(1)
+        val numCols = row.getInt(2)
+        val values = row.getAs[Iterable[Double]](5).toArray
+        val isTransposed = row.getBoolean(6)
+        tpe match {
+          case 0 =>
+            val colPtrs = row.getAs[Iterable[Int]](3).toArray
+            val rowIndices = row.getAs[Iterable[Int]](4).toArray
+            new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+          case 1 =>
+            new DenseMatrix(numRows, numCols, values, isTransposed)
+        }
+    }
+  }
+
+  override def userClass: Class[Matrix] = classOf[Matrix]
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case v: MatrixUDT => true
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = 1994
+
+  private[spark] override def asNullable: MatrixUDT = this
+}
+
 /**
  * Column-major dense matrix.
  * The entry values are stored in a single array of doubles with columns listed in sequence.
@@ -119,6 +207,7 @@ sealed trait Matrix extends Serializable {
  * @param isTransposed whether the matrix is transposed. If true, `values` stores the matrix in
  *                     row major.
  */
+@SQLUserDefinedType(udt = classOf[MatrixUDT])
 class DenseMatrix(
     val numRows: Int,
     val numCols: Int,
@@ -146,10 +235,14 @@ class DenseMatrix(
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
-  override def equals(o: Any) = o match {
+  override def equals(o: Any): Boolean = o match {
     case m: DenseMatrix =>
       m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
   }
 
   private[mllib] def toBreeze: BM[Double] = {
@@ -163,7 +256,7 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
-  private[mllib] def apply(i: Int, j: Int): Double = values(index(i, j))
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
@@ -173,7 +266,7 @@ class DenseMatrix(
     values(index(i, j)) = v
   }
 
-  override def copy = new DenseMatrix(numRows, numCols, values.clone())
+  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
   private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f))
 
@@ -256,8 +349,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
    */
-  def zeros(numRows: Int, numCols: Int): DenseMatrix =
+  def zeros(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
+  }
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
@@ -265,8 +361,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
    */
-  def ones(numRows: Int, numCols: Int): DenseMatrix =
+  def ones(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
+  }
 
   /**
    * Generate an Identity Matrix in `DenseMatrix` format.
@@ -291,6 +390,8 @@ object DenseMatrix {
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
@@ -302,6 +403,8 @@ object DenseMatrix {
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
 
@@ -346,6 +449,7 @@ object DenseMatrix {
  *                     Compressed Sparse Row (CSR) format, where `colPtrs` behaves as rowPtrs,
  *                     and `rowIndices` behave as colIndices, and `values` are stored in row major.
  */
+@SQLUserDefinedType(udt = classOf[MatrixUDT])
 class SparseMatrix(
     val numRows: Int,
     val numCols: Int,
@@ -398,7 +502,7 @@ class SparseMatrix(
      }
   }
 
-  private[mllib] def apply(i: Int, j: Int): Double = {
+  override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
@@ -421,7 +525,9 @@ class SparseMatrix(
     }
   }
 
-  override def copy = new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+  override def copy: SparseMatrix = {
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+  }
 
   private[mllib] def map(f: Double => Double) =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))
@@ -696,7 +802,7 @@ object Matrices {
   }
 
   /**
-   * Generate a `DenseMatrix` consisting of zeros.
+   * Generate a `Matrix` consisting of zeros.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
@@ -768,8 +874,8 @@ object Matrices {
     SparseMatrix.sprandn(numRows, numCols, density, rng)
 
   /**
-   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
-   * @param vector a `Vector` tat will form the values on the diagonal of the matrix
+   * Generate a diagonal matrix in `Matrix` format from the supplied values.
+   * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
    */

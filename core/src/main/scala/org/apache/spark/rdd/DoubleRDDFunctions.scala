@@ -213,7 +213,14 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     } else {
       basicBucketFunction _
     }
-    self.mapPartitions(histogramPartition(bucketFunction)).reduce(mergeCounters)
+    if (self.partitions.length == 0) {
+      new Array[Long](buckets.length - 1)
+    } else {
+      // reduce() requires a non-empty RDD. This works because the mapPartitions will make
+      // non-empty partitions out of empty ones. But it doesn't handle the no-partitions case,
+      // which is below
+      self.mapPartitions(histogramPartition(bucketFunction)).reduce(mergeCounters)
+    }
   }
 
 }

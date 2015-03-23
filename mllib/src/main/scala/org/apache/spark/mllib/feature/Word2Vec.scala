@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -272,7 +272,7 @@ class Word2Vec extends Serializable with Logging {
         def hasNext: Boolean = iter.hasNext
 
         def next(): Array[Int] = {
-          var sentence = new ArrayBuffer[Int]
+          val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
           while (iter.hasNext && sentenceLength < MAX_SENTENCE_LENGTH) {
             val word = bcVocabHash.value.get(iter.next())
@@ -283,7 +283,7 @@ class Word2Vec extends Serializable with Logging {
               case None =>
             }
           }
-          sentence.toArray
+          sentence.result()
         }
       }
     }

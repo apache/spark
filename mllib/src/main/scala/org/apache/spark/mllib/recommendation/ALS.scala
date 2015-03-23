@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.recommendation
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
@@ -81,6 +81,9 @@ class ALS private (
   /** storage level for user/product in/out links */
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
   private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+
+  /** checkpoint interval */
+  private var checkpointInterval: Int = 10
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
@@ -183,6 +186,19 @@ class ALS private (
   }
 
   /**
+   * Set period (in iterations) between checkpoints (default = 10). Checkpointing helps with
+   * recovery (when nodes fail) and StackOverflow exceptions caused by long lineage. It also helps
+   * with eliminating temporary shuffle files on disk, which can be important when there are many
+   * ALS iterations. If the checkpoint directory is not set in [[org.apache.spark.SparkContext]],
+   * this setting is ignored.
+   */
+  @DeveloperApi
+  def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    this.checkpointInterval = checkpointInterval
+    this
+  }
+
+  /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
@@ -212,6 +228,7 @@ class ALS private (
       nonnegative = nonnegative,
       intermediateRDDStorageLevel = intermediateRDDStorageLevel,
       finalRDDStorageLevel = StorageLevel.NONE,
+      checkpointInterval = checkpointInterval,
       seed = seed)
 
     val userFactors = floatUserFactors

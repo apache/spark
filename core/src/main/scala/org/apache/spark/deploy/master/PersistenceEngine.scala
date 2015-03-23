@@ -87,7 +87,7 @@ trait PersistenceEngine {
   def close() {}
 }
 
-private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
+private[master] class BlackHolePersistenceEngine extends PersistenceEngine {
 
   override def persist(name: String, obj: Object): Unit = {}
 

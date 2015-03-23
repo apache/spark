@@ -70,22 +70,48 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   }
 }
 
+
+trait GetField extends UnaryExpression {
+  self: Product =>
+
+  type EvaluatedType = Any
+  override def foldable = child.foldable
+  override def toString = s"$child.${field.name}"
+
+  def field: StructField
+}
+
 /**
  * Returns the value of fields in the Struct `child`.
  */
-case class GetField(child: Expression, field: StructField, ordinal: Int) extends UnaryExpression {
-  type EvaluatedType = Any
+case class StructGetField(child: Expression, field: StructField, ordinal: Int) extends GetField {
 
   def dataType = field.dataType
   override def nullable = child.nullable || field.nullable
-  override def foldable = child.foldable
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
     if (baseValue == null) null else baseValue(ordinal)
   }
+}
 
-  override def toString = s"$child.${field.name}"
+/**
+ * Returns the array of value of fields in the Array of Struct `child`.
+ */
+case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, containsNull: Boolean)
+  extends GetField {
+
+  def dataType = ArrayType(field.dataType, containsNull)
+  override def nullable = child.nullable
+
+  override def eval(input: Row): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
+    if (baseValue == null) null else {
+      baseValue.map { row =>
+        if (row == null) null else row(ordinal)
+      }
+    }
+  }
 }
 
 /**

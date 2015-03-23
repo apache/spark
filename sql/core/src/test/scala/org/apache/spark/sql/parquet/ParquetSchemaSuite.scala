@@ -36,8 +36,8 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
   private def testSchema[T <: Product: ClassTag: TypeTag](
       testName: String, messageType: String, isThriftDerived: Boolean = false): Unit = {
     test(testName) {
-      val actual = ParquetTypesConverter.convertFromAttributes(ScalaReflection.attributesFor[T], 
-                                                               isThriftDerived)
+      val actual = ParquetTypesConverter.convertFromAttributes(
+        ScalaReflection.attributesFor[T], isThriftDerived)
       val expected = MessageTypeParser.parseMessageType(messageType)
       actual.checkContains(expected)
       expected.checkContains(actual)
@@ -57,7 +57,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  testSchema[(Byte, Short, Int, Long)](
+  testSchema[(Byte, Short, Int, Long, java.sql.Date)](
     "logical integral types",
     """
       |message root {
@@ -65,6 +65,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       |  required int32 _2 (INT_16);
       |  required int32 _3 (INT_32);
       |  required int64 _4 (INT_64);
+      |  optional int32 _5 (DATE);
       |}
     """.stripMargin)
 

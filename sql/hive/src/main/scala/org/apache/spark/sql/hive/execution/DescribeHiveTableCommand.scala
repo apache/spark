@@ -30,16 +30,14 @@ import org.apache.spark.sql.SQLContext
 
 /**
  * Implementation for "describe [extended] table".
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
+private[hive]
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
     override val output: Seq[Attribute],
     isExtended: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 

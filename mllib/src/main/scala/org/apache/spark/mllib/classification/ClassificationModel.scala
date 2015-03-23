@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.classification
 
+import org.json4s.{DefaultFormats, JValue}
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.util.Loader
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * :: Experimental ::
@@ -60,16 +60,10 @@ private[mllib] object ClassificationModel {
 
   /**
    * Helper method for loading GLM classification model metadata.
-   *
-   * @param modelClass  String name for model class (used for error messages)
    * @return (numFeatures, numClasses)
    */
-  def getNumFeaturesClasses(metadata: DataFrame, modelClass: String, path: String): (Int, Int) = {
-    metadata.select("numFeatures", "numClasses").take(1)(0) match {
-      case Row(nFeatures: Int, nClasses: Int) => (nFeatures, nClasses)
-      case _ => throw new Exception(s"$modelClass unable to load" +
-        s" numFeatures, numClasses from metadata: ${Loader.metadataPath(path)}")
-    }
+  def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
+    implicit val formats = DefaultFormats
+    ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
   }
-
 }

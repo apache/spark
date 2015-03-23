@@ -32,7 +32,7 @@ import org.apache.spark.util.logging.{RollingFileAppender, SizeBasedRollingPolic
 
 class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
 
-  val testFile = new File("FileAppenderSuite-test-" + System.currentTimeMillis).getAbsoluteFile
+  val testFile = new File(Utils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
 
   before {
     cleanup()

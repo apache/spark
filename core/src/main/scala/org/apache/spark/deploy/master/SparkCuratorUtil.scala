@@ -25,12 +25,12 @@ import org.apache.zookeeper.KeeperException
 
 import org.apache.spark.{Logging, SparkConf}
 
-object SparkCuratorUtil extends Logging {
+private[deploy] object SparkCuratorUtil extends Logging {
 
-  val ZK_CONNECTION_TIMEOUT_MILLIS = 15000
-  val ZK_SESSION_TIMEOUT_MILLIS = 60000
-  val RETRY_WAIT_MILLIS = 5000
-  val MAX_RECONNECT_ATTEMPTS = 3
+  private val ZK_CONNECTION_TIMEOUT_MILLIS = 15000
+  private val ZK_SESSION_TIMEOUT_MILLIS = 60000
+  private val RETRY_WAIT_MILLIS = 5000
+  private val MAX_RECONNECT_ATTEMPTS = 3
 
   def newClient(conf: SparkConf): CuratorFramework = {
     val ZK_URL = conf.get("spark.deploy.zookeeper.url")

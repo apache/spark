@@ -50,7 +50,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     jsql = new SQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
-    dataset = jsql.applySchema(datasetRDD, LabeledPoint.class);
+    dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
   }
 

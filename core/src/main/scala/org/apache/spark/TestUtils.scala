@@ -17,12 +17,13 @@
 
 package org.apache.spark
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConversions._
 
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
@@ -59,6 +60,22 @@ private[spark] object TestUtils {
     createJar(files1 ++ files2, jarFile)
   }
 
+  /**
+   * Create a jar file containing multiple files. The `files` map contains a mapping of
+   * file names in the jar file to their contents.
+   */
+  def createJarWithFiles(files: Map[String, String], dir: File = null): URL = {
+    val tempDir = Option(dir).getOrElse(Utils.createTempDir())
+    val jarFile = File.createTempFile("testJar", ".jar", tempDir)
+    val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
+    files.foreach { case (k, v) =>
+      val entry = new JarEntry(k)
+      jarStream.putNextEntry(entry)
+      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(UTF_8)), jarStream)
+    }
+    jarStream.close()
+    jarFile.toURI.toURL
+  }
 
   /**
    * Create a jar file that contains this set of files. All files will be located at the root
