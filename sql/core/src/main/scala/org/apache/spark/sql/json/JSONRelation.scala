@@ -20,10 +20,12 @@ package org.apache.spark.sql.json
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.Row
 
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 private[sql] class DefaultSource
@@ -66,9 +68,23 @@ private[sql] class DefaultSource
       mode match {
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-        case SaveMode.Overwrite =>
-          fs.delete(filesystemPath, true)
+        case SaveMode.Overwrite => {
+          var success: Boolean = false
+          try {
+            success = fs.delete(filesystemPath, true)
+          } catch {
+            case e: IOException =>
+              throw new IOException(
+                s"Unable to clear output directory ${filesystemPath.toString} prior"
+                  + s" to writing to JSON table:\n${e.toString}")
+          }
+          if (!success) {
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table.")
+          }
           true
+        }
         case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
         case SaveMode.Ignore => false
@@ -90,7 +106,10 @@ private[sql] case class JSONRelation(
     samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
-  extends TableScan with InsertableRelation {
+  extends BaseRelation
+  with TableScan
+  with InsertableRelation {
+
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
@@ -101,21 +120,29 @@ private[sql] case class JSONRelation(
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord)))
 
-  override def buildScan() =
+  override def buildScan(): RDD[Row] =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 
-  override def insert(data: DataFrame, overwrite: Boolean) = {
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
-      try {
-        fs.delete(filesystemPath, true)
-      } catch {
-        case e: IOException =>
+      if (fs.exists(filesystemPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(filesystemPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${filesystemPath.toString} prior"
+                + s" to writing to JSON table:\n${e.toString}")
+        }
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+              + s" to writing to JSON table.")
+        }
       }
       // Write the data.
       data.toJSON.saveAsTextFile(path)
@@ -131,7 +158,7 @@ private[sql] case class JSONRelation(
 
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
-      (this.path == that.path) && (this.schema == that.schema)
+      (this.path == that.path) && this.schema.sameType(that.schema)
     case _ => false
   }
 }

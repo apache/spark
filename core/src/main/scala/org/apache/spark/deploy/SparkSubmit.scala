@@ -45,7 +45,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
  * Whether to submit, kill, or request the status of an application.
  * The latter two operations are currently supported only for standalone cluster mode.
  */
-private[spark] object SparkSubmitAction extends Enumeration {
+private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
   val SUBMIT, KILL, REQUEST_STATUS = Value
 }
@@ -137,7 +137,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    */
-  private[spark] def submit(args: SparkSubmitArguments): Unit = {
+  private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
@@ -199,7 +199,7 @@ object SparkSubmit {
    *   (4) the main class for the child
    * Exposed for testing.
    */
-  private[spark] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
@@ -602,32 +602,32 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource represents a shell.
    */
-  private[spark] def isShell(primaryResource: String): Boolean = {
+  private[deploy] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
   }
 
   /**
    * Return whether the given main class represents a sql shell.
    */
-  private[spark] def isSqlShell(mainClass: String): Boolean = {
+  private def isSqlShell(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 
   /**
    * Return whether the given main class represents a thrift server.
    */
-  private[spark] def isThriftServer(mainClass: String): Boolean = {
+  private def isThriftServer(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
   }
 
   /**
    * Return whether the given primary resource requires running python.
    */
-  private[spark] def isPython(primaryResource: String): Boolean = {
+  private[deploy] def isPython(primaryResource: String): Boolean = {
     primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
   }
 
-  private[spark] def isInternal(primaryResource: String): Boolean = {
+  private[deploy] def isInternal(primaryResource: String): Boolean = {
     primaryResource == SPARK_INTERNAL
   }
 
@@ -635,7 +635,7 @@ object SparkSubmit {
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
    * no files, into a single comma-separated string.
    */
-  private[spark] def mergeFileLists(lists: String*): String = {
+  private def mergeFileLists(lists: String*): String = {
     val merged = lists.filter(_ != null)
                       .flatMap(_.split(","))
                       .mkString(",")
@@ -644,10 +644,10 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[deploy] object SparkSubmitUtils {
 
   // Exposed for testing
-  private[spark] var printStream = SparkSubmit.printStream
+  var printStream = SparkSubmit.printStream
 
   /**
    * Represents a Maven Coordinate
@@ -655,16 +655,15 @@ private[spark] object SparkSubmitUtils {
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
    */
-  private[spark] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
+  private[deploy] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
 
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
- * in the format `groupId:artifactId:version` or `groupId/artifactId:version`. The latter provides
- * simplicity for Spark Package users.
+ * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
  */
-  private[spark] def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
+  def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
       val splits = p.replace("/", ":").split(":")
       require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
@@ -684,7 +683,7 @@ private[spark] object SparkSubmitUtils {
    * @param remoteRepos Comma-delimited string of remote repositories
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  private[spark] def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
+  def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("list")
@@ -727,7 +726,7 @@ private[spark] object SparkSubmitUtils {
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
    */
-  private[spark] def resolveDependencyPaths(
+  def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
@@ -739,7 +738,7 @@ private[spark] object SparkSubmitUtils {
   }
 
   /** Adds the given maven coordinates to Ivy's module descriptor. */
-  private[spark] def addDependenciesToIvy(
+  def addDependenciesToIvy(
       md: DefaultModuleDescriptor,
       artifacts: Seq[MavenCoordinate],
       ivyConfName: String): Unit = {
@@ -751,9 +750,38 @@ private[spark] object SparkSubmitUtils {
       md.addDependency(dd)
     }
   }
+  
+  /** Add exclusion rules for dependencies already included in the spark-assembly */
+  def addExclusionRules(
+      ivySettings: IvySettings,
+      ivyConfName: String,
+      md: DefaultModuleDescriptor): Unit = {
+    // Add scala exclusion rule
+    val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
+    val scalaDependencyExcludeRule =
+      new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
+    scalaDependencyExcludeRule.addConfiguration(ivyConfName)
+    md.addExcludeRule(scalaDependencyExcludeRule)
+
+    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
+    // other spark-streaming utility components. Underscore is there to differentiate between
+    // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
+    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
+
+    components.foreach { comp =>
+      val sparkArtifacts =
+        new ArtifactId(new ModuleId("org.apache.spark", s"spark-$comp*"), "*", "*", "*")
+      val sparkDependencyExcludeRule =
+        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
+      sparkDependencyExcludeRule.addConfiguration(ivyConfName)
+
+      md.addExcludeRule(sparkDependencyExcludeRule)
+    }
+  }
 
   /** A nice function to use in tests as well. Values are dummy strings. */
-  private[spark] def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
+  def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
 
   /**
@@ -764,7 +792,7 @@ private[spark] object SparkSubmitUtils {
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
-  private[spark] def resolveMavenCoordinates(
+  def resolveMavenCoordinates(
       coordinates: String,
       remoteRepos: Option[String],
       ivyPath: Option[String],
@@ -772,6 +800,9 @@ private[spark] object SparkSubmitUtils {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
     } else {
+      val sysOut = System.out
+      // To prevent ivy from logging to system out
+      System.setOut(printStream)
       val artifacts = extractMavenCoordinates(coordinates)
       // Default configuration name for ivy
       val ivyConfName = "default"
@@ -815,19 +846,9 @@ private[spark] object SparkSubmitUtils {
       val md = getModuleDescriptor
       md.setDefaultConf(ivyConfName)
 
-      // Add an exclusion rule for Spark and Scala Library
-      val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
-      val sparkDependencyExcludeRule =
-        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
-      sparkDependencyExcludeRule.addConfiguration(ivyConfName)
-      val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
-      val scalaDependencyExcludeRule =
-        new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
-      scalaDependencyExcludeRule.addConfiguration(ivyConfName)
-
-      // Exclude any Spark dependencies, and add all supplied maven artifacts as dependencies
-      md.addExcludeRule(sparkDependencyExcludeRule)
-      md.addExcludeRule(scalaDependencyExcludeRule)
+      // Add exclusion rules for Spark and Scala Library
+      addExclusionRules(ivySettings, ivyConfName, md)
+      // add all supplied maven artifacts as dependencies
       addDependenciesToIvy(md, artifacts, ivyConfName)
 
       // resolve dependencies
@@ -839,7 +860,7 @@ private[spark] object SparkSubmitUtils {
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
         packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
-
+      System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
     }
   }

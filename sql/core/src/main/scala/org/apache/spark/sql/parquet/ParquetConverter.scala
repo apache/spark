@@ -488,7 +488,7 @@ private[parquet] object CatalystTimestampConverter {
   // Also we use NanoTime and Int96Values from parquet-examples.
   // We utilize jodd to convert between NanoTime and Timestamp
   val parquetTsCalendar = new ThreadLocal[Calendar]
-  def getCalendar = {
+  def getCalendar: Calendar = {
     // this is a cache for the calendar instance.
     if (parquetTsCalendar.get == null) {
       parquetTsCalendar.set(Calendar.getInstance(TimeZone.getTimeZone("GMT")))

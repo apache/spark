@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Project, NoRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -308,5 +310,16 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+  }
+
+  test("lift alias out of cast") {
+    compareExpressions(
+      col("1234").as("name").cast("int").expr,
+      col("1234").cast("int").as("name").expr)
+  }
+
+  test("columns can be compared") {
+    assert('key.desc == 'key.desc)
+    assert('key.desc != 'key.asc)
   }
 }

@@ -20,8 +20,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent</artifactId>
-    <version>1.3.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.10</artifactId>
+    <version>1.4.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -33,9 +33,6 @@
 
   <properties>
     <sbt.project.name>streaming-kafka-assembly</sbt.project.name>
-    <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
-    <spark.jar.basename>spark-streaming-kafka-assembly-${project.version}.jar</spark.jar.basename>
-    <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
   </properties>
 
   <dependencies>
@@ -61,7 +58,6 @@
       <artifactId>maven-shade-plugin</artifactId>
       <configuration>
         <shadedArtifactAttached>false</shadedArtifactAttached>
-        <outputFile>${spark.jar}</outputFile>
         <artifactSet>
           <includes>
             <include>*:*</include>

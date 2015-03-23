@@ -48,6 +48,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
@@ -125,6 +126,13 @@ private[sql] case class ParquetTableScan(
         conf)
 
     if (requestedPartitionOrdinals.nonEmpty) {
+      // This check is based on CatalystConverter.createRootConverter.
+      val primitiveRow = output.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
+      // Uses temporary variable to avoid the whole `ParquetTableScan` object being captured into
+      // the `mapPartitionsWithInputSplit` closure below.
+      val outputSize = output.size
+
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
         val partValues =
@@ -142,19 +150,47 @@ private[sql] case class ParquetTableScan(
           relation.partitioningAttributes
             .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
-        new Iterator[Row] {
-          def hasNext = iter.hasNext
-          def next() = {
-            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
+        if (primitiveRow) {
+          new Iterator[Row] {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
+              // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+              val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
-            // Parquet will leave partitioning columns empty, so we fill them in here.
-            var i = 0
-            while (i < requestedPartitionOrdinals.size) {
-              row(requestedPartitionOrdinals(i)._2) =
-                partitionRowValues(requestedPartitionOrdinals(i)._1)
-              i += 1
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              var i = 0
+              while (i < requestedPartitionOrdinals.size) {
+                row(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              row
             }
-            row
+          }
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(outputSize)
+          new Iterator[Row] {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
+              // We are using CatalystGroupConverter and it returns a GenericRow.
+              // Since GenericRow is not mutable, we just cast it to a Row.
+              val row = iter.next()._2.asInstanceOf[Row]
+
+              var i = 0
+              while (i < row.size) {
+                mutableRow(i) = row(i)
+                i += 1
+              }
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              i = 0
+              while (i < requestedPartitionOrdinals.size) {
+                mutableRow(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              mutableRow
+            }
           }
         }
       }
@@ -219,7 +255,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -242,7 +278,10 @@ private[sql] case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    RowWriteSupport.setSchema(relation.output, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(relation.output).asNullable
+    RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
@@ -263,7 +302,7 @@ private[sql] case class InsertIntoParquetTable(
     childRdd
   }
 
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 
   /**
    * Stores the given Row RDD as a Hadoop file.
@@ -373,8 +412,6 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 private[parquet] class FilteringParquetRowInputFormat
   extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
 
-  private var footers: JList[Footer] = _
-
   private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
@@ -395,46 +432,15 @@ private[parquet] class FilteringParquetRowInputFormat
     }
   }
 
-  override def getFooters(jobContext: JobContext): JList[Footer] = {
-    import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.footerCache
+  // This is only a temporary solution sicne we need to use fileStatuses in
+  // both getClientSideSplits and getTaskSideSplits. It can be removed once we get rid of these
+  // two methods.
+  override def getSplits(jobContext: JobContext): JList[InputSplit] = {
+    // First set fileStatuses.
+    val statuses = listStatus(jobContext)
+    fileStatuses = statuses.map(file => file.getPath -> file).toMap
 
-    if (footers eq null) {
-      val conf = ContextUtil.getConfiguration(jobContext)
-      val cacheMetadata = conf.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)
-      val statuses = listStatus(jobContext)
-      fileStatuses = statuses.map(file => file.getPath -> file).toMap
-      if (statuses.isEmpty) {
-        footers = Collections.emptyList[Footer]
-      } else if (!cacheMetadata) {
-        // Read the footers from HDFS
-        footers = getFooters(conf, statuses)
-      } else {
-        // Read only the footers that are not in the footerCache
-        val foundFooters = footerCache.getAllPresent(statuses)
-        val toFetch = new ArrayList[FileStatus]
-        for (s <- statuses) {
-          if (!foundFooters.containsKey(s)) {
-            toFetch.add(s)
-          }
-        }
-        val newFooters = new mutable.HashMap[FileStatus, Footer]
-        if (toFetch.size > 0) {
-          val startFetch = System.currentTimeMillis
-          val fetched = getFooters(conf, toFetch)
-          logInfo(s"Fetched $toFetch footers in ${System.currentTimeMillis - startFetch} ms")
-          for ((status, i) <- toFetch.zipWithIndex) {
-            newFooters(status) = fetched.get(i)
-          }
-          footerCache.putAll(newFooters)
-        }
-        footers = new ArrayList[Footer](statuses.size)
-        for (status <- statuses) {
-          footers.add(newFooters.getOrElse(status, foundFooters.get(status)))
-        }
-      }
-    }
-
-    footers
+    super.getSplits(jobContext)
   }
 
   // TODO Remove this method and related code once PARQUET-16 is fixed
@@ -459,12 +465,20 @@ private[parquet] class FilteringParquetRowInputFormat
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
     getGlobalMetaData.setAccessible(true)
-    val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
+    var globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
 
     if (globalMetaData == null) {
      val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
      return splits
     }
+
+    val metadata = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+    val mergedMetadata = globalMetaData
+      .getKeyValueMetaData
+      .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(metadata)))
+
+    globalMetaData = new GlobalMetaData(globalMetaData.getSchema,
+      mergedMetadata, globalMetaData.getCreatedBy)
 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,

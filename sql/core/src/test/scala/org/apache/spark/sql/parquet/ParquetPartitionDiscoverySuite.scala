@@ -36,6 +36,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   override val sqlContext: SQLContext = TestSQLContext
 
   import sqlContext._
+  import sqlContext.implicits._
 
   val defaultPartitionName = "__NULL__"
 
@@ -316,6 +317,26 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
           } yield Row(i, pi, i.toString, null))
+      }
+    }
+  }
+
+  test("read partitioned table - merging compatible schemas") {
+    withTempDir { base =>
+      makeParquetFile(
+        (1 to 10).map(i => Tuple1(i)).toDF("intField"),
+        makePartitionDir(base, defaultPartitionName, "pi" -> 1))
+
+      makeParquetFile(
+        (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
+        makePartitionDir(base, defaultPartitionName, "pi" -> 2))
+
+      load(base.getCanonicalPath, "org.apache.spark.sql.parquet").registerTempTable("t")
+
+      withTempTable("t") {
+        checkAnswer(
+          sql("SELECT * FROM t"),
+          (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
       }
     }
   }

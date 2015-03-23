@@ -334,6 +334,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |DROP DATABASE IF EXISTS testdb CASCADE
     """.stripMargin)
 
+  createQueryTest("create table as with db name within backticks",
+    """
+      |CREATE DATABASE IF NOT EXISTS testdb;
+      |CREATE TABLE `testdb`.`createdtable` AS SELECT * FROM default.src;
+      |SELECT * FROM testdb.createdtable;
+      |DROP DATABASE IF EXISTS testdb CASCADE
+    """.stripMargin)
+
   createQueryTest("insert table with db name",
     """
       |CREATE DATABASE IF NOT EXISTS testdb;
@@ -467,6 +475,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
+    sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
   }
 
   test("DataFrame toString") {

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.types.StructType
+
 import scala.collection.mutable.ArrayBuffer
 import java.sql.DriverManager
 
@@ -119,11 +123,12 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition])(@transient val sqlContext: SQLContext)
-  extends PrunedFilteredScan {
+  extends BaseRelation
+  with PrunedFilteredScan {
 
-  override val schema = JDBCRDD.resolveTable(url, table)
+  override val schema: StructType = JDBCRDD.resolveTable(url, table)
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
