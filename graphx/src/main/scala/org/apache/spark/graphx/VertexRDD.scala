@@ -202,10 +202,10 @@ abstract class VertexRDD[VD](
 
   /**
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a VertexRDD with the same index then the efficient [[leftZipJoinWithFold]] implementation
-   * is used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
-   * missing any vertex in this VertexRDD, `f` is passed `None`. If there are duplicates,
-   * the vertex is picked arbitrarily.
+   * backed by a VertexRDD with the same index then the efficient [[leftZipJoinWithFold]]
+   * implementation is used. The resulting VertexRDD contains an entry for each vertex in `this`.
+   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`. If there are
+   * duplicates, the vertex is picked arbitrarily.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
@@ -263,7 +263,8 @@ abstract class VertexRDD[VD](
    * the same index then the efficient [[innerZipJoinWithFold]] implementation is used.
    *
    * @param other an RDD containing vertices to join. If there are multiple entries for the same
-   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndexWithFold]] to merge multiple entries.
+   * vertex, one is picked arbitrarily. Use [[aggregateUsingIndexWithFold]] to merge multiple
+   * entries.
    * @param acc the initial value for the accumulator
    * @param f the join function applied to corresponding values of `this` and `other`
    * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
