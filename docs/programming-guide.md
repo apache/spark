@@ -142,8 +142,8 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 
 <div data-lang="python"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.context.SparkContext-class.html) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.conf.SparkConf-class.html) object
+The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.html#pyspark.SparkConf) object
 that contains information about your application.
 
 {% highlight python %}
@@ -912,7 +912,7 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1025,7 +1025,7 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1105,7 +1105,7 @@ replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-proj
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/pyspark.storagelevel.StorageLevel-class.html))
+[Python](api/python/pyspark.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
@@ -1374,7 +1374,7 @@ scala> accum.value
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/python/pyspark.accumulators.AccumulatorParam-class.html).
+create their own types by subclassing [AccumulatorParam](api/python/pyspark.html#pyspark.AccumulatorParam).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:

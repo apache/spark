@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 import org.apache.spark.Logging
 import org.apache.spark.util.logging.RollingFileAppender
 
-private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
+private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
   private val workDir = parent.workDir
 

@@ -162,7 +162,7 @@ class DataFrame(object):
                 "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
         return jmode
 
-    def saveAsTable(self, tableName, source=None, mode="append", **options):
+    def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source as a table.
 
         The data source is specified by the `source` and a set of `options`.
@@ -188,7 +188,7 @@ class DataFrame(object):
                                           self.sql_ctx._sc._gateway._gateway_client)
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
 
-    def save(self, path=None, source=None, mode="append", **options):
+    def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the `source` and a set of `options`.

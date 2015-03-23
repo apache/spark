@@ -183,7 +183,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
-  protected lazy val outputBuffer =  new java.io.OutputStream {
+  protected lazy val outputBuffer = new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
@@ -191,7 +191,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       pos = (pos + 1) % buffer.size
     }
 
-    override def toString = {
+    override def toString: String = {
       val (end, start) = buffer.splitAt(pos)
       val input = new java.io.InputStream {
         val iterator = (start ++ end).iterator
@@ -227,7 +227,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive = false
+      def caseSensitive: Boolean = false
     }
 
   /* An analyzer that uses the Hive metastore. */

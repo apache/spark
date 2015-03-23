@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.recommendation
 
+import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
@@ -32,14 +33,23 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.util.Utils
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   private var sqlContext: SQLContext = _
+  private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    tempDir = Utils.createTempDir()
+    sc.setCheckpointDir(tempDir.getAbsolutePath)
     sqlContext = new SQLContext(sc)
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tempDir)
+    super.afterAll()
   }
 
   test("LocalIndexEncoder") {
@@ -484,5 +494,12 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
         Iterator.empty
       }.count()
     }
+  }
+
+  test("als with large number of iterations") {
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2)
+    ALS.train(
+      ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, implicitPrefs = true)
   }
 }
