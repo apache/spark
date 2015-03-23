@@ -26,7 +26,7 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-class AllStagesResource(uiRoot: UIRoot) {
+private[v1] class AllStagesResource(uiRoot: UIRoot) {
 
   @GET
   def stageList(
@@ -56,7 +56,7 @@ class AllStagesResource(uiRoot: UIRoot) {
   }
 }
 
-object AllStagesResource {
+private[v1] object AllStagesResource {
   def stageUiToStageData(
     status: StageStatus,
     stageInfo: StageInfo,
