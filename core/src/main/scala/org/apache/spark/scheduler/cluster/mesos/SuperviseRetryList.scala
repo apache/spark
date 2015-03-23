@@ -21,7 +21,7 @@ import org.apache.mesos.Protos.TaskStatus
 import java.util.Date
 import scala.collection.mutable.ArrayBuffer
 
-private[mesos] case class RetryState(
+private[spark] case class RetryState(
     submission: DriverSubmission,
     lastFailureStatus: TaskStatus,
     retries: Int,
