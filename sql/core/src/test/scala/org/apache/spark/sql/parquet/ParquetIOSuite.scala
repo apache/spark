@@ -332,7 +332,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("SPARK-6352 DirectParquetOutputCommitter") {
     try {
-      configuration.set("spark.sql.parquet.useDirectParquetOutputCommitter", "true")
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
         intercept[org.apache.spark.SparkException] {
@@ -344,7 +345,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
     finally {
-      configuration.set("spark.sql.parquet.useDirectParquetOutputCommitter", "false")
+      configuration.unset("spark.sql.parquet.output.committer.class")
     }
   }
 }

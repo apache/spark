@@ -406,15 +406,14 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
   }
 
-  // override to choose between ParquetOutputCommitter and DirectParquetOutputCommitter
+  // override to create output committer from configuration
   override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     if (committer == null) {
       val output = getOutputPath(context)
-      val marker = "spark.sql.parquet.useDirectParquetOutputCommitter"
-      committer = context.getConfiguration.getBoolean(marker, false) match {
-        case true  => new DirectParquetOutputCommitter(output, context)
-        case false => new ParquetOutputCommitter(output, context)
-      }
+      val cls = context.getConfiguration.getClass("spark.sql.parquet.output.committer.class",
+        classOf[ParquetOutputCommitter], classOf[ParquetOutputCommitter])
+      val ctor = cls.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+      committer = ctor.newInstance(output, context).asInstanceOf[ParquetOutputCommitter]
     }
     committer
   }
