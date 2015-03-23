@@ -147,7 +147,6 @@ abstract class AbstractCommandBuilder {
    */
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
-    String scala = getScalaVersion();
 
     List<String> cp = new ArrayList<String>();
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
@@ -158,6 +157,7 @@ abstract class AbstractCommandBuilder {
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
+      String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
@@ -182,7 +182,7 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    String assembly = findAssembly(scala);
+    String assembly = findAssembly();
     addToClassPath(cp, assembly);
 
     // When Hive support is needed, Datanucleus jars must be included on the classpath. Datanucleus
@@ -330,7 +330,7 @@ abstract class AbstractCommandBuilder {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
   }
 
-  private String findAssembly(String scalaVersion) {
+  private String findAssembly() {
     String sparkHome = getSparkHome();
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
@@ -338,7 +338,7 @@ abstract class AbstractCommandBuilder {
       checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
           libdir.getAbsolutePath());
     } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", scalaVersion));
+      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
     }
 
     final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
