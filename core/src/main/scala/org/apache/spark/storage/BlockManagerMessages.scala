@@ -19,8 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
-import akka.actor.ActorRef
-
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] object BlockManagerMessages {
@@ -52,7 +51,7 @@ private[spark] object BlockManagerMessages {
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
-      sender: ActorRef)
+      sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(
@@ -92,7 +91,7 @@ private[spark] object BlockManagerMessages {
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case class GetActorSystemHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
+  case class GetRpcHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 

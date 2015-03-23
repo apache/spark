@@ -19,21 +19,18 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import akka.actor.ActorSystem
 import org.mockito.Mockito.{mock, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.network.nio.NioBlockTransferService
@@ -51,7 +48,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   var store: BlockManager = null
   var store2: BlockManager = null
   var rpcEnv: RpcEnv = null
-  var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
@@ -70,7 +66,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+    val manager = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     manager.initialize("app-id")
     manager
@@ -78,7 +74,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
   override def beforeEach(): Unit = {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-    actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
@@ -779,7 +774,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
+    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
       0)
 

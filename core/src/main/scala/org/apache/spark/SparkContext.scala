@@ -446,7 +446,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
+        val (host, port) = env.blockManager.master.getRpcHostPortForExecutor(executorId).get
         val endpointRef = env.rpcEnv.setupEndpointRef(
           SparkEnv.executorActorSystemName, RpcAddress(host, port), "ExecutorEndpoint")
         Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))

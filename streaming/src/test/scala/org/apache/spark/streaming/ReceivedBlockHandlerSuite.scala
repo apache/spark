@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Props}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
@@ -32,14 +31,13 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{AkkaUtils, ManualClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
@@ -57,20 +55,18 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   val blockManagerSize = 10000000
 
   var rpcEnv: RpcEnv = null
-  var actorSystem: ActorSystem = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
   var tempDirectory: File = null
 
   before {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-    actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupThreadSafeEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
-    blockManager = new BlockManager("bm", actorSystem, blockManagerMaster, serializer,
+    blockManager = new BlockManager("bm", rpcEnv, blockManagerMaster, serializer,
       blockManagerSize, conf, mapOutputTracker, shuffleManager,
       new NioBlockTransferService(conf, securityMgr), securityMgr, 0)
     blockManager.initialize("app-id")
@@ -88,9 +84,9 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       blockManagerMaster.stop()
       blockManagerMaster = null
     }
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
+    rpcEnv.shutdown()
+    rpcEnv.awaitTermination()
+    rpcEnv = null
 
     Utils.deleteRecursively(tempDirectory)
   }

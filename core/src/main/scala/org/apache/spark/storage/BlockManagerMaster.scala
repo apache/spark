@@ -20,8 +20,6 @@ package org.apache.spark.storage
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import akka.actor._
-
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
@@ -36,16 +34,17 @@ class BlockManagerMaster(
 
   val timeout = AkkaUtils.askTimeout(conf)
 
-  /** Remove a dead executor from the driver actor. This is only called on the driver side. */
+  /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  def registerBlockManager(
+      blockManagerId: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef): Unit = {
     logInfo("Trying to register BlockManager")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
+    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint))
     logInfo("Registered BlockManager")
   }
 
@@ -85,8 +84,8 @@ class BlockManagerMaster(
     driverEndpoint.askWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
-  def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
-    driverEndpoint.askWithReply[Option[(String, Int)]](GetActorSystemHostPortForExecutor(executorId))
+  def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    driverEndpoint.askWithReply[Option[(String, Int)]](GetRpcHostPortForExecutor(executorId))
   }
 
   /**
@@ -162,11 +161,12 @@ class BlockManagerMaster(
       askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
     val msg = GetBlockStatus(blockId, askSlaves)
     /*
-     * To avoid potential deadlocks, the use of Futures is necessary, because the master actor
+     * To avoid potential deadlocks, the use of Futures is necessary, because the master endpoint
      * should not block on waiting for a block manager, which can in turn be waiting for the
-     * master actor for a response to a prior message.
+     * master endpoint for a response to a prior message.
      */
-    val response = driverEndpoint.askWithReply[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
+    val response = driverEndpoint.
+      askWithReply[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
     val result = Await.result(Future.sequence(futures), timeout)
     if (result == null) {
@@ -194,7 +194,7 @@ class BlockManagerMaster(
     Await.result(future, timeout)
   }
 
-  /** Stop the driver actor, called only on the Spark driver node */
+  /** Stop the driver endpoint, called only on the Spark driver node */
   def stop() {
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
@@ -203,15 +203,15 @@ class BlockManagerMaster(
     }
   }
 
-  /** Send a one-way message to the master actor, to which we expect it to reply with true. */
+  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
   private def tell(message: Any) {
     if (!driverEndpoint.askWithReply[Boolean](message)) {
-      throw new SparkException("BlockManagerMasterActor returned false, expected true.")
+      throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }
   }
 
 }
 
 private[spark] object BlockManagerMaster {
-  val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
+  val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
 }
