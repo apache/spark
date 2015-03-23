@@ -184,6 +184,13 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
+          ) ++ Seq(
+            //SPARK-4086 Fold-style aggregation for VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.innerJoinWithFold"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.leftJoinWithFold"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.leftZipJoinWithFold"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.innerZipJoinWithFold"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.aggregateUsingIndexWithFold")
           )
 
         case v if v.startsWith("1.2") =>
