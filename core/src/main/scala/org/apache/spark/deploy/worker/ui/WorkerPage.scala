@@ -31,10 +31,9 @@ import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
-  val workerActor = parent.worker.self
-  val worker = parent.worker
-  val timeout = parent.timeout
+private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
+  private val workerActor = parent.worker.self
+  private val timeout = parent.timeout
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]

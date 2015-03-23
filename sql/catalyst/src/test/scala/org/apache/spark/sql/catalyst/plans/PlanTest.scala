@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{NoRelation, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -36,6 +36,8 @@ class PlanTest extends FunSuite {
     plan transformAllExpressions {
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case a: Alias =>
+        Alias(a.child, a.name)(exprId = ExprId(0))
     }
   }
 
@@ -49,5 +51,10 @@ class PlanTest extends FunSuite {
           |== FAIL: Plans do not match ===
           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
         """.stripMargin)
+  }
+
+  /** Fails the test if the two expressions do not match */
+  protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
+    comparePlans(Filter(e1, NoRelation), Filter(e2, NoRelation))
   }
 }

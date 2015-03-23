@@ -138,3 +138,14 @@ private[ml] trait HasOutputCol extends Params {
   /** @group getParam */
   def getOutputCol: String = get(outputCol)
 }
+
+private[ml] trait HasCheckpointInterval extends Params {
+  /**
+   * param for checkpoint interval
+   * @group param
+   */
+  val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval")
+
+  /** @group getParam */
+  def getCheckpointInterval: Int = get(checkpointInterval)
+}

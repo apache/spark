@@ -19,13 +19,12 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
-import com.google.common.io.Files
-
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class GraphSuite extends FunSuite with LocalSparkContext {
 
@@ -369,8 +368,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
   test("checkpoint") {
-    val checkpointDir = Files.createTempDir()
-    checkpointDir.deleteOnExit()
+    val checkpointDir = Utils.createTempDir()
     withSpark { sc =>
       sc.setCheckpointDir(checkpointDir.getAbsolutePath)
       val ring = (0L to 100L).zip((1L to 99L) :+ 0L).map { case (a, b) => Edge(a, b, 1)}

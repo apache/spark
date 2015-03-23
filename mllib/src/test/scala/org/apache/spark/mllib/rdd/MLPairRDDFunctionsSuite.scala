@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.mesos
-
-import java.nio.ByteBuffer
+package org.apache.spark.mllib.rdd
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 
-class MesosTaskLaunchDataSuite extends FunSuite {
-  test("serialize and deserialize data must be same") {
-    val serializedTask = ByteBuffer.allocate(40)
-    (Range(100, 110).map(serializedTask.putInt(_)))
-    serializedTask.rewind
-    val attemptNumber = 100
-    val byteString = MesosTaskLaunchData(serializedTask, attemptNumber).toByteString
-    serializedTask.rewind
-    val mesosTaskLaunchData = MesosTaskLaunchData.fromByteString(byteString)
-    assert(mesosTaskLaunchData.attemptNumber == attemptNumber)
-    assert(mesosTaskLaunchData.serializedTask.equals(serializedTask))
+class MLPairRDDFunctionsSuite extends FunSuite with MLlibTestSparkContext {
+  test("topByKey") {
+    val topMap = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
+      .topByKey(2)
+      .collectAsMap()
+
+    assert(topMap.size === 3)
+    assert(topMap(1) === Array(2, 1))
+    assert(topMap(3) === Array(7, 5))
+    assert(topMap(5) === Array(3, 1))
   }
 }
