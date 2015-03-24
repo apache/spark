@@ -545,6 +545,44 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def sortMergeJoin[W](other: RDD[(K, W)], partitioner: Partitioner)(implicit wt: ClassTag[W])
+      : RDD[(K, (V, W))] = {
+    new SortMergeJoinRDD[K, V, W, (V, W)](self, other, partitioner, JoinType.inner)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def leftOuterSortMergeJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
+      (implicit wt: ClassTag[W]): RDD[(K, (V, Option[W]))] = {
+    new SortMergeJoinRDD[K, V, W, (V, Option[W])](self, other, partitioner, JoinType.leftOuter)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def rightOuterSortMergeJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
+      (implicit wt: ClassTag[W]): RDD[(K, (Option[V], W))] = {
+    new SortMergeJoinRDD[K, V, W, (Option[V], W)](self, other, partitioner, JoinType.rightOuter)
+  }
+
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
@@ -648,6 +686,81 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def fullOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], Option[W]))] = {
     fullOuterJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def sortMergeJoin[W](other: RDD[(K, W)])(implicit wt: ClassTag[W]): RDD[(K, (V, W))] = {
+    sortMergeJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def sortMergeJoin[W](other: RDD[(K, W)], numPartitions: Int)
+      (implicit wt: ClassTag[W]): RDD[(K, (V, W))] = {
+    sortMergeJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def leftOuterSortMergeJoin[W](other: RDD[(K, W)])
+      (implicit wt: ClassTag[W]): RDD[(K, (V, Option[W]))] = {
+    leftOuterSortMergeJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def leftOuterSortMergeJoin[W](other: RDD[(K, W)], numPartitions: Int)
+      (implicit wt: ClassTag[W]): RDD[(K, (V, Option[W]))] = {
+    leftOuterSortMergeJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def rightOuterSortMergeJoin[W](other: RDD[(K, W)])
+      (implicit wt: ClassTag[W]): RDD[(K, (Option[V], W))] = {
+    rightOuterSortMergeJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   *
+   * It performs sort merge join and `this` values of a key would be fit into memory.
+   */
+  def rightOuterSortMergeJoin[W](other: RDD[(K, W)], numPartitions: Int)
+      (implicit wt: ClassTag[W]): RDD[(K, (Option[V], W))] = {
+    rightOuterSortMergeJoin(other, new HashPartitioner(numPartitions))
   }
 
   /**
