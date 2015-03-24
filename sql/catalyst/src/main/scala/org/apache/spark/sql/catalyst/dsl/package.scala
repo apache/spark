@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -289,7 +289,7 @@ package object dsl {
       InsertIntoTable(
         analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
-    def analyze = analysis.SimpleAnalyzer(logicalPlan)
+    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
   }
 
   object plans {  // scalastyle:ignore

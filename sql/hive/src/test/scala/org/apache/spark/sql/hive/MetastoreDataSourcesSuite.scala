@@ -579,7 +579,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         Row(3) :: Row(4) :: Nil
       )
 
-      table("test_parquet_ctas").queryExecution.analyzed match {
+      table("test_parquet_ctas").queryExecution.optimizedPlan match {
         case LogicalRelation(p: ParquetRelation2) => // OK
         case _ =>
           fail(
