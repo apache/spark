@@ -22,7 +22,7 @@ from numpy import array
 
 from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
@@ -124,9 +124,17 @@ class LogisticRegressionModel(LinearClassificationModel):
     """
     def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
-        self.numFeatures = numFeatures
-        self.numClasses = numClasses
+        self._numFeatures = int(numFeatures)
+        self._numClasses = int(numClasses)
         self._threshold = 0.5
+
+    @property
+    def numFeatures(self):
+        return self._numFeatures
+
+    @property
+    def numClasses(self):
+        return self._numClasses
 
     def predict(self, x):
         """
@@ -137,16 +145,38 @@ class LogisticRegressionModel(LinearClassificationModel):
             return x.map(lambda v: self.predict(v))
 
         x = _convert_to_vector(x)
-        margin = self.weights.dot(x) + self._intercept
-        if margin > 0:
-            prob = 1 / (1 + exp(-margin))
+        if self.numClasses == 2:
+            margin = self.weights.dot(x) + self._intercept
+            if margin > 0:
+                prob = 1 / (1 + exp(-margin))
+            else:
+                exp_margin = exp(margin)
+                prob = exp_margin / (1 + exp_margin)
+            if self._threshold is None:
+                return prob
+            else:
+                return 1 if prob > self._threshold else 0
         else:
-            exp_margin = exp(margin)
-            prob = exp_margin / (1 + exp_margin)
-        if self._threshold is None:
-            return prob
-        else:
-            return 1 if prob > self._threshold else 0
+            data_with_bias_size = self.weights.size / (self.numClasses - 1)
+            if not isinstance(self.weights, DenseVector):
+                raise ValueError("weights only supports dense vector but got type "
+                                 + type(self.weights))
+            weights_matrix = self.weights.toArray().reshape(self.numClasses - 1,
+                                                            data_with_bias_size)
+            margins = []
+            for i in range(0, self.numClasses - 1):
+                if x.size + 1 == data_with_bias_size:
+                    margin = x.dot(weights_matrix[i][0:x.size]) + weights_matrix[i][x.size]
+                else:
+                    margin = x.dot(weights_matrix[i])
+                margins.append(margin)
+            best_class = 0
+            max_margin = 0.0
+            for i in range(0, len(margins)):
+                if(margins[i] > max_margin):
+                    max_margin = margins[i]
+                    best_class = i + 1
+            return best_class
 
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
@@ -262,6 +292,13 @@ class LogisticRegressionWithLBFGS(object):
                                  float(regParam), regType, bool(intercept), int(corrections),
                                  float(tolerance), bool(validateData), int(numClasses))
 
+        if initialWeights is None:
+            if numClasses == 2:
+                initialWeights = [0.0] * len(data.first().features)
+            elif intercept:
+                initialWeights = [0.0] * (len(data.first().features) + 1) * (numClasses - 1)
+            else:
+                initialWeights = [0.0] * len(data.first().features) * (numClasses - 1)
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
