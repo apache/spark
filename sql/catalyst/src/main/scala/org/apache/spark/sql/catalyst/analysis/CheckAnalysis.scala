@@ -33,7 +33,7 @@ class CheckAnalysis {
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  def failAnalysis(msg: String) = {
+  def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
 
