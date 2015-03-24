@@ -91,7 +91,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val startTime = System.nanoTime()
           val result = create(in)
           val endTime = System.nanoTime()
-          def timeMs = (endTime - startTime).toDouble / 1000000
+          def timeMs: Double = (endTime - startTime).toDouble / 1000000
           logInfo(s"Code generated expression $in in $timeMs ms")
           result
         }

@@ -34,7 +34,7 @@ package object util {
     tempFile
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8") = {
+  def fileToString(file: File, encoding: String = "UTF-8"): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -56,7 +56,7 @@ package object util {
   def resourceToString(
       resource:String,
       encoding: String = "UTF-8",
-      classLoader: ClassLoader = SparkUtils.getSparkClassLoader) = {
+      classLoader: ClassLoader = SparkUtils.getSparkClassLoader): String = {
     val inStream = classLoader.getResourceAsStream(resource)
     val outStream = new ByteArrayOutputStream
     try {
@@ -104,7 +104,7 @@ package object util {
     new String(out.toByteArray)
   }
 
-  def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
+  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
 
   def benchmark[A](f: => A): A = {
     val startTime = System.nanoTime()

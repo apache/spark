@@ -71,7 +71,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionDown(e: Expression) = {
+    @inline def transformExpressionDown(e: Expression): Expression = {
       val newE = e.transformDown(rule)
       if (newE.fastEquals(e)) {
         e
@@ -104,7 +104,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionUp(e: Expression) = {
+    @inline def transformExpressionUp(e: Expression): Expression = {
       val newE = e.transformUp(rule)
       if (newE.fastEquals(e)) {
         e
@@ -165,5 +165,5 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString = statePrefix + super.simpleString
+  override def simpleString: String = statePrefix + super.simpleString
 }
