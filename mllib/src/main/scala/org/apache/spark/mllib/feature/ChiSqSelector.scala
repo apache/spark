@@ -125,4 +125,3 @@ class ChiSqSelector (val numTopFeatures: Int) {
     new ChiSqSelectorModel(indices)
   }
 }
-
