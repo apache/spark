@@ -29,7 +29,7 @@ import scala.reflect.ClassTag
  * An RDD which can combine small cached partition in the same executor
  * into only one partition to reduce the use of cpu resource.
  */
-class ProcessCoalesceRDD [T: ClassTag](@transient var prev: RDD[T])
+private[spark] class ProcessCoalesceRDD [T: ClassTag](@transient var prev: RDD[T])
   extends RDD[T](prev.context, Nil) {
   // Nil since we implement getDependencies
 
@@ -92,7 +92,7 @@ class ProcessCoalesceRDD [T: ClassTag](@transient var prev: RDD[T])
 /**
  * A location where a task should run. This can either be a host or a (host, executorID) pair.
  */
-case class ProcessCoalescePartition(
+private[spark] case class ProcessCoalescePartition(
     index: Int,
     @transient rdd: RDD[_],
     parentsIndices: Array[Int],
