@@ -47,7 +47,7 @@ private[sql] object Column {
  * @groupname Ungrouped Support functions for DataFrames.
  */
 @Experimental
-class Column(val expr: Expression) extends Logging {
+class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
