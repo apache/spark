@@ -185,7 +185,7 @@ val training = sc.parallelize(Seq(
 // Create a LogisticRegression instance.  This instance is an Estimator.
 val lr = new LogisticRegression()
 // Print out the parameters, documentation, and any default values.
-println("LogisticRegression parameters:\n" + lr.explainParams() + "\n")
+println(s"LogisticRegression parameters:\n ${lr.explainParams()}")
 
 // We may set parameters using setter methods.
 lr.setMaxIter(10)
@@ -197,7 +197,7 @@ val model1 = lr.fit(training.toDF)
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-println("Model 1 was fit using parameters: " + model1.fittingParamMap)
+println(s"Model 1 was fit using parameters: ${model1.fittingParamMap}")
 
 // We may alternatively specify parameters using a ParamMap,
 // which supports several methods for specifying parameters.
@@ -212,7 +212,7 @@ val paramMapCombined = paramMap ++ paramMap2
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 val model2 = lr.fit(training.toDF, paramMapCombined)
-println("Model 2 was fit using parameters: " + model2.fittingParamMap)
+println(s"Model 2 was fit using parameters: ${model2.fittingParamMap}")
 
 // Prepare test data.
 val test = sc.parallelize(Seq(
@@ -228,7 +228,7 @@ model2.transform(test.toDF)
   .select("features", "label", "myProbability", "prediction")
   .collect()
   .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-    println("($features, $label) -> prob=$prob, prediction=$prediction")
+    println(s"($features, $label) -> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
@@ -382,7 +382,7 @@ model.transform(test.toDF)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println("($id, $text) --> prob=$prob, prediction=$prediction")
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
