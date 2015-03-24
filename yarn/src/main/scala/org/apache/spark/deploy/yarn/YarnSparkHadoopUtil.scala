@@ -126,6 +126,13 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] override def scheduleLoginFromKeytab(): Unit = {
     sparkConf.getOption("spark.yarn.principal").foreach { principal =>
       val keytab = sparkConf.get("spark.yarn.keytab")
+
+      def scheduleRenewal(runnable: Runnable) = {
+        val renewalInterval = (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong
+        logInfo("Scheduling login from keytab in " + renewalInterval + "millis.")
+        delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
+      }
+
       // This thread periodically runs on the driver to update the delegation tokens on HDFS.
       val driverTokenRenewerRunnable =
         new Runnable {
@@ -139,14 +146,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
                 delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
                 return
             }
-            delegationTokenRenewer.schedule(
-              this, (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong,
-              TimeUnit.MILLISECONDS)
+            scheduleRenewal(this)
           }
         }
-      val timeToRenewal = (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong
-      delegationTokenRenewer.schedule(
-        driverTokenRenewerRunnable, timeToRenewal, TimeUnit.MILLISECONDS)
+      scheduleRenewal(driverTokenRenewerRunnable)
     }
   }
 
@@ -154,8 +157,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (!loggedInViaKeytab) {
       // Keytab is copied by YARN to the working directory of the AM, so full path is
       // not needed.
+      logInfo(s"Attempting to login to KDC using principal: $principal")
       loggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(
         principal, keytab)
+      logInfo("Successfully logged into KDC.")
       loggedInViaKeytab = true
     }
     val nns = getNameNodesToAccess(sparkConf)
@@ -167,13 +172,16 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       sparkConf.get("spark.yarn.credentials.file") + "-" + nextSuffix
     val tokenPath = new Path(tokenPathStr)
     val tempTokenPath = new Path(tokenPathStr + ".tmp")
+    logInfo("Writing out delegation tokens to " + tempTokenPath.toString)
     val stream = Option(remoteFs.create(tempTokenPath, true))
     try {
       stream.foreach { s =>
         newCredentials.writeTokenStorageToStream(s)
         s.hflush()
         s.close()
+        logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")
         remoteFs.rename(tempTokenPath, tokenPath)
+        logInfo("Delegation token file rename complete.")
       }
     } finally {
       stream.foreach(_.close())
@@ -205,16 +213,23 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
           val credentials = credentialsStatus.getPath
           val suffix = credentials.getName.substring(credentials.getName.lastIndexOf("-") + 1).toInt
           if (suffix > lastCredentialsFileSuffix) {
+            logInfo("Reading new delegation tokens from " + credentials.toString)
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentials)
+            lastCredentialsFileSuffix = suffix
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+
             val totalValidity = getLatestValidity - credentialsStatus.getModificationTime
             val timeToRunRenewal =
               credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
             val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
-            delegationTokenRenewer.schedule(executorUpdaterRunnable,
-              timeFromNowToRenewal, TimeUnit.MILLISECONDS)
+            logInfo("Updated delegation tokens, will check for new tokens in " +
+              timeFromNowToRenewal + " millis")
+            delegationTokenRenewer.schedule(
+              executorUpdaterRunnable, timeFromNowToRenewal, TimeUnit.MILLISECONDS)
           } else {
             // Check every hour to see if new credentials arrived.
+            logInfo("Updated delegation tokens were expected, but the driver has not updated the " +
+              "tokens yet, will check again in an hour.")
             delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
           }
         }
@@ -223,8 +238,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       // Since the file may get deleted while we are reading it, catch the Exception and come
       // back in an hour to try again
       case e: Exception =>
-        logWarning(
-          "Error encountered while trying to update credentials, will try again in 1 hour", e)
+        logWarning("Error while trying to update credentials, will try again in 1 hour", e)
         delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
     }
   }

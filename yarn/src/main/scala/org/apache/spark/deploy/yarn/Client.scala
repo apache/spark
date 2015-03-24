@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
-import com.google.common.base.{Objects, Preconditions}
+import com.google.common.base.Objects
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -238,6 +238,8 @@ private[spark] class Client(
     // If we passed in a keytab, make sure we copy the keytab to the staging directory on
     // HDFS, and setup the relevant environment vars, so the AM can login again.
     if (loginFromKeytab) {
+      logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
+        " via the YARN Secure Distributed Cache.")
       val localUri = new URI(args.keytab)
       val localPath = getQualifiedLocalPath(localUri, hadoopConf)
       val destinationPath = copyFileToRemote(dst, localPath, replication)
@@ -333,6 +335,7 @@ private[spark] class Client(
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(
         "spark.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
+      logInfo(s"Credentials file set to: $credentialsFile")
     }
 
     // Set the environment variables to be passed on to the executors.
@@ -562,8 +565,7 @@ private[spark] class Client(
 
   def setupCredentials(): Unit = {
     if (args.principal != null) {
-      Preconditions.checkNotNull(
-        args.keytab, "Keytab must be specified when principal is specified.", Array.empty[Any])
+      require(args.keytab != null, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
         s" using principal: ${args.principal} and keytab: ${args.keytab}")
       val f = new File(args.keytab)
