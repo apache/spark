@@ -85,7 +85,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
 
   protected var _bitset = new BitSet(_capacity)
 
-  def getBitSet = _bitset
+  def getBitSet: BitSet = _bitset
 
   // Init of the array in constructor (instead of in declaration) to work around a Scala compiler
   // specialization bug that would generate two arrays (one for Object and one for specialized T).
@@ -183,7 +183,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   /** Return the value at the specified position. */
   def getValue(pos: Int): T = _data(pos)
 
-  def iterator = new Iterator[T] {
+  def iterator: Iterator[T] = new Iterator[T] {
     var pos = nextPos(0)
     override def hasNext: Boolean = pos != INVALID_POS
     override def next(): T = {

@@ -60,7 +60,7 @@ class KryoSerializer(conf: SparkConf)
     .split(',')
     .filter(!_.isEmpty)
 
-  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+  def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator

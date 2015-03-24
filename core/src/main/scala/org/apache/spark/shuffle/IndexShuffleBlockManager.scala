@@ -80,7 +80,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
    * end of the output file. This will be used by getBlockLocation to figure out where each block
    * begins and ends.
    * */
-  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]) = {
+  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
     try {
@@ -121,5 +121,5 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
     }
   }
 
-  override def stop() = {}
+  override def stop(): Unit = {}
 }

@@ -44,7 +44,7 @@ private[spark] class UnionPartition[T: ClassTag](
 
   var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
 
-  def preferredLocations() = rdd.preferredLocations(parentPartition)
+  def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition)
 
   override val index: Int = idx
 
