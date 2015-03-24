@@ -147,7 +147,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-
+  
+  test("SPARK-6493 Support numeric(a,b) in the parser") {
+    checkAnswer(
+      sql("SELECT CAST(20.12 AS NUMERIC(4,2)) FROM testData limit 1"),
+      Row(BigDecimal(20.12)))
+  }
+  
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),
