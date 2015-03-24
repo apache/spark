@@ -68,6 +68,7 @@ private[master] class Master(
   private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
+  private val BLACKLIST_TIMEOUT = conf.getLong("spark.deploy.workerBlacklistTimeout", 0L) * 1000
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
@@ -88,6 +89,17 @@ private[master] class Master(
   // Drivers currently spooled for scheduling
   private val waitingDrivers = new ArrayBuffer[DriverInfo] 
   private var nextDriverNumber = 0
+
+  // blacklist, appId -> HashMap[workerId, lastFailTime]
+  val failedAppWorkers = new HashMap[String, HashMap[String, Long]]
+  private def isWorkerInBlacklist(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
+    var inBlacklist = false
+    if (failedAppWorkers.contains(app.id)) {
+      val lastFailTime: Long = failedAppWorkers(app.id).getOrElse(worker.id, 0L)
+      inBlacklist = (System.currentTimeMillis() - lastFailTime) < BLACKLIST_TIMEOUT
+    }
+    inBlacklist
+  }
 
   Utils.checkHost(host, "Expected hostname")
 
@@ -346,6 +358,9 @@ private[master] class Master(
             // Only retry certain number of times so we don't go into an infinite loop.
             if (!normalExit) {
               if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
+                // Add failed worker info into blacklist
+                failedAppWorkers.getOrElseUpdate(appId, new HashMap[String, Long]).put(
+                  exec.worker.id, System.currentTimeMillis())
                 schedule()
               } else {
                 val execs = appInfo.executors.values
@@ -520,8 +535,10 @@ private[master] class Master(
    * launched an executor for the app on it (right now the standalone backend doesn't like having
    * two executors on the same worker).
    */
-  private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= app.desc.memoryPerSlave && !worker.hasExecutor(app)
+  def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
+    worker.memoryFree >= app.desc.memoryPerSlave &&
+    !worker.hasExecutor(app) &&
+    !isWorkerInBlacklist(app, worker)
   }
 
   /**
@@ -728,6 +745,9 @@ private[master] class Master(
       workers.foreach { w =>
         w.actor ! ApplicationFinished(app.id)
       }
+
+      // Clear app's blacklist
+      failedAppWorkers.remove(app.id)
     }
   }
 
