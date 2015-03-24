@@ -595,6 +595,19 @@ class Column(protected[sql] val expr: Expression) {
   def as(alias: Symbol): Column = Alias(expr, alias.name)()
 
   /**
+   * Gives the column an alias with metadata.
+   * {{{
+   *   val metadata: Metadata = ...
+   *   df.select($"colA".as("colB", metadata))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def as(alias: String, metadata: Metadata): Column = {
+    Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
+
+  /**
    * Casts the column to a different data type.
    * {{{
    *   // Casts colA to IntegerType.
