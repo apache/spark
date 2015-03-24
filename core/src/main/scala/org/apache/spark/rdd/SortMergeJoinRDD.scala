@@ -33,13 +33,13 @@ private[spark] class JoinPartition(idx: Int, val left: ShuffleJoinSplitDep,
   override def hashCode(): Int = idx
 }
 
-private[spark] sealed trait JoinType[K, L, R, PAIR <: Product2[_, _]] extends Serializable {
+private[spark] sealed trait JoinType[K: ClassTag, L: ClassTag, R: ClassTag, PAIR <: Product2[_, _]] extends Serializable {
 
   private[spark] var joinType: Int = 0
 
   def flatten(iterators: Iterator[(K, (Iterator[L], Iterator[R]))]): Iterator[(K, PAIR)]
 
-  def mergeIterators(leftIter: Iterator[L], rightIter: Iterator[R]): Iterator[(L, R)] = {
+  def mergeIterators(leftIter: Iterator[L], rightIter: Iterator[R])(implicit lt: ClassTag[L: Iterator[(L, R)] = {
     val buffer = new CompactBuffer[L]()
     while(leftIter.hasNext){
       buffer += leftIter.next
@@ -129,7 +129,7 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](
     right: RDD[(K, R)],
     part: Partitioner,
     join: JoinType[K, L, R, PAIR])
-    (implicit kt: ClassTag[K], keyOrdering: Ordering[K])
+    (implicit kt: ClassTag[K], lt: ClassTag[L], rt: ClassTag[R], keyOrdering: Ordering[K])
   extends RDD[(K, PAIR)](left.context, Nil) with Logging {
 
   // Ordering is necessary. SortMergeJoin needs to Sort by Key
