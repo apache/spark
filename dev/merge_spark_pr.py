@@ -286,40 +286,54 @@ def resolve_jira_issues(title, merge_branches, comment):
     for jira_id in jira_ids:
         resolve_jira_issue(merge_branches, comment, jira_id)
 
-
 def standardize_jira_ref(text):
     # Standardize the [MODULE] SPARK-XXXXX prefix
     # Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[MLLIB] SPARK-XXX: Issue"
     
-    # Check for compliance
-    if (re.search(r'\[[A-Z0-9_]+\] SPARK-[0-9]{4,5}: \S+', text)):
+    #If the string is compliant, no need to process any further
+    if (re.search(r'\[[A-Z0-9_]+\] SPARK-[0-9]{3,5}: \S+', text)):
         return text
     
     # Extract JIRA ref(s):
-    jira_refs = Queue.Queue()
-    pattern = re.compile(r'(SPARK[-\s]*[0-9]{4,5})', re.IGNORECASE)
+    jira_refs = deque()
+    pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,5})', re.IGNORECASE)
     while (pattern.search(text) is not None):
-        jira_refs.put(re.sub(r'\s', '-', pattern.search(text).groups()[0].upper()))
-        text = text.replace(pattern.search(text).groups()[0], '')
+        ref = pattern.search(text).groups()[0]
+        # Replace any whitespace with a dash & convert to uppercase
+        jira_refs.append(re.sub(r'\s', '-', ref.upper()))
+        text = text.replace(ref, '')
 
     # Extract spark component(s):
-    components = Queue.Queue()
-    pattern = re.compile(r'(\[\w+\])', re.IGNORECASE)
+    components = deque()
+    # Look for alphanumeric chars, spaces, and/or commas
+    pattern = re.compile(r'(\[[\w\s,]+\])', re.IGNORECASE)
     while (pattern.search(text) is not None):
-        components.put(pattern.search(text).groups()[0])
-        text = text.replace(pattern.search(text).groups()[0], '')
+        component = pattern.search(text).groups()[0]
+        # Convert to uppercase
+        components.append(component.upper())
+        text = text.replace(component, '')
 
     # Cleanup remaining symbols:
-    pattern = re.compile(r'\W+(.*)', re.IGNORECASE)
-    text = pattern.search(text).groups()[0]
+    pattern = re.compile(r'^\W+(.*)', re.IGNORECASE)
+    if (pattern.search(text) is not None):
+        text = pattern.search(text).groups()[0]
 
     # Assemble full text (module(s), JIRA ref(s), remaining text)
-    clean_text = ''
-    while (not components.empty()):
-        clean_text += components.get() + ' '
-    while (not jira_refs.empty()):
-        clean_text += jira_refs.get() + ' '
-    clean_text = clean_text.rstrip() + ': ' + text.strip()
+    if (len(components) < 1):
+        components = ""
+    component_text = ' '.join(components).strip()
+    if (len(jira_refs) < 1):
+        jira_ref_text = ""
+    jira_ref_text = ' '.join(jira_refs).strip()
+    
+    if (len(jira_ref_text) < 1 and len(component_text) < 1):
+        clean_text = text.strip()
+    elif (len(jira_ref_text) < 1):
+        clean_text = component_text + ' ' + text.strip()
+    elif (len(component_text) < 1):
+        clean_text = jira_ref_text + ': ' + text.strip()
+    else:
+        clean_text = component_text + ' ' + jira_ref_text + ': ' + text.strip()
     
     return clean_text
 
