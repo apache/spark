@@ -47,7 +47,10 @@ private[spark] class SparkUI private (
 
   /** Initialize all components of the server. */
   def initialize() {
-    attachTab(new JobsTab(this))
+    val jobsTab = new JobsTab(this)
+    attachTab(jobsTab)
+    attachHandler(
+      createRedirectHandler("/jobs/job/kill", "/jobs", jobsTab.handleKillRequest))
     val stagesTab = new StagesTab(this)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
