@@ -59,6 +59,13 @@ class Column(protected[sql] val expr: Expression) {
 
   override def toString: String = expr.prettyString
 
+  override def equals(that: Any): Boolean = that match {
+    case that: Column => that.expr.equals(this.expr)
+    case _ => false
+  }
+
+  override def hashCode: Int = this.expr.hashCode
+
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -600,7 +607,11 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def cast(to: DataType): Column = Cast(expr, to)
+  def cast(to: DataType): Column = expr match {
+    // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
+    case Alias(childExpr, name) => Alias(Cast(childExpr, to), name)()
+    case _ => Cast(expr, to)
+  }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -613,20 +624,7 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = Cast(expr, to.toLowerCase match {
-    case "string" | "str" => StringType
-    case "boolean" => BooleanType
-    case "byte" => ByteType
-    case "short" => ShortType
-    case "int" => IntegerType
-    case "long" => LongType
-    case "float" => FloatType
-    case "double" => DoubleType
-    case "decimal" => DecimalType.Unlimited
-    case "date" => DateType
-    case "timestamp" => TimestampType
-    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
-  })
+  def cast(to: String): Column = cast(DataTypeParser(to))
 
   /**
    * Returns an ordering used in sorting.
@@ -671,6 +669,11 @@ class Column(protected[sql] val expr: Expression) {
 }
 
 
+/**
+ * :: Experimental ::
+ * A convenient class used for constructing schema.
+ */
+@Experimental
 class ColumnName(name: String) extends Column(name) {
 
   /** Creates a new AttributeReference of type boolean */

@@ -24,6 +24,7 @@ import scala.xml.Node
 
 import akka.pattern.ask
 import org.json4s.JValue
+import org.json4s.JsonAST.JNothing
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
@@ -31,7 +32,7 @@ import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
+private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
@@ -44,7 +45,11 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
-    JsonProtocol.writeApplicationInfo(app)
+    if (app == null) {
+      JNothing
+    } else {
+      JsonProtocol.writeApplicationInfo(app)
+    }
   }
 
   /** Executor details for a particular application */
@@ -55,6 +60,10 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
+    if (app == null) {
+      val msg = <div class="row-fluid">No running application with ID {appId}</div>
+      return UIUtils.basicSparkPage(msg, "Not Found")
+    }
 
     val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq

@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StringType
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class HiveNativeCommand(sql: String) extends RunnableCommand {
 
-  override def output =
+  override def output: Seq[AttributeReference] =
     Seq(AttributeReference("result", StringType, nullable = false)())
 
-  override def run(sqlContext: SQLContext) =
+  override def run(sqlContext: SQLContext): Seq[Row] =
     sqlContext.asInstanceOf[HiveContext].runSqlHive(sql).map(Row(_))
 }

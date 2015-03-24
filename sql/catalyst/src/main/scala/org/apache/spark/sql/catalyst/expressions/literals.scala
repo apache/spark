@@ -38,6 +38,8 @@ object Literal {
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
+    case _ =>
+      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 }
 

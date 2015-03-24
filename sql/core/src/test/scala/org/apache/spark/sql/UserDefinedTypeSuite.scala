@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
+import org.apache.spark.util.Utils
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
@@ -60,6 +64,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   }
 
   override def userClass = classOf[MyDenseVector]
+
+  private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest {
@@ -90,5 +96,27 @@ class UserDefinedTypeSuite extends QueryTest {
     checkAnswer(
       sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
+  }
+
+
+  test("UDTs with Parquet") {
+    val tempDir = Utils.createTempDir()
+    tempDir.delete()
+    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+  }
+
+  test("Repartition UDTs with Parquet") {
+    val tempDir = Utils.createTempDir()
+    tempDir.delete()
+    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
+  }
+
+  // Tests to make sure that all operators correctly convert types on the way out.
+  test("Local UDTs") {
+    val df = Seq((1, new MyDenseVector(Array(0.1, 1.0)))).toDF("int", "vec")
+    df.collect()(0).getAs[MyDenseVector](1)
+    df.take(1)(0).getAs[MyDenseVector](1)
+    df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
+    df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
   }
 }

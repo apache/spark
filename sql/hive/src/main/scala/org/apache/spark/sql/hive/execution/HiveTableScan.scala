@@ -26,21 +26,20 @@ import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
- * :: DeveloperApi ::
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
  * @param relation The Hive table be be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
-@DeveloperApi
+private[hive]
 case class HiveTableScan(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
@@ -130,11 +129,11 @@ case class HiveTableScan(
     }
   }
 
-  override def execute() = if (!relation.hiveQlTable.isPartitioned) {
+  override def execute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
   }
 
-  override def output = attributes
+  override def output: Seq[Attribute] = attributes
 }
