@@ -22,24 +22,28 @@ import scala.util.control.NonFatal
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URL}
+import java.security.NoSuchAlgorithmException
 import java.util.concurrent.atomic.AtomicReference
+import javax.crypto.{SecretKey, KeyGenerator}
 
 import akka.actor._
 import akka.remote._
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.SparkException
+import org.apache.spark.crypto.CommonConfigurationKeys._
 import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader,
   SignalLogger, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.SparkException
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -273,6 +277,7 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
+      initJobCredentialsAndUGI()
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -283,6 +288,7 @@ private[spark] class ApplicationMaster(
       conf = sparkConf, securityManager = securityMgr)._1
     waitForSparkDriver()
     addAmIpFilter()
+    initJobCredentialsAndUGI()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
@@ -552,7 +558,46 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  /** set  "MapReduceShuffleToken" before registerAM
+    * @return
+    */
+  private def initJobCredentialsAndUGI() = {
+    val sc = sparkContextRef.get()
+    val conf = if (sc != null) sc.getConf else sparkConf
+    val isEncryptedShuffle = if (conf != null) {
+      conf.getBoolean("spark.encrypted.shuffle", false)
+    } else {
+      false
+    }
+    if (isEncryptedShuffle) {
+      val credentials = SparkHadoopUtil.get.getCurrentUserCredentials
+      if (credentials.getSecretKey(SPARK_SHUFFLE_TOKEN) == null) {
+        var keyGen: KeyGenerator = null
+        try {
+          val SHUFFLE_KEY_LENGTH: Int = 64
+          var keyLen: Int = if (conf.getBoolean(SPARK_ENCRYPTED_INTERMEDIATE_DATA,
+            DEFAULT_SPARK_ENCRYPTED_INTERMEDIATE_DATA) == true) {
+            conf.getInt(SPARK_ENCRYPTED_INTERMEDIATE_DATA_KEY_SIZE_BITS,
+              DEFAULT_SPARK_ENCRYPTED_INTERMEDIATE_DATA_KEY_SIZE_BITS)
+          }
+          else {
+            SHUFFLE_KEY_LENGTH
+          }
+          val SHUFFLE_KEYGEN_ALGORITHM = "HmacSHA1";
+          keyGen = KeyGenerator.getInstance(SHUFFLE_KEYGEN_ALGORITHM)
+          keyGen.init(keyLen)
+        }
+        catch {
+          case e: NoSuchAlgorithmException => println("Error generating shuffle secret key")
+        }
+        val shuffleKey: SecretKey = keyGen.generateKey
+        credentials.addSecretKey(SPARK_SHUFFLE_TOKEN, shuffleKey.getEncoded)
+        SparkHadoopUtil.get.addCurrentUserCredentials(credentials)
+      }
+    }
+  }
 }
+
 
 object ApplicationMaster extends Logging {
 

@@ -20,10 +20,14 @@ package org.apache.spark.storage
 import java.io.{BufferedOutputStream, FileOutputStream, File, OutputStream}
 import java.nio.channels.FileChannel
 
-import org.apache.spark.Logging
-import org.apache.spark.serializer.{SerializationStream, Serializer}
-import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.hadoop.mapreduce.security.TokenCache
 
+import org.apache.spark.crypto.CommonConfigurationKeys._
+import org.apache.spark.crypto.{CryptoOutputStream, CryptoCodec}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.{Logging,SparkConf}
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
  * appending data to an existing block, and can guarantee atomicity in the case of faults
@@ -123,16 +127,49 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
+  private var sparkConf:SparkConf = null
+
   override def open(): BlockObjectWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
     fos = new FileOutputStream(file, true)
-    ts = new TimeTrackingOutputStream(fos)
+    var isEncryptedShuffle: Boolean = if (sparkConf != null) {
+      sparkConf.getBoolean("spark.encrypted.shuffle", false)
+    }
+    else {
+      false
+    }
+    if (isEncryptedShuffle) {
+      val cryptoCodec: CryptoCodec = CryptoCodec.getInstance(sparkConf)
+      val bufferSize: Int = sparkConf.getInt(
+        SPARK_ENCRYPTED_INTERMEDIATE_DATA_BUFFER_KB,
+        DEFAULT_SPARK_ENCRYPTED_INTERMEDIATE_DATA_BUFFER_KB) * 1024
+      val iv: Array[Byte] = createIV(cryptoCodec)
+      val credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
+      var key: Array[Byte] = credentials.getSecretKey(SPARK_SHUFFLE_TOKEN)
+      fos.write(iv)
+      val cos = new CryptoOutputStream(fos, cryptoCodec,
+        bufferSize, key, iv, iv.length)
+      ts = new TimeTrackingOutputStream(cos)
+    } else {
+      ts = new TimeTrackingOutputStream(fos)
+    }
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializer.newInstance().serializeStream(bs)
     initialized = true
+    this
+  }
+
+  def createIV(cryptoCodec: CryptoCodec): Array[Byte] = {
+    val iv: Array[Byte] = new Array[Byte](cryptoCodec.getCipherSuite.algoBlockSize)
+    cryptoCodec.generateSecureRandom(iv)
+    iv
+  }
+
+  def setSparkConf(sparkConfVal: SparkConf): DiskBlockObjectWriter = {
+    sparkConf = sparkConfVal
     this
   }
 
