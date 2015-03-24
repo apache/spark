@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import com.typesafe.config.Config
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.StorageLevel
 import java.nio.ByteBuffer
@@ -143,7 +144,17 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  private[streaming] var actorReceiverConf: Config = null
+
+  private lazy val actorSystem: ActorSystem = {
+    if (actorReceiverConf != null) {
+      ActorSystem(s"$name-ActorSystem", actorReceiverConf)
+    } else {
+      SparkEnv.get.actorSystem
+    }
+  }
+
+  protected lazy val supervisor = actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {

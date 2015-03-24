@@ -279,5 +279,9 @@ And a new input stream can be created with this custom actor as
 val lines = ssc.actorStream[String](Props(new CustomActor()), "CustomReceiver")
 {% endhighlight %}
 
+Since Spark 1.4, Spark Streaming supports to start a customized Actor System for Actor-based receiver.
+You can configure the customized Actor System by passing the Akka configuration entries to SparkConf 
+or through spark-submit script, with a prefix "spark.streaming.receiver.".
+
 See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala)
 for an end-to-end example.

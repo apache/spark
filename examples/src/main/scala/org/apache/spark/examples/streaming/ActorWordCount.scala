@@ -146,6 +146,9 @@ object ActorWordCount {
 
     val Seq(host, port) = args.toSeq
     val sparkConf = new SparkConf().setAppName("ActorWordCount")
+    // start a customized actor system for receiver
+    sparkConf.set("spark.streaming.receiver.akka.remote.transport-failure-detector." +
+      "heartbeat-interval", "1 s")
     // Create the context and set the batch size
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 

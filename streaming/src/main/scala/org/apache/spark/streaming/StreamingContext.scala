@@ -25,6 +25,7 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
+import com.typesafe.config.ConfigFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -265,7 +266,22 @@ class StreamingContext private[streaming] (
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
     ): ReceiverInputDStream[T] = {
-    receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+
+    import scala.collection.JavaConversions.mapAsJavaMap
+
+    def getAkkaReceiverConf: Map[String, String] =
+      sparkContext.conf.getAll.filter {
+        case (k, _) => k.startsWith("spark.streaming.receiver.akka.")
+      }.toMap[String, String].map{case (key, value) => (key.substring(25), value)}
+
+    val actorReceiver = new ActorReceiver[T](props, name, storageLevel, supervisorStrategy)
+
+    val akkaReceiverConf = getAkkaReceiverConf
+    if (!akkaReceiverConf.isEmpty) {
+      actorReceiver.actorReceiverConf = ConfigFactory.parseMap(akkaReceiverConf).withFallback(
+        SparkEnv.get.actorSystem.settings.config)
+    }
+    receiverStream(actorReceiver)
   }
 
   /**
