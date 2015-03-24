@@ -137,12 +137,13 @@ case class InsertIntoTable(
   }
 }
 
-case class CreateTableAsSelect[T](
-    databaseName: Option[String],
-    tableName: String,
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    desc: T) extends UnaryNode {
+trait CreateTableAsSelect extends UnaryNode {
+  self: Product =>
+  def databaseName: Option[String]
+  def tableName: String
+  def child: LogicalPlan
+  def allowExisting: Boolean
+
   override def output = Seq.empty[Attribute]
   override lazy val resolved = databaseName != None && childrenResolved
 }

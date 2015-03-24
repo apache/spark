@@ -24,6 +24,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition => TPartition, Table => TTable}
 import org.apache.hadoop.hive.metastore.{TableType, Warehouse}
 import org.apache.hadoop.hive.ql.metadata._
+import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -527,7 +528,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       // TODO extra is in type of ASTNode which means the logical plan is not resolved
       // Need to think about how to implement the CreateTableAsSelect.resolved
-      case CreateTableAsSelect(db, tableName, child, allowExisting, extra: ASTNode) =>
+      case CreateHiveTableAsSelect(db, tableName, child, allowExisting, extra) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
@@ -546,7 +547,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
             }
           }
 
-          sa.analyze(extra, new Context(hive.hiveconf))
+          sa.analyze(extra.asInstanceOf[ASTNode], new Context(hive.hiveconf))
           Some(sa.getQB().getTableDesc)
         }
 
@@ -661,6 +662,14 @@ private[hive] case class InsertIntoHiveTable(
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
+}
+
+private[hive] case class CreateHiveTableAsSelect(
+    databaseName: Option[String],
+    tableName: String,
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    desc: Node) extends CreateTableAsSelect {
 }
 
 private[hive] case class MetastoreRelation

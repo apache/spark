@@ -141,7 +141,7 @@ class DataFrame private[sql](
     // happen right away to let these side effects take place eagerly.
     case _: Command |
          _: InsertIntoTable |
-         _: CreateTableAsSelect[_] |
+         _: CreateTableAsSelect |
          _: CreateTableUsingAsSelect |
          _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
