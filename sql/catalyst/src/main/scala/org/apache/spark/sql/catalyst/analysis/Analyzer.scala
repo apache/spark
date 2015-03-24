@@ -175,7 +175,7 @@ class Analyzer(catalog: Catalog,
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+          u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
@@ -275,7 +275,8 @@ class Analyzer(catalog: Catalog,
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolveChildren(name, resolver).getOrElse(u)
+            val result =
+              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>

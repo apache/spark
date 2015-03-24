@@ -42,6 +42,13 @@ abstract class NamedExpression extends Expression {
   def exprId: ExprId
 
   /**
+   * Returns a dot separated fully qualified name for this attribute.  Given that there can be
+   * multiple qualifiers, it is possible that there are other possible way to refer to this
+   * attribute.
+   */
+  def qualifiedName: String = (qualifiers.headOption.toSeq :+ name).mkString(".")
+
+  /**
    * All possible qualifiers for the expression.
    *
    * For now, since we do not allow using original table name to qualify a column name once the
