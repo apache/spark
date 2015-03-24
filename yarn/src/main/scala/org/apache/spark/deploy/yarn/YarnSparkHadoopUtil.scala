@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io._
-import java.util
 import java.util.Arrays
 import java.util.Comparator
 import java.util.concurrent.{Executors, TimeUnit}
@@ -162,6 +161,20 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         principal, keytab)
       logInfo("Successfully logged into KDC.")
       loggedInViaKeytab = true
+      // Not exactly sure when HDFS re-logs in, be safe and do it ourselves.
+      // Periodically check and relogin this keytab. The UGI will take care of not relogging in
+      // if it is not necessary to relogin.
+      val reloginRunnable = new Runnable {
+        override def run(): Unit = {
+          try {
+            loggedInUGI.checkTGTAndReloginFromKeytab()
+          } catch {
+            case e: Exception =>
+              logError("Error while attempting tp relogin to KDC", e)
+          }
+        }
+      }
+      delegationTokenRenewer.schedule(reloginRunnable, 6, TimeUnit.HOURS)
     }
     val nns = getNameNodesToAccess(sparkConf)
     val newCredentials = loggedInUGI.getCredentials
