@@ -133,7 +133,7 @@ private[spark] class Stage(
 
   def attemptId: Int = nextAttemptId
 
-  override def toString = "Stage " + id
+  override def toString: String = "Stage " + id
 
   override def hashCode(): Int = id
 

@@ -146,6 +146,27 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     result
   }
 
+  override def equals(o: Any): Boolean = o match {
+    case other: Row =>
+      if (values.length != other.length) {
+        return false
+      }
+
+      var i = 0
+      while (i < values.length) {
+        if (isNullAt(i) != other.isNullAt(i)) {
+          return false
+        }
+        if (apply(i) != other.apply(i)) {
+          return false
+        }
+        i += 1
+      }
+      true
+
+    case _ => false
+  }
+
   def copy() = this
 }
 

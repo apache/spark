@@ -56,7 +56,7 @@ SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 <div data-lang="python"  markdown="1">
 
 The entry point into all relational functionality in Spark is the
-[`SQLContext`](api/python/pyspark.sql.SQLContext-class.html) class, or one
+[`SQLContext`](api/python/pyspark.sql.html#pyspark.sql.SQLContext) class, or one
 of its decedents.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight python %}
@@ -509,8 +509,11 @@ val people = sc.textFile("examples/src/main/resources/people.txt")
 // The schema is encoded in a string
 val schemaString = "name age"
 
-// Import Spark SQL data types and Row.
-import org.apache.spark.sql._
+// Import Row.
+import org.apache.spark.sql.Row;
+
+// Import Spark SQL data types
+import org.apache.spark.sql.types.{StructType,StructField,StringType};
 
 // Generate the schema based on the string of schema
 val schema =

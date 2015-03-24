@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.mesos
+package org.apache.spark.scheduler.cluster.mesos
 
 import java.nio.ByteBuffer
 import java.util
@@ -24,21 +24,20 @@ import java.util.Collections
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.mesos.SchedulerDriver
-import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
-import org.mockito.Mockito._
+import org.apache.mesos.Protos._
+import org.apache.mesos.SchedulerDriver
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 import org.apache.spark.executor.MesosExecutorBackend
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerBackend, MemoryUtils}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 
 class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with MockitoSugar {
 

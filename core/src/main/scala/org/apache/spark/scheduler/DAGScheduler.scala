@@ -946,7 +946,7 @@ class DAGScheduler(
 
     val stage = stageIdToStage(task.stageId)
 
-    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
+    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
       val serviceTime = stage.latestInfo.submissionTime match {
         case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
         case _ => "Unknown"
@@ -1262,7 +1262,6 @@ class DAGScheduler(
       return true
     }
     val visitedRdds = new HashSet[RDD[_]]
-    val visitedStages = new HashSet[Stage]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
@@ -1274,7 +1273,6 @@ class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
-                visitedStages += mapStage
                 waitingForVisit.push(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
