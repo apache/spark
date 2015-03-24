@@ -35,7 +35,10 @@ private[spark] class JoinPartition(
   override def hashCode(): Int = idx
 }
 
-private[spark] abstract class JoinType[K: ClassTag, L: ClassTag, R: ClassTag, PAIR <: Product2[_, _]]
+private[spark] abstract class JoinType[K: ClassTag,
+                                          L: ClassTag,
+                                          R: ClassTag,
+                                          PAIR <: Product2[_, _]]
     extends Serializable {
 
   private[spark] var joinType: Int = 0
