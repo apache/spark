@@ -31,6 +31,8 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
+import org.apache.spark.sql.types.*;
+
 import static org.apache.spark.sql.functions.*;
 
 public class JavaDataFrameSuite {
@@ -117,6 +119,12 @@ public class JavaDataFrameSuite {
     Bean bean = new Bean();
     JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
     DataFrame df = context.createDataFrame(rdd, Bean.class);
+    StructType schema = df.schema();
+    Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
+      schema.apply("a"));
+    Assert.assertEquals(
+      new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
+      schema.apply("b"));
     Row first = df.select("a", "b").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     Assert.assertArrayEquals(bean.getB(), first.<Integer[]>getAs(1));
