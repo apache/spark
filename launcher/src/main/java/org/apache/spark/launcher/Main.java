@@ -48,13 +48,10 @@ class Main {
    * script.
    */
 
-  static String uberJarPath;
-
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
     List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
-    uberJarPath = args.remove(0);
     String className = args.remove(0);
 
     boolean printLaunchCommand;

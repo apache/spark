@@ -186,7 +186,7 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    final String assembly = Main.uberJarPath;
+    final String assembly = AbstractCommandBuilder.class.getProtectionDomain().getCodeSource().getLocation().getPath();
     addToClassPath(cp, assembly);
 
     // When Hive support is needed, Datanucleus jars must be included on the classpath. Datanucleus
