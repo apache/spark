@@ -34,7 +34,7 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
 
   def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
-  def handleKillRequest(request: HttpServletRequest) = {
+  def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && (parent.securityManager.checkModifyPermissions(request.getRemoteUser))) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageIdOpt = Option(request.getParameter("id"))

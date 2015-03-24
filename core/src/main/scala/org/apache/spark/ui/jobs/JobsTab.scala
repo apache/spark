@@ -32,7 +32,7 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   attachPage(new AllJobsPage(this))
   attachPage(new JobPage(this))
 
-  def handleKillRequest(request: HttpServletRequest) = {
+  def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && (parent.securityManager.checkModifyPermissions(request.getRemoteUser))) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val jobIdOpt = Option(request.getParameter("id"))
