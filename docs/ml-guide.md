@@ -408,31 +408,31 @@ import org.apache.spark.sql.SQLContext;
 // Labeled and unlabeled instance types.
 // Spark SQL can infer schema from Java Beans.
 public class Document implements Serializable {
-  private Long id;
+  private long id;
   private String text;
 
-  public Document(Long id, String text) {
+  public Document(long id, String text) {
     this.id = id;
     this.text = text;
   }
 
-  public Long getId() { return this.id; }
-  public void setId(Long id) { this.id = id; }
+  public long getId() { return this.id; }
+  public void setId(long id) { this.id = id; }
 
   public String getText() { return this.text; }
   public void setText(String text) { this.text = text; }
 }
 
 public class LabeledDocument extends Document implements Serializable {
-  private Double label;
+  private double label;
 
-  public LabeledDocument(Long id, String text, Double label) {
+  public LabeledDocument(long id, String text, double label) {
     super(id, text);
     this.label = label;
   }
 
-  public Double getLabel() { return this.label; }
-  public void setLabel(Double label) { this.label = label; }
+  public double getLabel() { return this.label; }
+  public void setLabel(double label) { this.label = label; }
 }
 
 // Set up contexts.
@@ -663,31 +663,31 @@ import org.apache.spark.sql.SQLContext;
 // Labeled and unlabeled instance types.
 // Spark SQL can infer schema from Java Beans.
 public class Document implements Serializable {
-  private Long id;
+  private long id;
   private String text;
 
-  public Document(Long id, String text) {
+  public Document(long id, String text) {
     this.id = id;
     this.text = text;
   }
 
-  public Long getId() { return this.id; }
-  public void setId(Long id) { this.id = id; }
+  public long getId() { return this.id; }
+  public void setId(long id) { this.id = id; }
 
   public String getText() { return this.text; }
   public void setText(String text) { this.text = text; }
 }
 
 public class LabeledDocument extends Document implements Serializable {
-  private Double label;
+  private double label;
 
-  public LabeledDocument(Long id, String text, Double label) {
+  public LabeledDocument(long id, String text, double label) {
     super(id, text);
     this.label = label;
   }
 
-  public Double getLabel() { return this.label; }
-  public void setLabel(Double label) { this.label = label; }
+  public double getLabel() { return this.label; }
+  public void setLabel(double label) { this.label = label; }
 }
 
 SparkConf conf = new SparkConf().setAppName("JavaCrossValidatorExample");
