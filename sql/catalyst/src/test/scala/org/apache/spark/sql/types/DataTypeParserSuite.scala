@@ -43,6 +43,8 @@ class DataTypeParserSuite extends FunSuite {
   checkDataType("dOUBle", DoubleType)
   checkDataType("decimal(10, 5)", DecimalType(10, 5))
   checkDataType("decimal", DecimalType.Unlimited)
+  checkDataType("numeric(10, 5)", DecimalType(10, 5))
+  checkDataType("numeric", DecimalType.Unlimited)
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
