@@ -136,6 +136,8 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
 
     try {
       gmm.save(sc, path)
+
+      // TODO: GaussianMixtureModel should implement equals/hashcode directly.
       val sameModel = GaussianMixtureModel.load(sc, path)
       assert(sameModel.k === gmm.k)
       (0 until sameModel.k).foreach { i =>

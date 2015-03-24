@@ -103,7 +103,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weights: Double, mus: Vector, sigmas: Matrix)
+    case class Data(weight: Double, mu: Vector, sigma: Matrix)
 
     def formatVersionV1_0 = "1.0"
 
@@ -136,7 +136,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.parquetFile(datapath)
       val numGaussians = dataRDD.count().toInt
-      val dataArray = dataRDD.select("weights", "mus", "sigmas").take(numGaussians)
+      val dataArray = dataRDD.select("weight", "mu", "sigma").collect()
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataRDD.schema)
 
@@ -160,10 +160,10 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         val model = SaveLoadV1_0.load(sc, path)
         require(model.weights.length == k,
           s"GaussianMixtureModel requires weights of length $k " +
-          s"got weights of length $model.weights.length")
+          s"got weights of length ${model.weights.length}")
         require(model.gaussians.length == k,
           s"GaussianMixtureModel requires gaussians of length $k" +
-          s"got gaussians of length $model.gaussians.length")
+          s"got gaussians of length ${model.gaussians.length}")
         model
       }
       case _ => throw new Exception(
