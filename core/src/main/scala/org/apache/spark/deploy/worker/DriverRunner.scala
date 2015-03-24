@@ -33,8 +33,6 @@ import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.util.{Clock, SystemClock}
 
-import scala.collection.mutable
-
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
  * This is currently only used in standalone cluster deploy mode.
@@ -178,7 +176,7 @@ private[deploy] class DriverRunner(
   }
 
   def runCommandWithRetry(
-      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean) {
+      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.

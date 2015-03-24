@@ -20,11 +20,10 @@ package org.apache.spark.metrics
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import org.eclipse.jetty.servlet.ServletContextHandler
-
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}

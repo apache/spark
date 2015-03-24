@@ -75,7 +75,7 @@
    <parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter>
   </parameters>
  </check>
- <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
+ <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="true"></check>
  <!-- <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true"> -->
  <!--  <parameters> -->
  <!--   <parameter name="illegalImports"><![CDATA[sun._,java.awt._]]></parameter> -->
@@ -137,9 +137,9 @@
  <!--   <parameter name="maxMethods"><![CDATA[30]]></parameter> -->
  <!--  </parameters> -->
  <!-- </check> -->
- <!-- <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check> -->
+ <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
- <check level="error" class="org.apache.spark.scalastyle.NonASCIICharacterChecker" enabled="true"></check>
+ <check level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"></check>
 </scalastyle>
