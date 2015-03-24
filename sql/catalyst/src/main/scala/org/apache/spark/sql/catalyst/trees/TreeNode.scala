@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.types.DataType
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -220,6 +221,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           Some(arg)
         }
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
@@ -276,6 +278,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           Some(arg)
         }
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
@@ -307,10 +310,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
+    val defaultCtor =
+      getClass.getConstructors
+        .find(_.getParameterTypes.size != 0)
+        .headOption
+        .getOrElse(sys.error(s"No valid constructor for $nodeName"))
+
     try {
       CurrentOrigin.withOrigin(origin) {
         // Skip no-arg constructors that are just there for kryo.
-        val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
         if (otherCopyArgs.isEmpty) {
           defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
         } else {
@@ -320,8 +328,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     } catch {
       case e: java.lang.IllegalArgumentException =>
         throw new TreeNodeException(
-          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName? "
-            + s"Exception message: ${e.getMessage}.")
+          this,
+          s"""
+             |Failed to copy node.
+             |Is otherCopyArgs specified correctly for $nodeName.
+             |Exception message: ${e.getMessage}
+             |ctor: $defaultCtor?
+             |args: ${newArgs.mkString(", ")}
+           """.stripMargin)
     }
   }
 
