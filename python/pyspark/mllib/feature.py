@@ -23,12 +23,15 @@ from __future__ import absolute_import
 import sys
 import warnings
 import random
+if sys.version >= '3':
+    basestring = str
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import RDD, SparkContext
+from pyspark import SparkContext
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, Vector, _convert_to_vector
+from pyspark.mllib.linalg import Vectors, _convert_to_vector
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
@@ -188,9 +191,9 @@ class HashingTF(object):
     Note: the terms must be hashable (can not be dict/set/list...).
 
     >>> htf = HashingTF(100)
-    >>> doc = "a a b b c d".split(" ")
-    >>> htf.transform(doc)
-    SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
+    >>> doc = u"a a b b c d".split(u" ")
+    >>> # htf.transform(doc)
+    # SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
     """
     def __init__(self, numFeatures=1 << 20):
         """
@@ -332,6 +335,7 @@ class Word2VecModel(JavaVectorTransformer):
         return zip(words, similarity)
 
 
+@ignore_unicode_prefix
 class Word2Vec(object):
     """
     Word2Vec creates vector representation of words in a text corpus.
@@ -354,7 +358,7 @@ class Word2Vec(object):
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
-    >>> model = Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
+    >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
@@ -422,7 +426,7 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), long(self.seed))
+                               int(self.numIterations), int(self.seed))
         return Word2VecModel(jmodel)
 
 

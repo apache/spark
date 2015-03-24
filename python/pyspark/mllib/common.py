@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version >= '3':
+    long = int
+    basestring = str
+
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
@@ -102,8 +107,8 @@ def _java2py(sc, r):
             except Py4JJavaError:
                 pass  # not pickable
 
-    if isinstance(r, bytearray):
-        r = PickleSerializer().loads(str(r))
+    if isinstance(r, (bytearray, bytes)):
+        r = PickleSerializer().loads(bytes(r))
     return r
 
 

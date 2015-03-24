@@ -61,7 +61,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> model = ALS.train(ratings, 4, seed=10)
     >>> model.userFeatures().collect()
-    [(1, array('d', [...])), (2, array('d', [...]))]
+    [(1, DenseVector([...])), (2, DenseVector([...]))]
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
@@ -69,7 +69,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
 
     >>> model.productFeatures().collect()
-    [(1, array('d', [...])), (2, array('d', [...]))]
+    [(1, DenseVector([...])), (2, DenseVector([...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]

@@ -87,7 +87,7 @@ class StatCounter(object):
         return copy.deepcopy(self)
 
     def count(self):
-        return self.n
+        return int(self.n)
 
     def mean(self):
         return self.mu
