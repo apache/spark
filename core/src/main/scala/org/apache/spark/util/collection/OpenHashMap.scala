@@ -58,7 +58,7 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     if (k == null) {
       haveNullValue
     } else {
-      _keySet.getPos(k) >= 0
+      _keySet.getPos(k) != OpenHashSet.INVALID_POS
     }
   }
 
