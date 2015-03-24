@@ -133,15 +133,18 @@ private[spark] class AkkaRpcEnv private[akka] (
           safelyCall(endpoint) {
             processMessage(endpoint, m, sender)
           }
+
         case AkkaFailure(e) =>
           try {
             endpoint.onError(e)
           } catch {
             case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
           }
+
         case message: Any => {
           logWarning(s"Unknown message: $message")
         }
+
       }
 
       override def postStop(): Unit = {
@@ -160,9 +163,9 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
     val message = m.message
-    val reply = m.reply
+    val needReply = m.needReply
     val pf =
-      if (reply) {
+      if (needReply) {
         endpoint.receiveAndReply(new RpcCallContext {
           override def sendFailure(e: Throwable): Unit = {
             _sender ! AkkaFailure(e)
@@ -185,7 +188,7 @@ private[spark] class AkkaRpcEnv private[akka] (
       }
     } catch {
       case NonFatal(e) =>
-        if (reply) {
+        if (needReply) {
           // If the sender asks a reply, we should send the error back to the sender
           _sender ! AkkaFailure(e)
         } else {
@@ -241,7 +244,7 @@ private[spark] class AkkaRpcEnv private[akka] (
     actorSystem.awaitTermination()
   }
 
-  override def toString = s"${getClass.getSimpleName}($actorSystem)"
+  override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -308,9 +311,9 @@ private[akka] class AkkaRpcEndpointRef(
 /**
  * A wrapper to `message` so that the receiver knows if the sender expects a reply.
  * @param message
- * @param reply if the sender expects a reply message
+ * @param needReply if the sender expects a reply message
  */
-private[akka] case class AkkaMessage(message: Any, reply: Boolean)
+private[akka] case class AkkaMessage(message: Any, needReply: Boolean)
 
 /**
  * A reply with the failure error from the receiver to the sender

@@ -192,7 +192,6 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     }
     val rpcEndpointRef = env.setupEndpoint("start-stop-test", endpoint)
-    rpcEndpointRef.send("message")
     env.stop(rpcEndpointRef)
     stopLatch.await(10, TimeUnit.SECONDS)
     assert(List("start", "stop") === calledMethods)

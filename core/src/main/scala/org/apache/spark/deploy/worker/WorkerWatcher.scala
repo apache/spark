@@ -53,7 +53,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
   override def receive = {
-    case e => logWarning(s"Received unexpected actor system event: $e")
+    case e => logWarning(s"Received unexpected message: $e")
   }
 
   override def onConnected(remoteAddress: RpcAddress): Unit = {

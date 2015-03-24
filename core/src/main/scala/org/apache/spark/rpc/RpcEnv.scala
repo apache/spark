@@ -293,6 +293,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint]] and get its result within a default
    * timeout, or throw a SparkException if this fails even after the default number of retries.
+   * Because this method retries, the message handling in the receiver side should be idempotent.
    *
    * Note: this is a blocking action which may cost a lot of time,  so don't call it in an message
    * loop of [[RpcEndpoint]].
@@ -306,7 +307,8 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
    * specified timeout, throw a SparkException if this fails even after the specified number of
-   * retries.
+   * retries. Because this method retries, the message handling in the receiver side should be
+   * idempotent.
    *
    * Note: this is a blocking action which may cost a lot of time, so don't call it in an message
    * loop of [[RpcEndpoint]].
@@ -350,12 +352,16 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
    * receive the reply within a default timeout.
+   *
+   * This method only sends the message once and never retries.
    */
   def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
    * receive the reply within the specified timeout.
+   *
+   * This method only sends the message once and never retries.
    */
   def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
 
