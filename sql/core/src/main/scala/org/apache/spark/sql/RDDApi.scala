@@ -29,13 +29,13 @@ import org.apache.spark.storage.StorageLevel
  */
 private[sql] trait RDDApi[T] {
 
-  def cache(): this.type = persist()
+  def cache(): this.type
 
   def persist(): this.type
 
   def persist(newLevel: StorageLevel): this.type
 
-  def unpersist(): this.type = unpersist(blocking = false)
+  def unpersist(): this.type
 
   def unpersist(blocking: Boolean): this.type
 

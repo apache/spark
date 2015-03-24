@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.FunSuite
+import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-class HiveTypeCoercionSuite extends FunSuite {
+class HiveTypeCoercionSuite extends PlanTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
@@ -106,7 +106,8 @@ class HiveTypeCoercionSuite extends FunSuite {
     val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      assert(booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)) ==
+      comparePlans(
+        booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)),
         Project(Seq(Alias(transformed, "a")()), testRelation))
     }
     // Remove superflous boolean -> boolean casts.
@@ -119,7 +120,8 @@ class HiveTypeCoercionSuite extends FunSuite {
     val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      assert(fac(Project(Seq(Alias(initial, "a")()), testRelation)) ==
+      comparePlans(
+        fac(Project(Seq(Alias(initial, "a")()), testRelation)),
         Project(Seq(Alias(transformed, "a")()), testRelation))
     }
     ruleTest(

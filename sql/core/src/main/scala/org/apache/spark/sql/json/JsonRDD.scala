@@ -48,7 +48,11 @@ private[sql] object JsonRDD extends Logging {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
-      parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
+      if (schemaData.isEmpty()) {
+        Set.empty[(String,DataType)]
+      } else {
+        parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
+      }
     createSchema(allKeys)
   }
 

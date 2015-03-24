@@ -162,7 +162,7 @@ private[deploy] object DeployMessages {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
 
-    def uri = "spark://" + host + ":" + port
+    def uri: String = "spark://" + host + ":" + port
     def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
   }
 

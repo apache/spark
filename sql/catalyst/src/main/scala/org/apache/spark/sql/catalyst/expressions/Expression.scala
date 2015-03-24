@@ -65,7 +65,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = !children.exists(!_.resolved)
 
   /**
    * Returns a string representation of this expression that does not have developer centric
@@ -84,9 +84,9 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   def symbol: String
 
-  override def foldable = left.foldable && right.foldable
+  override def foldable: Boolean = left.foldable && right.foldable
 
-  override def toString = s"($left $symbol $right)"
+  override def toString: String = s"($left $symbol $right)"
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
@@ -104,8 +104,8 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 case class GroupExpression(children: Seq[Expression]) extends Expression {
   self: Product =>
   type EvaluatedType = Seq[Any]
-  override def eval(input: Row): EvaluatedType = ???
-  override def nullable = false
-  override def foldable = false
-  override def dataType = ???
+  override def eval(input: Row): EvaluatedType = throw new UnsupportedOperationException
+  override def nullable: Boolean = false
+  override def foldable: Boolean = false
+  override def dataType: DataType = throw new UnsupportedOperationException
 }

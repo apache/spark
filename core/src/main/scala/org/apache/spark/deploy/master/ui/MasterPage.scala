@@ -31,7 +31,7 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 
@@ -95,7 +95,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
-    def hasDrivers = activeDrivers.length > 0 || completedDrivers.length > 0
+    def hasDrivers: Boolean = activeDrivers.length > 0 || completedDrivers.length > 0
 
     val content =
         <div class="row-fluid">

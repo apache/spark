@@ -109,7 +109,7 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     }
   }
 
-  override def iterator = new Iterator[(K, V)] {
+  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
     var pos = -1
     var nextPair: (K, V) = computeNextPair()
 
@@ -132,9 +132,9 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
       }
     }
 
-    def hasNext = nextPair != null
+    def hasNext: Boolean = nextPair != null
 
-    def next() = {
+    def next(): (K, V) = {
       val pair = nextPair
       nextPair = computeNextPair()
       pair

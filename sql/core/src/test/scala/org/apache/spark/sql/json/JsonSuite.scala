@@ -19,8 +19,9 @@ package org.apache.spark.sql.json
 
 import java.sql.{Date, Timestamp}
 
+import org.scalactic.Tolerance._
+
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.sources.LogicalRelation
@@ -29,6 +30,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.util.Utils
 
 class JsonSuite extends QueryTest {
   import org.apache.spark.sql.json.TestJsonData._
@@ -551,9 +553,37 @@ class JsonSuite extends QueryTest {
     jsonDF.registerTempTable("jsonTable")
   }
 
+  test("jsonFile should be based on JSONRelation") {
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
+    sparkContext.parallelize(1 to 100).map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
+    val jsonDF = jsonFile(path, 0.49)
+
+    val analyzed = jsonDF.queryExecution.analyzed
+    assert(
+      analyzed.isInstanceOf[LogicalRelation],
+      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+    val relation = analyzed.asInstanceOf[LogicalRelation].relation
+    assert(
+      relation.isInstanceOf[JSONRelation],
+      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+    assert(relation.asInstanceOf[JSONRelation].path === path)
+    assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
+
+    val schema = StructType(StructField("a", LongType, true) :: Nil)
+    val logicalRelation =
+      jsonFile(path, schema).queryExecution.analyzed.asInstanceOf[LogicalRelation]
+    val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
+    assert(relationWithSchema.path === path)
+    assert(relationWithSchema.schema === schema)
+    assert(relationWithSchema.samplingRatio > 0.99)
+  }
+
   test("Loading a JSON dataset from a text file") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
     val jsonDF = jsonFile(path)
 
@@ -583,8 +613,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     sql(
@@ -609,8 +640,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Applying schemas") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     val schema = StructType(
@@ -1005,4 +1037,11 @@ class JsonSuite extends QueryTest {
     assert(!logicalRelation2.sameResult(logicalRelation3),
       s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
   }
+
+  test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
+    // This is really a test that it doesn't throw an exception
+    val emptySchema = JsonRDD.inferSchema(empty, 1.0, "")
+    assert(StructType(Seq()) === emptySchema)
+  }
+
 }

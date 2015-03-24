@@ -18,9 +18,8 @@
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
-from pyspark.mllib.regression import LabeledPoint
 
 
 class MLUtils(object):
@@ -50,6 +49,7 @@ class MLUtils(object):
     @staticmethod
     def _convert_labeled_point_to_libsvm(p):
         """Converts a LabeledPoint to a string in LIBSVM format."""
+        from pyspark.mllib.regression import LabeledPoint
         assert isinstance(p, LabeledPoint)
         items = [str(p.label)]
         v = _convert_to_vector(p.features)
@@ -92,6 +92,7 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.write("+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
         >>> tempFile.flush()
@@ -110,6 +111,7 @@ class MLUtils(object):
         >>> print examples[2]
         (-1.0,(6,[1,3,5],[4.0,5.0,6.0]))
         """
+        from pyspark.mllib.regression import LabeledPoint
         if multiclass is not None:
             warnings.warn("deprecated", DeprecationWarning)
 
@@ -130,6 +132,7 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from fileinput import input
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> from glob import glob
         >>> from pyspark.mllib.util import MLUtils
         >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
@@ -156,6 +159,7 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
                         LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
@@ -191,6 +195,17 @@ class Saveable(object):
         raise NotImplementedError
 
 
+@inherit_doc
+class JavaSaveable(Saveable):
+    """
+    Mixin for models that provide save() through their Scala
+    implementation.
+    """
+
+    def save(self, sc, path):
+        self._java_model.save(sc._jsc.sc(), path)
+
+
 class Loader(object):
     """
     Mixin for classes which can load saved models from files.
@@ -210,6 +225,7 @@ class Loader(object):
         raise NotImplemented
 
 
+@inherit_doc
 class JavaLoader(Loader):
     """
     Mixin for classes which can load saved models using its Scala
@@ -217,13 +233,30 @@ class JavaLoader(Loader):
     """
 
     @classmethod
-    def load(cls, sc, path):
+    def _java_loader_class(cls):
+        """
+        Returns the full class name of the Java loader. The default
+        implementation replaces "pyspark" by "org.apache.spark" in
+        the Python full class name.
+        """
         java_package = cls.__module__.replace("pyspark", "org.apache.spark")
-        java_class = ".".join([java_package, cls.__name__])
+        return ".".join([java_package, cls.__name__])
+
+    @classmethod
+    def _load_java(cls, sc, path):
+        """
+        Load a Java model from the given path.
+        """
+        java_class = cls._java_loader_class()
         java_obj = sc._jvm
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
-        return cls(java_obj.load(sc._jsc.sc(), path))
+        return java_obj.load(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = cls._load_java(sc, path)
+        return cls(java_model)
 
 
 def _test():

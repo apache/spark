@@ -152,8 +152,8 @@ private[sql] case class ParquetTableScan(
 
         if (primitiveRow) {
           new Iterator[Row] {
-            def hasNext = iter.hasNext
-            def next() = {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
               // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
               val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
@@ -171,8 +171,8 @@ private[sql] case class ParquetTableScan(
           // Create a mutable row since we need to fill in values from partition columns.
           val mutableRow = new GenericMutableRow(outputSize)
           new Iterator[Row] {
-            def hasNext = iter.hasNext
-            def next() = {
+            def hasNext: Boolean = iter.hasNext
+            def next(): Row = {
               // We are using CatalystGroupConverter and it returns a GenericRow.
               // Since GenericRow is not mutable, we just cast it to a Row.
               val row = iter.next()._2.asInstanceOf[Row]
@@ -255,7 +255,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -278,7 +278,10 @@ private[sql] case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    RowWriteSupport.setSchema(relation.output, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(relation.output).asNullable
+    RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
@@ -299,7 +302,7 @@ private[sql] case class InsertIntoParquetTable(
     childRdd
   }
 
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 
   /**
    * Stores the given Row RDD as a Hadoop file.

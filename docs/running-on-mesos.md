@@ -110,7 +110,7 @@ cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooK
 The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
 1. In `spark-env.sh` set some environment variables:
- * `export MESOS_NATIVE_LIBRARY=<path to libmesos.so>`. This path is typically
+ * `export MESOS_NATIVE_JAVA_LIBRARY=<path to libmesos.so>`. This path is typically
    `<prefix>/lib/libmesos.so` where the prefix is `/usr/local` by default. See Mesos installation
    instructions above. On Mac OS X, the library is called `libmesos.dylib` instead of
    `libmesos.so`.
@@ -167,9 +167,6 @@ acquire. By default, it will acquire *all* cores in the cluster (that get offere
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
 
-# Known issues
-- When using the "fine-grained" mode, make sure that your executors always leave 32 MB free on the slaves. Otherwise it can happen that your Spark job does not proceed anymore. Currently, Apache Mesos only offers resources if there are at least 32 MB memory allocatable. But as Spark allocates memory only for the executor and cpu only for tasks, it can happen on high slave memory usage that no new tasks will be started anymore. More details can be found in [MESOS-1688](https://issues.apache.org/jira/browse/MESOS-1688). Alternatively use the "coarse-gained" mode, which is not affected by this issue.
-
 # Running Alongside Hadoop
 
 You can run Spark and Mesos alongside your existing Hadoop cluster by just launching them as a
@@ -225,13 +222,11 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.executor.memoryOverhead</code></td>
-  <td>executor memory * 0.07, with minimum of 384</td>
+  <td>executor memory * 0.10, with minimum of 384</td>
   <td>
-    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
-    which is used to calculate the total Mesos task memory. A value of <code>384</code>
-    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
-    overhead. The final overhead will be the larger of either
-    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
+    The amount of additional memory, specified in MB, to be allocated per executor. By default,
+    the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
+    the final overhead will be this value.
   </td>
 </tr>
 </table>

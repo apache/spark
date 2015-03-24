@@ -38,7 +38,7 @@ class BlockManagerSlaveActor(
   import context.dispatcher
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case RemoveBlock(blockId) =>
       doAsync[Boolean]("removing block " + blockId, sender) {
         blockManager.removeBlock(blockId)
