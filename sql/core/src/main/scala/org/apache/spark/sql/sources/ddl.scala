@@ -220,7 +220,7 @@ private[sql] object ResolvedDataSource {
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
-            s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
+            s"A schema needs to be specified when using $className.")
         case _ =>
           throw new AnalysisException(s"$className is not a RelationProvider.")
       }
