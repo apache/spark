@@ -289,7 +289,7 @@ package object dsl {
       InsertIntoTable(
         analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
-    def analyze = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
+    def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
   }
 
   object plans {  // scalastyle:ignore
