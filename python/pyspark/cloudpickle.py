@@ -61,6 +61,7 @@ if sys.version < '3':
     PY3 = False
 else:
     InstanceType = object  # see http://bugs.python.org/issue8206
+    types.ClassType = type
     from pickle import _Pickler as Pickler
     PY3 = True
 
@@ -342,6 +343,53 @@ class CloudPickler(Pickler):
         return self.save_function(obj)
     dispatch[types.BuiltinFunctionType] = save_builtin_function
 
+    def save_global(self, obj, name=None, pack=struct.pack):
+        if obj.__module__ == "__builtin__" or obj.__module__ == "builtins":
+            if obj in _BUILTIN_TYPE_NAMES:
+                return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
+
+        if name is None:
+            name = obj.__name__
+
+        modname = getattr(obj, "__module__", None)
+        if modname is None:
+            modname = pickle.whichmodule(obj, name)
+
+        if modname == '__main__':
+            themodule = None
+        else:
+            __import__(modname)
+            themodule = sys.modules[modname]
+            # new.* are misrepeported
+            if not PY3 and modname == '__builtin__' and not hasattr(themodule, name):
+                modname = 'new'
+                __import__(modname)
+                themodule = sys.modules[modname]
+            self.modules.add(themodule)
+
+        if hasattr(themodule, name) and getattr(themodule, name) is obj:
+            return Pickler.save_global(self, obj, name)
+
+        typ = type(obj)
+        if typ is not obj and isinstance(obj, (type, types.ClassType)):
+            d = dict(obj.__dict__)  # copy dict proxy to a dict
+            if not isinstance(d.get('__dict__', None), property):
+                # don't extract dict that are properties
+                d.pop('__dict__', None)
+            d.pop('__weakref__', None)
+
+            # hack as __new__ is stored differently in the __dict__
+            new_override = d.get('__new__', None)
+            if new_override:
+                d['__new__'] = obj.__new__
+
+            self.save_reduce(typ, (obj.__name__, obj.__bases__, d), obj=obj)
+        else:
+            raise pickle.PicklingError("Can't pickle %r" % obj)
+
+    dispatch[type] = save_global
+    dispatch[types.ClassType] = save_global
+
     def save_instancemethod(self, obj):
         # Memoization rarely is ever useful due to python bounding
         if PY3:
@@ -439,13 +487,6 @@ class CloudPickler(Pickler):
 
     if type(operator.attrgetter) is type:
         dispatch[operator.attrgetter] = save_attrgetter
-
-    def save_global(self, obj, name=None, pack=struct.pack):
-        if obj.__module__ == "__builtin__" or obj.__module__ == "builtins":
-            if obj in _BUILTIN_TYPE_NAMES:
-                return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
-        return Pickler.save_global(self, obj, name)
-    dispatch[type] = save_global
 
     def save_reduce(self, func, args, state=None,
                     listitems=None, dictitems=None, obj=None):
