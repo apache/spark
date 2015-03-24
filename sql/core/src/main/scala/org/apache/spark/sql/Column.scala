@@ -18,10 +18,12 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedGetField}
 import org.apache.spark.sql.types._
 
@@ -593,6 +595,28 @@ class Column(protected[sql] val expr: Expression) {
    * @group expr_ops
    */
   def as(alias: Symbol): Column = Alias(expr, alias.name)()
+
+  /**
+   * (Scala-specific) Explodes the column to zero or more rows by the provided function.
+   * {{{
+   *   val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+   *   df.select(df("words").explode { words: String => words.split(" ").toSeq } )
+   * }}}
+   */
+  def explode[A, B : TypeTag](f: A => TraversableOnce[B]): Column = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = expr match {
+      case ne: NamedExpression =>
+        AttributeReference(ne.name, dataType)() :: Nil
+      case _ =>
+        AttributeReference("col0", dataType)() :: Nil
+    }
+    val func: Row => TraversableOnce[Row] = (row: Row) => {
+      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+    }
+    val exprCopy = expr
+    UserDefinedGenerator(attributes, func, exprCopy :: Nil)
+  }
 
   /**
    * Casts the column to a different data type.

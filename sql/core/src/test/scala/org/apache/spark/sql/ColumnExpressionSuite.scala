@@ -312,6 +312,22 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
+  test("explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
+  
+    checkAnswer(
+      df.select(df("words").explode { word: String => word.split(" ").toSeq }.as("word")),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+
+    val df2 = Seq(Tuple1("1 2 3"), Tuple1("4 5")).toDF("numbers")
+
+    checkAnswer(
+      df2.select(df2("numbers").explode { number: String => number.split(" ").toSeq.map(_.toInt) }.as("number")),
+      Row(1) :: Row(2) :: Row(3) :: Row(4) ::Row(5) :: Nil
+    )
+  }
+
   test("lift alias out of cast") {
     compareExpressions(
       col("1234").as("name").cast("int").expr,
