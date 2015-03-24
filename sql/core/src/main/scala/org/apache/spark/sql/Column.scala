@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedGetField}
@@ -46,7 +47,7 @@ private[sql] object Column {
  * @groupname Ungrouped Support functions for DataFrames.
  */
 @Experimental
-class Column(protected[sql] val expr: Expression) {
+class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
@@ -109,7 +110,15 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def === (other: Any): Column = EqualTo(expr, lit(other).expr)
+  def === (other: Any): Column = {
+    val right = lit(other).expr
+    if (this.expr == right) {
+      logWarning(
+        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
+          "Perhaps you need to use aliases.")
+    }
+    EqualTo(expr, right)
+  }
 
   /**
    * Equality test.
