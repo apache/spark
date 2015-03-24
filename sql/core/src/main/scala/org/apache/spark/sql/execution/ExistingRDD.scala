@@ -40,7 +40,7 @@ object RDDConversions {
       } else {
         val bufferedIterator = iterator.buffered
         val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-        val schemaFields = schema.fields.toArray
+        val schemaFields = schema.fields
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {

@@ -612,6 +612,36 @@ case object ShortType extends ShortType
 
 /**
  * :: DeveloperApi ::
+ * The data type representing `Char` values. Please use the singleton [[DataTypes.CharType]].
+ *
+ * @group dataType
+ */
+@DeveloperApi
+class CharType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "CharType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
+  private[sql] type JvmType = Char
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Char]]
+  private[sql] val integral = implicitly[Integral[Char]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the CharType is 2 bytes.
+   */
+  override def defaultSize: Int = 2
+
+  override def simpleString = "char"
+
+  private[spark] override def asNullable: CharType = this
+}
+
+case object CharType extends CharType
+
+
+/**
+ * :: DeveloperApi ::
  * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
  *
  * @group dataType

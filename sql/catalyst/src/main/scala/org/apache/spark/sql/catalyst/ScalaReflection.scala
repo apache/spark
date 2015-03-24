@@ -170,6 +170,7 @@ trait ScalaReflection {
       case t if t <:< typeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
       case t if t <:< typeOf[java.lang.Float] => Schema(FloatType, nullable = true)
       case t if t <:< typeOf[java.lang.Short] => Schema(ShortType, nullable = true)
+      case t if t <:< typeOf[java.lang.Character] => Schema(CharType, nullable = true)
       case t if t <:< typeOf[java.lang.Byte] => Schema(ByteType, nullable = true)
       case t if t <:< typeOf[java.lang.Boolean] => Schema(BooleanType, nullable = true)
       case t if t <:< definitions.IntTpe => Schema(IntegerType, nullable = false)
@@ -177,6 +178,7 @@ trait ScalaReflection {
       case t if t <:< definitions.DoubleTpe => Schema(DoubleType, nullable = false)
       case t if t <:< definitions.FloatTpe => Schema(FloatType, nullable = false)
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
+      case t if t <:< definitions.CharTpe => Schema(CharType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
     }
@@ -189,6 +191,7 @@ trait ScalaReflection {
     case obj: StringType.JvmType => StringType
     case obj: ByteType.JvmType => ByteType
     case obj: ShortType.JvmType => ShortType
+    case obj: CharType.JvmType => CharType
     case obj: IntegerType.JvmType => IntegerType
     case obj: LongType.JvmType => LongType
     case obj: FloatType.JvmType => FloatType

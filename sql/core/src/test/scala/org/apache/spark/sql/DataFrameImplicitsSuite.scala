@@ -52,4 +52,11 @@ class DataFrameImplicitsSuite extends QueryTest {
       sc.parallelize(1 to 10).map(_.toString).toDF("stringCol"),
       (1 to 10).map(i => Row(i.toString)))
   }
+
+  test("RDD[Row]") {
+    val rdd = (1 to 10).map(i => (i, i.toString)).toDF("intCol", "strCol").rdd
+    checkAnswer(
+      rdd.toDF("intCol", "strCol"),
+      (1 to 10).map(i => Row(i, i.toString)))
+  }
 }
