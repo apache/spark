@@ -84,21 +84,41 @@ class TaskMetrics extends Serializable {
   def resultSerializationTime = _resultSerializationTime
   private[spark] def setResultSerializationTime(value: Long) = _resultSerializationTime = value
 
+  private var _shuffleReadSpillMetrics: Option[ShuffleWriteMetrics] = None
+  def shuffleReadSpillMetrics = _shuffleReadSpillMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating read metrics in
+   * executors.
+   */
+  private[spark] def setShuffleReadSpillMetrics(value: Option[ShuffleWriteMetrics]) {
+    _shuffleReadSpillMetrics = value
+  }
+
+  private var _shuffleWriteSpillMetrics: Option[ShuffleWriteMetrics] = None
+  def shuffleWriteSpillMetrics = _shuffleWriteSpillMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating read metrics in
+   * executors.
+   */
+  private[spark] def setShuffleWriteSpillMetrics(value: Option[ShuffleWriteMetrics]) {
+    _shuffleWriteSpillMetrics = value
+  }
+
   /**
    * The number of in-memory bytes spilled by this task
    */
-  private var _memoryBytesSpilled: Long = _
-  def memoryBytesSpilled = _memoryBytesSpilled
-  private[spark] def incMemoryBytesSpilled(value: Long) = _memoryBytesSpilled += value
-  private[spark] def decMemoryBytesSpilled(value: Long) = _memoryBytesSpilled -= value
+  @deprecated
+  def memoryBytesSpilled = _shuffleReadSpillMetrics.map(_.memorySize).getOrElse(0L) +
+    _shuffleWriteSpillMetrics.map(_.memorySize).getOrElse(0L)
 
   /**
    * The number of on-disk bytes spilled by this task
    */
-  private var _diskBytesSpilled: Long = _
-  def diskBytesSpilled = _diskBytesSpilled
-  def incDiskBytesSpilled(value: Long) = _diskBytesSpilled += value
-  def decDiskBytesSpilled(value: Long) = _diskBytesSpilled -= value
+  @deprecated
+  def diskBytesSpilled = _shuffleReadSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L) +
+    _shuffleWriteSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L)
 
   /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
@@ -211,6 +231,26 @@ class TaskMetrics extends Serializable {
 
   private[spark] def updateInputMetrics(): Unit = synchronized {
     inputMetrics.foreach(_.updateBytesRead())
+  }
+
+  /**
+   * Get or create metrics for spills while this task was aggregating shuffle data.
+   */
+  def getOrCreateShuffleWriteSpillMetrics(): ShuffleWriteMetrics = {
+    if (_shuffleWriteSpillMetrics.isEmpty) {
+      _shuffleWriteSpillMetrics = Some(new ShuffleWriteMetrics())
+    }
+    _shuffleWriteSpillMetrics.get
+  }
+
+  /**
+   * Get or create metrics for spills while this task was writing out shuffle data.
+   */
+  def getOrCreateShuffleReadSpillMetrics(): ShuffleWriteMetrics = {
+    if (_shuffleReadSpillMetrics.isEmpty) {
+      _shuffleReadSpillMetrics = Some(new ShuffleWriteMetrics())
+    }
+    _shuffleReadSpillMetrics.get
   }
 }
 
@@ -377,6 +417,14 @@ class ShuffleReadMetrics extends Serializable {
 @DeveloperApi
 class ShuffleWriteMetrics extends Serializable {
   /**
+   * Size the data took up in memory.
+   */
+  @volatile var _memorySize: Long = _
+  def memorySize = _memorySize
+  private[spark] def incMemorySize(value: Long) = _memorySize += value
+  private[spark] def setMemorySize(value: Long) = _memorySize = value
+
+  /**
    * Number of bytes written for the shuffle by this task
    */
   @volatile private var _shuffleBytesWritten: Long = _
@@ -400,4 +448,12 @@ class ShuffleWriteMetrics extends Serializable {
   private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
   private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
   private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
+
+  def +=(writeMetrics: ShuffleWriteMetrics): ShuffleWriteMetrics = {
+    incMemorySize(writeMetrics.memorySize)
+    incShuffleBytesWritten(writeMetrics.shuffleBytesWritten)
+    incShuffleWriteTime(writeMetrics.shuffleWriteTime)
+    incShuffleRecordsWritten(writeMetrics.shuffleRecordsWritten)
+    this
+  }
 }

@@ -49,17 +49,19 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+    val spillMetrics = context.taskMetrics.getOrCreateShuffleWriteSpillMetrics()
+
     if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       sorter = new ExternalSorter[K, V, C](
-        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer, spillMetrics)
       sorter.insertAll(records)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
       sorter = new ExternalSorter[K, V, V](
-        None, Some(dep.partitioner), None, dep.serializer)
+        None, Some(dep.partitioner), None, dep.serializer, spillMetrics)
       sorter.insertAll(records)
     }
 

@@ -439,15 +439,29 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     stageData.outputRecords += outputRecordsDelta
     execSummary.outputRecords += outputRecordsDelta
 
-    val diskSpillDelta =
-      taskMetrics.diskBytesSpilled - oldMetrics.map(_.diskBytesSpilled).getOrElse(0L)
-    stageData.diskBytesSpilled += diskSpillDelta
-    execSummary.diskBytesSpilled += diskSpillDelta
+    val shuffleWriteDiskSpillDelta =
+      (taskMetrics.shuffleWriteSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L)
+        - oldMetrics.flatMap(_.shuffleWriteSpillMetrics).map(_.shuffleBytesWritten).getOrElse(0L))
+    stageData.shuffleWriteDiskSpillBytes += shuffleWriteDiskSpillDelta
+    execSummary.shuffleWriteDiskBytesSpilled += shuffleWriteDiskSpillDelta
 
-    val memorySpillDelta =
-      taskMetrics.memoryBytesSpilled - oldMetrics.map(_.memoryBytesSpilled).getOrElse(0L)
-    stageData.memoryBytesSpilled += memorySpillDelta
-    execSummary.memoryBytesSpilled += memorySpillDelta
+    val shuffleReadDiskSpillDelta =
+      (taskMetrics.shuffleReadSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L)
+        - oldMetrics.flatMap(_.shuffleReadSpillMetrics).map(_.shuffleBytesWritten).getOrElse(0L))
+    stageData.shuffleReadDiskSpillBytes += shuffleReadDiskSpillDelta
+    execSummary.shuffleReadDiskBytesSpilled += shuffleReadDiskSpillDelta
+
+    val shuffleWriteMemorySpillDelta =
+      (taskMetrics.shuffleWriteSpillMetrics.map(_.memorySize).getOrElse(0L)
+        - oldMetrics.flatMap(_.shuffleWriteSpillMetrics).map(_.memorySize).getOrElse(0L))
+    stageData.shuffleWriteMemorySpillBytes += shuffleWriteMemorySpillDelta
+    execSummary.shuffleWriteMemoryBytesSpilled += shuffleWriteMemorySpillDelta
+
+    val shuffleReadMemorySpillDelta =
+      (taskMetrics.shuffleReadSpillMetrics.map(_.memorySize).getOrElse(0L)
+        - oldMetrics.flatMap(_.shuffleReadSpillMetrics).map(_.memorySize).getOrElse(0L))
+    stageData.shuffleReadMemorySpillBytes += shuffleReadMemorySpillDelta
+    execSummary.shuffleReadMemoryBytesSpilled += shuffleReadMemorySpillDelta
 
     val timeDelta =
       taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)

@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 import scala.util.Random
 
@@ -57,10 +58,15 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val ord = implicitly[Ordering[Int]]
 
     // Both aggregator and ordering
+    val spillMetrics = new ShuffleWriteMetrics()
     val sorter = new ExternalSorter[Int, Int, Int](
-      Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
+      Some(agg), Some(new HashPartitioner(3)), Some(ord), None, spillMetrics)
     assert(sorter.iterator.toSeq === Seq())
     sorter.stop()
+    assert(spillMetrics.memorySize === 0)
+    assert(spillMetrics.shuffleBytesWritten === 0)
+    assert(spillMetrics.shuffleRecordsWritten === 0)
+    assert(spillMetrics.shuffleWriteTime === 0)
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
@@ -95,11 +101,16 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       (5, Set((5, 5))), (6, Set()))
 
     // Both aggregator and ordering
+    val spillMetrics = new ShuffleWriteMetrics()
     val sorter = new ExternalSorter[Int, Int, Int](
-      Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
+      Some(agg), Some(new HashPartitioner(7)), Some(ord), None, spillMetrics)
     sorter.insertAll(elements.iterator)
     assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter.stop()
+    assert(spillMetrics.memorySize === 0)
+    assert(spillMetrics.shuffleBytesWritten === 0)
+    assert(spillMetrics.shuffleRecordsWritten === 0)
+    assert(spillMetrics.shuffleWriteTime === 0)
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
@@ -133,8 +144,9 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val ord = implicitly[Ordering[Int]]
     val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
+    val spillMetrics = new ShuffleWriteMetrics()
     val sorter = new ExternalSorter[Int, Int, Int](
-      None, Some(new HashPartitioner(7)), Some(ord), None)
+      None, Some(new HashPartitioner(7)), Some(ord), None, spillMetrics)
     assertDidNotBypassMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
@@ -147,6 +159,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(iter.next() === (5, List((5, 5))))
     assert(iter.next() === (6, Nil))
     sorter.stop()
+
+    assert(spillMetrics.shuffleRecordsWritten > 0)
+    assert(spillMetrics.shuffleBytesWritten > 0)
+    assert(spillMetrics.memorySize > 0)
   }
 
   test("empty partitions with spilling, bypass merge-sort") {
@@ -158,8 +174,9 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
 
     val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
+    val spillMetrics = new ShuffleWriteMetrics()
     val sorter = new ExternalSorter[Int, Int, Int](
-      None, Some(new HashPartitioner(7)), None, None)
+      None, Some(new HashPartitioner(7)), None, None, spillMetrics)
     assertBypassedMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
@@ -172,6 +189,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(iter.next() === (5, List((5, 5))))
     assert(iter.next() === (6, Nil))
     sorter.stop()
+
+    assert(spillMetrics.shuffleRecordsWritten === 0)
+    assert(spillMetrics.shuffleBytesWritten === 0)
+    assert(spillMetrics.memorySize === 0)
   }
 
   test("spilling in local cluster") {

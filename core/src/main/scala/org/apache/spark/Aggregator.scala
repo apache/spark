@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
@@ -56,14 +57,12 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      // TODO: Make context non-optional in a future release
+      val spillMetrics = Option(context).map(
+        _.taskMetrics.getOrCreateShuffleWriteSpillMetrics()).getOrElse(new ShuffleWriteMetrics())
+      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners,
+        spillMetrics = spillMetrics)
       combiners.insertAll(iter)
-      // Update task metrics if context is not null
-      // TODO: Make context non optional in a future release
-      Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
-      }
       combiners.iterator
     }
   }
@@ -87,16 +86,14 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      // TODO: Make context non-optional in a future release
+      val spillMetrics = Option(context).map(
+        _.taskMetrics.getOrCreateShuffleReadSpillMetrics()).getOrElse(new ShuffleWriteMetrics())
+      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners,
+        spillMetrics = spillMetrics)
       while (iter.hasNext) {
         val pair = iter.next()
         combiners.insert(pair._1, pair._2)
-      }
-      // Update task metrics if context is not null
-      // TODO: Make context non-optional in a future release
-      Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
       }
       combiners.iterator
     }

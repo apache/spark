@@ -270,6 +270,10 @@ private[spark] object JsonProtocol {
       taskMetrics.shuffleReadMetrics.map(shuffleReadMetricsToJson).getOrElse(JNothing)
     val shuffleWriteMetrics =
       taskMetrics.shuffleWriteMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
+    val shuffleReadSpillMetrics =
+      taskMetrics.shuffleReadSpillMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
+    val shuffleWriteSpillMetrics =
+      taskMetrics.shuffleWriteSpillMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
     val inputMetrics =
       taskMetrics.inputMetrics.map(inputMetricsToJson).getOrElse(JNothing)
     val outputMetrics =
@@ -287,8 +291,8 @@ private[spark] object JsonProtocol {
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
-    ("Memory Bytes Spilled" -> taskMetrics.memoryBytesSpilled) ~
-    ("Disk Bytes Spilled" -> taskMetrics.diskBytesSpilled) ~
+    ("Shuffle Read Spill Metrics" -> shuffleReadSpillMetrics) ~
+    ("Shuffle Write Spill Metrics" -> shuffleWriteSpillMetrics) ~
     ("Shuffle Read Metrics" -> shuffleReadMetrics) ~
     ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
     ("Input Metrics" -> inputMetrics) ~
@@ -662,8 +666,10 @@ private[spark] object JsonProtocol {
     metrics.setResultSize((json \ "Result Size").extract[Long])
     metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
-    metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
-    metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
+    metrics.setShuffleReadSpillMetrics(
+      Utils.jsonOption(json \ "Shuffle Read Spill Metrics").map(shuffleWriteMetricsFromJson))
+    metrics.setShuffleWriteSpillMetrics(
+      Utils.jsonOption(json \ "Shuffle Write Spill Metrics").map(shuffleWriteMetricsFromJson))
     metrics.setShuffleReadMetrics(
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =

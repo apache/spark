@@ -26,10 +26,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
-import org.apache.spark.util.Utils
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleHandle
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 
@@ -155,18 +156,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     } else {
-      val map = createExternalMap(numRdds)
+      val spillMetrics = context.taskMetrics.getOrCreateShuffleReadSpillMetrics()
+      val map = createExternalMap(numRdds, spillMetrics)
       for ((it, depNum) <- rddIterators) {
         map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
       }
-      context.taskMetrics.incMemoryBytesSpilled(map.memoryBytesSpilled)
-      context.taskMetrics.incDiskBytesSpilled(map.diskBytesSpilled)
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     }
   }
 
-  private def createExternalMap(numRdds: Int)
+  private def createExternalMap(numRdds: Int, spillMetrics: ShuffleWriteMetrics)
     : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
 
     val createCombiner: (CoGroupValue => CoGroupCombiner) = value => {
@@ -189,7 +189,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         combiner1
       }
     new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](
-      createCombiner, mergeValue, mergeCombiners)
+      createCombiner, mergeValue, mergeCombiners, spillMetrics = spillMetrics)
   }
 
   override def clearDependencies() {
