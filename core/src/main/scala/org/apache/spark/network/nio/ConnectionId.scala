@@ -18,7 +18,9 @@
 package org.apache.spark.network.nio
 
 private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
-  override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
+  override def toString: String = {
+    connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
+  }
 }
 
 private[nio] object ConnectionId {

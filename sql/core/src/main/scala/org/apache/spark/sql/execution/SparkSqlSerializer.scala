@@ -74,7 +74,7 @@ private[execution] class KryoResourcePool(size: Int)
     new KryoSerializer(sparkConf)
   }
 
-  def newInstance() = ser.newInstance()
+  def newInstance(): SerializerInstance = ser.newInstance()
 }
 
 private[sql] object SparkSqlSerializer {

@@ -80,7 +80,6 @@ private[spark] abstract class Stage(
   def attemptId: Int = nextAttemptId
 
   override final def hashCode(): Int = id
-
   override final def equals(other: Any): Boolean = other match {
     case stage: Stage => stage != null && stage.id == id
     case _ => false
