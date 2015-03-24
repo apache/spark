@@ -175,7 +175,8 @@ private[ui] class ExecutorsPage(
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
-    val rddBlocks = status.numBlocks
+    val rddBlocks = status.numRddBlocks
+    val broadcastBlocks = status.numBroadcastBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed

@@ -26,7 +26,7 @@ import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockStatus, BlockId, BlockManagerId}
 import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
@@ -67,6 +67,9 @@ case class SparkListenerJobStart(
   // only stored stageIds and not StageInfos:
   val stageIds: Seq[Int] = stageInfos.map(_.stageId)
 }
+
+case class SparkListenerBlockUpdate(blockManagerId: BlockManagerId, blockId: BlockId,
+                                    blockStatus: BlockStatus) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerJobEnd(
@@ -210,6 +213,11 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+   * Called when the driver receives UpdateBlock from an BlockManagerSlaveActor.
+   */
+  def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) { }
 }
 
 /**

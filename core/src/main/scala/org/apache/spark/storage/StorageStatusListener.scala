@@ -36,7 +36,7 @@ class StorageStatusListener extends SparkListener {
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    executorIdToStorageStatus.get(execId).foreach { storageStatus =>
+    executorIdToStorageStatus.get(formatExecutorId(execId)).foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
         if (updatedStatus.storageLevel == StorageLevel.NONE) {
           storageStatus.removeBlock(blockId)
@@ -88,4 +88,23 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
+  override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
+    val executorId = blockUpdateEvent.blockManagerId.executorId
+    // we only log Broadcast block update for now, as RDD blocks have been logged as part of
+    // StateCompleted event
+    if (blockUpdateEvent.blockId.isBroadcast) {
+      updateStorageStatus(executorId, Seq((blockUpdateEvent.blockId,
+        blockUpdateEvent.blockStatus)))
+    }
+  }
+
+  /**
+   * In the local mode, there is a discrepancy between the executor ID according to the
+   * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
+   * results in duplicate rows for the same executor. Thus, in this mode, we aggregate
+   * these two rows and use the executor ID of "<driver>" to be consistent.
+   */
+  def formatExecutorId(execId: String): String = {
+    if (execId == "localhost") "<driver>" else execId
+  }
 }

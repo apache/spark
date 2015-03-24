@@ -30,6 +30,7 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))
+  attachPage(new BroadcastPage(this))
 }
 
 /**
@@ -39,11 +40,16 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 @DeveloperApi
 class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
+  private[ui] val _broadcastInfoMap = mutable.Map[Long, BroadcastInfo]()
 
   def storageStatusList = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
-  def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  def rddInfoList = {
+    _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  }
+    
+  def broadcastInfoList = _broadcastInfoMap.values.toSeq
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
@@ -70,7 +76,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     // Remove all partitions that are no longer cached in current completed stage
-    val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id).toSet
+    val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id.toLong).toSet
     _rddInfoMap.retain { case (id, info) =>
       !completedRddIds.contains(id) || info.numCachedPartitions > 0
     }
@@ -78,5 +84,23 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
     _rddInfoMap.remove(unpersistRDD.rddId)
+  }
+
+  override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
+    // only update broadcast for now as RDD blocks has been logged in StageCompleted event, 
+    // we ignore other types of blocks for now
+    val broadcastIdOpt = blockUpdateEvent.blockId.asBroadcastId
+    broadcastIdOpt.foreach { broadcastBlockId =>
+      val broadcastId = broadcastBlockId.broadcastId
+      val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
+        broadcastId,
+        new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId),
+          blockUpdateEvent.blockStatus.storageLevel))
+      StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
+      if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
+        broadcastInfoToUpdate.tachyonSize == 0) {
+        _broadcastInfoMap.remove(broadcastId)
+      }
+    }
   }
 }

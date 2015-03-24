@@ -17,34 +17,32 @@
 
 package org.apache.spark.ui.storage
 
-import scala.xml.Node
-
 import org.apache.spark.storage.StorageUtils
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
-/** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", parent) {
+import scala.xml.Node
 
-  protected override val workerTableID: String = "rdd-storage-by-worker-table"
+private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("broadcast", parent){
+
+  protected override val workerTableID: String = "broadcast-storage-by-worker-table"
   
-  protected override def objectList = listener.rddInfoList
+  protected override def objectList = listener.broadcastInfoList
 
   protected override def getBlockTableAndSize(objectId: Any): (Seq[Node], Int) = {
-    val blockLocations = StorageUtils.getRddBlockLocations(objectId.asInstanceOf[Long],
+    val blockLocations = StorageUtils.getBroadcastBlockLocation(objectId.asInstanceOf[Long],
       storageStatusList)
     val blocks = listener.storageStatusList
-      .flatMap(_.rddBlocksById(objectId.asInstanceOf[Long]))
+      .flatMap(_.broadcastBlocksById(objectId.asInstanceOf[Long]))
       .sortWith(_._1.name < _._1.name)
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
-    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
-      blocks.size)
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, 
+      id = Some("broadcast-storage-by-block-table")), blocks.size)
   }
-  
 
-  protected def generateContent(objectId: Long): (String, Seq[Node]) = {
+  protected override def generateContent(objectId: Long): (String, Seq[Node]) = {
     val objectInfo = objectList.find(_.id == objectId).getOrElse {
       // Rather than crashing, render an "Not Found" page
       return (objectId.toString, nonFoundErrorInfo)
@@ -53,48 +51,40 @@ private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", p
 
     val (blockTable, blockCount) = getBlockTableAndSize(objectId)
 
-    val content = <div class="row-fluid">
-      <div class="span12">
-        <ul class="unstyled">
-          <li>
-            <strong>Storage Level:</strong>
-            {objectInfo.storageLevel.description}
-          </li>
-          <li>
-            <strong>Cached Partitions:</strong>
-            {objectInfo.numCachedPartitions}
-          </li>
-          <li>
-            <strong>Total Partitions:</strong>
-            {objectInfo.numPartitions}
-          </li>
-          <li>
-            <strong>Memory Size:</strong>
-            {Utils.bytesToString(objectInfo.memSize)}
-          </li>
-          <li>
-            <strong>Disk Size:</strong>
-            {Utils.bytesToString(objectInfo.diskSize)}
-          </li>
-        </ul>
-      </div>
-    </div>
-
+    val content =
       <div class="row-fluid">
         <div class="span12">
-          <h4> Data Distribution on {workerCount} Executors </h4>
-          {workerTable}
+          <ul class="unstyled">
+            <li>
+              <strong>Storage Level:</strong>
+              {objectInfo.storageLevel.description}
+            </li>
+            <li>
+              <strong>Memory Size:</strong>
+              {Utils.bytesToString(objectInfo.memSize)}
+            </li>
+            <li>
+              <strong>Disk Size:</strong>
+              {Utils.bytesToString(objectInfo.diskSize)}
+            </li>
+          </ul>
         </div>
       </div>
 
-      <div class="row-fluid">
-        <div class="span12">
-          <h4> {blockCount} Partitions </h4>
-          {blockTable}
+        <div class="row-fluid">
+          <div class="span12">
+            <h4> Data Distribution on {workerCount} Executors </h4>
+            {workerTable}
+          </div>
         </div>
-      </div>;
+
+        <div class="row-fluid">
+          <div class="span12">
+            <h4> {blockCount} Partitions </h4>
+            {blockTable}
+          </div>
+        </div>;
 
     (objectInfo.name, content)
   }
-
 }

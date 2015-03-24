@@ -36,6 +36,7 @@ sealed abstract class BlockId {
 
   // convenience methods
   def asRDDId = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
+  def asBroadcastId = if (isBroadcast) Some(asInstanceOf[BroadcastBlockId]) else None
   def isRDD = isInstanceOf[RDDBlockId]
   def isShuffle = isInstanceOf[ShuffleBlockId]
   def isBroadcast = isInstanceOf[BroadcastBlockId]

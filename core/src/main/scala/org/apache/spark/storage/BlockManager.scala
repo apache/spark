@@ -357,7 +357,14 @@ private[spark] class BlockManager(
       info: BlockInfo,
       status: BlockStatus,
       droppedMemorySize: Long = 0L): Unit = {
-    val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize)
+    def ifAsync: Boolean = {
+      blockId.isBroadcast
+    }
+    // report broadcast blocks asynchronously and rdd blocks synchronously , 
+    // in future we only need to change the implementation of ifAsync when we deal with 
+    // other types of blocks
+    val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize,
+      async = ifAsync)
     if (needReregister) {
       logInfo(s"Got told to re-register updating block $blockId")
       // Re-registering will report our new block for free.
@@ -375,14 +382,15 @@ private[spark] class BlockManager(
       blockId: BlockId,
       info: BlockInfo,
       status: BlockStatus,
-      droppedMemorySize: Long = 0L): Boolean = {
+      droppedMemorySize: Long = 0L,
+      async: Boolean = false): Boolean = {
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
       val inTachyonSize = status.tachyonSize
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)
+        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize, async)
     } else {
       true
     }

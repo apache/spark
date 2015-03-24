@@ -41,14 +41,14 @@ class BlockManagerMaster(
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
-    tell(RemoveExecutor(execId))
+    askDriverExpectingTrue(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     logInfo("Trying to register BlockManager")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
+    askDriverExpectingTrue(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
   }
 
@@ -58,10 +58,18 @@ class BlockManagerMaster(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long,
-      tachyonSize: Long): Boolean = {
-    val res = askDriverWithReply[Boolean](
-      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
-    logDebug(s"Updated info of block $blockId")
+      tachyonSize: Long,
+      async: Boolean): Boolean = {
+    val res = {
+      if (!async) {
+        askDriverWithReply[Boolean](
+          UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
+      } else {
+        tell(UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
+        true
+      }
+    }
+    logInfo("Updated info of block " + blockId + " storageLevel:" + storageLevel)
     res
   }
 
@@ -200,17 +208,24 @@ class BlockManagerMaster(
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
     if (driverActor != null && isDriver) {
-      tell(StopBlockManagerMaster)
+      askDriverExpectingTrue(StopBlockManagerMaster)
       driverActor = null
       logInfo("BlockManagerMaster stopped")
     }
   }
 
-  /** Send a one-way message to the master actor, to which we expect it to reply with true. */
-  private def tell(message: Any) {
+  /** Send a message to the master actor, to which we expect it to reply with true. */
+  private def askDriverExpectingTrue(message: Any) {
     if (!askDriverWithReply[Boolean](message)) {
       throw new SparkException("BlockManagerMasterActor returned false, expected true.")
     }
+  }
+
+  /**
+   * Send a message to the master actor in a fire-and-forget manner
+   */
+  private def tell(message: Any): Unit = {
+    driverActor ! message
   }
 
   /**

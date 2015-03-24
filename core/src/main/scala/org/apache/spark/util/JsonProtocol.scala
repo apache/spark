@@ -93,7 +93,16 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
+      case blockUpdate: SparkListenerBlockUpdate =>
+        blockUpdateToJson(blockUpdate)
     }
+  }
+  
+  def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdate): JValue = {
+    val blockStatus = blockStatusToJson(blockUpdate.blockStatus)
+    ("BlockManagerID" -> blockManagerIdToJson(blockUpdate.blockManagerId)) ~
+    ("BlockID" -> blockUpdate.blockId.name) ~
+    ("BlockStatus" -> blockStatus)
   }
 
   def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted): JValue = {
@@ -455,6 +464,7 @@ private[spark] object JsonProtocol {
     val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
+    val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdate)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -473,7 +483,15 @@ private[spark] object JsonProtocol {
       case `executorAdded` => executorAddedFromJson(json)
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
+      case `blockUpdate` => blockUpdateFromJson(json)
     }
+  }
+  
+  def blockUpdateFromJson(json: JValue): SparkListenerBlockUpdate = {
+    val blockManagerId = blockManagerIdFromJson(json \ "BlockManagerID")
+    val blockId = BlockId((json \ "BlockID").extract[String])
+    val blockStatus = blockStatusFromJson(json \ "BlockStatus")
+    SparkListenerBlockUpdate(blockManagerId, blockId, blockStatus)
   }
 
   def stageSubmittedFromJson(json: JValue): SparkListenerStageSubmitted = {

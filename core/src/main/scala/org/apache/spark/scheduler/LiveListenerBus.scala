@@ -33,7 +33,7 @@ private[spark] class LiveListenerBus
   with SparkListenerBus {
 
   private val logDroppedEvent = new AtomicBoolean(false)
-
+  
   override def onDropEvent(event: SparkListenerEvent): Unit = {
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.
@@ -42,5 +42,4 @@ private[spark] class LiveListenerBus
         "the rate at which tasks are being started by the scheduler.")
     }
   }
-
 }
