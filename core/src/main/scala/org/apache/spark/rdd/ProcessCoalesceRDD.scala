@@ -34,7 +34,7 @@ private[spark] class ProcessCoalesceRDD [T: ClassTag](@transient var prev: RDD[T
   // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
-    //TODO: check boundary
+    // TODO: check boundary
     val parentLocs = prev.partitions.map(p =>
       (p.index, prev.sparkContext.getPreferredLocs(prev, p.index)(0)))
 

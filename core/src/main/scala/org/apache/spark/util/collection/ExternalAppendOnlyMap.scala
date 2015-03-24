@@ -159,7 +159,7 @@ class ExternalAppendOnlyMap[K, V, C](
     val batchSizes = new ArrayBuffer[Long]
 
     // Flush the disk writer's contents to disk, and update relevant variables
-    def flush() = {
+    def flush(): Unit = {
       val w = writer
       writer = null
       w.commitAndClose()
@@ -355,7 +355,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def isEmpty = pairs.length == 0
+      def isEmpty: Boolean = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {
