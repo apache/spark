@@ -151,7 +151,6 @@ abstract class AbstractCommandBuilder {
    */
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
-    String scala = getScalaVersion();
 
     List<String> cp = new ArrayList<String>();
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
@@ -162,6 +161,7 @@ abstract class AbstractCommandBuilder {
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
+      String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");

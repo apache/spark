@@ -42,7 +42,9 @@ private[nio] abstract class Message(val typ: Long, val id: Int) {
 
   def timeTaken(): String = (finishTime - startTime).toString + " ms"
 
-  override def toString = this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
+  override def toString: String = {
+    this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
+  }
 }
 
 
@@ -51,7 +53,7 @@ private[nio] object Message {
 
   var lastId = 1
 
-  def getNewId() = synchronized {
+  def getNewId(): Int = synchronized {
     lastId += 1
     if (lastId == 0) {
       lastId += 1
