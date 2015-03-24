@@ -218,7 +218,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         }
       }
       <td>
-        {if (app.requestedCores == Int.MaxValue) "*" else app.requestedCores}
+        {app.requestedCores}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
