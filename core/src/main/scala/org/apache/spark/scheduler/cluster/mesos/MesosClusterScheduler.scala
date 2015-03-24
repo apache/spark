@@ -446,6 +446,8 @@ private[spark] class MesosClusterScheduler(
         return StatusResponse(submissionId, true, Option("Driver is running"))
       } else if (finishedDrivers.contains(submissionId)) {
         return StatusResponse(submissionId, true, Option("Driver already finished"))
+      } else if (superviseRetryList.contains(submissionId)) {
+        return StatusResponse(submissionId, true, Option("Driver is retrying"))
       } else {
         return StatusResponse(submissionId, false, None)
       }

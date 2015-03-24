@@ -46,6 +46,9 @@ private[mesos] class SuperviseRetryList(state: ClusterPersistenceEngine) {
     }
   }
 
+  def contains(submissionId: String) =
+    drivers.exists(d => d.submission.submissionId.equals(submissionId))
+
   def getNextRetry(currentTime: Date): (Option[DriverSubmission], Option[RetryState]) = {
     val retry = drivers.find(d => d.nextRetry.before(currentTime))
     if (retry.isDefined) {
