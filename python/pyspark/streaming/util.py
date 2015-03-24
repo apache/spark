@@ -91,9 +91,9 @@ class TransformFunctionSerializer(object):
         except Exception:
             traceback.print_exc()
 
-    def loads(self, bytes):
+    def loads(self, data):
         try:
-            f, deserializers = self.serializer.loads(bytes)
+            f, deserializers = self.serializer.loads(bytes(data))
             return TransformFunction(self.ctx, f, *deserializers)
         except Exception:
             traceback.print_exc()

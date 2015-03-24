@@ -1024,7 +1024,7 @@ class RDD(object):
                 return [minv, maxv], [filtered.count()]
 
             try:
-                inc = int((maxv - minv) / buckets)
+                inc = (maxv - minv) / buckets
             except TypeError:
                 raise TypeError("Can not generate buckets with non-number in RDD")
 
@@ -1032,6 +1032,7 @@ class RDD(object):
                 raise ValueError("Can not generate buckets with infinite value")
 
             # keep them as integer if possible
+            inc = int(inc)
             if inc * buckets != maxv - minv:
                 inc = (maxv - minv) * 1.0 / buckets
 

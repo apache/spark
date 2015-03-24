@@ -210,7 +210,7 @@ class CloudPickler(Pickler):
             # func is nested
             klass = getattr(themodule, name, None)
             if klass is None or klass is not obj:
-                self.save_function_tuple(obj, [themodule])
+                self.save_function_tuple(obj)
                 return
 
         if obj.__dict__:
@@ -225,7 +225,7 @@ class CloudPickler(Pickler):
             self.memoize(obj)
     dispatch[types.FunctionType] = save_function
 
-    def save_function_tuple(self, func, forced_imports=None):
+    def save_function_tuple(self, func):
         """  Pickles an actual func object.
 
         A func comprises: code, globals, defaults, closure, and dict.  We
@@ -239,19 +239,6 @@ class CloudPickler(Pickler):
         """
         save = self.save
         write = self.write
-
-        # save the modules (if any)
-        if forced_imports:
-            write(pickle.MARK)
-            save(_modules_to_main)
-            #print 'forced imports are', forced_imports
-
-            forced_names = map(lambda m: m.__name__, forced_imports)
-            save((forced_names,))
-
-            #save((forced_imports,))
-            write(pickle.REDUCE)
-            write(pickle.POP_MARK)
 
         code, f_globals, defaults, closure, dct, base_globals = self.extract_func_data(func)
 

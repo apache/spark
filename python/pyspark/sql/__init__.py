@@ -35,10 +35,13 @@ from __future__ import absolute_import
 
 import sys
 from . import _types as types
-types.__name__ = 'types'
-sys.modules[__name__ + '.types'] = types
-for n in types.__all__:
-    getattr(types, n).__module__ = __name__ + '.types'
+modname = __name__ + '.types'
+types.__name__ = modname
+# update the __module__ for all objects, make them picklable
+for v in types.__dict__.values():
+    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
+        v.__module__ = modname
+sys.modules[modname] = types
 
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext

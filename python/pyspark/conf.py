@@ -44,7 +44,7 @@ u'/path'
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.executorEnv.VAR1")
 u'value1'
->>> print conf.toDebugString()
+>>> print(conf.toDebugString())
 spark.executorEnv.VAR1=value1
 spark.executorEnv.VAR3=value3
 spark.executorEnv.VAR4=value4
@@ -57,9 +57,10 @@ spark.home=/path
 __all__ = ['SparkConf']
 
 import sys
-# TODO: this is a hack
+import re
+
 if sys.version >= '3':
-    unicode = str
+    __doc__ = re.sub(r"(\W|^)[uU](['])", r'\1\2', __doc__)
 
 
 class SparkConf(object):
@@ -105,7 +106,7 @@ class SparkConf(object):
 
     def set(self, key, value):
         """Set a configuration property."""
-        self._jconf.set(key, unicode(value))
+        self._jconf.set(key, str(value))
         return self
 
     def setIfMissing(self, key, value):

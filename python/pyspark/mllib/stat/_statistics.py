@@ -38,7 +38,7 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
         return self.call("variance").toArray()
 
     def count(self):
-        return self.call("count")
+        return int(self.call("count"))
 
     def numNonzeros(self):
         return self.call("numNonzeros").toArray()
@@ -183,11 +183,11 @@ class Statistics(object):
         >>> from pyspark.mllib.linalg import Vectors, Matrices
         >>> observed = Vectors.dense([4, 6, 5])
         >>> pearson = Statistics.chiSqTest(observed)
-        >>> pearson.statistic
+        >>> print(pearson.statistic)
         0.4
         >>> pearson.degreesOfFreedom
         2
-        >>> round(pearson.pValue, 4)
+        >>> print(round(pearson.pValue, 4))
         0.8187
         >>> pearson.method
         u'pearson'
@@ -197,12 +197,12 @@ class Statistics(object):
         >>> observed = Vectors.dense([21, 38, 43, 80])
         >>> expected = Vectors.dense([3, 5, 7, 20])
         >>> pearson = Statistics.chiSqTest(observed, expected)
-        >>> round(pearson.pValue, 4)
+        >>> print(round(pearson.pValue, 4))
         0.0027
 
         >>> data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
         >>> chi = Statistics.chiSqTest(Matrices.dense(3, 4, data))
-        >>> round(chi.statistic, 4)
+        >>> print(round(chi.statistic, 4))
         21.9958
 
         >>> data = [LabeledPoint(0.0, Vectors.dense([0.5, 10.0])),
@@ -213,9 +213,9 @@ class Statistics(object):
         ...         LabeledPoint(1.0, Vectors.dense([3.5, 40.0])),]
         >>> rdd = sc.parallelize(data, 4)
         >>> chi = Statistics.chiSqTest(rdd)
-        >>> chi[0].statistic
+        >>> print(chi[0].statistic)
         0.75
-        >>> chi[1].statistic
+        >>> print(chi[1].statistic)
         1.5
         """
         if isinstance(observed, RDD):
