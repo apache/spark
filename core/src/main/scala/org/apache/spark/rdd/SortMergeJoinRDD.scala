@@ -62,7 +62,7 @@ private[spark] sealed trait JoinType[K, L, R, PAIR <: Product2[_, _]] extends Se
       }
 
       def next(): (L, R) = {
-        val joinRow:(L, R) = (buffer(index), rightElem)
+        val joinRow: (L, R) = (buffer(index), rightElem)
         index += 1
         joinRow
       }
@@ -80,7 +80,7 @@ private[spark] object JoinType {
 
     joinType = JoinType.INNER
 
-    override def flatten(iterators: Iterator[(K, (Iterator[L], Iterator[R]))])= {
+    override def flatten(iterators: Iterator[(K, (Iterator[L], Iterator[R]))]) = {
       iterators flatMap {
         case (key, pair) => {
           mergeIterators(pair._1, pair._2).map(value => (key, (value._1, value._2)))
@@ -128,8 +128,8 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
                                                                        right: RDD[(K, R)],
                                                                        part: Partitioner,
                                                                        join: JoinType[K, L, R, PAIR])
-    (implicit kt: ClassTag[K], keyOrdering: Ordering[K])
-    extends RDD[(K, PAIR)](left.context, Nil) with Logging {
+                                                                      (implicit kt: ClassTag[K], keyOrdering: Ordering[K])
+  extends RDD[(K, PAIR)](left.context, Nil) with Logging {
 
   // Ordering is necessary. SortMergeJoin needs to Sort by Key
   require(keyOrdering != null, "No implicit Ordering defined for " + kt.runtimeClass)
@@ -167,10 +167,10 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
   override val partitioner: Some[Partitioner] = Some(part)
 
   private def internalCompute[V, W](leftIter: Iterator[(K, V)], rightIter: Iterator[(K, W)])
-    : Iterator[(K, (Iterator[V], Iterator[W]))] = {
+  : Iterator[(K, (Iterator[V], Iterator[W]))] = {
     new Iterator[(K, (Iterator[V], Iterator[W]))] {
-      
-      var leftNext:Option[(K, V)] = None
+
+      var leftNext: Option[(K, V)] = None
       var rightNext: Option[(K, W)] = None
 
       def hasNext: Boolean = {
@@ -185,10 +185,10 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
       }
 
       def next(): (K, (Iterator[V], Iterator[W])) = {
-        val currentKey:K = leftNext.get._1
+        val currentKey: K = leftNext.get._1
         val leftIterResult = new Iterator[V] {
           def hasNext: Boolean = {
-            var flag:Boolean = true
+            var flag: Boolean = true
             if (leftNext.isDefined) {
               flag = true
             } else if (leftIter.hasNext) {
@@ -213,7 +213,7 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
 
         val rightIterResult = new Iterator[W] {
           def hasNext: Boolean = {
-            var flag:Boolean = true
+            var flag: Boolean = true
             if (! rightNext.isDefined) {
               if (rightIter.hasNext) {
                 rightNext = Some(rightIter.next())
@@ -223,21 +223,21 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
             }
 
             if (flag) {
-            var comp = keyOrdering.compare(currentKey, rightNext.get._1)
-            while (comp > 0 && flag) {
-              if (rightIter.hasNext) {
-                rightNext = Some(rightIter.next())
-                comp = keyOrdering.compare(currentKey, rightNext.get._1)
+              var comp = keyOrdering.compare(currentKey, rightNext.get._1)
+              while (comp > 0 && flag) {
+                if (rightIter.hasNext) {
+                  rightNext = Some(rightIter.next())
+                  comp = keyOrdering.compare(currentKey, rightNext.get._1)
+                } else {
+                  flag = false
+                }
+              }
+              if (comp == 0) {
+                flag = true
               } else {
                 flag = false
               }
             }
-            if (comp == 0) {
-              flag = true
-            } else {
-              flag = false
-            }
-          }
             flag
           }
 
@@ -252,8 +252,7 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
     }
   }
 
-  override def compute(s: Partition, context: TaskContext)
-    : Iterator[(K, PAIR)] = {
+  override def compute(s: Partition, context: TaskContext): Iterator[(K, PAIR)] = {
     val split = s.asInstanceOf[JoinPartition]
     val leftIter = SparkEnv.get.shuffleManager
       .getReader(split.left.handle, split.index, split.index + 1, context)
