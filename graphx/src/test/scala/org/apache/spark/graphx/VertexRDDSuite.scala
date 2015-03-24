@@ -52,17 +52,17 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val vertexA = VertexRDD(sc.parallelize(0 until 75, 2).map(i => (i.toLong, 0))).cache()
       val vertexB = VertexRDD(sc.parallelize(25 until 100, 2).map(i => (i.toLong, 1))).cache()
       val vertexC = vertexA.minus(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (75 until 100).toSet)
+      assert(vertexC.map(_._1).collect.toSet === (0 until 25).toSet)
     }
   }
 
   test("minus with non-equal number of partitions") {
     withSpark { sc =>
-      val vertexA = VertexRDD(sc.parallelize(0 until 16, 3).map(i => (i.toLong, 0)))
-      val vertexB = VertexRDD(sc.parallelize(8 until 24, 2).map(i => (i.toLong, 1)))
+      val vertexA = VertexRDD(sc.parallelize(0 until 75, 5).map(i => (i.toLong, 0)))
+      val vertexB = VertexRDD(sc.parallelize(50 until 100, 2).map(i => (i.toLong, 1)))
       assert(vertexA.partitions.size != vertexB.partitions.size)
       val vertexC = vertexA.minus(vertexB)
-      assert(vertexC.map(_._1).collect.toSet === (16 until 24).toSet)
+      assert(vertexC.map(_._1).collect.toSet === (0 until 50).toSet)
     }
   }
 

@@ -90,7 +90,7 @@ private[graphx] abstract class VertexPartitionBaseOps
 
   /** Hides the VertexId's that are the same between `this` and `other`. */
   def minus(other: Self[VD]): Self[VD] = {
-    other.withMask((self.mask & other.mask) ^ other.mask)
+    other.withMask((self.mask & other.mask) ^ self.mask)
   }
 
   /** Hides the VertexId's that are the same between `this` and `other`. */

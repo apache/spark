@@ -123,8 +123,7 @@ abstract class VertexRDD[VD](
 
   /**
    * For each VertexId present in both `this` and `other`, minus will act as a set difference
-   * operation returning only those VertexId's present in `other`; will keep the values from
-   * `other`.
+   * operation returning only those unique VertexId's present in `this`.
    *
    * @param other an RDD to run the set operation against
    */
