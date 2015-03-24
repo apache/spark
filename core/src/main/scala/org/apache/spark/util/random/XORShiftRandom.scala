@@ -83,7 +83,7 @@ private[spark] object XORShiftRandom {
    * @return Map of execution times for {@link java.util.Random java.util.Random}
    * and XORShift
    */
-  def benchmark(numIters: Int) = {
+  def benchmark(numIters: Int): Map[String, Long] = {
 
     val seed = 1L
     val million = 1e6.toInt

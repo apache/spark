@@ -73,7 +73,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   // Misc:
   val executorIdToBlockManagerId = HashMap[ExecutorId, BlockManagerId]()
-  def blockManagerIds = executorIdToBlockManagerId.values.toSeq
+  def blockManagerIds: Seq[BlockManagerId] = executorIdToBlockManagerId.values.toSeq
 
   var schedulingMode: Option[SchedulingMode] = None
 
@@ -146,7 +146,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onJobStart(jobStart: SparkListenerJobStart) = synchronized {
+  override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobGroup = for (
       props <- Option(jobStart.properties);
       group <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
@@ -182,7 +182,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
     val jobData = activeJobs.remove(jobEnd.jobId).getOrElse {
       logWarning(s"Job completed for unknown job ${jobEnd.jobId}")
       new JobUIData(jobId = jobEnd.jobId)
@@ -219,7 +219,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val stage = stageCompleted.stageInfo
     stageIdToInfo(stage.stageId) = stage
     val stageData = stageIdToData.getOrElseUpdate((stage.stageId, stage.attemptId), {
@@ -260,7 +260,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   /** For FIFO, all stages are contained by "default" pool but "default" pool here is meaningless */
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val stage = stageSubmitted.stageInfo
     activeStages(stage.stageId) = stage
     pendingStages.remove(stage.stageId)
@@ -288,7 +288,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
+  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
       val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
@@ -312,7 +312,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     // stageToTaskInfos already has the updated status.
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     // If stage attempt id is -1, it means the DAGScheduler had no idea which attempt this task
     // completion event is for. Let's just drop it here. This means we might have some speculation
