@@ -89,7 +89,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
-  protected val NUMERIC = Keyword("NUMERIC")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
