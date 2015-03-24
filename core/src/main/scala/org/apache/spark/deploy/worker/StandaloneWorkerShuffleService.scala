@@ -17,10 +17,12 @@
 
 package org.apache.spark.deploy.worker
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.sasl.SaslRpcHandler
+import org.apache.spark.network.sasl.SaslServerBootstrap
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 
@@ -41,10 +43,7 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
 
   private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
   private val blockHandler = new ExternalShuffleBlockHandler(transportConf)
-  private val transportContext: TransportContext = {
-    val handler = if (useSasl) new SaslRpcHandler(blockHandler, securityManager) else blockHandler
-    new TransportContext(transportConf, handler)
-  }
+  private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
 
   private var server: TransportServer = _
 
@@ -53,7 +52,8 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
     if (enabled) {
       require(server == null, "Shuffle server already started")
       logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
-      server = transportContext.createServer(port)
+      val bootstraps = if (useSasl) Seq(new SaslServerBootstrap(securityManager)) else Seq()
+      server = transportContext.createServer(port, bootstraps)
     }
   }
 

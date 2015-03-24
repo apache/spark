@@ -17,10 +17,9 @@
 
 package org.apache.spark.network.sasl;
 
-import java.util.concurrent.ConcurrentMap;
-
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,8 +36,10 @@ import org.apache.spark.network.server.StreamManager;
  * Note that the authentication process consists of multiple challenge-response pairs, each of
  * which are individual RPCs.
  */
-public class SaslRpcHandler extends RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
+class SaslRpcHandler extends RpcHandler {
+  private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
+
+  private final Channel channel;
 
   /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
@@ -46,18 +47,17 @@ public class SaslRpcHandler extends RpcHandler {
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
-  /** Maps each channel to its SASL authentication state. */
-  private final ConcurrentMap<TransportClient, SparkSaslServer> channelAuthenticationMap;
+  private SparkSaslServer saslServer;
 
-  public SaslRpcHandler(RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
+  SaslRpcHandler(Channel channel, RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
+    this.channel = channel;
     this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
-    this.channelAuthenticationMap = Maps.newConcurrentMap();
+    this.saslServer = null;
   }
 
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    SparkSaslServer saslServer = channelAuthenticationMap.get(client);
     if (saslServer != null && saslServer.isComplete()) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
@@ -69,7 +69,6 @@ public class SaslRpcHandler extends RpcHandler {
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
       saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder);
-      channelAuthenticationMap.put(client, saslServer);
     }
 
     byte[] response = saslServer.response(saslMessage.payload);
@@ -86,7 +85,6 @@ public class SaslRpcHandler extends RpcHandler {
 
   @Override
   public void connectionTerminated(TransportClient client) {
-    SparkSaslServer saslServer = channelAuthenticationMap.remove(client);
     if (saslServer != null) {
       saslServer.dispose();
     }

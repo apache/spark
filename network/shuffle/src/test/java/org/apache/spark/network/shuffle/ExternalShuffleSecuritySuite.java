@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.junit.After;
 import org.junit.Before;
@@ -27,10 +28,11 @@ import static org.junit.Assert.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -42,10 +44,10 @@ public class ExternalShuffleSecuritySuite {
 
   @Before
   public void beforeEach() {
-    RpcHandler handler = new SaslRpcHandler(new ExternalShuffleBlockHandler(conf),
-      new TestSecretKeyHolder("my-app-id", "secret"));
-    TransportContext context = new TransportContext(conf, handler);
-    this.server = context.createServer();
+    TransportContext context = new TransportContext(conf, new ExternalShuffleBlockHandler(conf));
+    TransportServerBootstrap bootstrap = new SaslServerBootstrap(
+        new TestSecretKeyHolder("my-app-id", "secret"));
+    this.server = context.createServer(Arrays.asList(bootstrap));
   }
 
   @After

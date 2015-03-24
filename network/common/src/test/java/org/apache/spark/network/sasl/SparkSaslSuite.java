@@ -17,12 +17,28 @@
 
 package org.apache.spark.network.sasl;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.common.base.Charsets.UTF_8;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+
+import io.netty.channel.Channel;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
+import org.apache.spark.network.TestUtils;
+import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
@@ -86,4 +102,54 @@ public class SparkSaslSuite {
       assertFalse(server.isComplete());
     }
   }
+
+  @Test
+  public void testSaslAuthentication() throws Exception {
+    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+
+    RpcHandler rpcHandler = mock(RpcHandler.class);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          byte[] message = (byte[]) invocation.getArguments()[1];
+          RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
+          assertEquals("Ping", new String(message, UTF_8));
+          cb.onSuccess("Pong".getBytes(UTF_8));
+          return null;
+        }
+      })
+      .when(rpcHandler)
+      .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
+
+
+    SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
+    when(keyHolder.getSaslUser(anyString())).thenReturn("user");
+    when(keyHolder.getSecretKey(anyString())).thenReturn("secret");
+
+    TransportContext ctx = new TransportContext(conf, rpcHandler);
+    TransportServer server = null;
+    TransportClient client = null;
+    try {
+      TransportServerBootstrap serverBootstrap = spy(new SaslServerBootstrap(keyHolder));
+      server = ctx.createServer(Arrays.asList(serverBootstrap));
+
+      TransportClientBootstrap clientBootstrap = new SaslClientBootstrap(conf, "user", keyHolder);
+      client = ctx.createClientFactory(Arrays.asList(clientBootstrap))
+        .createClient(TestUtils.getLocalHost(), server.getPort());
+
+      verify(serverBootstrap, times(1))
+        .doBootstrap(any(Channel.class), any(TransportConf.class), any(RpcHandler.class));
+
+      byte[] response = client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", new String(response, UTF_8));
+    } finally {
+      if (client != null) {
+        client.close();
+      }
+      if (server != null) {
+        server.close();
+      }
+    }
+  }
+
 }
