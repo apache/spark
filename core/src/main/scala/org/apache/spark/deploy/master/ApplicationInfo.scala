@@ -43,6 +43,7 @@ private[deploy] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+  @transient var actualCoresRequested: Int = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -80,6 +81,7 @@ private[deploy] class ApplicationInfo(
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
+    actualCoresRequested += cores
     exec
   }
 
