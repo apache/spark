@@ -202,8 +202,8 @@ abstract class VertexRDD[VD](
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs and a fold-style
    * initial value. If the other RDD is backed by a VertexRDD with the same index then the efficient
    * [[leftZipJoinWithFold]] implementation is used. The resulting VertexRDD contains an entry for
-   * each vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
-   * If there are duplicates, the vertex is picked arbitrarily.
+   * each vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed
+   * `None`. If there are duplicates, the vertex is picked arbitrarily.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
