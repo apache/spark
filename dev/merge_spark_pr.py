@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import urllib2
+import Queue
 
 try:
     import jira.client
@@ -286,6 +287,42 @@ def resolve_jira_issues(title, merge_branches, comment):
         resolve_jira_issue(merge_branches, comment, jira_id)
 
 
+def standardize_jira_ref(text):
+    # Standardize the [MODULE] SPARK-XXXXX prefix
+    # Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[MLLIB] SPARK-XXX: Issue"
+    
+    # Check for compliance
+    if (re.search(r'\[[A-Z0-9_]+\] SPARK-[0-9]{4,5}: \S+', text)):
+        return text
+    
+    # Extract JIRA ref(s):
+    jira_refs = Queue.Queue()
+    pattern = re.compile(r'(SPARK[-\s]*[0-9]{4,5})', re.IGNORECASE)
+    while (pattern.search(text) is not None):
+        jira_refs.put(re.sub(r'\s', '-', pattern.search(text).groups()[0].upper()))
+        text = text.replace(pattern.search(text).groups()[0], '')
+
+    # Extract spark component(s):
+    components = Queue.Queue()
+    pattern = re.compile(r'(\[\w+\])', re.IGNORECASE)
+    while (pattern.search(text) is not None):
+        components.put(pattern.search(text).groups()[0])
+        text = text.replace(pattern.search(text).groups()[0], '')
+
+    # Cleanup remaining symbols:
+    pattern = re.compile(r'\W+(.*)', re.IGNORECASE)
+    text = pattern.search(text).groups()[0]
+
+    # Assemble full text (module(s), JIRA ref(s), remaining text)
+    clean_text = ''
+    while (not components.empty()):
+        clean_text += components.get() + ' '
+    while (not jira_refs.empty()):
+        clean_text += jira_refs.get() + ' '
+    clean_text = clean_text.rstrip() + ': ' + text.strip()
+    
+    return clean_text
+
 branches = get_json("%s/branches" % GITHUB_API_BASE)
 branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
 # Assumes branch names can be sorted lexicographically
@@ -296,7 +333,7 @@ pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
 pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
 url = pr["url"]
-title = pr["title"]
+title = standardize_jira_ref(pr["title"])
 body = pr["body"]
 target_ref = pr["base"]["ref"]
 user_login = pr["user"]["login"]
