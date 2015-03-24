@@ -103,7 +103,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Matrix])
+    case class Data(weights: Double, mus: Vector, sigmas: Matrix)
 
     def formatVersionV1_0 = "1.0"
 
@@ -118,16 +118,16 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
 
-      val (mus, sigmas) = gaussians.map(i => (i.mu, i.sigma)).unzip
-
       // Create JSON metadata.
       val metadata = compact(render
         (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~ ("k" -> weights.length)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, mus.toArray, sigmas.toArray)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
+      val dataArray = Array.tabulate(weights.length){ i =>
+        Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
+      }
+      val dataRDD: DataFrame = sc.parallelize(dataArray, 1).toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
@@ -135,19 +135,18 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.parquetFile(datapath)
-      val dataArray = dataRDD.select("weights", "mus", "sigmas").take(1)
+      val numGaussians = dataRDD.count().toInt
+      val dataArray = dataRDD.select("weights", "mus", "sigmas").take(numGaussians)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataRDD.schema)
-      val data = dataArray(0)
-      val weights = data.getAs[Seq[Double]](0).toArray
-      val mus = data.getAs[Seq[Vector]](1).toArray
-      val sigmas = data.getAs[Seq[Matrix]](2).toArray
 
-      val gaussians = Array.tabulate(weights.length) { i =>
-        new MultivariateGaussian(mus(i), sigmas(i))
-      }
+      val (weights, gaussians) = Array.tabulate(numGaussians) { i =>
+        val currentMu = dataArray(i).getAs[Vector](1)
+        val currentSigma = dataArray(i).getAs[Matrix](2)
+        (dataArray(i).getAs[Double](0), new MultivariateGaussian(currentMu, currentSigma))
+      }.unzip
 
-      return new GaussianMixtureModel(weights, gaussians)
+      return new GaussianMixtureModel(weights.toArray, gaussians.toArray)
     }
   }
 
