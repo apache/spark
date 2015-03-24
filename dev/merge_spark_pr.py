@@ -30,7 +30,7 @@ import re
 import subprocess
 import sys
 import urllib2
-import Queue
+from collections import deque
 
 try:
     import jira.client
