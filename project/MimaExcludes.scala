@@ -50,7 +50,9 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
-              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
           )
 
         case v if v.startsWith("1.3") =>

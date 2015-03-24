@@ -32,8 +32,8 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
  * policy.
  *
  * OutputCommitCoordinator is instantiated in both the drivers and executors. On executors, it is
- * configured with a reference to the driver's OutputCommitCoordinatorActor, so requests to commit
- * output will be forwarded to the driver's OutputCommitCoordinator.
+ * configured with a reference to the driver's OutputCommitCoordinatorEndpoint, so requests to
+ * commit output will be forwarded to the driver's OutputCommitCoordinator.
  *
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
@@ -152,7 +152,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 private[spark] object OutputCommitCoordinator {
 
   // This actor is used only for RPC
-  class OutputCommitCoordinatorEndpoint(
+  private[spark] class OutputCommitCoordinatorEndpoint(
       override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
     extends RpcEndpoint with Logging {
 
