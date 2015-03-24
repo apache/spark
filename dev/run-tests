@@ -180,6 +180,15 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 echo ""
 echo "========================================================================="
+echo "Detecting binary incompatibilities with MiMa"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_MIMA
+
+./dev/mima
+
+echo ""
+echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
@@ -227,12 +236,3 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
 ./python/run-tests
-
-echo ""
-echo "========================================================================="
-echo "Detecting binary incompatibilities with MiMa"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_MIMA
-
-./dev/mima
