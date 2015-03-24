@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
@@ -194,7 +194,8 @@ case class ExternalSort(
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[Row, Null, Row](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r, null)))
-      sorter.iterator.map(_._1)
+      val baseIterator = sorter.iterator.map(_._1)
+      CompletionIterator(baseIterator, sorter.stop())
     }, preservesPartitioning = true)
   }
 
