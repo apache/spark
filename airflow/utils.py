@@ -228,6 +228,9 @@ def apply_defaults(func):
         default_args = {}
         if 'default_args' in kwargs:
             default_args = kwargs['default_args']
+            if 'params' in default_args:
+                dag_params.update(default_args['params'])
+                del default_args['params']
 
         dag_args.update(default_args)
         default_args = dag_args
