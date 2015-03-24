@@ -116,7 +116,7 @@ private[spark] class AppClient(
       masterAkkaUrls.map(AddressFromURIString(_).hostPort).contains(remoteUrl.hostPort)
     }
 
-    override def receiveWithLogging = {
+    override def receiveWithLogging: PartialFunction[Any, Unit] = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
