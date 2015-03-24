@@ -34,38 +34,38 @@ public class JavaTokenizerSuite {
   private transient SQLContext jsql;
 
   @Before
-	public void setUp() {
+  public void setUp() {
     jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
-		jsql = new SQLContext(jsc);
-	}
+    jsql = new SQLContext(jsc);
+  }
 
-	@After
-	public void tearDown() {
-		jsc.stop();
-		jsc = null;
+  @After
+  public void tearDown() {
+    jsc.stop();
+    jsc = null;
   }
 
   @Test
-	public void regexTokenizer() {
+  public void regexTokenizer() {
     RegexTokenizer myRegExTokenizer = new RegexTokenizer()
       .setInputCol("rawText")
-			.setOutputCol("tokens")
-			.setPattern("\\s")
-			.setGaps(true)
+      .setOutputCol("tokens")
+      .setPattern("\\s")
+      .setGaps(true)
       .setMinTokenLength(3);
 
-		JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Lists.newArrayList(
-			new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
-			new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
-		));
+    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Lists.newArrayList(
+      new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
+      new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+    ));
     DataFrame dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
 
-		Row[] pairs = myRegExTokenizer.transform(dataset)
-			.select("tokens","wantedTokens")
+    Row[] pairs = myRegExTokenizer.transform(dataset)
+      .select("tokens", "wantedTokens")
       .collect();
 
-		for (Row r: pairs) {
-			Assert.assertEquals(r.get(0), r.get(1));
-		}
+    for (Row r : pairs) {
+      Assert.assertEquals(r.get(0), r.get(1));
+    }
   }
 }
