@@ -36,7 +36,7 @@ _float_str_mapping = {
 
 def _new_smart_decode(obj):
     if isinstance(obj, float):
-        s = unicode(obj)
+        s = str(obj)
         return _float_str_mapping.get(s, s)
     return _old_smart_decode(obj)
 

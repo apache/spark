@@ -59,8 +59,10 @@ import zlib
 import itertools
 try:
     import cPickle as pickle
+    protocol = 2
 except ImportError:
     import pickle
+    protocol = 3
 
 from pyspark import cloudpickle
 
@@ -383,10 +385,13 @@ class PickleSerializer(FramedSerializer):
     """
 
     def dumps(self, obj):
-        return pickle.dumps(obj, 2)
+        return pickle.dumps(obj, protocol)
 
     def loads(self, obj):
-        return pickle.loads(obj)
+        if sys.version >= '3':
+            return pickle.loads(obj, encoding='bytes')
+        else:
+            return pickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):

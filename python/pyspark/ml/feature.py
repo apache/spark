@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaTransformer
@@ -24,6 +25,7 @@ __all__ = ['Tokenizer', 'HashingTF']
 
 
 @inherit_doc
+@ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
     A tokenizer that converts the input string to lowercase and then
@@ -32,15 +34,15 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> from pyspark.sql import Row
     >>> df = sc.parallelize([Row(text="a b c")]).toDF()
     >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
-    >>> print tokenizer.transform(df).head()
+    >>> tokenizer.transform(df).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
-    >>> print tokenizer.setParams(outputCol="tokens").transform(df).head()
+    >>> tokenizer.setParams(outputCol="tokens").transform(df).head()
     Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
     >>> # Temporarily modify a parameter.
-    >>> print tokenizer.transform(df, {tokenizer.outputCol: "words"}).head()
+    >>> tokenizer.transform(df, {tokenizer.outputCol: "words"}).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
-    >>> print tokenizer.transform(df).head()
+    >>> tokenizer.transform(df).head()
     Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
     >>> # Must use keyword arguments to specify params.
     >>> tokenizer.setParams("text")
@@ -79,13 +81,13 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     >>> from pyspark.sql import Row
     >>> df = sc.parallelize([Row(words=["a", "b", "c"])]).toDF()
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
-    >>> print hashingTF.transform(df).head().features
-    (10,[7,8,9],[1.0,1.0,1.0])
-    >>> print hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    (10,[7,8,9],[1.0,1.0,1.0])
+    >>> hashingTF.transform(df).head().features
+    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
+    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
-    >>> print hashingTF.transform(df, params).head().vector
-    (5,[2,3,4],[1.0,1.0,1.0])
+    >>> hashingTF.transform(df, params).head().vector
+    SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
     """
 
     _java_class = "org.apache.spark.ml.feature.HashingTF"

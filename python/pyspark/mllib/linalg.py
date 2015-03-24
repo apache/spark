@@ -22,10 +22,18 @@ around. For sparse vectors, users can construct a L{SparseVector}
 object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
+from __future__ import print_function
 
 import sys
 import array
-import copy_reg
+try:
+    import copy_reg
+except ImportError:
+    import copyreg as copy_reg
+
+if sys.version >= '3':
+    basestring = str
+    xrange = range
 
 import numpy as np
 
@@ -57,7 +65,7 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
@@ -88,7 +96,7 @@ def _vector_size(v):
     """
     if isinstance(v, Vector):
         return len(v)
-    elif type(v) in (array.array, list, tuple):
+    elif type(v) in (array.array, list, tuple, xrange):
         return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
@@ -176,7 +184,7 @@ class DenseVector(Vector):
     A dense vector represented by a value array.
     """
     def __init__(self, ar):
-        if isinstance(ar, basestring):
+        if isinstance(ar, bytes):
             ar = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
             ar = np.array(ar, dtype=np.float64)
@@ -308,12 +316,12 @@ class SparseVector(Vector):
         :param args: Non-zero entries, as a dictionary, list of tupes,
                or two sorted lists containing indices and values.
 
-        >>> print SparseVector(4, {1: 1.0, 3: 5.5})
-        (4,[1,3],[1.0,5.5])
-        >>> print SparseVector(4, [(1, 1.0), (3, 5.5)])
-        (4,[1,3],[1.0,5.5])
-        >>> print SparseVector(4, [1, 3], [1.0, 5.5])
-        (4,[1,3],[1.0,5.5])
+        >>> SparseVector(4, {1: 1.0, 3: 5.5})
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> SparseVector(4, [(1, 1.0), (3, 5.5)])
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> SparseVector(4, [1, 3], [1.0, 5.5])
+        SparseVector(4, {1: 1.0, 3: 5.5})
         """
         self.size = int(size)
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
@@ -325,8 +333,8 @@ class SparseVector(Vector):
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
         else:
-            if isinstance(args[0], basestring):
-                assert isinstance(args[1], str), "values should be string too"
+            if isinstance(args[0], bytes):
+                assert isinstance(args[1], bytes), "values should be string too"
                 if args[0]:
                     self.indices = np.frombuffer(args[0], np.int32)
                     self.values = np.frombuffer(args[1], np.float64)
@@ -555,12 +563,12 @@ class Vectors(object):
         :param args: Non-zero entries, as a dictionary, list of tupes,
                      or two sorted lists containing indices and values.
 
-        >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})
-        (4,[1,3],[1.0,5.5])
-        >>> print Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
-        (4,[1,3],[1.0,5.5])
-        >>> print Vectors.sparse(4, [1, 3], [1.0, 5.5])
-        (4,[1,3],[1.0,5.5])
+        >>> Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> Vectors.sparse(4, [1, 3], [1.0, 5.5])
+        SparseVector(4, {1: 1.0, 3: 5.5})
         """
         return SparseVector(size, *args)
 
@@ -611,7 +619,7 @@ class DenseMatrix(Matrix):
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
-        if isinstance(values, basestring):
+        if isinstance(values, bytes):
             values = np.frombuffer(values, dtype=np.float64)
         elif not isinstance(values, np.ndarray):
             values = np.array(values, dtype=np.float64)
