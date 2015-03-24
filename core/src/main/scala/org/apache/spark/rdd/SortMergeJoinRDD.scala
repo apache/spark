@@ -26,14 +26,17 @@ import org.apache.spark.util.collection.CompactBuffer
 
 private[spark] case class ShuffleJoinSplitDep(handle: ShuffleHandle) extends Serializable
 
-private[spark] class JoinPartition(idx: Int, val left: ShuffleJoinSplitDep,
-                                   val right: ShuffleJoinSplitDep)
+private[spark] class JoinPartition(
+    idx: Int,
+    val left: ShuffleJoinSplitDep,
+    val right: ShuffleJoinSplitDep)
   extends Partition with Serializable {
   override val index: Int = idx
   override def hashCode(): Int = idx
 }
 
-private[spark] abstract class JoinType[K: ClassTag, L: ClassTag, R: ClassTag, PAIR <: Product2[_, _]] extends Serializable {
+private[spark] abstract class JoinType[K: ClassTag, L: ClassTag, R: ClassTag, PAIR <: Product2[_, _]]
+    extends Serializable {
 
   private[spark] var joinType: Int = 0
 
@@ -124,12 +127,13 @@ private[spark] object JoinType {
   }
 }
 
-private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD[(K, L)],
-                                                                       right: RDD[(K, R)],
-                                                                       part: Partitioner,
-                                                                       join: JoinType[K, L, R, PAIR])
-    (implicit kt: ClassTag[K], lt: ClassTag[L], rt: ClassTag[R], keyOrdering: Ordering[K])
-    extends RDD[(K, PAIR)](left.context, Nil) with Logging {
+private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](
+    left: RDD[(K, L)],
+    right: RDD[(K, R)],
+    part: Partitioner,
+    join: JoinType[K, L, R, PAIR]
+  )(implicit kt: ClassTag[K], lt: ClassTag[L], rt: ClassTag[R], keyOrdering: Ordering[K])
+  extends RDD[(K, PAIR)](left.context, Nil) with Logging {
 
   // Ordering is necessary. SortMergeJoin needs to Sort by Key
   require(keyOrdering != null, "No implicit Ordering defined for " + kt.runtimeClass)
