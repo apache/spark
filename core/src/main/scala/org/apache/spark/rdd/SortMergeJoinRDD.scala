@@ -39,7 +39,7 @@ private[spark] sealed trait JoinType[K: ClassTag, L: ClassTag, R: ClassTag, PAIR
 
   def flatten(iterators: Iterator[(K, (Iterator[L], Iterator[R]))]): Iterator[(K, PAIR)]
 
-  def mergeIterators(leftIter: Iterator[L], rightIter: Iterator[R])(implicit lt: ClassTag[L: Iterator[(L, R)] = {
+  def mergeIterators(leftIter: Iterator[L], rightIter: Iterator[R]): Iterator[(L, R)] = {
     val buffer = new CompactBuffer[L]()
     while(leftIter.hasNext){
       buffer += leftIter.next
