@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -32,6 +33,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
   val batches =
+    Batch("Remove SubQueries", FixedPoint(100),
+      EliminateSubQueries) ::
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),

@@ -64,9 +64,7 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*),
-    Batch("Remove SubQueries", fixedPoint,
-      EliminateSubQueries)
+      extendedResolutionRules : _*)
   )
 
   /**
