@@ -88,6 +88,16 @@ private[graphx] abstract class VertexPartitionBaseOps
     this.withMask(newMask)
   }
 
+  /** Hides the VertexId's that are the same between `this` and `other`. */
+  def minus(other: Self[VD]): Self[VD] = {
+    other.withMask((self.mask & other.mask) ^ other.mask)
+  }
+
+  /** Hides the VertexId's that are the same between `this` and `other`. */
+  def minus(other: Iterator[(VertexId, VD)]): Self[VD] = {
+    minus(createUsingIndex(other))
+  }
+
   /**
    * Hides vertices that are the same between this and other. For vertices that are different, keeps
    * the values from `other`. The indices of `this` and `other` must be the same.
