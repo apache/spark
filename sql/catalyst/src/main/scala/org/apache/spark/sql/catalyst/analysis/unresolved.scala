@@ -36,6 +36,10 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 case class UnresolvedRelation(
     tableIdentifier: Seq[String],
     alias: Option[String] = None) extends LeafNode {
+
+  /** Returns a `.` separated name for this relation. */
+  def tableName = tableIdentifier.mkString(".")
+
   override def output = Nil
   override lazy val resolved = false
 }

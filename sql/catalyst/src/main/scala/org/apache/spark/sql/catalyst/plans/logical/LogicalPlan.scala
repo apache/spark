@@ -208,8 +208,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // More than one match.
       case ambiguousReferences =>
+        val referenceNames = ambiguousReferences.map(_._1.qualifiedName).mkString(", ")
         throw new AnalysisException(
-          s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
+          s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
 }
