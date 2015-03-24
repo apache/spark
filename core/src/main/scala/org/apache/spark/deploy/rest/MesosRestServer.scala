@@ -145,7 +145,7 @@ class MesosSubmitRequestServlet(
         val response = scheduler.submitDriver(driverDescription)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
-        submitResponse.message = response.message.orNull
+        submitResponse.message = response.message
         submitResponse.success = response.success
         submitResponse.submissionId = response.id
         val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
@@ -178,13 +178,12 @@ class MesosStatusRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
   extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val response = scheduler.getStatus(submissionId)
-    //val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
+    d.driverState = response.state
     d.serverSparkVersion = sparkVersion
     d.submissionId = response.id
     d.success = response.success
-    //d.driverState = response.state.map(_.toString).orNull
-    d.message = response.message.orNull
+    d.message = response.status.map { s => s.toString }.getOrElse("")
     d
   }
 }

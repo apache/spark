@@ -69,8 +69,14 @@ private [spark] case class ClusterTaskState(
   }
 }
 
-private[spark] case class SubmitResponse(id: String, success: Boolean, message: Option[String])
-private[spark] case class StatusResponse(id: String, success: Boolean, message: Option[String])
+private[spark] case class SubmitResponse(id: String, success: Boolean, message: String)
+
+private[spark] case class StatusResponse(
+    id: String,
+    success: Boolean,
+    state: String,
+    status: Option[TaskStatus] = None)
+
 private[spark] case class KillResponse(id: String, success: Boolean, message: String)
 
 private[spark] case class ClusterSchedulerState(
@@ -128,14 +134,14 @@ private[spark] class MesosClusterScheduler(
   def submitDriver(desc: MesosDriverDescription): SubmitResponse = {
     stateLock.synchronized {
       if (queue.isFull) {
-        return SubmitResponse("", false, Option("Already reached maximum submission size"))
+        return SubmitResponse("", false, "Already reached maximum submission size")
       }
 
       val submitDate: Date = new Date()
       val submissionId: String = newDriverId(submitDate)
       val submission = new DriverSubmission(submissionId, desc, submitDate)
       queue.offer(submission)
-      SubmitResponse(submissionId, true, None)
+      SubmitResponse(submissionId, true, "")
     }
   }
 
@@ -184,7 +190,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   def start() {
-    //TODO: Implement leader election to make sure only one framework running in the cluster.
+    // TODO: Implement leader election to make sure only one framework running in the cluster.
     val fwId = state.fetch[String]("frameworkId")
 
     val builder = FrameworkInfo.newBuilder()
@@ -441,15 +447,19 @@ private[spark] class MesosClusterScheduler(
   def getStatus(submissionId: String): StatusResponse = {
     stateLock.synchronized {
       if (queue.contains(submissionId)) {
-        return StatusResponse(submissionId, true, Option("Driver is queued for launch"))
+        return StatusResponse(submissionId, true, "Driver is queued for launch")
       } else if (launchedDrivers.contains(submissionId)) {
-        return StatusResponse(submissionId, true, Option("Driver is running"))
+        val status = launchedDrivers.get(submissionId).taskState
+        return StatusResponse(submissionId, true, "Driver is running", status)
       } else if (finishedDrivers.contains(submissionId)) {
-        return StatusResponse(submissionId, true, Option("Driver already finished"))
+        val status =
+          finishedDrivers.find(d => d.submission.submissionId.equals(submissionId)).get.taskState
+        return StatusResponse(submissionId, true, "Driver already finished", status)
       } else if (superviseRetryList.contains(submissionId)) {
-        return StatusResponse(submissionId, true, Option("Driver is retrying"))
+        val status = superviseRetryList.get(submissionId).get.lastFailureStatus
+        return StatusResponse(submissionId, true, "Driver failed and retrying", Some(status))
       } else {
-        return StatusResponse(submissionId, false, None)
+        return StatusResponse(submissionId, false, "Driver not found")
       }
     }
   }

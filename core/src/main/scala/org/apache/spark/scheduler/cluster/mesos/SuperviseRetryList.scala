@@ -58,6 +58,10 @@ private[mesos] class SuperviseRetryList(state: ClusterPersistenceEngine) {
     }
   }
 
+  def get(submissionId: String): Option[RetryState] = {
+    drivers.find(d => d.submission.submissionId.equals(submissionId))
+  }
+
   def retries: Iterable[RetryState] = {
     drivers.collect { case d => d.copy}.toList
   }
