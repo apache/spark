@@ -61,6 +61,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
+  protected val CUBE = Keyword("CUBE")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -71,6 +72,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
+  protected val GROUPING = Keyword("GROUPING")
   protected val HAVING = Keyword("HAVING")
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
@@ -98,8 +100,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val REGEXP = Keyword("REGEXP")
   protected val RIGHT = Keyword("RIGHT")
   protected val RLIKE = Keyword("RLIKE")
+  protected val ROLLUP = Keyword("ROLLUP")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
+  protected val SETS = Keyword("SETS")
   protected val SQRT = Keyword("SQRT")
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
@@ -111,6 +115,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val WITH = Keyword("WITH")
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -134,7 +139,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       repsep(projection, ",") ~
       (FROM   ~> relations).? ~
       (WHERE  ~> expression).? ~
-      (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
+      groupType.? ~
       (HAVING ~> expression).? ~
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
@@ -142,7 +147,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val base = r.getOrElse(NoRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
-            .map(Aggregate(_, assignAliases(p), withFilter))
+            .map(_(withFilter, assignAliases(p)))
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
@@ -197,6 +202,45 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | RIGHT ~ OUTER.? ^^^ RightOuter
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
+
+  protected lazy val groupType: Parser[(LogicalPlan, Seq[NamedExpression]) => LogicalPlan] =
+    GROUP ~ BY ~> (
+      rep1sep(expression, ",") <~ WITH ~ ROLLUP ^^ { case r =>
+        (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+          Rollup(r, child, aggregations)
+      }
+      | rep1sep(expression, ",") <~ WITH ~ CUBE ^^ { case c =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Cube(c, child, aggregations)
+      }
+      | rep1sep(expression, ",") ~ (GROUPING ~ SETS ~ "(" ~> rep1sep(groupingsets, ",") <~ ")")
+          ^^ { case e ~ g =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            extractGroupingSet(child, aggregations, e, g)
+      }
+      | rep1sep(expression, ",") ^^ { case g =>
+          (child: LogicalPlan, aggregations: Seq[NamedExpression]) =>
+            Aggregate(g, aggregations, child)
+      }
+    )
+
+  protected lazy val groupingsets: Parser[Seq[Expression]] =
+    ( "(" ~> repsep(expression, ",") <~ ")"
+    | rep1sep(expression, ",")
+    )
+
+  private def extractGroupingSet(
+      child: LogicalPlan,
+      aggregations: Seq[NamedExpression],
+      groupByExprs: Seq[Expression],
+      groupingSets: List[Seq[Expression]]): GroupingSets = {
+    val keyMap = groupByExprs.zipWithIndex.toMap
+    val bitmasks: Seq[Int] = groupingSets.map(set => set.foldLeft(0)((bitmap, col) => {
+      require(keyMap.contains(col), s"$col doesn't show up in the GROUP BY list")
+      bitmap | 1 << keyMap(col)
+    }))
+    GroupingSets(bitmasks, groupByExprs, child, aggregations)
+  }
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
     ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }

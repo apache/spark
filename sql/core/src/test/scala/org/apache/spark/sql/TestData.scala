@@ -206,4 +206,14 @@ object TestData {
         :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
+
+  case class Student(name: String, course: String, score: Int)
+  val students = TestSQLContext.sparkContext.parallelize(
+    Student("Tom", "Math", 10) ::
+    Student("Tom", "English", 20) ::
+    Student("Phoebe", "Math", 30) ::
+    Student("Phoebe", "English", 40) ::
+    Student(null, "Math", 50) ::
+    Student("Jim", null, 60) :: Nil).toDF()
+  students.registerTempTable("students")
 }

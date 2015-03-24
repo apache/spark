@@ -91,6 +91,103 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(1, 1) :: Nil)
   }
 
+  test("SPARK-6356 ROLLUP") {
+    val expectedResult =
+      Row(null, null, 50) ::
+      Row(null, "Math", 50) ::
+      Row(null, null, 210) ::
+      Row("Jim", null, 60) ::
+      Row("Jim", null, 60) ::
+      Row("Phoebe", null, 70) ::
+      Row("Phoebe", "English", 40) ::
+      Row("Phoebe", "Math", 30) ::
+      Row("Tom", null, 30) ::
+      Row("Tom", "English", 20) ::
+      Row("Tom", "Math", 10) :: Nil
+
+    // GROUP BY expression list WITH ROLLUP
+    checkAnswer(
+      sql("SELECT name, course, sum(score) FROM students GROUP BY name, course WITH ROLLUP"),
+      expectedResult
+    )
+  }
+
+  test("SPARK-6356 CUBE") {
+    val expectedResult =
+      Row(null, "English", 60) ::
+      Row(null, null, 50) ::
+      Row(null, "Math", 50) ::
+      Row(null, null, 60) ::
+      Row(null, "Math", 90) ::
+      Row(null, null, 210) ::
+      Row("Jim", null, 60) ::
+      Row("Jim", null, 60) ::
+      Row("Phoebe", null, 70) ::
+      Row("Phoebe", "English", 40) ::
+      Row("Phoebe", "Math", 30) ::
+      Row("Tom", null, 30) ::
+      Row("Tom", "English", 20) ::
+      Row("Tom", "Math", 10) :: Nil
+
+    // GROUP BY expression list WITH CUBE
+    checkAnswer(
+      sql("SELECT name, course, sum(score) FROM students GROUP BY name, course WITH CUBE"),
+      expectedResult
+    )
+  }
+
+  test("SPARK-6356 GROUPING SETS") {
+    val expectedResult1 =
+      Row(null, 50) ::
+      Row("Jim", 60) ::
+      Row("Phoebe", 70) ::
+      Row("Tom", 30) :: Nil
+
+    val expectedResult2 =
+      Row(null, "Math", 50) ::
+      Row("Jim", null, 60) ::
+      Row("Phoebe", "Math", 30) ::
+      Row("Phoebe", "English", 40) ::
+      Row("Tom", "Math", 10) ::
+      Row("Tom", "English", 20) :: Nil
+
+    val expectedResult3 =
+      Row(null, null, 50) ::
+      Row(null, "Math", 50) ::
+      Row("Jim", null, 60) ::
+      Row("Jim", null, 60) ::
+      Row("Phoebe", null, 70) ::
+      Row("Phoebe", "Math", 30) ::
+      Row("Phoebe", "English", 40) ::
+      Row("Tom", null, 30) ::
+      Row("Tom", "Math", 10) ::
+      Row("Tom", "English", 20) :: Nil
+
+    // GROUP BY expression list GROUPING SETS(expression list2)
+    checkAnswer(
+      sql("SELECT name, course, sum(score) FROM students GROUP BY name, course " +
+        "GROUPING SETS(())"),
+      Row(null, null, 210) :: Nil
+    )
+
+    checkAnswer(
+      sql("SELECT name, sum(score) FROM students GROUP BY name GROUPING SETS(name)"),
+      expectedResult1
+    )
+
+    checkAnswer(
+      sql("SELECT name, course, sum(score) FROM students GROUP BY name, course " +
+        "GROUPING SETS(name, course)"),
+      expectedResult2
+    )
+
+    checkAnswer(
+      sql("SELECT name, course, sum(score) FROM students GROUP BY name, course " +
+        "GROUPING SETS(name, (name, course))"),
+      expectedResult3
+    )
+  }
+
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),
