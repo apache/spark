@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import array as pyarray
+
 from numpy import array
 
 from pyspark import RDD
@@ -155,7 +157,7 @@ class GaussianMixtureModel(object):
         :return:     cluster_labels. RDD of cluster labels.
         """
         if isinstance(x, RDD):
-            cluster_labels = self.predictSoft(x).map(lambda z: list(z).index(max(z)))
+            cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
 
     def predictSoft(self, x):
@@ -169,7 +171,7 @@ class GaussianMixtureModel(object):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
             membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
                                               _convert_to_vector(self.weights), means, sigmas)
-            return membership_matrix.map(lambda x: x.toArray())
+            return membership_matrix.map(lambda x: pyarray.array('d', x))
 
 
 class GaussianMixture(object):
