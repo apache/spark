@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -170,7 +170,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         </div>
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      def accumulableRow(acc: AccumulableInfo): Elem =
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
       val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
         accumulables.values.toSeq)
 
@@ -293,10 +294,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val schedulerDelayQuantiles = schedulerDelayTitle +:
             getFormattedTimeQuantiles(schedulerDelays)
 
-          def getFormattedSizeQuantiles(data: Seq[Double]) =
+          def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] =
             getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
 
-          def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double]) = {
+          def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double])
+            : Seq[Elem] = {
             val recordDist = getDistributionQuantiles(records).iterator
             getDistributionQuantiles(data).map(d =>
               <td>{s"${Utils.bytesToString(d.toLong)} / ${recordDist.next().toLong}"}</td>

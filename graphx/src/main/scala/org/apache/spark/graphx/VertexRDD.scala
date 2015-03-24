@@ -140,10 +140,9 @@ abstract class VertexRDD[VD](
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
 
   /**
-   * Left joins this RDD with another VertexRDD with the same index. This function will fail if
-   * both VertexRDDs do not share the same index. The resulting vertex set contains an entry for
-   * each vertex in `this`.
-   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
+   * Left joins this RDD with another VertexRDD sharing the same index. The resulting vertex
+   * set contains an entry for each vertex in `this`. If `other` is missing any vertex in this
+   * VertexRDD, `f` is passed `None`.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
@@ -159,23 +158,22 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD3]
 
   /**
-   * Left joins this RDD with another VertexRDD with the same index. This function will fail if
-   * both VertexRDDs do not share the same index. The resulting vertex set contains an entry for
-   * each vertex in `this`.
-   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
+   * Left joins this RDD with another VertexRDD sharing the same index passing in a fold-style
+   * initial value. The resulting vertex set contains an entry for each vertex in `this`. If
+   * `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
-   * @tparam A the type of the given starting value and accumulator
+   * @tparam A the type of the given starting value
    *
    * @param other the other VertexRDD with which to join.
-   * @param acc the initial value for the accumulator
+   * @param initVal the initial value for the fold operation
    * @param f the function mapping a vertex id and its attributes in this and the other vertex set
    * to a new vertex attribute.
    * @return a VertexRDD containing the results of `f`
    */
   def leftZipJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: VertexRDD[VD2], acc: A)
+      (other: VertexRDD[VD2], initVal: A)
       (f: (A, VertexId, VD, Option[VD2]) => VD3)
     : VertexRDD[VD3]
 
@@ -201,25 +199,25 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD3]
 
   /**
-   * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a VertexRDD with the same index then the efficient [[leftZipJoinWithFold]]
-   * implementation is used. The resulting VertexRDD contains an entry for each vertex in `this`.
-   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`. If there are
-   * duplicates, the vertex is picked arbitrarily.
+   * Left joins this VertexRDD with an RDD containing vertex attribute pairs and a fold-style
+   * initial value. If the other RDD is backed by a VertexRDD with the same index then the efficient
+   * [[leftZipJoinWithFold]] implementation is used. The resulting VertexRDD contains an entry for
+   * each vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
+   * If there are duplicates, the vertex is picked arbitrarily.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
-   * @tparam A the type of the given starting value and accumulator
+   * @tparam A the type of the given starting value
    *
    * @param other the other VertexRDD with which to join
-   * @param acc the initial value for the accumulator
+   * @param initVal the initial value for the fold operation
    * @param f the function mapping a vertex id and its attributes in this and the other vertex set
    * to a new vertex attribute.
    * @return a VertexRDD containing all the vertices in this VertexRDD with the attributes emitted
    * by `f`.
    */
   def leftJoinWithFold[VD2: ClassTag, VD3: ClassTag, A]
-      (other: RDD[(VertexId, VD2)], acc: A)
+      (other: RDD[(VertexId, VD2)], initVal: A)
       (f: (A, VertexId, VD, Option[VD2]) => VD3)
     : VertexRDD[VD3]
 
@@ -233,11 +231,11 @@ abstract class VertexRDD[VD](
     : VertexRDD[VD2]
 
   /**
-   * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index. See
-   * [[innerJoinWithFold]] for the behavior of the join.
+   * Efficiently inner joins this VertexRDD with another VertexRDD sharing the same index with a
+   * fold-style initial value. See [[innerJoinWithFold]] for the behavior of the join.
    */
   def innerZipJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: VertexRDD[U], acc: A)
+      (other: VertexRDD[U], initVal: A)
       (f: (A, VertexId, VD, U) => VD2)
     : VertexRDD[VD2]
 
@@ -265,13 +263,13 @@ abstract class VertexRDD[VD](
    * @param other an RDD containing vertices to join. If there are multiple entries for the same
    * vertex, one is picked arbitrarily. Use [[aggregateUsingIndexWithFold]] to merge multiple
    * entries.
-   * @param acc the initial value for the accumulator
+   * @param initVal the initial value for the fold operation
    * @param f the join function applied to corresponding values of `this` and `other`
    * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
    *         `this` and `other`, with values supplied by `f`
    */
   def innerJoinWithFold[U: ClassTag, VD2: ClassTag, A]
-      (other: RDD[(VertexId, U)], acc: A)
+      (other: RDD[(VertexId, U)], initVal: A)
       (f: (A, VertexId, VD, U) => VD2)
     : VertexRDD[VD2]
 
@@ -296,14 +294,14 @@ abstract class VertexRDD[VD](
    *
    * @param messages an RDD containing messages to aggregate, where each message is a pair of its
    * target vertex ID and the message data
-   * @param acc the initial value for the accumulator
+   * @param initVal the initial value for the fold operation
    * @param foldFunc the fold-style aggregation function for merging messages to the same vertex
    * @return a VertexRDD co-indexed with `this`, containing only vertices that received messages.
    * For those vertices, their values are the result of applying `reduceFunc` to all received
    * messages.
    */
   def aggregateUsingIndexWithFold[VD2: ClassTag, A]
-      (messages: RDD[(VertexId, VD2)], acc: A)
+      (messages: RDD[(VertexId, VD2)], initVal: A)
       (foldFunc: (A, VD2, VD2) => VD2)
     : VertexRDD[VD2]
 

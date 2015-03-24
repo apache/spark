@@ -42,7 +42,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
-  def driverOptions = _driverOptions.toSeq
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
   var driverId: String = ""

@@ -106,7 +106,7 @@ class FileShuffleBlockManager(conf: SparkConf)
    * when the writers are closed successfully
    */
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
-      writeMetrics: ShuffleWriteMetrics) = {
+      writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
@@ -268,7 +268,7 @@ object FileShuffleBlockManager {
       new PrimitiveVector[Long]()
     }
 
-    def apply(bucketId: Int) = files(bucketId)
+    def apply(bucketId: Int): File = files(bucketId)
 
     def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
       assert(offsets.length == lengths.length)
