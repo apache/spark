@@ -1088,58 +1088,62 @@ for details.
 
 ### Shuffle operations
 
-Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's 
-mechanism for re-distributing data so that is grouped differently across partitions. This typically 
-involves re-arranging and copying data across executors and machines, making shuffle a complex and 
+Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
+mechanism for re-distributing data so that is grouped differently across partitions. This typically
+involves copying data across executors and machines, making the shuffle a complex and
 costly operation.
 
 #### Background
 
-To understand what happens during the shuffle we can consider the example of the 
-[`reduceByKey`](#ReduceByLink) operation. The `reduceByKey` operation generates a new RDD where all 
-values for a single key are combined into a tuple - the key and the result of executing a reduce 
-function against all values associated with that key. The challenge is that not all values for a 
-single key necessarily reside on the same partition, or even the same machine, but they must be 
-co-located to present a single array per key.
+To understand what happens during the shuffle we can consider the example of the
+[`reduceByKey`](#ReduceByLink) operation. The `reduceByKey` operation generates a new RDD where all
+values for a single key are combined into a tuple - the key and the result of executing a reduce
+function against all values associated with that key. The challenge is that not all values for a
+single key necessarily reside on the same partition, or even the same machine, but they must be
+co-located to compute the result.
 
-In Spark, data is generally not distributed across partitions to be in the necessary place for a 
+In Spark, data is generally not distributed across partitions to be in the necessary place for a
 specific operation. During computations, a single task will operate on a single partition - thus, to
-organize all the data for a single `reduceByKey` reduce task to execute, Spark needs to perform an 
+organize all the data for a single `reduceByKey` reduce task to execute, Spark needs to perform an
 all-to-all operation. It must read from all partitions to find all the values for all keys, and then
-organize those such that all values for any key lie within the same partition - this is called the 
+organize those such that all values for any key lie within the same partition - this is called the
 **shuffle**.
 
-Although the set of elements in each partition of newly shuffled data will be deterministic, the 
-ordering of these elements is not. If one desires predictably ordered data following shuffle 
+Although the set of elements in each partition of newly shuffled data will be deterministic, the
+ordering of these elements is not. If one desires predictably ordered data following shuffle
 operations, [`mapPartitions`](#MapPartLink) can be used to sort each partition or `sortBy` can be
-used to perform a global sort. A similar operation, 
-[`repartitionAndSortWithinPartitions`](#Repartition2Link`) coupled with `mapPartitions`, 
+used to perform a global sort. A similar operation,
+[`repartitionAndSortWithinPartitions`](#Repartition2Link`) coupled with `mapPartitions`,
 may be used to enact a Hadoop style shuffle.
 
-Operations which can cause a shuffle include **repartition** operations like 
+Operations which can cause a shuffle include **repartition** operations like
 [`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'byKey** operations
-(except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and 
+(except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and
 **join** operations like [`cogroup`](#CogroupLink) and [`join`](#JoinLink).
 
 #### Performance Impact
-**Shuffle** is an expensive operation since it involves disk I/O, data serialization, and 
-network I/O. To organize data for the shuffle, Spark generates two sets of tasks - map tasks to 
-organize the data, and a set of reduce tasks to aggregate it. Internally, results from individual 
-map jobs are kept in memory until they can't fit. Then, these are sorted based on the target reduce 
-task and written to a single file. On the reduce side, tasks read the relevant sorted blocks.
+**Shuffle** is an expensive operation since it involves disk I/O, data serialization, and
+network I/O. To organize data for the shuffle, Spark generates sets of tasks - *map* tasks to
+organize the data, and a set of *reduce* tasks to aggregate it. This nomenclature comes from
+MapReduce and does not directly relate to Spark's `map` and `reduce` operations.
 
-Certain shuffle operations can consume significant amounts of heap memory since they generate hash 
-tables in memory. Specifically, `reduceByKey` and `aggregateByKey` on the map-side and `'byKey` 
-operations on the reduce-side. When data does not fit in memory Spark will spill these tables to 
-disk, incurring the additional overhead of disk I/O and increased garbage collection. 
+Internally, results from individual map tasks are kept in memory until they can't fit. Then, these 
+are sorted based on the target partition and written to a single file. On the reduce side, tasks 
+read the relevant sorted blocks.
         
-Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files 
+Certain shuffle operations can consume significant amounts of heap memory since they employ 
+in-memory data structures to organize records before or after transferring them. Specifically, 
+`reduceByKey` and `aggregateByKey` create these structures on the map-side and `'byKey` operations 
+generate these on the reduce-side. When data does not fit in memory Spark will spill these tables 
+to disk, incurring the additional overhead of disk I/O and increased garbage collection.
+
+Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
 are not cleaned up from Spark's temporary storage until Spark is stopped, which means that
-long-running Spark jobs may consume available disk space. This is done so the shuffle doesn't need 
-to be re-computed if the lineage is re-computed. The temporary storage directory is specified by the 
+long-running Spark jobs may consume available disk space. This is done so the shuffle doesn't need
+to be re-computed if the lineage is re-computed. The temporary storage directory is specified by the
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
-Shuffle behavior can be fine-tuned by adjusting a variety of configuration parameters. See the 
+Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
 'Shuffle Behavior' section within the Spark Configuration Guide. 
 
 ## RDD Persistence
