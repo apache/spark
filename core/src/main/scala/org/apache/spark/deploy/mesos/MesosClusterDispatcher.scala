@@ -101,6 +101,13 @@ private[mesos] object MesosClusterDispatcher extends Logging {
     conf.setMaster(dispatcherArgs.masterUrl)
     conf.setAppName("Mesos Cluster Dispatcher")
 
+    dispatcherArgs.zookeeperUrl.foreach {
+      z => {
+        conf.set("spark.deploy.recoveryMode", "ZOOKEEPER")
+        conf.set("spark.deploy.zookeeper.url", z)
+      }
+    }
+
     val dispatcher = new MesosClusterDispatcher(
       dispatcherArgs,
       conf)
@@ -125,6 +132,7 @@ private[mesos] object MesosClusterDispatcher extends Logging {
     var port = 7077
     var webUiPort = 8081
     var masterUrl: String = _
+    var zookeeperUrl: Option[String] = None
     var propertiesFile: String = _
 
     parse(args.toList)
@@ -143,6 +151,10 @@ private[mesos] object MesosClusterDispatcher extends Logging {
 
       case ("--webui-port" | "-p") :: IntParam(value) :: tail =>
         webUiPort = value
+        parse(tail)
+
+      case ("--zk" | "-z") :: value :: tail =>
+        zookeeperUrl = Some(value)
         parse(tail)
 
       case ("--master" | "-m") :: value :: tail =>
@@ -183,6 +195,7 @@ private[mesos] object MesosClusterDispatcher extends Logging {
           "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
           "  --webui-port WEBUI_PORT   WebUI Port to listen on (default: 8081)\n" +
           "  -m --master MASTER      URI for connecting to Mesos master\n" +
+          "  -z --zk ZOOKEEPER       URLs for connecting to Zookeeper for persistence\n" +
           "  --properties-file FILE Path to a custom Spark properties file.\n" +
           "                         Default is conf/spark-defaults.conf.")
       System.exit(exitCode)
