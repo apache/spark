@@ -109,7 +109,7 @@ private[spark] abstract class YarnSchedulerBackend(
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
-    override def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
         amActor = Some(sender)

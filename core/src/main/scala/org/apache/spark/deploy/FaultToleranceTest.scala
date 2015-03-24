@@ -426,7 +426,7 @@ private object SparkDocker {
 }
 
 private class DockerId(val id: String) {
-  override def toString = id
+  override def toString: String = id
 }
 
 private object Docker extends Logging {

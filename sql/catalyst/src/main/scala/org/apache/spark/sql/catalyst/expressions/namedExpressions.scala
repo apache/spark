@@ -95,9 +95,12 @@ abstract class Attribute extends NamedExpression {
  * @param name the name to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.
+ * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
  */
-case class Alias(child: Expression, name: String)
-    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
+case class Alias(child: Expression, name: String)(
+    val exprId: ExprId = NamedExpression.newExprId,
+    val qualifiers: Seq[String] = Nil,
+    val explicitMetadata: Option[Metadata] = None)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   override type EvaluatedType = Any
@@ -107,9 +110,11 @@ case class Alias(child: Expression, name: String)
   override def dataType = child.dataType
   override def nullable = child.nullable
   override def metadata: Metadata = {
-    child match {
-      case named: NamedExpression => named.metadata
-      case _ => Metadata.empty
+    explicitMetadata.getOrElse {
+      child match {
+        case named: NamedExpression => named.metadata
+        case _ => Metadata.empty
+      }
     }
   }
 
@@ -123,11 +128,12 @@ case class Alias(child: Expression, name: String)
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
-  override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
+  override protected final def otherCopyArgs = exprId :: qualifiers :: explicitMetadata :: Nil
 
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
-      name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers
+      name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers &&
+        explicitMetadata == a.explicitMetadata
     case _ => false
   }
 }
