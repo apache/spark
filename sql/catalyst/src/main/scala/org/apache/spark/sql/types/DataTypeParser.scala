@@ -62,7 +62,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     }
     
   protected lazy val fixedNumericType: Parser[DataType] =
-    ("(?i)decimal".r ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+    ("(?i)numeric".r ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
       case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
     }
     
