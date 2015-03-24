@@ -31,7 +31,14 @@ if "x%1"=="x" (
 
 rem Find assembly jar
 set SPARK_ASSEMBLY_JAR=0
-for %%d in (%SPARK_HOME%\lib\spark-assembly*hadoop*.jar) do (
+
+if exist "%SPARK_HOME%\RELEASE" (
+  set ASSEMBLY_DIR=%SPARK_HOME%\lib
+) else (
+  set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
+)
+
+for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
   set SPARK_ASSEMBLY_JAR=%%d
 )
 if "%SPARK_ASSEMBLY_JAR%"=="0" (
