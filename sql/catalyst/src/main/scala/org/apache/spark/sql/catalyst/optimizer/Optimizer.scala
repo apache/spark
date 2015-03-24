@@ -33,6 +33,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
   val batches =
+    // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
     Batch("Combine Limits", FixedPoint(100),
