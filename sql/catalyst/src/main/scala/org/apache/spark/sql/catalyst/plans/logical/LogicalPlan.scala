@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, Resolver}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -73,12 +73,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * can do better should override this function.
    */
   def sameResult(plan: LogicalPlan): Boolean = {
-    plan.getClass == this.getClass &&
-    plan.children.size == children.size && {
-      logDebug(s"[${cleanArgs.mkString(", ")}] == [${plan.cleanArgs.mkString(", ")}]")
-      cleanArgs == plan.cleanArgs
+    val cleanLeft = EliminateSubQueries(this)
+    val cleanRight = EliminateSubQueries(plan)
+
+    cleanLeft.getClass == cleanRight.getClass &&
+      cleanLeft.children.size == cleanRight.children.size && {
+      logDebug(
+        s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
+      cleanRight.cleanArgs == cleanLeft.cleanArgs
     } &&
-    (plan.children, children).zipped.forall(_ sameResult _)
+    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
   /** Args that have cleaned such that differences in expression id should not affect equality */
