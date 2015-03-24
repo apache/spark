@@ -124,11 +124,12 @@ private[spark] object JoinType {
   }
 }
 
-private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD[(K, L)],
-                                                                       right: RDD[(K, R)],
-                                                                       part: Partitioner,
-                                                                       join: JoinType[K, L, R, PAIR])
-                                                                      (implicit kt: ClassTag[K], keyOrdering: Ordering[K])
+private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](
+    left: RDD[(K, L)],
+    right: RDD[(K, R)],
+    part: Partitioner,
+    join: JoinType[K, L, R, PAIR])
+    (implicit kt: ClassTag[K], keyOrdering: Ordering[K])
   extends RDD[(K, PAIR)](left.context, Nil) with Logging {
 
   // Ordering is necessary. SortMergeJoin needs to Sort by Key
@@ -262,7 +263,9 @@ private[spark] class SortMergeJoinRDD[K, L, R, PAIR <: Product2[_, _]](left: RDD
       .read().asInstanceOf[Iterator[(K, R)]]
     val mergeIterators: Iterator[(K, (Iterator[L], Iterator[R]))] =
       if (join.joinType == JoinType.RIGHTOUTER) {
-        internalCompute[R, L](rightIter, leftIter).map{case (key, pair) => (key, (pair._2, pair._1))}
+        internalCompute[R, L](rightIter, leftIter).map{
+          case (key, pair) => (key, (pair._2, pair._1))
+        }
       } else {
         internalCompute[L, R](leftIter, rightIter)
       }
