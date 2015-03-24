@@ -40,14 +40,12 @@ class LabelIndexerSuite extends FunSuite with MLlibTestSparkContext {
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attr.numValues === Some(3))
-    assert(attr.values.get(0) === "a")
-    assert(attr.values.get.toSet === Set("a", "b", "c"))
+    assert(attr.values.get === Array("a", "c", "b"))
     val output = transformed.select("id", "labelIndex").map { r =>
-      (r.getInt(0), r.getInt(1))
+      (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 0), (1, 2), (2, 1), (3, 0), (4, 0), (5, 1))
+    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
   }
 }

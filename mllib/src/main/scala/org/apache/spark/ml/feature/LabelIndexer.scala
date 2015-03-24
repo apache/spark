@@ -17,13 +17,14 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -48,9 +49,9 @@ private[feature] trait LabelIndexerBase extends Params with HasLabelCol with Has
 
 /**
  * :: AlphaComponent ::
- * A label indexer that maps a string column of labels to an integer column of label indices.
+ * A label indexer that maps a string column of labels to an ML column of label indices.
  * The indices are in [0, numLabels), ordered by label frequencies.
- * The most frequent label gets index 0.
+ * So the most frequent label gets index 0.
  */
 @AlphaComponent
 class LabelIndexer extends Estimator[LabelIndexerModel] with LabelIndexerBase {
@@ -61,7 +62,7 @@ class LabelIndexer extends Estimator[LabelIndexerModel] with LabelIndexerBase {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  // TODO: Allow unseen labels in transform.
+  // TODO: handle unseen labels
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): LabelIndexerModel = {
     val map = this.paramMap ++ paramMap
@@ -87,9 +88,9 @@ class LabelIndexerModel private[ml] (
     override val fittingParamMap: ParamMap,
     labels: Array[String]) extends Model[LabelIndexerModel] with LabelIndexerBase {
 
-  private val labelToIndex: OpenHashMap[String, Int] = {
+  private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
-    val map = new OpenHashMap[String, Int](n)
+    val map = new OpenHashMap[String, Double](n)
     var i = 0
     while (i < n) {
       map.update(labels(i), i)
@@ -106,11 +107,17 @@ class LabelIndexerModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     val map = this.paramMap ++ paramMap
-    val indexer = udf { label: String => labelToIndex.apply(label) }
+    val indexer = udf { label: String =>
+      if (labelToIndex.contains(label)) {
+        labelToIndex(label)
+      } else {
+        throw new SparkException(s"Unseen label: $label.")
+      }
+    }
     val outputColName = map(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toStructField().metadata
-    dataset.withColumn(outputColName, indexer(dataset(map(labelCol))).withMetadata(metadata))
+    dataset.select(col("*"), indexer(dataset(map(labelCol))).as(outputColName, metadata))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
