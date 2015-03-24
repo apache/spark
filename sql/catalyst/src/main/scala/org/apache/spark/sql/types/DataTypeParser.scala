@@ -49,6 +49,8 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     "(?i)boolean".r ^^^ BooleanType |
     fixedDecimalType |
     "(?i)decimal".r ^^^ DecimalType.Unlimited |
+    fixedNumericType |
+    "(?i)numeric".r ^^^ DecimalType.Unlimited |
     "(?i)date".r ^^^ DateType |
     "(?i)timestamp".r ^^^ TimestampType |
     varchar
@@ -58,7 +60,12 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
       case precision ~ scale =>
         DecimalType(precision.toInt, scale.toInt)
     }
-
+    
+  protected lazy val fixedNumericType: Parser[DataType] =
+    ("(?i)decimal".r ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+    }
+    
   protected lazy val varchar: Parser[DataType] =
     "(?i)varchar".r ~> "(" ~> (numericLit <~ ")") ^^^ StringType
 
