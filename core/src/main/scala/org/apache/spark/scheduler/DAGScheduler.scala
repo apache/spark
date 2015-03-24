@@ -227,6 +227,15 @@ class DAGScheduler(
   }
 
   /**
+   * Helper function to eliminate some code re-use when creating new stages.
+   */
+  def getParentStageAndId(rdd: RDD[_], jobId: Int): (List[Stage], Int) = {
+    val parentStages = getParentStages(rdd, jobId)
+    val id = nextStageId.getAndIncrement()
+    (parentStages, id)
+  }
+
+  /**
    * Create a ShuffleMapStage as part of the (re)-creation of a shuffle map stage in
    * newOrUsedShuffleStage.  The stage will be associated with the provided jobId.
    * Production of shuffle map stages should always use newOrUsedShuffleStage, not
@@ -238,8 +247,7 @@ class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _, _],
       jobId: Int,
       callSite: CallSite): ShuffleMapStage = {
-    val parentStages = getParentStages(rdd, jobId)
-    val id = nextStageId.getAndIncrement()
+    val (parentStages: List[Stage], id: Int) = getParentStageAndId(rdd, jobId)
     val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, parentStages,
       jobId, callSite, shuffleDep)
 
@@ -258,8 +266,7 @@ class DAGScheduler(
       numTasks: Int,
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    val parentStages = getParentStages(rdd, jobId)
-    val id = nextStageId.getAndIncrement()
+    val (parentStages: List[Stage], id: Int) = getParentStageAndId(rdd, jobId)
     val stage: ResultStage = new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)
 
     stageIdToStage(id) = stage
@@ -779,7 +786,7 @@ class DAGScheduler(
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)
-        if (missing == Nil) {
+        if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
           submitMissingTasks(stage, jobId.get)
         } else {
@@ -804,7 +811,7 @@ class DAGScheduler(
     val partitionsToCompute: Seq[Int] = {
       stage match {
         case stage: ShuffleMapStage =>
-          (0 until stage.numPartitions).filter(id => stage.outputLocs(id) == Nil)
+          (0 until stage.numPartitions).filter(id => stage.outputLocs(id).isEmpty)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
           (0 until job.numPartitions).filter(id => !job.finished(id))
@@ -1055,7 +1062,8 @@ class DAGScheduler(
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
-                  shuffleStage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+                  shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
+                      .map(_._2).mkString(", "))
                 submitStage(shuffleStage)
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
@@ -1063,7 +1071,8 @@ class DAGScheduler(
                   logInfo("Missing parents for " + shuffleStage + ": " +
                     getMissingParentStages(shuffleStage))
                 }
-                for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage) == Nil) {
+                for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage).isEmpty)
+                {
                   newlyRunnable += shuffleStage
                 }
                 waitingStages --= newlyRunnable
