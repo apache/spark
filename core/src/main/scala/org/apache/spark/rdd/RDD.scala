@@ -376,6 +376,11 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return a new RDD which can combine multi partition into one in the same executor.
+   */
+  def processCoalesce: RDD[T] = new ProcessCoalesceRDD[T](this)
+
+  /**
    * Return a sampled subset of this RDD.
    * 
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)

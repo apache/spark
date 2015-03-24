@@ -191,7 +191,7 @@ class DAGScheduler(
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): Seq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
-    if (!cacheLocs.contains(rdd.id)) {
+    if (!cacheLocs.contains(rdd.id) || (checkCacheRdd(rdd) && cacheLocs(rdd.id)(0).length == 0)) {
       val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
       val locs: Seq[Seq[TaskLocation]] = blockManagerMaster.getLocations(blockIds).map { bms =>
         bms.map(bm => TaskLocation(bm.host, bm.executorId))
@@ -200,6 +200,9 @@ class DAGScheduler(
     }
     cacheLocs(rdd.id)
   }
+
+  private def checkCacheRdd(rdd: RDD[_]) = rdd.getStorageLevel != StorageLevel.NONE
+
 
   private def clearCacheLocs(): Unit = cacheLocs.synchronized {
     cacheLocs.clear()
