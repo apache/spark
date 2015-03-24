@@ -33,6 +33,7 @@ public classes of Spark SQL:
 """
 from __future__ import absolute_import
 
+# fix the module name conflict for Python 3+
 import sys
 from . import _types as types
 modname = __name__ + '.types'
@@ -42,6 +43,7 @@ for v in types.__dict__.values():
     if hasattr(v, "__module__") and v.__module__.endswith('._types'):
         v.__module__ = modname
 sys.modules[modname] = types
+del modname, sys
 
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext

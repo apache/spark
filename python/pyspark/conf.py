@@ -59,7 +59,8 @@ __all__ = ['SparkConf']
 import sys
 import re
 
-if sys.version >= '3':
+if sys.version > '3':
+    unicode = str
     __doc__ = re.sub(r"(\W|^)[uU](['])", r'\1\2', __doc__)
 
 
@@ -106,7 +107,7 @@ class SparkConf(object):
 
     def set(self, key, value):
         """Set a configuration property."""
-        self._jconf.set(key, str(value))
+        self._jconf.set(key, unicode(value))
         return self
 
     def setIfMissing(self, key, value):

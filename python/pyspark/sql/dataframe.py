@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import sys
 import itertools
 import warnings
@@ -243,7 +241,7 @@ class DataFrame(object):
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
-        print (self._jdf.schema().treeString())
+        print(self._jdf.schema().treeString())
 
     def explain(self, extended=False):
         """

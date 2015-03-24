@@ -1,4 +1,3 @@
-from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,6 +14,8 @@ from __future__ import print_function
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from __future__ import print_function
 
 import os
 import shutil
@@ -38,7 +39,7 @@ from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
 
-if sys.version >= '3':
+if sys.version > '3':
     xrange = range
 
 
@@ -97,6 +98,7 @@ class SparkContext(object):
         :param jsc: The JavaSparkContext instance (optional).
         :param profiler_cls: A class of custom Profiler used to do profiling
                (default is pyspark.profiler.BasicProfiler).
+
 
         >>> from pyspark.context import SparkContext
         >>> sc = SparkContext('local', 'test')
@@ -197,7 +199,7 @@ class SparkContext(object):
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
-            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark")\
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark") \
                 .getAbsolutePath()
 
         # profiling stats collected for each PythonRDD

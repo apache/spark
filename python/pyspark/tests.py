@@ -19,7 +19,6 @@
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
 """
-from __future__ import print_function
 
 from array import array
 from glob import glob
@@ -159,7 +158,7 @@ class SorterTests(unittest.TestCase):
         self.assertGreater(shuffle.DiskBytesSpilled, last)
         last = shuffle.DiskBytesSpilled
         self.assertEqual(sorted(l, key=lambda x: -x, reverse=True),
-                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
+                         list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
         self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):

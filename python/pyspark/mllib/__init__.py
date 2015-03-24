@@ -31,6 +31,8 @@ __all__ = ['classification', 'clustering', 'feature', 'linalg', 'random',
 
 import sys
 from . import rand as random
-random.__name__ = 'random'
-random.RandomRDDs.__module__ = __name__ + '.random'
-sys.modules[__name__ + '.random'] = random
+modname = __name__ + '.random'
+random.__name__ = modname
+random.RandomRDDs.__module__ = modname
+sys.modules[modname] = random
+del modname, sys

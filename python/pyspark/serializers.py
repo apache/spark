@@ -57,10 +57,11 @@ import types
 import collections
 import zlib
 import itertools
-try:
+
+if sys.version < '3':
     import cPickle as pickle
     protocol = 2
-except ImportError:
+else:
     import pickle
     protocol = 3
 
@@ -387,10 +388,11 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return pickle.dumps(obj, protocol)
 
-    def loads(self, obj):
-        if sys.version >= '3':
+    if sys.version >= '3':
+        def loads(self, obj):
             return pickle.loads(obj, encoding='bytes')
-        else:
+    else:
+        def loads(self, obj):
             return pickle.loads(obj)
 
 

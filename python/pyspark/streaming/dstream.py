@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from itertools import chain
 import operator
 import time
@@ -183,7 +181,7 @@ class DStream(object):
         Return a new DStream by applying a map function to the value of
         each key-value pairs in this DStream without changing the key.
         """
-        map_values_fn = lambda k_v3: (k_v3[0], f(k_v3[1]))
+        map_values_fn = lambda kv: (kv[0], f(kv[1]))
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def flatMapValues(self, f):
@@ -191,7 +189,7 @@ class DStream(object):
         Return a new DStream by applying a flatmap function to the value
         of each key-value pairs in this DStream without changing the key.
         """
-        flat_map_fn = lambda k_v4: ((k_v4[0], x) for x in f(k_v4[1]))
+        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def glom(self):
@@ -462,7 +460,7 @@ class DStream(object):
         keyed = self.map(lambda x: (1, x))
         reduced = keyed.reduceByKeyAndWindow(reduceFunc, invReduceFunc,
                                              windowDuration, slideDuration, 1)
-        return reduced.map(lambda k_v1: k_v1[1])
+        return reduced.map(lambda kv: kv[1])
 
     def countByWindow(self, windowDuration, slideDuration):
         """
@@ -491,7 +489,7 @@ class DStream(object):
         keyed = self.map(lambda x: (x, 1))
         counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
                                              windowDuration, slideDuration, numPartitions)
-        return counted.filter(lambda k_v2: k_v2[1] > 0).count()
+        return counted.filter(lambda kv: kv[1] > 0).count()
 
     def groupByKeyAndWindow(self, windowDuration, slideDuration, numPartitions=None):
         """
@@ -550,7 +548,8 @@ class DStream(object):
         def invReduceFunc(t, a, b):
             b = b.reduceByKey(func, numPartitions)
             joined = a.leftOuterJoin(b, numPartitions)
-            return joined.mapValues(lambda v1_v2: invFunc(v1_v2[0], v1_v2[1]) if v1_v2[1] is not None else v1_v2[0])
+            return joined.mapValues(lambda kv: invFunc(kv[0], kv[1])
+                                    if kv[1] is not None else kv[0])
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
         if invReduceFunc:
@@ -581,8 +580,7 @@ class DStream(object):
                 g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
                 g = a.cogroup(b.partitionBy(numPartitions), numPartitions)
-                g = g.mapValues(lambda va_vb: (list(va_vb[1]), list(va_vb[0])[0]
-                                                               if len(va_vb[0]) else None))
+                g = g.mapValues(lambda ab: (list(ab[1]), list(ab[0])[0] if len(ab[0]) else None))
             state = g.mapValues(lambda vs_s: updateFunc(vs_s[0], vs_s[1]))
             return state.filter(lambda k_v: k_v[1] is not None)
 

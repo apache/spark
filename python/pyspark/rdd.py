@@ -54,12 +54,9 @@ from pyspark.traceback_utils import SCCallSiteSync
 from py4j.java_collections import ListConverter, MapConverter
 
 
-
 __all__ = ["RDD"]
 
 
-# TODO: for Python 3.3+, PYTHONHASHSEED should be reset to disable randomized
-# hash for string
 def portable_hash(x):
     """
     This function returns consistant hash code for builtin types, especially
@@ -355,7 +352,7 @@ class RDD(object):
         """
         return self.map(lambda x: (x, None)) \
                    .reduceByKey(lambda x, _: x, numPartitions) \
-                   .map(lambda x__: x__[0])
+                   .map(lambda x: x[0])
 
     def sample(self, withReplacement, fraction, seed=None):
         """
@@ -595,7 +592,7 @@ class RDD(object):
 
         def sortPartition(iterator):
             sort = ExternalSorter(memory * 0.9, serializer).sorted if spill else sorted
-            return iter(sort(iterator, key=lambda k_v1: keyfunc(k_v1[0]), reverse=(not ascending)))
+            return iter(sort(iterator, key=lambda kv: keyfunc(kv[0]), reverse=(not ascending)))
 
         if numPartitions == 1:
             if self.getNumPartitions() > 1:
@@ -610,7 +607,7 @@ class RDD(object):
             return self  # empty RDD
         maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
         fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
-        samples = self.sample(False, fraction, 1).map(lambda k_v2: k_v2[0]).collect()
+        samples = self.sample(False, fraction, 1).map(lambda kv: kv[0]).collect()
         samples = sorted(samples, reverse=(not ascending), key=keyfunc)
 
         # we have numPartitions many parts but one of the them has
@@ -1479,7 +1476,7 @@ class RDD(object):
         >>> m.collect()
         [1, 3]
         """
-        return self.map(lambda k_v3: k_v3[0])
+        return self.map(lambda x: x[0])
 
     def values(self):
         """
@@ -1489,7 +1486,7 @@ class RDD(object):
         >>> m.collect()
         [2, 4]
         """
-        return self.map(lambda k_v4: k_v4[1])
+        return self.map(lambda x: x[1])
 
     def reduceByKey(self, func, numPartitions=None):
         """
@@ -1816,7 +1813,7 @@ class RDD(object):
         >>> x.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
-        flat_map_fn = lambda k_v6: ((k_v6[0], x) for x in f(k_v6[1]))
+        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def mapValues(self, f):
@@ -1830,7 +1827,7 @@ class RDD(object):
         >>> x.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
-        map_values_fn = lambda k_v7: (k_v7[0], f(k_v7[1]))
+        map_values_fn = lambda kv: (kv[0], f(kv[1]))
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def groupWith(self, other, *others):
@@ -2119,7 +2116,7 @@ class RDD(object):
         >>> sorted.lookup(1024)
         []
         """
-        values = self.filter(lambda k_v5: k_v5[0] == key).values()
+        values = self.filter(lambda kv: kv[0] == key).values()
 
         if self.partitioner is not None:
             return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)], False)

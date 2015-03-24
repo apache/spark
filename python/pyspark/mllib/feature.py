@@ -23,8 +23,10 @@ from __future__ import absolute_import
 import sys
 import warnings
 import random
+import binascii
 if sys.version >= '3':
     basestring = str
+    unicode = str
 
 from py4j.protocol import Py4JJavaError
 
@@ -192,8 +194,8 @@ class HashingTF(object):
 
     >>> htf = HashingTF(100)
     >>> doc = u"a a b b c d".split(u" ")
-    >>> # htf.transform(doc)
-    # SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
+    >>> htf.transform(doc)
+    SparseVector(100, {55: 1.0, 59: 2.0, 81: 2.0, 88: 1.0})
     """
     def __init__(self, numFeatures=1 << 20):
         """
@@ -203,7 +205,10 @@ class HashingTF(object):
 
     def indexOf(self, term):
         """ Returns the index of the input term. """
-        return hash(term) % self.numFeatures
+        # hash of string is not portable in Python 3
+        if isinstance(term, unicode):
+            term = term.encode('utf-8')
+        return (binascii.crc32(term) & 0x7FFFFFFF) % self.numFeatures
 
     def transform(self, document):
         """

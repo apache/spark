@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from py4j.java_collections import MapConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 

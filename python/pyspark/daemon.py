@@ -56,7 +56,6 @@ def worker(sock):
     # otherwise writes also cause a seek that makes us miss data on the read side.
     infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
     outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
-
     exit_code = 0
     try:
         worker_main(infile, outfile)

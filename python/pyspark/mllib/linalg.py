@@ -22,18 +22,16 @@ around. For sparse vectors, users can construct a L{SparseVector}
 object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
-from __future__ import print_function
 
 import sys
 import array
-try:
-    import copy_reg
-except ImportError:
-    import copyreg as copy_reg
 
 if sys.version >= '3':
     basestring = str
     xrange = range
+    import copyreg as copy_reg
+else:
+    import copy_reg
 
 import numpy as np
 

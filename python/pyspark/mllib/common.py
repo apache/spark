@@ -18,7 +18,7 @@
 import sys
 if sys.version >= '3':
     long = int
-    basestring = str
+    unicode = str
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
@@ -79,11 +79,11 @@ def _py2java(sc, obj):
         obj = ListConverter().convert([_py2java(sc, x) for x in obj], sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass
-    elif isinstance(obj, (int, long, float, bool, basestring)):
+    elif isinstance(obj, (int, long, float, bool, bytes, str, unicode)):
         pass
     else:
-        bytes = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.SerDe.loads(bytes)
+        data = bytearray(PickleSerializer().dumps(obj))
+        obj = sc._jvm.SerDe.loads(data)
     return obj
 
 

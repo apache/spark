@@ -503,10 +503,11 @@ class UserDefinedType(DataType):
 _all_primitive_types = dict((v.typeName(), v)
                             for v in list(globals().values())
                             if (type(v) is type or type(v) is PrimitiveTypeSingleton)
-                                and v.__base__ == PrimitiveType)
+                            and v.__base__ == PrimitiveType)
 
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
+
 
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
@@ -605,6 +606,7 @@ if sys.version < "3":
         unicode: StringType,
         long: LongType,
     })
+
 
 def _infer_type(obj):
     """Infer the DataType from obj

@@ -81,14 +81,15 @@ class SQLContext(object):
         >>> from datetime import datetime
         >>> sqlCtx = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
-        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1))])
+        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
+        ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
         >>> df.registerTempTable("allTypes")
-        >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], row.a '
+        >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
-        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0, a=1)]
-        >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, 1, [1, 2, 3])]
+        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
+        >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
+        [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
