@@ -51,6 +51,10 @@ object MimaExcludes {
               "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
+          ) ++ Seq(
+            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+            // the stage class is defined as private[spark]
+            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
           )
 
         case v if v.startsWith("1.3") =>
@@ -201,10 +205,6 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
-          ) ++ Seq(
-            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
-            // the stage class is defined as private[spark]
-            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
           ) ++ Seq(
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
