@@ -154,7 +154,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
+    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
       case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
@@ -162,7 +162,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => true
     }
 
-    def allAggregates(exprs: Seq[Expression]) =
+    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
 
@@ -257,7 +257,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions = self.numPartitions
+    def numPartitions: Int = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
@@ -319,18 +319,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
       case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
-        val logicalPlan = sqlContext.parseSql(query)
-        val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, logicalPlan)
-        ExecutedCommand(cmd) :: Nil
-      case c: CreateTableUsingAsSelect if !c.temporary =>
-        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-
-      case CreateTableUsingAsLogicalPlan(tableName, provider, true, mode, opts, query) =>
         val cmd =
           CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
-      case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
+      case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
       case LogicalDescribeCommand(table, isExtended) =>

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions.Explode
+import org.apache.spark.sql.catalyst.expressions.{Count, Explode}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
@@ -37,7 +37,8 @@ class FilterPushdownSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughProject,
         PushPredicateThroughJoin,
-        PushPredicateThroughGenerate) :: Nil
+        PushPredicateThroughGenerate,
+        ColumnPruning) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -54,6 +55,38 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .select('a.attr)
         .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for group") {
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a, Count('b))
+        .select('a)
+
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a)
+        .select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for group with alias") {
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a as 'c, Count('b))
+        .select('c)
+
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a as 'c)
+        .select('c).analyze
 
     comparePlans(optimized, correctAnswer)
   }

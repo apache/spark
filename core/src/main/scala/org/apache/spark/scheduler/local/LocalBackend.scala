@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.local
 import java.nio.ByteBuffer
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -58,7 +59,7 @@ private[spark] class LocalActor(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
       reviveOffers()
 
@@ -116,7 +117,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
     localActor ! ReviveOffers
   }
 
-  override def defaultParallelism() =
+  override def defaultParallelism(): Int =
     scheduler.conf.getInt("spark.default.parallelism", totalCores)
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {

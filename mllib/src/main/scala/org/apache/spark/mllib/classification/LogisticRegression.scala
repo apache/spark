@@ -163,6 +163,10 @@ class LogisticRegressionModel (
   }
 
   override protected def formatVersion: String = "1.0"
+
+  override def toString: String = {
+    s"${super.toString}, numClasses = ${numClasses}, threshold = ${threshold.get}"
+  }
 }
 
 object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
@@ -355,6 +359,10 @@ class LogisticRegressionWithLBFGS
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    if (numOfLinearPredictor == 1) {
+      new LogisticRegressionModel(weights, intercept)
+    } else {
+      new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    }
   }
 }

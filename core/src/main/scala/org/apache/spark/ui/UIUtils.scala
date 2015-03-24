@@ -149,9 +149,11 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
+  def prependBaseUri(basePath: String = "", resource: String = ""): String = {
+    uiRoot + basePath + resource
+  }
 
-  def commonHeaderNodes = {
+  def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
     <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
           type="text/css" />

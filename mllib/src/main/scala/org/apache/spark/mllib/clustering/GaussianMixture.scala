@@ -19,12 +19,10 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.IndexedSeq
 
-import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, SparseVector => BSV,
-  Transpose, Vector => BV}
+import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{BLAS, DenseVector, DenseMatrix, Matrices,
-  SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -43,7 +41,11 @@ import org.apache.spark.util.Utils
  * less than convergenceTol, or until it has reached the max number of iterations.
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.  
- * 
+ *
+ * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+ *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ *
  * @param k The number of independent Gaussians in the mixture model
  * @param convergenceTol The maximum change in log-likelihood at which convergence
  * is considered to have occurred.

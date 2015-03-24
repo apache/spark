@@ -26,11 +26,11 @@ import org.apache.spark.sql.jdbc.{JDBCPartitioningInfo, JDBCRelation, JDBCPartit
 import org.apache.spark.sql.types._
 
 package object jdbc {
-  object JDBCWriteDetails extends Logging {
+  private[sql] object JDBCWriteDetails extends Logging {
     /**
      * Returns a PreparedStatement that inserts a row into table via conn.
      */
-    private def insertStatement(conn: Connection, table: String, rddSchema: StructType):
+    def insertStatement(conn: Connection, table: String, rddSchema: StructType):
         PreparedStatement = {
       val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
       var fieldsLeft = rddSchema.fields.length
@@ -56,7 +56,7 @@ package object jdbc {
      * non-Serializable.  Instead, we explicitly close over all variables that
      * are used.
      */
-    private[jdbc] def savePartition(url: String, table: String, iterator: Iterator[Row],
+    def savePartition(url: String, table: String, iterator: Iterator[Row],
         rddSchema: StructType, nullTypes: Array[Int]): Iterator[Byte] = {
       val conn = DriverManager.getConnection(url)
       var committed = false
@@ -117,19 +117,14 @@ package object jdbc {
       }
       Array[Byte]().iterator
     }
-  }
 
-  /**
-   * Make it so that you can call createJDBCTable and insertIntoJDBC on a DataFrame.
-   */
-  implicit class JDBCDataFrame(rdd: DataFrame) {
     /**
      * Compute the schema string for this RDD.
      */
-    private def schemaString(url: String): String = {
+    def schemaString(df: DataFrame, url: String): String = {
       val sb = new StringBuilder()
       val quirks = DriverQuirks.get(url)
-      rdd.schema.fields foreach { field => {
+      df.schema.fields foreach { field => {
         val name = field.name
         var typ: String = quirks.getJDBCType(field.dataType)._1
         if (typ == null) typ = field.dataType match {
@@ -156,9 +151,9 @@ package object jdbc {
     /**
      * Saves the RDD to the database in a single transaction.
      */
-    private def saveTable(url: String, table: String) {
+    def saveTable(df: DataFrame, url: String, table: String) {
       val quirks = DriverQuirks.get(url)
-      var nullTypes: Array[Int] = rdd.schema.fields.map(field => {
+      var nullTypes: Array[Int] = df.schema.fields.map(field => {
         var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
         if (nullType.isEmpty) {
           field.dataType match {
@@ -175,61 +170,16 @@ package object jdbc {
             case DateType => java.sql.Types.DATE
             case DecimalType.Unlimited => java.sql.Types.DECIMAL
             case _ => throw new IllegalArgumentException(
-                s"Can't translate null value for field $field")
+              s"Can't translate null value for field $field")
           }
         } else nullType.get
       }).toArray
 
-      val rddSchema = rdd.schema
-      rdd.mapPartitions(iterator => JDBCWriteDetails.savePartition(
-          url, table, iterator, rddSchema, nullTypes)).collect()
+      val rddSchema = df.schema
+      df.foreachPartition { iterator =>
+        JDBCWriteDetails.savePartition(url, table, iterator, rddSchema, nullTypes)
+      }
     }
 
-    /**
-     * Save this RDD to a JDBC database at `url` under the table name `table`.
-     * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
-     * If you pass `true` for `allowExisting`, it will drop any table with the
-     * given name; if you pass `false`, it will throw if the table already
-     * exists.
-     */
-    def createJDBCTable(url: String, table: String, allowExisting: Boolean) {
-      val conn = DriverManager.getConnection(url)
-      try {
-        if (allowExisting) {
-          val sql = s"DROP TABLE IF EXISTS $table"
-          conn.prepareStatement(sql).executeUpdate()
-        }
-        val schema = schemaString(url)
-        val sql = s"CREATE TABLE $table ($schema)"
-        conn.prepareStatement(sql).executeUpdate()
-      } finally {
-        conn.close()
-      }
-      saveTable(url, table)
-    }
-
-    /**
-     * Save this RDD to a JDBC database at `url` under the table name `table`.
-     * Assumes the table already exists and has a compatible schema.  If you
-     * pass `true` for `overwrite`, it will `TRUNCATE` the table before
-     * performing the `INSERT`s.
-     *
-     * The table must already exist on the database.  It must have a schema
-     * that is compatible with the schema of this RDD; inserting the rows of
-     * the RDD in order via the simple statement
-     * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
-     */
-    def insertIntoJDBC(url: String, table: String, overwrite: Boolean) {
-      if (overwrite) {
-        val conn = DriverManager.getConnection(url)
-        try {
-          val sql = s"TRUNCATE TABLE $table"
-          conn.prepareStatement(sql).executeUpdate()
-        } finally {
-          conn.close()
-        }
-      }
-      saveTable(url, table)
-    }
-  } // implicit class JDBCDataFrame
+  }
 } // package object jdbc

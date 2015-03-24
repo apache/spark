@@ -50,9 +50,9 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
     expectedHostPort.getHost == address.host && expectedHostPort.getPort == address.port
   }
 
-  def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
+  private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
-  override def receive = {
+  override def receive: PartialFunction[Any, Unit] = {
     case e => logWarning(s"Received unexpected message: $e")
   }
 

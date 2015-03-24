@@ -100,7 +100,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.sparkConf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(newCp.createSparkConf().getInt("spark.cleaner.ttl", -1) === 10)
     ssc = new StreamingContext(null, newCp, null)
     assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }
@@ -190,7 +190,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         logInfo("Count = " + count + ", Running count = " + runningCount)
       }
       ssc.start()
-      ssc.awaitTermination(500)
+      ssc.awaitTerminationOrTimeout(500)
       ssc.stop(stopSparkContext = false, stopGracefully = true)
       logInfo("Running count = " + runningCount)
       logInfo("TestReceiver.counter = " + TestReceiver.counter.get())
@@ -223,7 +223,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       logInfo("Count = " + count + ", Running count = " + runningCount)
     }
     ssc.start()
-    ssc.awaitTermination(500)
+    ssc.awaitTerminationOrTimeout(500)
     ssc.stop(stopSparkContext = false, stopGracefully = true)
     logInfo("Running count = " + runningCount)
     assert(runningCount > 0)
@@ -243,7 +243,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     // test whether awaitTermination() exits after give amount of time
     failAfter(1000 millis) {
-      ssc.awaitTermination(500)
+      ssc.awaitTerminationOrTimeout(500)
     }
 
     // test whether awaitTermination() does not exit if not time is given
@@ -288,7 +288,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     val exception = intercept[Exception] {
       ssc.start()
-      ssc.awaitTermination(5000)
+      ssc.awaitTerminationOrTimeout(5000)
     }
     assert(exception.getMessage.contains("map task"), "Expected exception not thrown")
   }
@@ -299,7 +299,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     inputStream.transform { rdd => throw new TestException("error in transform"); rdd }.register()
     val exception = intercept[TestException] {
       ssc.start()
-      ssc.awaitTermination(5000)
+      ssc.awaitTerminationOrTimeout(5000)
     }
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
