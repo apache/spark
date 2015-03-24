@@ -68,8 +68,8 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
    * param sets regex as splitting on gaps (true) or matching tokens (false)
    * @group param
    */
-  val gaps: BooleanParam = new BooleanParam(this, "gaps", 
-    "Set regex to match gaps or tokens", Some(false))
+  val gaps: BooleanParam = new BooleanParam(
+    this, "gaps", "Set regex to match gaps or tokens", Some(false))
 
   /** @group setParam */
   def setGaps(value: Boolean): this.type = set(gaps, value)

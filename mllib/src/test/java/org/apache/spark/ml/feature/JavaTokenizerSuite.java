@@ -54,11 +54,11 @@ public class JavaTokenizerSuite {
 			.setGaps(true)
       .setMinTokenLength(3);
 
-		JavaRDD<TextData> rdd = jsc.parallelize(Lists.newArrayList(
-			new TextData("Test of tok.", new String[] {"Test", "tok."}),
-			new TextData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+		JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Lists.newArrayList(
+			new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
+			new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
 		));
-    DataFrame dataset = jsql.createDataFrame(rdd, TextData.class);
+    DataFrame dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
 
 		Row[] pairs = myRegExTokenizer.transform(dataset)
 			.select("tokens","wantedTokens")
