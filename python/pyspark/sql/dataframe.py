@@ -22,10 +22,14 @@ import itertools
 import warnings
 import random
 
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD, _load_from_socket
+from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -75,6 +79,7 @@ class DataFrame(object):
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
         self._schema = None  # initialized lazily
+        self._lazy_rdd = None
 
     @property
     def rdd(self):
@@ -82,24 +87,25 @@ class DataFrame(object):
         Return the content of the :class:`DataFrame` as an :class:`RDD`
         of :class:`Row` s.
         """
-        if not hasattr(self, '_lazy_rdd'):
+        if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
             rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
             schema = self.schema
 
             def applySchema(it):
                 cls = _create_cls(schema)
-                return itertools.imap(cls, it)
+                return map(cls, it)
 
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
         return self._lazy_rdd
 
-    def toJSON(self, use_unicode=False):
+    @ignore_unicode_prefix
+    def toJSON(self, use_unicode=True):
         """Convert a :class:`DataFrame` into a MappedRDD of JSON documents; one document per row.
 
         >>> df.toJSON().first()
-        '{"age":2,"name":"Alice"}'
+        u'{"age":2,"name":"Alice"}'
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
@@ -283,7 +289,7 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print(self._jdf.showString(n).encode('utf8', 'ignore'))
+        print(self._jdf.showString(n))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -296,10 +302,11 @@ class DataFrame(object):
         which supports features such as filter pushdown.
 
         >>> df.count()
-        2L
+        2
         """
-        return self._jdf.count()
+        return int(self._jdf.count())
 
+    @ignore_unicode_prefix
     def collect(self):
         """Return a list that contains all of the rows.
 
@@ -315,6 +322,7 @@ class DataFrame(object):
         cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
+    @ignore_unicode_prefix
     def limit(self, num):
         """Limit the result count to the number specified.
 
@@ -326,6 +334,7 @@ class DataFrame(object):
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def take(self, num):
         """Take the first num rows of the RDD.
 
@@ -337,6 +346,7 @@ class DataFrame(object):
         """
         return self.limit(num).collect()
 
+    @ignore_unicode_prefix
     def map(self, f):
         """ Return a new RDD by applying a function to each Row
 
@@ -347,6 +357,7 @@ class DataFrame(object):
         """
         return self.rdd.map(f)
 
+    @ignore_unicode_prefix
     def flatMap(self, f):
         """ Return a new RDD by first applying a function to all elements of this,
         and then flattening the results.
@@ -378,7 +389,7 @@ class DataFrame(object):
         It's a shorthand for df.rdd.foreach()
 
         >>> def f(person):
-        ...     print person.name
+        ...     print(person.name)
         >>> df.foreach(f)
         """
         return self.rdd.foreach(f)
@@ -391,7 +402,7 @@ class DataFrame(object):
 
         >>> def f(people):
         ...     for person in people:
-        ...         print person.name
+        ...         print(person.name)
         >>> df.foreachPartition(f)
         """
         return self.rdd.foreachPartition(f)
@@ -440,7 +451,7 @@ class DataFrame(object):
         Return a new :class:`DataFrame` containing the distinct rows in this DataFrame.
 
         >>> df.distinct().count()
-        2L
+        2
         """
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
@@ -449,7 +460,7 @@ class DataFrame(object):
         Return a sampled subset of this DataFrame.
 
         >>> df.sample(False, 0.5, 97).count()
-        1L
+        1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -466,6 +477,7 @@ class DataFrame(object):
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
+    @ignore_unicode_prefix
     def columns(self):
         """ Return all column names as a list.
 
@@ -474,6 +486,7 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
+    @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
         """
         Join with another :class:`DataFrame`, using the given join expression.
@@ -498,6 +511,7 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def sort(self, *cols):
         """ Return a new :class:`DataFrame` sorted by the specified column(s).
 
@@ -522,6 +536,7 @@ class DataFrame(object):
 
     orderBy = sort
 
+    @ignore_unicode_prefix
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
 
@@ -535,6 +550,7 @@ class DataFrame(object):
             return rs[0] if rs else None
         return self.take(n)
 
+    @ignore_unicode_prefix
     def first(self):
         """ Return the first row.
 
@@ -543,6 +559,7 @@ class DataFrame(object):
         """
         return self.head()
 
+    @ignore_unicode_prefix
     def __getitem__(self, item):
         """ Return the column by given name
 
@@ -574,6 +591,7 @@ class DataFrame(object):
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    @ignore_unicode_prefix
     def select(self, *cols):
         """ Selecting a set of expressions.
 
@@ -601,6 +619,7 @@ class DataFrame(object):
         jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def filter(self, condition):
         """ Filtering rows using the given condition, which could be
         :class:`Column` expression or string of SQL expression.
@@ -627,6 +646,7 @@ class DataFrame(object):
 
     where = filter
 
+    @ignore_unicode_prefix
     def groupBy(self, *cols):
         """ Group the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedData`
@@ -680,6 +700,7 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    @ignore_unicode_prefix
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
@@ -688,6 +709,7 @@ class DataFrame(object):
         """
         return self.select('*', col.alias(colName))
 
+    @ignore_unicode_prefix
     def withColumnRenamed(self, existing, new):
         """ Rename an existing column to a new name
 
@@ -752,6 +774,7 @@ class GroupedData(object):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
 
+    @ignore_unicode_prefix
     def agg(self, *exprs):
         """ Compute aggregates by specifying a map from column name
         to aggregate methods.
@@ -931,11 +954,13 @@ class Column(object):
     __sub__ = _bin_op("minus")
     __mul__ = _bin_op("multiply")
     __div__ = _bin_op("divide")
+    __truediv__ = _bin_op("divide")
     __mod__ = _bin_op("mod")
     __radd__ = _bin_op("plus")
     __rsub__ = _reverse_op("minus")
     __rmul__ = _bin_op("multiply")
     __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
 
     # logistic operators
@@ -965,6 +990,7 @@ class Column(object):
     startswith = _bin_op("startsWith")
     endswith = _bin_op("endsWith")
 
+    @ignore_unicode_prefix
     def substr(self, startPos, length):
         """
         Return a :class:`Column` which is a substring of the column
@@ -1004,6 +1030,7 @@ class Column(object):
         """
         return Column(getattr(self._jc, "as")(alias))
 
+    @ignore_unicode_prefix
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 

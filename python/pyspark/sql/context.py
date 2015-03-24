@@ -15,13 +15,17 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 import json
+
+if sys.version >= '3':
+    basestring = unicode = str
 
 from py4j.protocol import Py4JError
 from py4j.java_collections import MapConverter
 
-from pyspark.rdd import RDD, _prepare_for_python_RDD
+from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
@@ -62,7 +66,7 @@ class SQLContext(object):
     A SQLContext can be used create L{DataFrame}, register L{DataFrame} as
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
-
+    @ignore_unicode_prefix
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
@@ -76,17 +80,15 @@ class SQLContext(object):
 
         >>> from datetime import datetime
         >>> sqlCtx = SQLContext(sc)
-        >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
-        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
-        ...     time=datetime(2014, 8, 1, 14, 1, 5))])
+        >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
+        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1))])
         >>> df = allTypes.toDF()
         >>> df.registerTempTable("allTypes")
-        >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
+        >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], row.a '
         ...            'from allTypes where b and i > 0').collect()
-        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
-        >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time,
-        ...                     x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, ...(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
+        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0, a=1)]
+        >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.row.a, x.list)).collect()
+        [(1, u'string', 1.0, 1, True, 1, [1, 2, 3])]
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -117,6 +119,7 @@ class SQLContext(object):
         """
         return self._ssql_ctx.getConf(key, defaultValue)
 
+    @ignore_unicode_prefix
     def registerFunction(self, name, f, returnType=StringType()):
         """Registers a lambda function as a UDF so it can be used in SQL statements.
 
@@ -171,6 +174,7 @@ class SQLContext(object):
             schema = rdd.map(_infer_schema).reduce(_merge_type)
         return schema
 
+    @ignore_unicode_prefix
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
 
@@ -206,6 +210,7 @@ class SQLContext(object):
         rdd = rdd.map(converter)
         return self.applySchema(rdd, schema)
 
+    @ignore_unicode_prefix
     def applySchema(self, rdd, schema):
         """
         Applies the given schema to the given RDD of L{tuple} or L{list}.
@@ -254,6 +259,7 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
+    @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None):
         """
         Create a DataFrame from an RDD of tuple/list, list or pandas.DataFrame.
@@ -415,6 +421,7 @@ class SQLContext(object):
             df = self._ssql_ctx.jsonFile(path, scala_datatype)
         return DataFrame(df, self)
 
+    @ignore_unicode_prefix
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a L{DataFrame}.
 
@@ -441,7 +448,6 @@ class SQLContext(object):
         >>> df3 = sqlCtx.jsonRDD(json, schema)
         >>> df3.first()
         Row(field2=u'row1', field3=Row(field5=None))
-
         """
 
         def func(iterator):
@@ -516,6 +522,7 @@ class SQLContext(object):
                                                     joptions)
         return DataFrame(df, self)
 
+    @ignore_unicode_prefix
     def sql(self, sqlQuery):
         """Return a L{DataFrame} representing the result of the given query.
 
@@ -536,6 +543,7 @@ class SQLContext(object):
         """
         return DataFrame(self._ssql_ctx.table(tableName), self)
 
+    @ignore_unicode_prefix
     def tables(self, dbName=None):
         """Returns a DataFrame containing names of tables in the given database.
 

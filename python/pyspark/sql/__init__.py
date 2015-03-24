@@ -31,9 +31,17 @@ public classes of Spark SQL:
     - L{HiveContext}
       Main entry point for accessing data stored in Apache Hive..
 """
+from __future__ import absolute_import
 
-from pyspark.sql.context import SQLContext, HiveContext
+import sys
+from . import _types as types
+types.__name__ = 'types'
+sys.modules[__name__ + '.types'] = types
+for n in types.__all__:
+    getattr(types, n).__module__ = __name__ + '.types'
+
 from pyspark.sql.types import Row
+from pyspark.sql.context import SQLContext, HiveContext
 from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
 
 __all__ = [

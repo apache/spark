@@ -19,8 +19,6 @@
 A collections of builtin functions
 """
 
-from itertools import imap
-
 from py4j.java_collections import ListConverter
 
 from pyspark import SparkContext
@@ -116,7 +114,7 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
