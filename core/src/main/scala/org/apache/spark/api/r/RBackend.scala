@@ -36,9 +36,9 @@ import org.apache.spark.Logging
  */
 private[spark] class RBackend {
 
-  var channelFuture: ChannelFuture = null  
-  var bootstrap: ServerBootstrap = null
-  var bossGroup: EventLoopGroup = null
+  private[this] var channelFuture: ChannelFuture = null
+  private[this] var bootstrap: ServerBootstrap = null
+  private[this] var bossGroup: EventLoopGroup = null
 
   def init(): Int = {
     bossGroup = new NioEventLoopGroup(2)
@@ -70,11 +70,11 @@ private[spark] class RBackend {
     channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
   }
 
-  def run() = {
+  def run(): Unit = {
     channelFuture.channel.closeFuture().syncUninterruptibly()
   }
 
-  def close() = {
+  def close(): Unit = {
     if (channelFuture != null) {
       // close is a local operation and should finish within milliseconds; timeout just to be safe
       channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS)

@@ -29,7 +29,7 @@ inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
 outputCon <- socketConnection(port = port, blocking = TRUE, open = "wb")
 
 # read the index of the current partition inside the RDD
-splitIndex <- SparkR:::readInt(inputCon)
+partition <- SparkR:::readInt(inputCon)
 
 deserializer <- SparkR:::readString(inputCon)
 serializer <- SparkR:::readString(inputCon)
@@ -73,7 +73,7 @@ if (isEmpty != 0) {
     } else if (deserializer == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
-    output <- computeFunc(splitIndex, data)
+    output <- computeFunc(partition, data)
     if (serializer == "byte") {
       SparkR:::writeRawSerialize(outputCon, output)
     } else if (serializer == "row") {

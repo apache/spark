@@ -194,11 +194,11 @@ private[r] object JVMObjectTracker {
 
   // TODO: This map should be thread-safe if we want to support multiple
   // connections at the same time
-  val objMap = new HashMap[String, Object]
+  private[this] val objMap = new HashMap[String, Object]
 
   // TODO: We support only one connection now, so an integer is fine.
-  // Investiage using use atomic integer in the future.
-  var objCounter: Int = 0
+  // Investigate using use atomic integer in the future.
+  private[this] var objCounter: Int = 0
 
   def getObject(id: String): Object = {
     objMap(id)

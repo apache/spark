@@ -25,6 +25,7 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.api.r.RBackend
+import org.apache.spark.util.RedirectThread
 
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
@@ -76,7 +77,7 @@ object RRunner {
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 
-        new RedirectThread(process.getInputStream, System.out, "redirect output").start()
+        new RedirectThread(process.getInputStream, System.out, "redirect R output").start()
 
         process.waitFor()
       } finally {
@@ -86,32 +87,6 @@ object RRunner {
     } else {
       System.err.println("SparkR backend did not initialize in " + backendTimeout + " seconds")
       System.exit(-1)
-    }
-  }
-
-  private class RedirectThread(
-      in: InputStream,
-      out: OutputStream,
-      name: String,
-      propagateEof: Boolean = false)
-    extends Thread(name) {
-
-    setDaemon(true)
-    override def run() {
-      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      try {
-        val buf = new Array[Byte](1024)
-        var len = in.read(buf)
-        while (len != -1) {
-          out.write(buf, 0, len)
-          out.flush()
-          len = in.read(buf)
-        }
-      } finally {
-        if (propagateEof) {
-          out.close()
-        }
-      }
     }
   }
 }
