@@ -23,6 +23,7 @@ import java.util.logging.Level
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.spark.sql.types.{StructType, DataType}
 import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
@@ -70,14 +71,20 @@ private[sql] case class ParquetRelation(
       sqlContext.conf.isParquetINT96AsTimestamp)
   lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
-  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance(): this.type = {
+    ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  }
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case p: ParquetRelation =>
       p.path == path && p.output == output
     case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(path, output)
   }
 
   // TODO: Use data from the footers.
@@ -172,9 +179,13 @@ private[sql] object ParquetRelation {
       sqlContext.conf.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED)
       .name())
     ParquetRelation.enableLogForwarding()
-    ParquetTypesConverter.writeMetaData(attributes, path, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(attributes).asNullable
+    val newAttributes = schema.toAttributes
+    ParquetTypesConverter.writeMetaData(newAttributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {
-      override val output = attributes
+      override val output = newAttributes
     }
   }
 

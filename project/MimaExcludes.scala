@@ -16,6 +16,7 @@
  */
 
 import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -33,6 +34,25 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.4") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.rdd.JdbcRDD.compute"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
+          )
+
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -149,10 +169,41 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.serialize"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.sqlType")
           ) ++ Seq(
+            // SPARK-5814
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$wrapDoubleArray"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$fillFullMatrix"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$iterations"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$makeOutLinkBlock"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$computeYtY"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$makeLinkRDDs"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$alpha"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$randomFactor"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$makeInLinkBlock"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$dspr"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$lambda"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$implicitPrefs"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$rank")
+          ) ++ Seq(
             // SPARK-4682
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
+          ) ++ Seq(
+            // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
           )
 
         case v if v.startsWith("1.2") =>

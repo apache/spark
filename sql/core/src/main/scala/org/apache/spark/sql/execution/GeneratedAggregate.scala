@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -49,7 +50,7 @@ case class GeneratedAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[Distribution] =
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
@@ -60,9 +61,9 @@ case class GeneratedAggregate(
       }
     }
 
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
@@ -271,9 +272,9 @@ case class GeneratedAggregate(
           private[this] val resultIterator = buffers.entrySet.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
 
-          def hasNext = resultIterator.hasNext
+          def hasNext: Boolean = resultIterator.hasNext
 
-          def next() = {
+          def next(): Row = {
             val currentGroup = resultIterator.next()
             resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
           }
