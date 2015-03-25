@@ -108,7 +108,7 @@ public class TransportServer implements Closeable {
       protected void initChannel(SocketChannel ch) throws Exception {
         RpcHandler rpcHandler = appRpcHandler;
         for (TransportServerBootstrap bootstrap : bootstraps) {
-          rpcHandler = bootstrap.doBootstrap(ch, conf, rpcHandler);
+          rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
         context.initializePipeline(ch, rpcHandler);
       }

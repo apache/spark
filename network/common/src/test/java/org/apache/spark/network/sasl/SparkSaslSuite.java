@@ -60,7 +60,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testMatching() {
-    SparkSaslClient client = new SparkSaslClient("shared-secret", secretKeyHolder);
+    SparkSaslClient client = new SparkSaslClient("shared-secret", secretKeyHolder, false);
     SparkSaslServer server = new SparkSaslServer("shared-secret", secretKeyHolder);
 
     assertFalse(client.isComplete());
@@ -80,10 +80,9 @@ public class SparkSaslSuite {
     assertFalse(client.isComplete());
   }
 
-
   @Test
   public void testNonMatching() {
-    SparkSaslClient client = new SparkSaslClient("my-secret", secretKeyHolder);
+    SparkSaslClient client = new SparkSaslClient("my-secret", secretKeyHolder, false);
     SparkSaslServer server = new SparkSaslServer("your-secret", secretKeyHolder);
 
     assertFalse(client.isComplete());
@@ -105,6 +104,15 @@ public class SparkSaslSuite {
 
   @Test
   public void testSaslAuthentication() throws Exception {
+    testSasl(false);
+  }
+
+  @Test
+  public void testSaslEncryption() throws Exception {
+    testSasl(true);
+  }
+
+  private void testSasl(boolean encrypt) throws Exception {
     TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
 
     RpcHandler rpcHandler = mock(RpcHandler.class);
@@ -121,7 +129,6 @@ public class SparkSaslSuite {
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
 
-
     SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
     when(keyHolder.getSaslUser(anyString())).thenReturn("user");
     when(keyHolder.getSecretKey(anyString())).thenReturn("secret");
@@ -133,12 +140,12 @@ public class SparkSaslSuite {
       TransportServerBootstrap serverBootstrap = spy(new SaslServerBootstrap(keyHolder));
       server = ctx.createServer(Arrays.asList(serverBootstrap));
 
-      TransportClientBootstrap clientBootstrap = new SaslClientBootstrap(conf, "user", keyHolder);
+      TransportClientBootstrap clientBootstrap =
+        new SaslClientBootstrap(conf, "user", keyHolder, encrypt);
       client = ctx.createClientFactory(Arrays.asList(clientBootstrap))
         .createClient(TestUtils.getLocalHost(), server.getPort());
 
-      verify(serverBootstrap, times(1))
-        .doBootstrap(any(Channel.class), any(TransportConf.class), any(RpcHandler.class));
+      verify(serverBootstrap, times(1)).doBootstrap(any(Channel.class), any(RpcHandler.class));
 
       byte[] response = client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
       assertEquals("Pong", new String(response, UTF_8));

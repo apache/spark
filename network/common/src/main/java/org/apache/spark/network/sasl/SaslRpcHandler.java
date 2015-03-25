@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.sasl;
 
+import javax.security.sasl.Sasl;
+
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -27,6 +29,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.NettyUtils;
 
 /**
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.
@@ -39,26 +42,29 @@ import org.apache.spark.network.server.StreamManager;
 class SaslRpcHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
-  private final Channel channel;
-
   /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
 
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
+  /** The client channel. */
+  private final Channel channel;
+
   private SparkSaslServer saslServer;
+  private boolean isComplete;
 
   SaslRpcHandler(Channel channel, RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
     this.channel = channel;
     this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
     this.saslServer = null;
+    this.isComplete = false;
   }
 
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    if (saslServer != null && saslServer.isComplete()) {
+    if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
@@ -72,10 +78,26 @@ class SaslRpcHandler extends RpcHandler {
     }
 
     byte[] response = saslServer.response(saslMessage.payload);
+    callback.onSuccess(response);
+
+    // Setup encryption after the SASL response, otherwise the client can't parse the response.
+    // It's ok to change the channel pipeline here since we are processing an incoming message,
+    // so the pipeline is busy and no new incoming messages will be fed to it before this method
+    // returns.
     if (saslServer.isComplete()) {
       logger.debug("SASL authentication successful for channel {}", client);
+      isComplete = true;
+      if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
+        logger.debug("Enabling encryption for channel {}", client);
+        channel.pipeline()
+          .addFirst("saslEncryption", new SaslEncryptionHandler(saslServer))
+          .addFirst("saslFrameDecoder", NettyUtils.createFrameDecoder());
+        saslServer = null;
+      } else {
+        saslServer.dispose();
+        saslServer = null;
+      }
     }
-    callback.onSuccess(response);
   }
 
   @Override
@@ -89,4 +111,5 @@ class SaslRpcHandler extends RpcHandler {
       saslServer.dispose();
     }
   }
+
 }

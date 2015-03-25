@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * initial state to the "authenticated" state. (It is not a server in the sense of accepting
  * connections on some socket.)
  */
-public class SparkSaslServer {
+public class SparkSaslServer implements SaslEncryptionBackend {
   private final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
 
   /**
@@ -60,13 +60,19 @@ public class SparkSaslServer {
   static final String DIGEST = "DIGEST-MD5";
 
   /**
-   * The quality of protection is just "auth". This means that we are doing
-   * authentication only, we are not supporting integrity or privacy protection of the
-   * communication channel after authentication. This could be changed to be configurable
-   * in the future.
+   * QOP value that includes encryption.
+   */
+  static final String QOP_AUTH_CONF = "auth-conf";
+
+  /**
+   * QOP value that does not include encryption.
+   */
+  static final String QOP_AUTH = "auth";
+
+  /**
+   * Common SASL config properties for both client and server.
    */
   static final Map<String, String> SASL_PROPS = ImmutableMap.<String, String>builder()
-    .put(Sasl.QOP, "auth")
     .put(Sasl.SERVER_AUTH, "true")
     .build();
 
@@ -78,8 +84,15 @@ public class SparkSaslServer {
   public SparkSaslServer(String secretKeyId, SecretKeyHolder secretKeyHolder) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
+
+    // The server is configured to accept both "auth" and "auth-conf" for quality-of-protection.
+    // The client will choose which one it wants.
+    Map<String, String> saslProps = ImmutableMap.<String, String>builder()
+      .putAll(SASL_PROPS)
+      .put(Sasl.QOP, String.format("%s,%s", QOP_AUTH_CONF, QOP_AUTH))
+      .build();
     try {
-      this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, SASL_PROPS,
+      this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, saslProps,
         new DigestCallbackHandler());
     } catch (SaslException e) {
       throw Throwables.propagate(e);
@@ -91,6 +104,11 @@ public class SparkSaslServer {
    */
   public synchronized boolean isComplete() {
     return saslServer != null && saslServer.isComplete();
+  }
+
+  /** Returns the value of a negotiated property. */
+  public Object getNegotiatedProperty(String name) {
+    return saslServer.getNegotiatedProperty(name);
   }
 
   /**
@@ -110,6 +128,7 @@ public class SparkSaslServer {
    * Disposes of any system resources or security-sensitive information the
    * SaslServer might be using.
    */
+  @Override
   public synchronized void dispose() {
     if (saslServer != null) {
       try {
@@ -120,6 +139,16 @@ public class SparkSaslServer {
         saslServer = null;
       }
     }
+  }
+
+  @Override
+  public byte[] wrap(byte[] data, int offset, int len) throws SaslException {
+    return saslServer.wrap(data, offset, len);
+  }
+
+  @Override
+  public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
+    return saslServer.unwrap(data, offset, len);
   }
 
   /**

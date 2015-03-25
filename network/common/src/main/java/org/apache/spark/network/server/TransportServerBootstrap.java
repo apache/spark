@@ -19,8 +19,6 @@ package org.apache.spark.network.server;
 
 import io.netty.channel.Channel;
 
-import org.apache.spark.network.util.TransportConf;
-
 /**
  * A bootstrap which is executed on a TransportServer's client channel once a client connects
  * to the server. This allows customizing the client channel to allow for things such as SASL
@@ -31,9 +29,8 @@ public interface TransportServerBootstrap {
    * Customizes the channel to include new features, if needed.
    *
    * @param channel The connected channel opened by the client.
-   * @param conf The transport configuration for the server.
    * @param rpcHandler The RPC handler for the server.
    * @return The RPC handler to use for the channel.
    */
-  public RpcHandler doBootstrap(Channel channel, TransportConf conf, RpcHandler rpcHandler);
+  public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler);
 }

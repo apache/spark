@@ -21,7 +21,6 @@ import io.netty.channel.Channel;
 
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.util.TransportConf;
 
 /**
  * A bootstrap which is executed on a TransportServer's client channel once a client connects
@@ -40,7 +39,7 @@ public class SaslServerBootstrap implements TransportServerBootstrap {
    * Wrap the given application handler in a SaslRpcHandler that will handle the initial SASL
    * negotiation.
    */
-  public RpcHandler doBootstrap(Channel channel, TransportConf conf, RpcHandler rpcHandler) {
+  public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
     return new SaslRpcHandler(channel, rpcHandler, secretKeyHolder);
   }
 
