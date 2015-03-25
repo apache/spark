@@ -128,6 +128,16 @@ private[ml] trait HasInputCol extends Params {
   def getInputCol: String = get(inputCol)
 }
 
+private[ml] trait HasInputCols extends Params {
+  /**
+   * Param for input column names.
+   */
+  val inputCols: Param[Array[String]] = new Param(this, "inputCols", "input column names")
+
+  /** @group getParam */
+  def getInputCols: Array[String] = get(inputCols)
+}
+
 private[ml] trait HasOutputCol extends Params {
   /**
    * param for output column name
