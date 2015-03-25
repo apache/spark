@@ -19,9 +19,10 @@ package org.apache.spark.network
 
 import java.io.Closeable
 import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
 
 import scala.concurrent.{Promise, Await, Future}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import org.apache.spark.Logging
 import org.apache.spark.network.buffer.{NioManagedBuffer, ManagedBuffer}
@@ -83,7 +84,12 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    *
    * It is also only available after [[init]] is invoked.
    */
-  def fetchBlockSync(host: String, port: Int, execId: String, blockId: String): ManagedBuffer = {
+  def fetchBlockSync(
+      host: String,
+      port: Int,
+      execId: String,
+      blockId: String,
+      timeout: Int): ManagedBuffer = {
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()
     fetchBlocks(host, port, execId, Array(blockId),
@@ -99,7 +105,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
         }
       })
 
-    Await.result(result.future, Duration.Inf)
+    val fetchTimeout = new FiniteDuration(timeout, TimeUnit.SECONDS)
+    Await.result(result.future, fetchTimeout)
   }
 
   /**
