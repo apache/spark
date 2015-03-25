@@ -346,8 +346,7 @@ class AddFileTests(PySparkTestCase):
         def func(x):
             from userlibrary import UserClass
             return UserClass().hello()
-        self.assertRaises(Exception,
-                          self.sc.parallelize(range(2)).map(func).first)
+        self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
         log4j.LogManager.getRootLogger().setLevel(old_level)
 
         # Add the file, so the job should now succeed:
@@ -381,7 +380,7 @@ class AddFileTests(PySparkTestCase):
         def func():
             from userlib import UserClass
         self.assertRaises(ImportError, func)
-        path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1-py2.7.egg")
+        path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())

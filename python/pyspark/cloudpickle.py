@@ -75,11 +75,6 @@ GLOBAL_OPS = [STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL]
 HAVE_ARGUMENT = dis.HAVE_ARGUMENT
 EXTENDED_ARG = dis.EXTENDED_ARG
 
-if PyImp == "PyPy":
-    import new
-    # register builtin type in `new`
-    new.method = types.MethodType
-
 if PY3:
     from io import BytesIO as StringIO
 else:
@@ -347,11 +342,6 @@ class CloudPickler(Pickler):
         else:
             __import__(modname)
             themodule = sys.modules[modname]
-            # new.* are misrepeported
-            if not PY3 and modname == '__builtin__' and not hasattr(themodule, name):
-                modname = 'new'
-                __import__(modname)
-                themodule = sys.modules[modname]
             self.modules.add(themodule)
 
         if hasattr(themodule, name) and getattr(themodule, name) is obj:
@@ -534,7 +524,6 @@ class CloudPickler(Pickler):
             self._batch_setitems(dictitems)
 
         if state is not None:
-            #print 'obj %s has state %s' % (obj, state)
             save(state)
             write(pickle.BUILD)
 
@@ -734,4 +723,3 @@ Note: These can never be renamed due to client compatibility issues"""
 def _getobject(modname, attribute):
     mod = __import__(modname, fromlist=[attribute])
     return mod.__dict__[attribute]
-
