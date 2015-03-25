@@ -31,24 +31,20 @@
 ghprbActualCommit="$1"
 sha1="$2"
 
-set -e
-
 MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null
-
-#${MVN_BIN} clean package dependency:build-classpath 2>/dev/null | \
-#  sed -n -e '/Building Spark Project Assembly/,$p' | \
-#  grep --context=1 -m 2 "Dependencies classpath:" | \
-#  head -n 3 | \
-#  tail -n 1 | \
-#  tr ":" "\n" | \
-#  rev | \
-#  cut -d "/" -f 1 | \
-#  rev | \
-#  sort > ${CURR_CP_FILE}
+${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
+  sed -n -e '/Building Spark Project Assembly/,$p' | \
+  grep --context=1 -m 2 "Dependencies classpath:" | \
+  head -n 3 | \
+  tail -n 1 | \
+  tr ":" "\n" | \
+  rev | \
+  cut -d "/" -f 1 | \
+  rev | \
+  sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
 git checkout master &>/dev/null
@@ -93,7 +89,3 @@ fi
 
 # Clean up our mess from the Maven builds just in case
 ${MVN_BIN} clean &>/dev/null
-
-set +e
-
-exit 0

@@ -158,11 +158,7 @@ for t in "${PR_TESTS[@]}"; do
   # Ensure the test can be found and is a file
   if [ -f "${this_test}" ]; then
     echo "Running test: $t"
-    this_mssg="$(bash -x "${this_test}" "${ghprbActualCommit}" "${sha1}")"
-    # Check the return value from the test to ensure it exited properly
-    #[ $? > 0 ] && \
-    #  echo "Error while running test: $t" && \
-    #  continue
+    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}")"
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
