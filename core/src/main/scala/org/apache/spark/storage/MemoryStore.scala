@@ -85,7 +85,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      val putAttempt = tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
+      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
@@ -117,11 +117,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       returnValues: Boolean): PutResult = {
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      val putAttempt = tryToPut(blockId, () => values, sizeEstimate, deserialized = true)
+      val putAttempt = tryToPut(blockId, values, sizeEstimate, deserialized = true)
       PutResult(sizeEstimate, Left(values.iterator), putAttempt.droppedBlocks)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      val putAttempt = tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
+      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
@@ -325,6 +325,26 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
    * must also be passed by the caller.
    *
+   * Synchronize on `accountingLock` to ensure that all the put requests and its associated block
+   * dropping is done by only on thread at a time. Otherwise while one thread is dropping
+   * blocks to free memory for one block, another thread may use up the freed space for
+   * another block.
+   *
+   * Return whether put was successful, along with the blocks dropped in the process.
+   */
+  private def tryToPut(
+      blockId: BlockId,
+      value: Any,
+      size: Long,
+      deserialized: Boolean): ResultWithDroppedBlocks = {
+    tryToPut(blockId, () => value, size, deserialized)
+  }
+
+  /**
+   * Try to put in a set of values, if we can free up enough space. The value should either be
+   * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
+   * must also be passed by the caller.
+   *
    * `value` will be lazily created. If it cannot be put into MemoryStore or disk, `value` won't be
    * created to avoid OOM since it may be a big ByteBuffer.
    *
@@ -439,7 +459,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            val droppedBlockStatus = blockManager.dropFromMemory(blockId, () => data)
+            val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
             droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
           }
         }

@@ -1000,6 +1000,18 @@ private[spark] class BlockManager(
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
    * store reaches its limit and needs to free up space.
    *
+   * Return the block status if the given block has been updated, else None.
+   */
+  def dropFromMemory(
+      blockId: BlockId,
+      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+    dropFromMemory(blockId, () => data)
+  }
+
+  /**
+   * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
+   * store reaches its limit and needs to free up space.
+   *
    * If `data` is not put on disk, it won't be created.
    *
    * Return the block status if the given block has been updated, else None.
