@@ -56,8 +56,6 @@ JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
 BRANCH_PREFIX = "PR_TOOL"
 
-os.chdir(SPARK_HOME)
-
 
 def get_json(url):
     try:
@@ -85,10 +83,6 @@ def continue_maybe(prompt):
     result = raw_input("\n%s (y/n): " % prompt)
     if result.lower() != "y":
         fail("Okay, exiting")
-
-
-original_head = run_cmd("git rev-parse HEAD")[:8]
-
 
 def clean_up():
     print "Restoring head pointer to %s" % original_head
@@ -275,7 +269,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     asf_jira.transition_issue(
         jira_id, resolve["id"], fixVersions=jira_fix_versions, comment=comment)
 
-    print "Succesfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
+    print "Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
 
 
 def resolve_jira_issues(title, merge_branches, comment):
@@ -286,10 +280,19 @@ def resolve_jira_issues(title, merge_branches, comment):
     for jira_id in jira_ids:
         resolve_jira_issue(merge_branches, comment, jira_id)
 
+
 def standardize_jira_ref(text):
-    # Standardize the [MODULE] SPARK-XXXXX prefix
-    # Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[MLLIB] SPARK-XXX: Issue"
+    """
+    Standardize the [MODULE] SPARK-XXXXX prefix
+    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[MLLIB] SPARK-XXX: Issue"
     
+    >>> standardize_jira_ref("[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
+    '[SQL] SPARK-5821: ParquetRelation2 CTAS should check if delete is successful'
+    >>> standardize_jira_ref("[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
+    '[PROJECT INFRA] [WIP] SPARK-4123: Show new dependencies added in pull requests'
+    >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
+    '[MLLIB] SPARK-5954: Top by key'
+    """
     #If the string is compliant, no need to process any further
     if (re.search(r'\[[A-Z0-9_]+\] SPARK-[0-9]{3,5}: \S+', text)):
         return text
@@ -300,7 +303,7 @@ def standardize_jira_ref(text):
     while (pattern.search(text) is not None):
         ref = pattern.search(text).groups()[0]
         # Replace any whitespace with a dash & convert to uppercase
-        jira_refs.append(re.sub(r'\s', '-', ref.upper()))
+        jira_refs.append(re.sub(r'\s+', '-', ref.upper()))
         text = text.replace(ref, '')
 
     # Extract spark component(s):
@@ -337,68 +340,78 @@ def standardize_jira_ref(text):
     
     return clean_text
 
-branches = get_json("%s/branches" % GITHUB_API_BASE)
-branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
-# Assumes branch names can be sorted lexicographically
-latest_branch = sorted(branch_names, reverse=True)[0]
+def main():
+    os.chdir(SPARK_HOME)
+    original_head = run_cmd("git rev-parse HEAD")[:8]
+    
+    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
+    # Assumes branch names can be sorted lexicographically
+    latest_branch = sorted(branch_names, reverse=True)[0]
 
-pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
-pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
+    pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
+    pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
-url = pr["url"]
-title = standardize_jira_ref(pr["title"])
-body = pr["body"]
-target_ref = pr["base"]["ref"]
-user_login = pr["user"]["login"]
-base_ref = pr["head"]["ref"]
-pr_repo_desc = "%s/%s" % (user_login, base_ref)
+    url = pr["url"]
+    title = standardize_jira_ref(pr["title"])
+    body = pr["body"]
+    target_ref = pr["base"]["ref"]
+    user_login = pr["user"]["login"]
+    base_ref = pr["head"]["ref"]
+    pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
-# Merged pull requests don't appear as merged in the GitHub API;
-# Instead, they're closed by asfgit.
-merge_commits = \
-    [e for e in pr_events if e["actor"]["login"] == "asfgit" and e["event"] == "closed"]
+    # Merged pull requests don't appear as merged in the GitHub API;
+    # Instead, they're closed by asfgit.
+    merge_commits = \
+        [e for e in pr_events if e["actor"]["login"] == "asfgit" and e["event"] == "closed"]
 
-if merge_commits:
-    merge_hash = merge_commits[0]["commit_id"]
-    message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
+    if merge_commits:
+        merge_hash = merge_commits[0]["commit_id"]
+        message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
 
-    print "Pull request %s has already been merged, assuming you want to backport" % pr_num
-    commit_is_downloaded = run_cmd(['git', 'rev-parse', '--quiet', '--verify',
+        print "Pull request %s has already been merged, assuming you want to backport" % pr_num
+        commit_is_downloaded = run_cmd(['git', 'rev-parse', '--quiet', '--verify',
                                     "%s^{commit}" % merge_hash]).strip() != ""
-    if not commit_is_downloaded:
-        fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
+        if not commit_is_downloaded:
+            fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
-    print "Found commit %s:\n%s" % (merge_hash, message)
-    cherry_pick(pr_num, merge_hash, latest_branch)
-    sys.exit(0)
+        print "Found commit %s:\n%s" % (merge_hash, message)
+        cherry_pick(pr_num, merge_hash, latest_branch)
+        sys.exit(0)
 
-if not bool(pr["mergeable"]):
-    msg = "Pull request %s is not mergeable in its current form.\n" % pr_num + \
-        "Continue? (experts only!)"
-    continue_maybe(msg)
+    if not bool(pr["mergeable"]):
+        msg = "Pull request %s is not mergeable in its current form.\n" % pr_num + \
+            "Continue? (experts only!)"
+        continue_maybe(msg)
 
-print ("\n=== Pull Request #%s ===" % pr_num)
-print ("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (
-    title, pr_repo_desc, target_ref, url))
-continue_maybe("Proceed with merging pull request #%s?" % pr_num)
+    print ("\n=== Pull Request #%s ===" % pr_num)
+    print ("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (
+        title, pr_repo_desc, target_ref, url))
+    continue_maybe("Proceed with merging pull request #%s?" % pr_num)
 
-merged_refs = [target_ref]
+    merged_refs = [target_ref]
 
-merge_hash = merge_pr(pr_num, target_ref)
+    merge_hash = merge_pr(pr_num, target_ref)
 
-pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
-    merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
+    pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
+    while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
+        merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
-if JIRA_IMPORTED:
-    if JIRA_USERNAME and JIRA_PASSWORD:
-        continue_maybe("Would you like to update an associated JIRA?")
-        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
-        resolve_jira_issues(title, merged_refs, jira_comment)
+    if JIRA_IMPORTED:
+        if JIRA_USERNAME and JIRA_PASSWORD:
+            continue_maybe("Would you like to update an associated JIRA?")
+            jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
+            resolve_jira_issues(title, merged_refs, jira_comment)
+        else:
+            print "JIRA_USERNAME and JIRA_PASSWORD not set"
+            print "Exiting without trying to close the associated JIRA."
     else:
-        print "JIRA_USERNAME and JIRA_PASSWORD not set"
+        print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
         print "Exiting without trying to close the associated JIRA."
-else:
-    print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
-    print "Exiting without trying to close the associated JIRA."
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+    
+    main()
