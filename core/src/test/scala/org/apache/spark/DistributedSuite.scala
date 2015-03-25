@@ -194,7 +194,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     val blockTransfer = SparkEnv.get.blockTransferService
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString)
+        blockId.toString, 1000)
       val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
         .asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)
