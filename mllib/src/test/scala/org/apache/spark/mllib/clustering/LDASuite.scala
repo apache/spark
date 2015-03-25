@@ -118,10 +118,10 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val docVertexIds = docIds
     val termIds = Array(0, 1, 2)
     val termVertexIds = Array(-1, -2, -3)
-    assert(docVertexIds.forall(i => !LDA.isTermVertex((i.toLong, 0))))
-    assert(termIds.map(LDA.term2index) === termVertexIds)
-    assert(termVertexIds.map(i => LDA.index2term(i.toLong)) === termIds)
-    assert(termVertexIds.forall(i => LDA.isTermVertex((i.toLong, 0))))
+    assert(docVertexIds.forall(i => !LDA.EMLearningStateInitializer.isTermVertex((i.toLong, 0))))
+    assert(termIds.map(LDA.EMLearningStateInitializer.term2index) === termVertexIds)
+    assert(termVertexIds.map(i => LDA.EMLearningStateInitializer.index2term(i.toLong)) === termIds)
+    assert(termVertexIds.forall(i => LDA.EMLearningStateInitializer.isTermVertex((i.toLong, 0))))
   }
 }
 
