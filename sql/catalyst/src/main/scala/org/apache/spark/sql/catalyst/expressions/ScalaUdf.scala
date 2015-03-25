@@ -703,4 +703,5 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
   // scalastyle:on
   
   override def eval(input: Row): Any = ScalaReflection.convertToCatalyst(f(input), dataType)
+
 }
