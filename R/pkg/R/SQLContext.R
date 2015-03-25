@@ -176,7 +176,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   dataFrame(sdf)
 }
 
-#' toDF()
+#' toDF
 #'
 #' Converts an RDD to a DataFrame by infer the types.
 #'

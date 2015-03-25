@@ -138,7 +138,7 @@ readDeserializeRows <- function(inputCon) {
   # that termintates when the next row is empty.
   data <- list()
   while(TRUE) {
-    row <- readRow(inputCon, numCols)
+    row <- readRow(inputCon)
     if (length(row) == 0) {
       break
     }
@@ -154,10 +154,10 @@ readRowList <- function(obj) {
   # deserialize the row.
   rawObj <- rawConnection(obj, "r+")
   on.exit(close(rawObj))
-  SparkR:::readRow(rawObj, numCols)
+  SparkR:::readRow(rawObj)
 }
 
-readRow <- function(inputCon, numCols) {
+readRow <- function(inputCon) {
   numCols <- readInt(inputCon)
   if (length(numCols) > 0 && numCols > 0) {
     lapply(1:numCols, function(x) {
