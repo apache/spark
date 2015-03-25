@@ -532,32 +532,34 @@ def launch_cluster(conn, opts, cluster_name):
             name = '/dev/sd' + string.letters[i + 1]
             block_map[name] = dev
 
-    # Launch slaves
-    if opts.spot_price is not None:
-        # Launch spot instances with the requested price
-        print ("Requesting %d slaves as spot instances with price $%.3f" %
-               (opts.slaves, opts.spot_price))
+    # Launch spot instances
+    if opts.spot_price is not None or opts.master_spot_price is not None:
         zones = get_zones(conn, opts)
-        num_zones = len(zones)
-        i = 0
         my_req_ids = []
-        for zone in zones:
-            num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
-            slave_reqs = conn.request_spot_instances(
-                price=opts.spot_price,
-                image_id=opts.ami,
-                launch_group="launch-group-%s" % cluster_name,
-                placement=zone,
-                count=num_slaves_this_zone,
-                key_name=opts.key_pair,
-                security_group_ids=[slave_group.id] + additional_group_ids,
-                instance_type=opts.instance_type,
-                block_device_map=block_map,
-                subnet_id=opts.subnet_id,
-                placement_group=opts.placement_group,
-                user_data=user_data_content)
-            my_req_ids += [req.id for req in slave_reqs]
-            i += 1
+        # Launch slaves
+        if opts.spot_price is not None:
+            print ("Requesting %d slaves as spot instances with price $%.3f" %
+                   (opts.slaves, opts.spot_price))
+            num_zones = len(zones)
+            i = 0
+            for zone in zones:
+                num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
+                slave_reqs = conn.request_spot_instances(
+                    price=opts.spot_price,
+                    image_id=opts.ami,
+                    launch_group="launch-group-%s" % cluster_name,
+                    placement=zone,
+                    count=num_slaves_this_zone,
+                    key_name=opts.key_pair,
+                    security_group_ids=[slave_group.id] + additional_group_ids,
+                    instance_type=opts.instance_type,
+                    block_device_map=block_map,
+                    subnet_id=opts.subnet_id,
+                    placement_group=opts.placement_group,
+                    user_data=user_data_content)
+                my_req_ids += [req.id for req in slave_reqs]
+                i += 1
+        # Launch master
         if opts.master_spot_price is not None:
             print ("Requesting master as spot instance with price $%.3f" % opts.master_spot_price)
             master_type = opts.master_instance_type
@@ -590,31 +592,28 @@ def launch_cluster(conn, opts, cluster_name):
                 for i in my_req_ids:
                     if i in id_to_req and id_to_req[i].state == "active":
                         active_instance_ids.append(id_to_req[i].instance_id)
-                if opts.master_spot_price is not None:
-                    if len(active_instance_ids) == opts.slaves + 1:
-                        print "Master and all %d slaves granted" % opts.slaves
-                        reservations = conn.get_all_reservations(active_instance_ids)
-                        master_nodes = []
-                        slave_nodes = []
-                        for r in reservations:
-                            if any([group.name == cluster_name + "-master" for group in r.groups]):
-                                master_nodes += r.instances
-                            else:
-                                slave_nodes += r.instances
-                        break
+                if len(active_instance_ids) == len(my_req_ids):
+                    if opts.master_spot_price is not None:
+                        if opts.spot_price is not None:
+                            print "Master and all %d slaves granted" % opts.slaves
+                        else:
+                            print "Master granted"
                     else:
-                        print "%d of %d spot instances granted, waiting longer" % (
-                            len(active_instance_ids), opts.slaves + 1)
-                elif len(active_instance_ids) == opts.slaves:
-                    print "All %d slaves granted" % opts.slaves
+                        print "All %d slaves granted" % opts.slaves
                     reservations = conn.get_all_reservations(active_instance_ids)
+                    master_nodes = []
                     slave_nodes = []
                     for r in reservations:
-                        slave_nodes += r.instances
+                        if any([group.name == cluster_name + "-master" for group in r.groups]):
+                            master_nodes += r.instances
+                        elif any([group.name == cluster_name + "-slaves" for group in r.groups]):
+                            slave_nodes += r.instances
+                        else:
+                            print >> stderr, ("WARNING: Unknown security group " % group.name)
                     break
                 else:
-                    print "%d of %d slaves granted, waiting longer" % (
-                        len(active_instance_ids), opts.slaves)
+                    print "%d of %d spot instances granted, waiting longer" % (
+                        len(active_instance_ids), len(my_req_ids))
         except:
             print "Canceling spot instance requests"
             conn.cancel_spot_instance_requests(my_req_ids)
@@ -625,7 +624,8 @@ def launch_cluster(conn, opts, cluster_name):
             if running:
                 print >> stderr, ("WARNING: %d instances are still running" % running)
             sys.exit(0)
-    else:
+
+    if opts.spot_price is None:
         # Launch non-spot instances
         zones = get_zones(conn, opts)
         num_zones = len(zones)
