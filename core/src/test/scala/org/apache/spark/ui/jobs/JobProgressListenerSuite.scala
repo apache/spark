@@ -133,7 +133,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       listener.onJobEnd(createJobEndEvent(jobId, false))
     }
     assertActiveJobsStateIsEmpty(listener)
-    //
+    // This collection won't become empty, but it should be bounded by spark.ui.retainedJobs
     listener.jobGroupToJobIds.size should be (5)
   }
 
