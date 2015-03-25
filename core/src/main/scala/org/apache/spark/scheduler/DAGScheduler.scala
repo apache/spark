@@ -899,12 +899,12 @@ class DAGScheduler(
 
       val debugString = stage match {
         case stage: ShuffleMapStage =>
-          "Stage " + stage + (" is actually done; " +
+          s"Stage ${stage} is actually done; " +
             s"(available: ${stage.isAvailable}," +
             s"available outputs: ${stage.numAvailableOutputs}," +
-            s"partitions: ${stage.numPartitions})")
+            s"partitions: ${stage.numPartitions})"
         case stage : ResultStage =>
-          "Stage " + stage + s" is actually done; (partitions: ${stage.numPartitions})"
+          s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
       runningStages -= stage
