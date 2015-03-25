@@ -1144,7 +1144,7 @@ to be re-computed if the lineage is re-computed. The temporary storage directory
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
 Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
-'Shuffle Behavior' section within the Spark Configuration Guide. 
+'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.html). 
 
 ## RDD Persistence
 
