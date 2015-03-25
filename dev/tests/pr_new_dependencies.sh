@@ -31,6 +31,8 @@
 ghprbActualCommit="$1"
 sha1="$2"
 
+set -e
+
 MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
@@ -83,3 +85,7 @@ fi
 
 # Clean up our mess from the Maven builds just in case
 ${MVN_BIN} clean &>/dev/null
+
+set +e
+
+exit 0

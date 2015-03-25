@@ -159,6 +159,10 @@ for t in "${PR_TESTS[@]}"; do
   if [ -f "${this_test}" ]; then
     echo "Running test: $t"
     this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}")"
+    # Check the return value from the test to ensure it exited properly
+    [ $? > 0 ] && \
+      echo "Error while running test: $t" && \
+      continue
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
@@ -230,7 +234,7 @@ done
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"
-  result_message="${result_message}\n${pr_message}"
+  result_message="${result_message}${pr_message}"
 
   post_message "$result_message"
 }
