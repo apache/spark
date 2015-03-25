@@ -364,7 +364,6 @@ class AddFileTests(PySparkTestCase):
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
 
-    @unittest.skipIf(sys.version >= '3', "flaky")
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
@@ -372,11 +371,10 @@ class AddFileTests(PySparkTestCase):
             from userlibrary import UserClass
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
-        self.sc.addFile(path)
+        self.sc.addPyFile(path)
         from userlibrary import UserClass
         self.assertEqual("Hello World!", UserClass().hello())
 
-    @unittest.skipIf(sys.version >= '3', "flaky")
     def test_add_egg_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:

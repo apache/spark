@@ -73,6 +73,9 @@ def main(infile, outfile):
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
             add_path(os.path.join(spark_files_dir, filename))
+        if sys.version > '3':
+            import importlib
+            importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)

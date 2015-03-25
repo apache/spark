@@ -713,11 +713,13 @@ class SparkContext(object):
         """
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
-
         if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+        if sys.version > '3':
+            import importlib
+            importlib.invalidate_caches()
 
     def setCheckpointDir(self, dirName):
         """
