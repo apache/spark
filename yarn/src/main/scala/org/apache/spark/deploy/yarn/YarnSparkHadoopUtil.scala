@@ -127,7 +127,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       val keytab = sparkConf.get("spark.yarn.keytab")
 
       def scheduleRenewal(runnable: Runnable) = {
-        val renewalInterval = (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong
+        // Latest validity can be -ve if the original tokens expired, and then the AM died.
+        val renewalInterval =
+          math.max((0.75 * (getLatestValidity - System.currentTimeMillis())).toLong, 0L)
         logInfo("Scheduling login from keytab in " + renewalInterval + "millis.")
         delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
       }
@@ -180,6 +182,16 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val newCredentials = loggedInUGI.getCredentials
     obtainTokensForNamenodes(nns, conf, newCredentials)
     val remoteFs = FileSystem.get(conf)
+    // If lastCredentialsFileSuffix is 0, then the AM is either started or restarted. If the AM
+    // was restarted, then the lastCredentialsFileSuffix might be > 0, so find the newest file
+    // and update the lastCredentialsFileSuffix.
+    if (lastCredentialsFileSuffix == 0) {
+      val credentialsPath = new Path(sparkConf.get("spark.yarn.credentials.file"))
+      listCredentialsFilesSorted(remoteFs, credentialsPath)
+        .lastOption.foreach { status =>
+        lastCredentialsFileSuffix = getSuffixForCredentialsPath(status)
+      }
+    }
     val nextSuffix = lastCredentialsFileSuffix + 1
     val tokenPathStr =
       sparkConf.get("spark.yarn.credentials.file") + "-" + nextSuffix
@@ -199,35 +211,43 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     } finally {
       stream.foreach(_.close())
     }
-
     lastCredentialsFileSuffix = nextSuffix
   }
 
+  private def listCredentialsFilesSorted(
+      remoteFs: FileSystem,
+      credentialsFilePath: Path): Array[FileStatus] = {
+    val fileStatuses = remoteFs.listStatus(credentialsFilePath.getParent,
+      new PathFilter {
+        override def accept(path: Path): Boolean = {
+          val name = path.getName
+          name.startsWith(credentialsFilePath.getName) && !name.endsWith(".tmp")
+        }
+      })
+    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+      override def compare(o1: FileStatus, o2: FileStatus): Int = {
+        Longs.compare(o1.getModificationTime, o2.getModificationTime)
+      }
+    })
+    fileStatuses
+  }
+
+  private def getSuffixForCredentialsPath(credentialsStatus: FileStatus): Int = {
+    val fileName = credentialsStatus.getPath.getName
+    fileName.substring(fileName.lastIndexOf("-") + 1).toInt
+  }
   override def updateCredentialsIfRequired(): Unit = {
     try {
       sparkConf.getOption("spark.yarn.credentials.file").foreach { credentialsFile =>
         val credentialsFilePath = new Path(credentialsFile)
         val remoteFs = FileSystem.get(conf)
-        val stagingDirPath = new Path(remoteFs.getHomeDirectory, credentialsFilePath.getParent)
-        val fileStatuses =
-          remoteFs.listStatus(stagingDirPath,
-            new PathFilter {
-              override def accept(path: Path): Boolean = {
-                val name = path.getName
-                name.startsWith(credentialsFilePath.getName) && !name.endsWith(".tmp")
-              }
-            })
-        Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-          override def compare(o1: FileStatus, o2: FileStatus): Int = {
-            Longs.compare(o1.getModificationTime, o2.getModificationTime)
-          }
-        })
-        fileStatuses.lastOption.foreach { credentialsStatus =>
-          val credentials = credentialsStatus.getPath
-          val suffix = credentials.getName.substring(credentials.getName.lastIndexOf("-") + 1).toInt
+
+        listCredentialsFilesSorted(remoteFs, credentialsFilePath)
+          .lastOption.foreach { credentialsStatus =>
+          val suffix = getSuffixForCredentialsPath(credentialsStatus)
           if (suffix > lastCredentialsFileSuffix) {
-            logInfo("Reading new delegation tokens from " + credentials.toString)
-            val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentials)
+            logInfo("Reading new delegation tokens from " + credentialsStatus.getPath)
+            val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
             lastCredentialsFileSuffix = suffix
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
 
