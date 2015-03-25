@@ -236,6 +236,9 @@ public class GaussianMixtureExample {
     // Cluster the data into two classes using GaussianMixture
     GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
 
+    // Save and load GaussianMixtureModel
+    gmm.save(sc, "myGMMModel")
+    GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
     // Output the parameters of the mixture model
     for(int j=0; j<gmm.k(); j++) {
         System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
