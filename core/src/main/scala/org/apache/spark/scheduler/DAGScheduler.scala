@@ -229,7 +229,7 @@ class DAGScheduler(
   /**
    * Helper function to eliminate some code re-use when creating new stages.
    */
-  def getParentStageAndId(rdd: RDD[_], jobId: Int): (List[Stage], Int) = {
+  def getParentStagesAndId(rdd: RDD[_], jobId: Int): (List[Stage], Int) = {
     val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     (parentStages, id)
@@ -247,7 +247,7 @@ class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _, _],
       jobId: Int,
       callSite: CallSite): ShuffleMapStage = {
-    val (parentStages: List[Stage], id: Int) = getParentStageAndId(rdd, jobId)
+    val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
     val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, parentStages,
       jobId, callSite, shuffleDep)
 
@@ -266,7 +266,7 @@ class DAGScheduler(
       numTasks: Int,
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    val (parentStages: List[Stage], id: Int) = getParentStageAndId(rdd, jobId)
+    val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
     val stage: ResultStage = new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)
 
     stageIdToStage(id) = stage
