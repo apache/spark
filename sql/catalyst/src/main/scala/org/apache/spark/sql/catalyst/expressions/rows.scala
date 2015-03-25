@@ -44,8 +44,8 @@ trait MutableRow extends Row {
  */
 object EmptyRow extends Row {
   override def apply(i: Int): Any = throw new UnsupportedOperationException
-  override def toSeq = Seq.empty
-  override def length = 0
+  override def toSeq: Seq[Any] = Seq.empty
+  override def length: Int = 0
   override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
   override def getInt(i: Int): Int = throw new UnsupportedOperationException
   override def getLong(i: Int): Long = throw new UnsupportedOperationException
@@ -56,7 +56,7 @@ object EmptyRow extends Row {
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
   override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-  def copy() = this
+  override def copy(): Row = this
 }
 
 /**
@@ -70,13 +70,13 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def toSeq = values.toSeq
+  override def toSeq: Seq[Any] = values.toSeq
 
-  override def length = values.length
+  override def length: Int = values.length
 
-  override def apply(i: Int) = values(i)
+  override def apply(i: Int): Any = values(i)
 
-  override def isNullAt(i: Int) = values(i) == null
+  override def isNullAt(i: Int): Boolean = values(i) == null
 
   override def getInt(i: Int): Int = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
@@ -167,7 +167,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     case _ => false
   }
 
-  def copy() = this
+  override def copy(): Row = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -194,7 +194,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
 
   override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
-  override def copy() = new GenericRow(values.clone())
+  override def copy(): Row = new GenericRow(values.clone())
 }
 
 
