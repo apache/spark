@@ -60,10 +60,9 @@ private[mesos] class DriverQueue(state: ClusterPersistenceEngine, capacity: Int)
     val removed = queue.dequeueFirst(d => d.submissionId.equals(submissionId))
     if (removed.isDefined) {
       state.expunge(removed.get.submissionId)
-      true
     }
 
-    false
+    removed.isDefined
   }
 
   def peek(): Option[DriverSubmission] = {

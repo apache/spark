@@ -37,6 +37,7 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
+    scheduler.recoverState
     val response =
       scheduler.submitDriver(
         new MesosDriverDescription(new DriverDescription("jar", 1000, 1, true, createCommand),
@@ -59,6 +60,7 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
+    scheduler.recoverState
     val response =
       scheduler.submitDriver(new MesosDriverDescription(
         new DriverDescription("jar", 1000, 1, true, createCommand),

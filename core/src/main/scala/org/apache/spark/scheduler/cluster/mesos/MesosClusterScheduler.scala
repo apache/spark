@@ -165,7 +165,7 @@ private[spark] class MesosClusterScheduler(
     }
   }
 
-  private def recoverState {
+  def recoverState {
     stateLock.synchronized {
       queue = new DriverQueue(engineFactory.createEngine("driverQueue"), queuedCapacity)
 
