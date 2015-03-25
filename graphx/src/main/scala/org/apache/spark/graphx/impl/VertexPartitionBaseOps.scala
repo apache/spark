@@ -90,7 +90,12 @@ private[graphx] abstract class VertexPartitionBaseOps
 
   /** Hides the VertexId's that are the same between `this` and `other`. */
   def minus(other: Self[VD]): Self[VD] = {
-    other.withMask((self.mask & other.mask) ^ self.mask)
+    if (self.index != other.index) {
+      logWarning("Minus operations on two VertexPartitions with different indexes is slow.")
+      minus(createUsingIndex(other.iterator))
+    } else {
+      self.withMask(self.mask.andNot(other.mask))
+    }
   }
 
   /** Hides the VertexId's that are the same between `this` and `other`. */
