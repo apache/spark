@@ -1365,7 +1365,6 @@ class DaemonTests(unittest.TestCase):
 
 
 class WorkerTests(PySparkTestCase):
-    @unittest.skipIf(sys.version >= "3", "flaky")
     def test_cancel_task(self):
         temp = tempfile.NamedTemporaryFile(delete=True)
         temp.close()
@@ -1389,7 +1388,8 @@ class WorkerTests(PySparkTestCase):
         daemon_pid, worker_pid = 0, 0
         while True:
             if os.path.exists(path):
-                data = open(path).read().split(' ')
+                with open(path) as f:
+                    data = f.read().split(' ')
                 daemon_pid, worker_pid = map(int, data)
                 break
             time.sleep(0.1)

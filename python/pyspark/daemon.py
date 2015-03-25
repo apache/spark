@@ -24,7 +24,7 @@ import sys
 import traceback
 import time
 import gc
-from errno import EINTR, ECHILD, EAGAIN
+from errno import EINTR, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
@@ -69,17 +69,6 @@ def worker(sock):
     return exit_code
 
 
-# Cleanup zombie children
-def cleanup_dead_children():
-    try:
-        while True:
-            pid, _ = os.waitpid(0, os.WNOHANG)
-            if not pid:
-                break
-    except:
-        pass
-
-
 def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
@@ -89,10 +78,12 @@ def manager():
     listen_sock.bind(('127.0.0.1', 0))
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
-    # re-open sys.stdout in 'wb' mode
-    f = os.fdopen(sys.stdout.fileno(), 'wb', 4)
-    write_int(listen_port, f)
-    f.flush()
+
+    # re-open stdin/stdout in 'wb' mode
+    stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
+    stdout_bin = os.fdopen(sys.stdout.fileno(), 'wb', 4)
+    write_int(listen_port, stdout_bin)
+    stdout_bin.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -104,6 +95,7 @@ def manager():
         shutdown(1)
     signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
+    signal.signal(SIGCHLD, SIG_IGN)
 
     reuse = os.environ.get("SPARK_REUSE_WORKER")
 
@@ -118,12 +110,9 @@ def manager():
                 else:
                     raise
 
-            # cleanup in signal handler will cause deadlock
-            cleanup_dead_children()
-
             if 0 in ready_fds:
                 try:
-                    worker_pid = read_int(sys.stdin)
+                    worker_pid = read_int(stdin_bin)
                 except EOFError:
                     # Spark told us to exit by closing stdin
                     shutdown(0)
