@@ -51,6 +51,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <span class="kill-link">
           (<a href={killLinkUri} onclick={confirm}>kill</a>)
         </span>
+      } else {
+        Seq.empty
       }
       // scalastyle:on
 
