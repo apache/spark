@@ -82,7 +82,7 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
     this
   }
 
-  override def update(key: A, value: B) = this += ((key, value))
+  override def update(key: A, value: B): Unit = this += ((key, value))
 
   override def apply(key: A): B = internalMap.apply(key)
 
@@ -92,14 +92,14 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
 
   override def size: Int = internalMap.size
 
-  override def foreach[U](f: ((A, B)) => U) = nonNullReferenceMap.foreach(f)
+  override def foreach[U](f: ((A, B)) => U): Unit = nonNullReferenceMap.foreach(f)
 
   def putIfAbsent(key: A, value: B): Option[B] = internalMap.putIfAbsent(key, value)
 
   def toMap: Map[A, B] = iterator.toMap
 
   /** Remove old key-value pairs with timestamps earlier than `threshTime`. */
-  def clearOldValues(threshTime: Long) = internalMap.clearOldValues(threshTime)
+  def clearOldValues(threshTime: Long): Unit = internalMap.clearOldValues(threshTime)
 
   /** Remove entries with values that are no longer strongly reachable. */
   def clearNullValues() {

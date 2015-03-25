@@ -91,7 +91,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def getRunner(operateFun: () => Unit): Runnable = {
     new Runnable() {
-      override def run() = Utils.tryOrExit {
+      override def run(): Unit = Utils.tryOrExit {
         operateFun()
       }
     }
@@ -139,7 +139,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getListing(refresh: Boolean) = {
+  override def getListing(refresh: Boolean): Iterable[FsApplicationHistoryInfo] = {
     if (refresh) checkForLogs()
     applications.values
   }

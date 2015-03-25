@@ -63,7 +63,7 @@ class CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case aggregatePlan@Aggregate(groupingExprs, aggregateExprs, child) =>
+          case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
               case e: Attribute if !groupingExprs.contains(e) =>
@@ -85,13 +85,18 @@ class CheckAnalysis {
 
             cleaned.foreach(checkValidAggregateExpression)
 
+          case _ => // Fallbacks to the following checks
+        }
+
+        operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.map(_.prettyString).mkString(",")
-            val input = o.inputSet.map(_.prettyString).mkString(",")
+            val missingAttributes = o.missingInput.mkString(",")
+            val input = o.inputSet.mkString(",")
 
-            failAnalysis(s"resolved attributes $missingAttributes missing from $input")
+            failAnalysis(
+              s"resolved attribute(s) $missingAttributes missing from $input " +
+                s"in operator ${operator.simpleString}")
 
-          // Catch all
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")

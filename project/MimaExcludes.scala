@@ -44,7 +44,13 @@ object MimaExcludes {
             // the maven-generated artifacts in 1.3.
             excludePackage("org.spark-project.jetty"),
             MimaBuild.excludeSparkPackage("unused"),
-            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.rdd.JdbcRDD.compute"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
           )
 
         case v if v.startsWith("1.3") =>

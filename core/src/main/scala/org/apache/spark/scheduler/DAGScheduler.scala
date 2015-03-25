@@ -946,7 +946,7 @@ class DAGScheduler(
 
     val stage = stageIdToStage(task.stageId)
 
-    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
+    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
       val serviceTime = stage.latestInfo.submissionTime match {
         case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
         case _ => "Unknown"

@@ -63,7 +63,7 @@ class HistoryServer(
   private val appCache = CacheBuilder.newBuilder()
     .maximumSize(retainedApplications)
     .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]) = {
+      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
         detachSparkUI(rm.getValue())
       }
     })
@@ -159,7 +159,9 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(refresh: Boolean) = provider.getListing(refresh)
+  def getApplicationList(refresh: Boolean): Iterable[ApplicationHistoryInfo] = {
+    provider.getListing(refresh)
+  }
 
   def getApplicationInfoList: Seq[ApplicationInfo] = {
     getApplicationList(true).map { ApplicationsListResource.appHistoryInfoToPublicAppInfo }.toSeq
@@ -170,7 +172,7 @@ class HistoryServer(
    *
    * @return A map with the provider's configuration.
    */
-  def getProviderConfig() = provider.getConfig()
+  def getProviderConfig(): Map[String, String] = provider.getConfig()
 
 }
 
@@ -209,9 +211,7 @@ object HistoryServer extends Logging {
     server.bind()
 
     Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
-      override def run() = {
-        server.stop()
-      }
+      override def run(): Unit = server.stop()
     })
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
