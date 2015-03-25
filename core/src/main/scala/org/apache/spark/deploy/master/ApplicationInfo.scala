@@ -111,6 +111,10 @@ private[deploy] class ApplicationInfo(
     endTime = System.currentTimeMillis()
   }
 
+  private[master] def isFinished: Boolean = {
+    state != ApplicationState.WAITING && state != ApplicationState.RUNNING
+  }
+
   def duration: Long = {
     if (endTime != -1) {
       endTime - startTime
