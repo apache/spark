@@ -20,7 +20,7 @@ import org.scalatest.{Matchers, FunSuite}
 
 import org.apache.spark.SparkException
 
-class SparkEnumTest extends FunSuite with Matchers {
+class SparkEnumSuite extends FunSuite with Matchers {
 
   test("toString") {
     DummyEnum.Foo.toString should be ("Foo")
