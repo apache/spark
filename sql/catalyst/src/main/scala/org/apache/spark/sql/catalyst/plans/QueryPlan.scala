@@ -71,7 +71,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionDown(e: Expression) = {
+    @inline def transformExpressionDown(e: Expression): Expression = {
       val newE = e.transformDown(rule)
       if (newE.fastEquals(e)) {
         e
@@ -85,6 +85,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case e: Expression => transformExpressionDown(e)
       case Some(e: Expression) => Some(transformExpressionDown(e))
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionDown(e)
         case other => other
@@ -103,7 +104,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionUp(e: Expression) = {
+    @inline def transformExpressionUp(e: Expression): Expression = {
       val newE = e.transformUp(rule)
       if (newE.fastEquals(e)) {
         e
@@ -117,6 +118,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case e: Expression => transformExpressionUp(e)
       case Some(e: Expression) => Some(transformExpressionUp(e))
       case m: Map[_,_] => m
+      case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionUp(e)
         case other => other
@@ -163,5 +165,5 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString = statePrefix + super.simpleString
+  override def simpleString: String = statePrefix + super.simpleString
 }

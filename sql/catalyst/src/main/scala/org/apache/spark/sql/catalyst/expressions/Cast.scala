@@ -29,9 +29,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   override lazy val resolved = childrenResolved && resolve(child.dataType, dataType)
 
-  override def foldable = child.foldable
+  override def foldable: Boolean = child.foldable
 
-  override def nullable = forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = forceNullable(child.dataType, dataType) || child.nullable
 
   private[this] def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (StringType, _: NumericType) => true
@@ -103,7 +103,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
   }
 
-  override def toString = s"CAST($child, $dataType)"
+  override def toString: String = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
 
@@ -430,14 +430,14 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 object Cast {
   // `SimpleDateFormat` is not thread-safe.
   private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue() = {
+    override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
   private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue() = {
+    override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd")
     }
   }
