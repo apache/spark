@@ -91,7 +91,7 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  private[master] val requestedCores = desc.maxCores.getOrElse(defaultCores)
+  private val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 

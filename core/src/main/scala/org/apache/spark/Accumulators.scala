@@ -18,8 +18,6 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
-import java.util.concurrent.atomic.AtomicLong
-import java.lang.ThreadLocal
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
@@ -109,7 +107,7 @@ class Accumulable[R, T] (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue = value_
+  def localValue: R = value_
 
   /**
    * Set the accumulator's value; only allowed on master.
@@ -137,7 +135,7 @@ class Accumulable[R, T] (
     Accumulators.register(this, false)
   }
 
-  override def toString = if (value_ == null) "null" else value_.toString
+  override def toString: String = if (value_ == null) "null" else value_.toString
 }
 
 /**
@@ -257,22 +255,22 @@ object AccumulatorParam {
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
-    def zero(initialValue: Double) = 0.0
+    def zero(initialValue: Double): Double = 0.0
   }
 
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
-    def zero(initialValue: Int) = 0
+    def zero(initialValue: Int): Int = 0
   }
 
   implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
-    def addInPlace(t1: Long, t2: Long) = t1 + t2
-    def zero(initialValue: Long) = 0L
+    def addInPlace(t1: Long, t2: Long): Long = t1 + t2
+    def zero(initialValue: Long): Long = 0L
   }
 
   implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
-    def addInPlace(t1: Float, t2: Float) = t1 + t2
-    def zero(initialValue: Float) = 0f
+    def addInPlace(t1: Float, t2: Float): Float = t1 + t2
+    def zero(initialValue: Float): Float = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
@@ -351,6 +349,7 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
-  def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
-  def stringifyValue(value: Any) = "%s".format(value)
+  def stringifyPartialValue(partialValue: Any): String = "%s".format(partialValue)
+
+  def stringifyValue(value: Any): String = "%s".format(value)
 }

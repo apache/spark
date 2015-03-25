@@ -40,7 +40,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   }
   val timeout = AkkaUtils.askTimeout(conf)
 
-  override def preStart() = {
+  override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.masters}")
@@ -123,7 +123,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     }
   }
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)

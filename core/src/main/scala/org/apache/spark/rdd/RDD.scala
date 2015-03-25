@@ -186,7 +186,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
-  def getStorageLevel = storageLevel
+  def getStorageLevel: StorageLevel = storageLevel
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -746,13 +746,13 @@ abstract class RDD[T: ClassTag](
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = {
     zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
-        def hasNext = (thisIter.hasNext, otherIter.hasNext) match {
+        def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
           case (false, false) => false
           case _ => throw new SparkException("Can only zip RDDs with " +
             "same number of elements in each partition")
         }
-        def next = (thisIter.next, otherIter.next)
+        def next(): (T, U) = (thisIter.next(), otherIter.next())
       }
     }
   }
@@ -868,8 +868,8 @@ abstract class RDD[T: ClassTag](
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
       val p2 = new Partitioner() {
-        override def numPartitions = p.numPartitions
-        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+        override def numPartitions: Int = p.numPartitions
+        override def getPartition(k: Any): Int = p.getPartition(k.asInstanceOf[(Any, _)]._1)
       }
       // Unfortunately, since we're making a new p2, we'll get ShuffleDependencies
       // anyway, and when calling .keys, will not have a partitioner set, even though
@@ -1394,7 +1394,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
-  def context = sc
+  def context: SparkContext = sc
 
   /**
    * Private API for changing an RDD's ClassTag.
