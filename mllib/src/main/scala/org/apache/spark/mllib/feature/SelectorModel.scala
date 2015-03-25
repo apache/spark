@@ -17,36 +17,41 @@
 
 package org.apache.spark.mllib.feature
 
-import scala.collection.mutable.ArrayBuilder
-
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- * Creates a ChiSquared feature selector.
- * @param numTopFeatures number of features that selector will select
- *                       (ordered by statistic value descending)
+ * Generic selector model.
+ *
+ * @param selectedFeatures list of indices to select (filter). Must be ordered asc
  */
 @Experimental
-class ChiSqSelector (val numTopFeatures: Int) {
+class SelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer {
+
+  require(isSorted(selectedFeatures), "Array has to be sorted asc")
+
+  protected def isSorted(array: Array[Int]): Boolean = {
+    var i = 1
+    while (i < array.length) {
+      if (array(i) < array(i-1)) return false
+      i += 1
+    }
+    true
+  }
 
   /**
-   * Returns a ChiSquared feature selector.
+   * Applies transformation on a vector.
    *
-   * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
-   *             Real-valued features will be treated as categorical for each distinct value.
-   *             Apply feature discretizer before using this function.
+   * @param vector vector to be transformed.
+   * @return transformed vector.
    */
-  def fit(data: RDD[LabeledPoint]): SelectorModel = {
-    val indices = Statistics.chiSqTest(data)
-      .zipWithIndex.sortBy { case (res, _) => -res.statistic }
-      .take(numTopFeatures)
-      .map { case (_, indices) => indices }
-      .sorted
-    new SelectorModel(indices)
+  override def transform(vector: Vector): Vector = {
+    FeatureUtils.compress(vector, selectedFeatures)
   }
+
+
 }
