@@ -125,7 +125,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
     ...    miniBatchFraction=1.0, initialWeights=array([1.0]), regParam=0.1, regType="l2",
-    ...    addIntercept=True, validateData=True)
+    ...    intercept=True, validateData=True)
     >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
@@ -149,7 +149,7 @@ class LinearRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=0.0, regType=None, addIntercept=False,
+              initialWeights=None, regParam=0.0, regType=None, intercept=False,
               validateData=True):
         """
         Train a linear regression model on the given data.
@@ -172,7 +172,7 @@ class LinearRegressionWithSGD(object):
 
                                      (default: None)
 
-        :param addIntercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not). (default: False)
@@ -183,7 +183,7 @@ class LinearRegressionWithSGD(object):
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
-                                 regType, bool(addIntercept), bool(validateData))
+                                 regType, bool(intercept), bool(validateData))
 
         return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
@@ -219,6 +219,13 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     validateData=True)
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
     """
 
 
@@ -226,12 +233,12 @@ class LassoWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None, addIntercept=False,
+              miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True):
         """Train a Lasso regression model on the given data."""
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
-                                 float(regParam), float(miniBatchFraction), i, bool(addIntercept),
+                                 float(regParam), float(miniBatchFraction), i, bool(intercept),
                                  bool(validateData))
 
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
@@ -268,6 +275,13 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=100, step=1.0,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     validateData=True)
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
     """
 
 
@@ -275,12 +289,12 @@ class RidgeRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None, addIntercept=False,
+              miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True):
         """Train a ridge regression model on the given data."""
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
-                                 float(regParam), float(miniBatchFraction), i, bool(addIntercept),
+                                 float(regParam), float(miniBatchFraction), i, bool(intercept),
                                  bool(validateData))
 
         return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
