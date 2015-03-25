@@ -19,7 +19,6 @@ package org.apache.spark.mllib.classification
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.classification.tree.ClassificationImpurity.Gini
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
@@ -52,10 +51,10 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
     val newModel = rf
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(2)
       .setNumTrees(1)
-      .setFeatureSubsetStrategy("auto")
+      .setFeaturesPerNode("auto")
       .setSeed(123)
       .run(rdd, categoricalFeatures, numClasses)
     val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
@@ -72,7 +71,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Binary classification with continuous features and node Id cache:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
-      .setCacheNodeIds(true)
+      .setCacheNodeIds(cacheNodeIds = true)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
 
@@ -87,10 +86,10 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val numClasses = 3
 
     val rf = new RandomForestClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(5)
       .setNumTrees(2)
-      .setFeatureSubsetStrategy("sqrt")
+      .setFeaturesPerNode("sqrt")
       .setSeed(12345)
 
     val newModel = rf.run(rdd, categoricalFeatures, numClasses)
@@ -105,11 +104,11 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val numClasses = 2
 
     val rf1 = new RandomForestClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(2)
-      .setCacheNodeIds(true)
+      .setCacheNodeIds(cacheNodeIds = true)
       .setNumTrees(3)
-      .setFeatureSubsetStrategy("auto")
+      .setFeaturesPerNode("auto")
       .setSeed(123)
     val model1 = rf1.run(rdd, categoricalFeaturesInfo, numClasses)
     val oldStrategy1 = rf1.getOldStrategy(categoricalFeaturesInfo, numClasses)

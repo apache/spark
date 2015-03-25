@@ -20,10 +20,10 @@ package org.apache.spark.mllib.classification
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.classification.tree.ClassificationImpurity.{Entropy, Gini}
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
+  DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
@@ -59,7 +59,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Binary classification stump with ordered categorical features") {
     val dt = new DecisionTreeClassifier()
-      .setImpurity(DecisionTreeClassifier.Impurities.Gini)
+      .setImpurity("gini")
       .setMaxDepth(2)
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
@@ -74,7 +74,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(100)
     val numClasses = 2
     Array(orderedLabeledPointsWithLabel0RDD, orderedLabeledPointsWithLabel1RDD).foreach { rdd =>
-      Array(Entropy, Gini).foreach { impurity =>
+      DecisionTreeClassifier.supportedImpurities.foreach { impurity =>
         dt.setImpurity(impurity)
         DecisionTreeClassifierSuite.compareAPIs(
           rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
@@ -85,7 +85,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Multiclass classification stump with 3-ary (unordered) categorical features") {
     val rdd = categoricalDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
     val numClasses = 3
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
@@ -100,7 +100,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
     val numClasses = 2
     DecisionTreeClassifierSuite.compareAPIs(
@@ -115,7 +115,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
     val numClasses = 2
     DecisionTreeClassifierSuite.compareAPIs(
@@ -127,7 +127,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val maxBins = 2 * (math.pow(2, 3 - 1).toInt - 1) // just enough bins to allow unordered features
     val rdd = categoricalDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
       .setMaxBins(maxBins)
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
@@ -138,7 +138,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Multiclass classification stump with continuous features") {
     val rdd = continuousDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
       .setMaxBins(100)
     val numClasses = 3
@@ -149,7 +149,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Multiclass classification stump with continuous + unordered categorical features") {
     val rdd = continuousDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 3)
@@ -160,7 +160,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Multiclass classification stump with 10-ary (ordered) categorical features") {
     val rdd = categoricalDataPointsForMulticlassForOrderedFeaturesRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 10, 1 -> 10)
@@ -172,7 +172,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       " with just enough bins") {
     val rdd = categoricalDataPointsForMulticlassForOrderedFeaturesRDD
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(4)
       .setMaxBins(10)
     val categoricalFeatures = Map(0 -> 10, 1 -> 10)
@@ -187,7 +187,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(2)
       .setMinInstancesPerNode(2)
     val numClasses = 2
@@ -205,7 +205,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     arr(3) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxBins(2)
       .setMaxDepth(2)
       .setMinInstancesPerNode(2)
@@ -222,7 +222,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val rdd = sc.parallelize(arr)
 
     val dt = new DecisionTreeClassifier()
-      .setImpurity(Gini)
+      .setImpurity("Gini")
       .setMaxDepth(2)
       .setMinInfoGain(1.0)
     val numClasses = 2

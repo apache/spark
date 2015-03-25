@@ -17,9 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.classification.tree.ClassificationImpurity
-import org.apache.spark.mllib.impl.tree.{DecisionTreeModel, Node, TreeClassifier,
-  TreeClassifierParams}
+import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -29,7 +27,7 @@ import org.apache.spark.rdd.RDD
 
 class DecisionTreeClassifier
   extends TreeClassifier[DecisionTreeClassificationModel]
-  with TreeClassifierParams[DecisionTreeClassifier] {
+  with DecisionTreeClassifierParams[DecisionTreeClassifier] {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -52,7 +50,7 @@ class DecisionTreeClassifier
   override def setCheckpointInterval(checkpointInterval: Int): DecisionTreeClassifier =
     super.setCheckpointInterval(checkpointInterval)
 
-  override def setImpurity(impurity: ClassificationImpurity): DecisionTreeClassifier =
+  override def setImpurity(impurity: String): DecisionTreeClassifier =
     super.setImpurity(impurity)
 
   override def run(
@@ -60,21 +58,17 @@ class DecisionTreeClassifier
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DecisionTreeClassificationModel = {
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
-    strategy.setSubsamplingRate(1.0) // fixed to 1.0 for individual trees
     val oldModel = OldDecisionTree.train(input, strategy)
     DecisionTreeClassificationModel.fromOld(oldModel)
   }
-
 }
 
 object DecisionTreeClassifier {
 
-  /** Accessor for supported ClassificationImpurity types */
-  final val Impurities = ClassificationImpurity
+  /** Accessor for supported impurities */
+  final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
-
-// TODO: Generalize for regression as well
 class DecisionTreeClassificationModel private[mllib] (rootNode: Node)
   extends DecisionTreeModel(rootNode) with Serializable {
 
@@ -95,5 +89,4 @@ private[mllib] object DecisionTreeClassificationModel {
     val rootNode = Node.fromOld(oldModel.topNode)
     new DecisionTreeClassificationModel(rootNode)
   }
-
 }

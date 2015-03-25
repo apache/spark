@@ -86,6 +86,8 @@ abstract class DecisionTreeModel(val rootNode: Node) extends PredictionModel wit
   }
 }
 
+// Note: We do not store the trees here since they are specialized to classification/regression,
+// and this class is for both.
 private[mllib] abstract class TreeEnsembleModel extends PredictionModel with Serializable {
 
   require(numTrees > 0, "TreeEnsembleModel requires at least 1 tree.")

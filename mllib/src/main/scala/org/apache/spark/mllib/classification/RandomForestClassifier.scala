@@ -19,7 +19,6 @@ package org.apache.spark.mllib.classification
 
 import scala.collection.mutable
 
-import org.apache.spark.mllib.classification.tree.ClassificationImpurity
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -35,6 +34,8 @@ class RandomForestClassifier
   with TreeClassifierParams[RandomForestClassifier] {
 
   // Override parameter setters from parent trait for Java API compatibility.
+
+  // Parameters from TreeClassifierParams:
 
   override def setMaxDepth(maxDepth: Int): RandomForestClassifier = super.setMaxDepth(maxDepth)
 
@@ -55,18 +56,22 @@ class RandomForestClassifier
   override def setCheckpointInterval(checkpointInterval: Int): RandomForestClassifier =
     super.setCheckpointInterval(checkpointInterval)
 
-  override def setImpurity(impurity: ClassificationImpurity): RandomForestClassifier =
+  override def setImpurity(impurity: String): RandomForestClassifier =
     super.setImpurity(impurity)
 
-  override def setNumTrees(numTrees: Int): RandomForestClassifier = super.setNumTrees(numTrees)
-
-  override def setFeatureSubsetStrategy(featureSubsetStrategy: String): RandomForestClassifier =
-    super.setFeatureSubsetStrategy(featureSubsetStrategy)
+  // Parameters from TreeEnsembleParams:
 
   override def setSubsamplingRate(subsamplingRate: Double): RandomForestClassifier =
     super.setSubsamplingRate(subsamplingRate)
 
   override def setSeed(seed: Long): RandomForestClassifier = super.setSeed(seed)
+
+  // Parameters from RandomForestParams:
+
+  override def setNumTrees(numTrees: Int): RandomForestClassifier = super.setNumTrees(numTrees)
+
+  override def setFeaturesPerNode(featuresPerNode: String): RandomForestClassifier =
+    super.setFeaturesPerNode(featuresPerNode)
 
   override def run(
       input: RDD[LabeledPoint],
@@ -74,13 +79,12 @@ class RandomForestClassifier
       numClasses: Int): RandomForestClassificationModel = {
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldRandomForest.trainClassifier(
-      input, strategy, getNumTrees, getFeatureSubsetStrategyStr, getSeed.toInt)
+      input, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
     RandomForestClassificationModel.fromOld(oldModel)
   }
 
   /**
    * Create a Strategy instance to use with the old API.
-   * NOTE: The caller should set subsamplingRate by hand based on the model type!
    * TODO: Make this protected once we deprecate the old API.
    */
   override private[mllib] def getOldStrategy(
@@ -90,15 +94,12 @@ class RandomForestClassifier
     strategy.setSubsamplingRate(getSubsamplingRate)
     strategy
   }
-
 }
 
 object RandomForestClassifier {
 
-  /** Accessor for supported FeatureSubsetStrategy options */
-  final val featureSubsetStrategies = FeatureSubsetStrategy
-
-  def supportedImpurities = ClassificationImpurity
+  /** Accessor for supported impurities */
+  final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
 class RandomForestClassificationModel(
@@ -134,5 +135,4 @@ private[mllib] object RandomForestClassificationModel {
     new RandomForestClassificationModel(oldModel.trees.map(DecisionTreeClassificationModel.fromOld),
       Array.fill(oldModel.trees.size)(1.0))
   }
-
 }

@@ -17,9 +17,12 @@
 
 package org.apache.spark.mllib.impl.tree
 
-import org.apache.spark.mllib.classification.tree.ClassificationImpurity
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
+  BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
+  Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, AbsoluteError => OldAbsoluteError,
+  LogLoss => OldLogLoss, SquaredError => OldSquaredError}
 import org.apache.spark.util.Utils
 
 
@@ -186,8 +189,8 @@ private[mllib] trait DecisionTreeParams[M] {
 
   /**
    * Create a Strategy instance to use with the old API.
-   * NOTE: The caller should set subsamplingRate by hand based on the model type!
-   * TODO: Make this protected once we deprecate the old API.
+   * NOTE: The caller should set impurity and subsamplingRate (which is set to 1.0,
+   *       the default for single trees).
    */
   private[mllib] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
@@ -207,47 +210,125 @@ private[mllib] trait DecisionTreeParams[M] {
 
 }
 
-private[mllib] trait TreeClassifierParams[M] extends DecisionTreeParams[M] {
+private[mllib] trait TreeClassifierParams[M] {
 
-  protected var impurity: ClassificationImpurity = ClassificationImpurity.Gini
+  protected var impurityStr: String = "Gini"
 
   /**
    * Criterion used for information gain calculation.
-   * Supported: [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Gini]],
-   * [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
+   * Supported: "Entropy" and "Gini".
    * (default = Gini)
+   * @param impurity  String for the impurity (case-insensitive)
    * @group setParam
    */
-  def setImpurity(impurity: ClassificationImpurity): M = {
-    this.impurity = impurity
+  def setImpurity(impurity: String): M = {
+    val impurityStr = impurity.toLowerCase
+    require(TreeClassifierParams.supportedImpurities.contains(impurityStr),
+      s"TreeClassifierParams was given unrecognized impurity: $impurity." +
+      s"  Supported options: ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
+    this.impurityStr = impurityStr
     this.asInstanceOf[M]
   }
 
   /**
    * Criterion used for information gain calculation.
-   * Supported: [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Gini]],
-   * [[org.apache.spark.mllib.classification.tree.ClassificationImpurity.Entropy]].
+   * Supported: "Entropy" and "Gini".
    * (default = Gini)
    * @group getParam
    */
-  def getImpurity: ClassificationImpurity = impurity
+  def getImpurityStr: String = impurityStr
+
+  /** Convert new impurity to old impurity. */
+  protected def getOldImpurity: OldImpurity = {
+    impurityStr match {
+      case "entropy" => OldEntropy
+      case "gini" => OldGini
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(
+          s"TreeClassifierParams was given unrecognized impurity: $impurityStr.")
+    }
+  }
+}
+
+private[mllib] object TreeClassifierParams {
+  // Must be lower-case
+  val supportedImpurities: Array[String] = Array("entropy", "gini")
+}
+
+private[mllib] trait TreeRegressorParams[M] {
+
+  protected var impurityStr: String = "Variance"
+
+  /**
+   * Criterion used for information gain calculation.
+   * Supported: "Variance".
+   * (default = Variance)
+   * @param impurity  String for the impurity (case-insensitive)
+   * @group setParam
+   */
+  def setImpurity(impurity: String): M = {
+    val impurityStr = impurity.toLowerCase
+    require(TreeRegressorParams.supportedImpurities.contains(impurityStr),
+      s"TreeRegressorParams was given unrecognized impurity: $impurity." +
+        s"  Supported options: ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
+    this.impurityStr = impurityStr
+    this.asInstanceOf[M]
+  }
+
+  /**
+   * Criterion used for information gain calculation.
+   * Supported: "Variance".
+   * (default = Variance)
+   * @group getParam
+   */
+  def getImpurityStr: String = impurityStr
+
+  /** Convert new impurity to old impurity. */
+  protected def getOldImpurity: OldImpurity = {
+    impurityStr match {
+      case "variance" => OldVariance
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(
+          s"TreeRegressorParams was given unrecognized impurity: $impurityStr")
+    }
+  }
+}
+
+private[mllib] object TreeRegressorParams {
+  // Must be lower-case
+  val supportedImpurities: Array[String] = Array("variance")
+}
+
+private[mllib] trait DecisionTreeClassifierParams[M]
+  extends DecisionTreeParams[M] with TreeClassifierParams[M] {
 
   /**
    * Create a Strategy instance to use with the old API.
-   * NOTE: The caller should set subsamplingRate by hand based on the model type!
-   * TODO: Make this protected once we deprecate the old API.
+   * TODO: Remove once we move implementation to new API.
    */
   override private[mllib] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    val oldImpurity = impurity match {
-      case ClassificationImpurity.Entropy => OldEntropy
-      case ClassificationImpurity.Gini => OldGini
-      case _ => throw new RuntimeException(
-        s"TreeClassifierParams was given unrecognized impurity: $impurity")
-    }
-    strategy.setImpurity(oldImpurity)
+    strategy.setImpurity(getOldImpurity)
+    strategy
+  }
+}
+
+private[mllib] trait DecisionTreeRegressorParams[M]
+  extends DecisionTreeParams[M] with TreeRegressorParams[M] {
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setImpurity(getOldImpurity)
     strategy
   }
 }
@@ -256,7 +337,7 @@ private[mllib] trait TreeClassifierParams[M] extends DecisionTreeParams[M] {
  * (private trait) Parameters for Decision Trees.
  * @tparam M  Concrete class implementing this parameter trait
  */
-private[mllib] trait TreeEnsembleParams[M] {
+private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
 
   protected var subsamplingRate: Double = 1.0
 
@@ -294,16 +375,25 @@ private[mllib] trait TreeEnsembleParams[M] {
    */
   def getSeed: Long = seed
 
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set impurity and seed.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setSubsamplingRate(subsamplingRate)
+    strategy
+  }
 }
 
 private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
 
   protected var numTrees: Int = 20
 
-  protected var featureSubsetStrategy: FeatureSubsetStrategy = FeatureSubsetStrategy.Auto
-
-  /** Paired with [[featureSubsetStrategy]] to track built-in named options */
-  protected var featureSubsetStrategyStr: String = "auto"
+  protected var featuresPerNodeStr: String = "auto"
 
   /**
    * Number of trees to train (>= 1).
@@ -329,31 +419,82 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
   def getNumTrees: Int = numTrees
 
   /**
-   * Specifies the number of features to consider for splits at each tree node.
-   * Use featureSubsetStrategies to select supported options.
-   * (default = [[FeatureSubsetStrategy.Auto]])
+   * The number of features to consider for splits at each tree node.
+   * Supported options:
+   *  - "auto": choose automatically for task
+   *  - "all": use all features
+   *  - "onethird": use 1/3 of the features
+   *  - "sqrt": use sqrt(number of features)
+   *  - "log2": use log2(number of features)
+   * (default = "auto")
    * @group setParam
    */
-  def setFeatureSubsetStrategy(featureSubsetStrategy: String): M = {
-    this.featureSubsetStrategy = FeatureSubsetStrategies.fromString(featureSubsetStrategy)
-    this.featureSubsetStrategyStr = featureSubsetStrategy
+  def setFeaturesPerNode(featuresPerNode: String): M = {
+    val featuresPerNodeStr = featuresPerNode.toLowerCase
+    require(RandomForestParams.supportedFeaturesPerNode.contains(featuresPerNodeStr),
+      s"RandomForestParams was given unrecognized featuresPerNode: $featuresPerNode." +
+        s"  Supported options: ${RandomForestParams.supportedFeaturesPerNode.mkString(", ")}")
+    this.featuresPerNodeStr = featuresPerNodeStr
     this.asInstanceOf[M]
   }
 
   /**
-   * Specifies the number of features to consider for splits at each tree node.
-   * Use featureSubsetStrategies to select supported options.
+   * The number of features to consider for splits at each tree node.
+   * Supported options:
+   *  - "auto": choose automatically for task
+   *  - "all": use all features
+   *  - "onethird": use 1/3 of the features
+   *  - "sqrt": use sqrt(number of features)
+   *  - "log2": use log2(number of features)
    * (default = "auto")
-   * Note: This returns the strategy as a String to permit us to make this strategy
-   *       more pluggable in the future.
    * @group getParam
    */
-  def getFeatureSubsetStrategyStr: String = featureSubsetStrategyStr
+  def getFeaturesPerNodeStr: String = featuresPerNodeStr
+}
+
+private[mllib] object RandomForestParams {
+  val supportedFeaturesPerNode: Array[String] = Array("auto", "all", "onethird", "sqrt", "log2")
+}
+
+private[mllib] trait RandomForestClassifierParams[M]
+  extends TreeEnsembleParams[M] with TreeClassifierParams[M] {
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setImpurity(getOldImpurity)
+    strategy
+  }
+}
+
+private[mllib] trait RandomForestRegressorParams[M]
+  extends TreeEnsembleParams[M] with TreeRegressorParams[M] {
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setImpurity(getOldImpurity)
+    strategy
+  }
 }
 
 private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   protected var numIterations: Int = 20
+
+  protected var learningRate: Double = 0.1
+
+  protected var validationTol: Double = 1e-5
 
   /**
    * Number of trees to train (>= 1).
@@ -373,4 +514,145 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
    * @group getParam
    */
   def getNumIterations: Int = numIterations
+
+  /**
+   * Learning rate in interval (0, 1] for shrinking the contribution of each estimator.
+   * (default = 0.1)
+   */
+  def setLearningRate(learningRate: Double): M = {
+    require(learningRate > 0.0 && learningRate <= 1.0,
+      s"GBT given invalid learning rate ($learningRate).  Value should be in (0,1].")
+    this.learningRate = learningRate
+    this.asInstanceOf[M]
+  }
+
+  /**
+   * Learning rate in interval (0, 1] for shrinking the contribution of each estimator.
+   * (default = 0.1)
+   */
+  def getLearningRate: Double = learningRate
+
+  /**
+   * Threshold for stopping early when runWithValidation is used.
+   * If the error rate on the validation input changes by less than the validationTol,
+   * then learning will stop early (before [[numIterations]]).
+   * This parameter is ignored when run is used.
+   * (default = 1e-5)
+   */
+  def setValidationTol(validationTol: Double): M = {
+    this.validationTol = validationTol
+    this.asInstanceOf[M]
+  }
+
+  /**
+   * Threshold for stopping early when runWithValidation is used.
+   * If the error rate on the validation input changes by less than the validationTol,
+   * then learning will stop early (before [[numIterations]]).
+   * This parameter is ignored when run is used.
+   * (default = 1e-5)
+   */
+  def getValidationTol: Double = validationTol
+
+  /**
+   * Create a BoostingStrategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  private[mllib] def getOldBoostingStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    // NOTE: The old API does not support "seed" so we ignore it.
+    new OldBoostingStrategy(strategy, getOldLoss, numIterations, learningRate, validationTol)
+  }
+
+  protected def getOldLoss: OldLoss
+}
+
+private[mllib] trait GBTClassifierParams[M]
+  extends GBTParams[M] with TreeClassifierParams[M] {
+
+  protected var lossStr: String = "LogLoss"
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "LogLoss"
+   * (default = LogLoss)
+   * @param loss  String for loss (case-insensitive)
+   * @group setParam
+   */
+  def setLoss(loss: String): M = {
+    val lossStr = loss.toLowerCase
+    require(GBTClassifierParams.supportedLosses.contains(lossStr),
+      s"GBTClassifierParams was given bad loss: $loss." +
+      s"  Supported options: ${GBTClassifierParams.supportedLosses.mkString(", ")}")
+    this.lossStr = lossStr
+    this.asInstanceOf[M]
+  }
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "LogLoss"
+   * (default = LogLoss)
+   * @group getParam
+   */
+  def getLossStr: String = lossStr
+
+  /** Convert new loss to old loss. */
+  override protected def getOldLoss: OldLoss = {
+    lossStr match {
+      case "logloss" => OldLogLoss
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTClassifierParams was given bad loss: $lossStr")
+    }
+  }
+}
+
+private[mllib] object GBTClassifierParams {
+  val supportedLosses: Array[String] = Array("logloss")
+}
+
+private[mllib] trait GBTRegressorParams[M]
+  extends GBTParams[M] with TreeRegressorParams[M] {
+
+  protected var lossStr: String = "SquaredError"
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "SquaredError" and "AbsoluteError"
+   * (default = SquaredError)
+   * @param loss  String for loss (case-insensitive)
+   * @group setParam
+   */
+  def setLoss(loss: String): M = {
+    val lossStr = loss.toLowerCase
+    require(GBTRegressorParams.supportedLosses.contains(lossStr),
+      s"GBTRegressorParams was given bad loss: $loss." +
+        s"  Supported options: ${GBTRegressorParams.supportedLosses.mkString(", ")}")
+    this.lossStr = lossStr
+    this.asInstanceOf[M]
+  }
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "SquaredError" and "AbsoluteError"
+   * (default = SquaredError)
+   * @group getParam
+   */
+  def getLossStr: String = lossStr
+
+  /** Convert new loss to old loss. */
+  override protected def getOldLoss: OldLoss = {
+    lossStr match {
+      case "squarederror" => OldSquaredError
+      case "absoluteerror" => OldAbsoluteError
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTRegressorParams was given bad loss: $lossStr")
+    }
+  }
+}
+
+private[mllib] object GBTRegressorParams {
+  val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
 }

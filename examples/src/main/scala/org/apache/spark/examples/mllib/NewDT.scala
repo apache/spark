@@ -45,20 +45,20 @@ object NewDT {
 
     /****************** EXAMPLE OF Decision Tree **************************/
     val dt = new DecisionTreeClassifier()
-      .setImpurity(DecisionTreeClassifier.Impurities.Gini)
+      .setImpurity("Gini")
       .setCheckpointInterval(5)
-      .setImpurity(DecisionTreeClassifier.Impurities.Gini)
+      .setImpurity("gini")
       .setCheckpointInterval(5)
     val dtModel: DecisionTreeClassificationModel = dt.run(data)
 
     /****************** EXAMPLE OF Ensemble **************************/
     val rf = new RandomForestClassifier()
-      .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
+      .setImpurity("Gini")
       .setCheckpointInterval(5)
-      .setFeatureSubsetStrategy("auto")
-      .setImpurity(RandomForestClassifier.supportedImpurities.Gini)
+      .setFeaturesPerNode("auto")
+      .setImpurity("gini")
       .setCheckpointInterval(5)
-      .setFeatureSubsetStrategy("onethird")
+      .setFeaturesPerNode("onethird")
     val rfModel: RandomForestClassificationModel = rf.run(data)
 
     sc.stop()
