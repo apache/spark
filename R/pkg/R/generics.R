@@ -90,6 +90,10 @@ setGeneric("foreachPartition", function(x, func) { standardGeneric("foreachParti
 # The jrdd accessor function.
 setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
 
+#' @rdname glom
+#' @export
+setGeneric("glom", function(x) { standardGeneric("glom") })
+
 #' @rdname keyBy
 #' @export
 setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
