@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.DataType
 class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
   /**
-   * number of features
+   * p norm of the vector
    * @group param
    */
   val p = new DoubleParam(this, "p", "p-norm", Some(2))
