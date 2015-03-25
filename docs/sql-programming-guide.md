@@ -624,7 +624,8 @@ tuples or lists in the RDD created in the step 1.
 For example:
 {% highlight python %}
 # Import SQLContext and data types
-from pyspark.sql import *
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
 
 # sc is an existing SparkContext.
 sqlContext = SQLContext(sc)

@@ -51,7 +51,7 @@ private[spark] object UIWorkloadGenerator {
     val nJobSet = args(2).toInt
     val sc = new SparkContext(conf)
 
-    def setProperties(s: String) = {
+    def setProperties(s: String): Unit = {
       if(schedulingMode == SchedulingMode.FAIR) {
         sc.setLocalProperty("spark.scheduler.pool", s)
       }
@@ -59,7 +59,7 @@ private[spark] object UIWorkloadGenerator {
     }
 
     val baseData = sc.makeRDD(1 to NUM_PARTITIONS * 10, NUM_PARTITIONS)
-    def nextFloat() = new Random().nextFloat()
+    def nextFloat(): Float = new Random().nextFloat()
 
     val jobs = Seq[(String, () => Long)](
       ("Count", baseData.count),

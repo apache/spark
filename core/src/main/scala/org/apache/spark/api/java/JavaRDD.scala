@@ -179,7 +179,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
 
-  override def toString = rdd.toString
+  override def toString: String = rdd.toString
 
   /** Assign a name to this RDD */
   def setName(name: String): JavaRDD[T] = {
