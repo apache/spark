@@ -87,7 +87,7 @@ def _py2java(sc, obj):
     return obj
 
 
-def _java2py(sc, r):
+def _java2py(sc, r, encoding="bytes"):
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -108,7 +108,7 @@ def _java2py(sc, r):
                 pass  # not pickable
 
     if isinstance(r, (bytearray, bytes)):
-        r = PickleSerializer().loads(bytes(r))
+        r = PickleSerializer().loads(bytes(r), encoding=encoding)
     return r
 
 

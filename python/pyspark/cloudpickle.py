@@ -53,19 +53,19 @@ from functools import partial
 import itertools
 import dis
 import traceback
-import platform
 
 if sys.version < '3':
-    from types import InstanceType
     from pickle import Pickler
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
     PY3 = False
 else:
-    InstanceType = object  # see http://bugs.python.org/issue8206
     types.ClassType = type
     from pickle import _Pickler as Pickler
+    from io import BytesIO as StringIO
     PY3 = True
-
-PyImp = platform.python_implementation()
 
 #relevant opcodes
 STORE_GLOBAL = dis.opname.index('STORE_GLOBAL')
@@ -74,14 +74,6 @@ LOAD_GLOBAL = dis.opname.index('LOAD_GLOBAL')
 GLOBAL_OPS = [STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL]
 HAVE_ARGUMENT = dis.HAVE_ARGUMENT
 EXTENDED_ARG = dis.EXTENDED_ARG
-
-if PY3:
-    from io import BytesIO as StringIO
-else:
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
 
 
 def islambda(func):
@@ -115,20 +107,19 @@ class CloudPickler(Pickler):
             return Pickler.dump(self, obj)
         except RuntimeError as e:
             if 'recursion' in e.args[0]:
-                msg = """Could not pickle object as excessively deep recursion required.
-                Try _fast_serialization=2 or contact PiCloud support"""
+                msg = """Could not pickle object as excessively deep recursion required."""
                 raise pickle.PicklingError(msg)
 
     def save_memoryview(self, obj):
         """Fallback to save_string"""
         Pickler.save_string(self, str(obj))
-    if PY3:
-        dispatch[memoryview] = save_memoryview
 
     def save_buffer(self, obj):
         """Fallback to save_string"""
         Pickler.save_string(self,str(obj))
-    if not PY3:
+    if PY3:
+        dispatch[memoryview] = save_memoryview
+    else:
         dispatch[buffer] = save_buffer
 
     def save_unsupported(self, obj):
@@ -301,7 +292,6 @@ class CloudPickler(Pickler):
         # process all variables referenced by global environment
         f_globals = {}
         for var in func_global_refs:
-            #Some names, such as class functions are not global - we don't need them
             if var in func.__globals__:
                 f_globals[var] = func.__globals__[var]
 
@@ -423,7 +413,8 @@ class CloudPickler(Pickler):
         save(stuff)
         write(pickle.BUILD)
 
-    dispatch[InstanceType] = save_inst
+    if not PY3:
+        dispatch[types.InstanceType] = save_inst
 
     def save_property(self, obj):
         # properties not correctly saved in python

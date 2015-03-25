@@ -389,10 +389,10 @@ class PickleSerializer(FramedSerializer):
         return pickle.dumps(obj, protocol)
 
     if sys.version >= '3':
-        def loads(self, obj):
-            return pickle.loads(obj, encoding='bytes')
+        def loads(self, obj, encoding="bytes"):
+            return pickle.loads(obj, encoding=encoding)
     else:
-        def loads(self, obj):
+        def loads(self, obj, encoding=None):
             return pickle.loads(obj)
 
 

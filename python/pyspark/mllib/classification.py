@@ -428,9 +428,10 @@ class NaiveBayesModel(Saveable, Loader):
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
             sc._jsc.sc(), path)
-        py_labels = _java2py(sc, java_model.labels())
-        py_pi = _java2py(sc, java_model.pi())
-        py_theta = _java2py(sc, java_model.theta())
+        # Can not unpickle array.array from Pyrolite in Python3 with "bytes"
+        py_labels = _java2py(sc, java_model.labels(), "latin1")
+        py_pi = _java2py(sc, java_model.pi(), "latin1")
+        py_theta = _java2py(sc, java_model.theta(), "latin1")
         return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
 
