@@ -43,7 +43,7 @@ private[spark] class ShuffleMapStage(
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
-  def addOutputLoc(partition: Int, status: MapStatus) {
+  def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
     if (prevList == Nil) {
@@ -51,7 +51,7 @@ private[spark] class ShuffleMapStage(
     }
   }
 
-  def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
+  def removeOutputLoc(partition: Int, bmAddress: BlockManagerId): Unit = {
     val prevList = outputLocs(partition)
     val newList = prevList.filterNot(_.location == bmAddress)
     outputLocs(partition) = newList
@@ -65,7 +65,7 @@ private[spark] class ShuffleMapStage(
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
    */
-  def removeOutputsOnExecutor(execId: String) {
+  def removeOutputsOnExecutor(execId: String): Unit = {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
       val prevList = outputLocs(partition)

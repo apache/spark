@@ -150,7 +150,7 @@ class DAGScheduler(
       result: Any,
       accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics) {
+      taskMetrics: TaskMetrics): Unit ={
     eventProcessLoop.post(
       CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
   }
@@ -173,18 +173,18 @@ class DAGScheduler(
   }
 
   // Called by TaskScheduler when an executor fails.
-  def executorLost(execId: String) {
+  def executorLost(execId: String): Unit = {
     eventProcessLoop.post(ExecutorLost(execId))
   }
 
   // Called by TaskScheduler when a host is added
-  def executorAdded(execId: String, host: String) {
+  def executorAdded(execId: String, host: String): Unit = {
     eventProcessLoop.post(ExecutorAdded(execId, host))
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
-  def taskSetFailed(taskSet: TaskSet, reason: String) {
+  def taskSetFailed(taskSet: TaskSet, reason: String): Unit = {
     eventProcessLoop.post(TaskSetFailed(taskSet, reason))
   }
 
@@ -335,7 +335,7 @@ class DAGScheduler(
   }
 
   /** Find ancestor missing shuffle dependencies and register into shuffleToMapStage */
-  private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], jobId: Int) = {
+  private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], jobId: Int) {
     val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
     while (parentsWithNoMapStage.nonEmpty) {
       val currentShufDep = parentsWithNoMapStage.pop()
@@ -411,7 +411,7 @@ class DAGScheduler(
    * Registers the given jobId among the jobs that need the given stage and
    * all of that stage's ancestors.
    */
-  private def updateJobIdStageIdMaps(jobId: Int, stage: Stage) {
+  private def updateJobIdStageIdMaps(jobId: Int, stage: Stage) = {
     def updateJobIdStageIdMapsList(stages: List[Stage]) {
       if (stages.nonEmpty) {
         val s = stages.head
@@ -431,7 +431,7 @@ class DAGScheduler(
    *
    * @param job The job whose state to cleanup.
    */
-  private def cleanupStateForJobAndIndependentStages(job: ActiveJob) {
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob) = {
     val registeredStages = jobIdToStageIds.get(job.jobId)
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError("No stages registered for job " + job.jobId)
@@ -522,7 +522,7 @@ class DAGScheduler(
       callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
-      properties: Properties = null) {
+      properties: Properties = null): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
@@ -555,12 +555,12 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int) {
+  def cancelJob(jobId: Int): Unit = {
     logInfo("Asked to cancel job " + jobId)
     eventProcessLoop.post(JobCancelled(jobId))
   }
 
-  def cancelJobGroup(groupId: String) {
+  def cancelJobGroup(groupId: String): Unit = {
     logInfo("Asked to cancel job group " + groupId)
     eventProcessLoop.post(JobGroupCancelled(groupId))
   }
@@ -568,7 +568,7 @@ class DAGScheduler(
   /**
    * Cancel all jobs that are running or waiting in the queue.
    */
-  def cancelAllJobs() {
+  def cancelAllJobs(): Unit = {
     eventProcessLoop.post(AllJobsCancelled)
   }
 
@@ -807,6 +807,7 @@ class DAGScheduler(
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
 
+
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
@@ -828,6 +829,7 @@ class DAGScheduler(
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
+
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
@@ -1442,7 +1444,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     dagScheduler.sc.stop()
   }
 
-  override def onStop() {
+  override def onStop(): Unit ={
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
   }
