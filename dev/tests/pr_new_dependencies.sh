@@ -37,7 +37,7 @@ MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-${MVN_BIN} clean package dependency:build-classpath 2>/dev/null
+${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null
 
 #${MVN_BIN} clean package dependency:build-classpath 2>/dev/null | \
 #  sed -n -e '/Building Spark Project Assembly/,$p' | \
@@ -53,7 +53,7 @@ ${MVN_BIN} clean package dependency:build-classpath 2>/dev/null
 # Checkout the master branch to compare against
 git checkout master &>/dev/null
 
-${MVN_BIN} clean package dependency:build-classpath 2>/dev/null | \
+${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
   head -n 3 | \
