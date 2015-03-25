@@ -47,7 +47,7 @@ ${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
   sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
-git checkout master
+git checkout master &>/dev/null
 
 ${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
