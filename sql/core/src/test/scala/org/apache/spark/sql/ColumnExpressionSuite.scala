@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 
 class ColumnExpressionSuite extends QueryTest {
@@ -311,11 +311,24 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("lift alias out of cast") {
-    assert(col("1234").as("name").cast("int").expr === col("1234").cast("int").as("name").expr)
+    compareExpressions(
+      col("1234").as("name").cast("int").expr,
+      col("1234").cast("int").as("name").expr)
   }
 
   test("columns can be compared") {
     assert('key.desc == 'key.desc)
     assert('key.desc != 'key.asc)
+  }
+
+  test("alias with metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("originName", "value")
+      .build()
+    val schema = testData
+      .select($"*", col("value").as("abc", metadata))
+      .schema
+    assert(schema("value").metadata === Metadata.empty)
+    assert(schema("abc").metadata === metadata)
   }
 }

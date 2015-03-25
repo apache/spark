@@ -346,6 +346,12 @@ class RDD(object):
         """
         Return a sampled subset of this RDD.
 
+        :param withReplacement: can elements be sampled multiple times (replaced when sampled out)
+        :param fraction: expected size of the sample as a fraction of this RDD's size
+            without replacement: probability that each element is chosen; fraction must be [0, 1]
+            with replacement: expected number of times each element is chosen; fraction must be >= 0
+        :param seed: seed for the random number generator
+
         >>> rdd = sc.parallelize(range(100), 4)
         >>> rdd.sample(False, 0.1, 81).count()
         10

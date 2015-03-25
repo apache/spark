@@ -50,7 +50,7 @@ private[spark] class WorkerWatcher(workerUrl: String)
 
   private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case AssociatedEvent(localAddress, remoteAddress, inbound) if isWorker(remoteAddress) =>
       logInfo(s"Successfully connected to $workerUrl")
 

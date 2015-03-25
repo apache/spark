@@ -180,6 +180,15 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 echo ""
 echo "========================================================================="
+echo "Detecting binary incompatibilities with MiMa"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_MIMA
+
+./dev/mima
+
+echo ""
+echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
@@ -238,11 +247,3 @@ CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
 ./R/install-dev.sh
 ./R/run-tests.sh
 
-echo ""
-echo "========================================================================="
-echo "Detecting binary incompatibilities with MiMa"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_MIMA
-
-./dev/mima

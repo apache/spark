@@ -56,7 +56,7 @@ SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 <div data-lang="python"  markdown="1">
 
 The entry point into all relational functionality in Spark is the
-[`SQLContext`](api/python/pyspark.sql.SQLContext-class.html) class, or one
+[`SQLContext`](api/python/pyspark.sql.html#pyspark.sql.SQLContext) class, or one
 of its decedents.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight python %}
@@ -170,14 +170,14 @@ df.select("name").show()
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df("age") + 1).show()
+df.select(df("name"), df("age") + 1).show()
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show()
+df.filter(df("age") > 21).show()
 // age name
 // 30  Andy
 
@@ -220,14 +220,14 @@ df.select("name").show();
 // Justin
 
 // Select everybody, but increment the age by 1
-df.select("name", df.col("age").plus(1)).show();
+df.select(df.col("name"), df.col("age").plus(1)).show();
 // name    (age + 1)
 // Michael null
 // Andy    31
 // Justin  20
 
 // Select people older than 21
-df.filter(df("name") > 21).show();
+df.filter(df.col("age").gt(21)).show();
 // age name
 // 30  Andy
 
@@ -270,14 +270,14 @@ df.select("name").show()
 ## Justin
 
 # Select everybody, but increment the age by 1
-df.select("name", df.age + 1).show()
+df.select(df.name, df.age + 1).show()
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-df.filter(df.name > 21).show()
+df.filter(df.age > 21).show()
 ## age name
 ## 30  Andy
 
@@ -509,8 +509,11 @@ val people = sc.textFile("examples/src/main/resources/people.txt")
 // The schema is encoded in a string
 val schemaString = "name age"
 
-// Import Spark SQL data types and Row.
-import org.apache.spark.sql._
+// Import Row.
+import org.apache.spark.sql.Row;
+
+// Import Spark SQL data types
+import org.apache.spark.sql.types.{StructType,StructField,StringType};
 
 // Generate the schema based on the string of schema
 val schema =
@@ -621,7 +624,8 @@ tuples or lists in the RDD created in the step 1.
 For example:
 {% highlight python %}
 # Import SQLContext and data types
-from pyspark.sql import *
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
 
 # sc is an existing SparkContext.
 sqlContext = SQLContext(sc)

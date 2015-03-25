@@ -24,8 +24,6 @@ import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 import scala.util.Random
 
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
@@ -51,15 +49,12 @@ class ReceivedBlockTrackerSuite
 
   before {
     conf = new SparkConf().setMaster("local[2]").setAppName("ReceivedBlockTrackerSuite")
-    checkpointDirectory = Files.createTempDir()
+    checkpointDirectory = Utils.createTempDir()
   }
 
   after {
     allReceivedBlockTrackers.foreach { _.stop() }
-    if (checkpointDirectory != null && checkpointDirectory.exists()) {
-      FileUtils.deleteDirectory(checkpointDirectory)
-      checkpointDirectory = null
-    }
+    Utils.deleteRecursively(checkpointDirectory)
   }
 
   test("block addition, and block to batch allocation") {

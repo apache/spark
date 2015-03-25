@@ -323,6 +323,13 @@ class ListTests(PySparkTestCase):
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
 
+        try:
+            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+        except ValueError:
+            self.fail()
+
 
 class StatTests(PySparkTestCase):
     # SPARK-4023
