@@ -52,8 +52,10 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
  * implementation of this client can use that information to retry using the version specified
  * by the server.
  */
-private[deploy] class StandaloneRestClient extends Logging {
+private[deploy] class StandaloneRestClient(master: String) extends Logging {
   import StandaloneRestClient._
+
+  val masters: Array[String] = master.stripPrefix("spark://").split(",").map("spark://" + _)
 
   /**
    * Submit an application specified by the parameters in the provided request.
@@ -62,45 +64,70 @@ private[deploy] class StandaloneRestClient extends Logging {
    * it to the user. Otherwise, report the error message provided by the server.
    */
   private[rest] def createSubmission(
-      master: String,
       request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch an application in $master.")
-    validateMaster(master)
-    val url = getSubmitUrl(master)
-    val response = postJson(url, request.toJson)
-    response match {
-      case s: CreateSubmissionResponse =>
-        reportSubmissionStatus(master, s)
-        handleRestResponse(s)
-      case unexpected =>
-        handleUnexpectedRestResponse(unexpected)
+    var suc: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters if !suc) {
+      validateMaster(m)
+      val url = getSubmitUrl(m)
+      response = postJson(url, request.toJson)
+      response match {
+        case s: CreateSubmissionResponse =>
+          if (s.success) {
+            reportSubmissionStatus(s)
+            handleRestResponse(s)
+            suc = true
+          }
+        case unexpected =>
+          handleUnexpectedRestResponse(unexpected)
+      }
     }
     response
   }
 
   /** Request that the server kill the specified submission. */
-  def killSubmission(master: String, submissionId: String): SubmitRestProtocolResponse = {
+  def killSubmission(submissionId: String): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to kill submission $submissionId in $master.")
-    validateMaster(master)
-    val response = post(getKillUrl(master, submissionId))
-    response match {
-      case k: KillSubmissionResponse => handleRestResponse(k)
-      case unexpected => handleUnexpectedRestResponse(unexpected)
+    var suc: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters if !suc) {
+      validateMaster(m)
+      response = post(getKillUrl(m, submissionId))
+      response match {
+        case k: KillSubmissionResponse =>
+          if (!k.message.contains("Can only")) {
+            handleRestResponse(k)
+            suc = true
+          }
+        case unexpected =>
+          handleUnexpectedRestResponse(unexpected)
+      }
     }
     response
   }
 
   /** Request the status of a submission from the server. */
   def requestSubmissionStatus(
-      master: String,
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
-    validateMaster(master)
-    val response = get(getStatusUrl(master, submissionId))
-    response match {
-      case s: SubmissionStatusResponse => if (!quiet) { handleRestResponse(s) }
-      case unexpected => handleUnexpectedRestResponse(unexpected)
+    var suc: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters) {
+      validateMaster(m)
+      response = get(getStatusUrl(m, submissionId))
+      response match {
+        case s: SubmissionStatusResponse =>
+          if (!s.message.contains("Can only")) {
+            if (!quiet) {
+              handleRestResponse(s)
+            }
+            suc = true
+          }
+        case unexpected =>
+          handleUnexpectedRestResponse(unexpected)
+      }
     }
     response
   }
@@ -228,20 +255,14 @@ private[deploy] class StandaloneRestClient extends Logging {
 
   /** Report the status of a newly created submission. */
   private def reportSubmissionStatus(
-      master: String,
       submitResponse: CreateSubmissionResponse): Unit = {
-    if (submitResponse.success) {
-      val submissionId = submitResponse.submissionId
-      if (submissionId != null) {
-        logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
-        pollSubmissionStatus(master, submissionId)
-      } else {
-        // should never happen
-        logError("Application successfully submitted, but submission ID was not provided!")
-      }
+    val submissionId = submitResponse.submissionId
+    if (submissionId != null) {
+      logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
+      pollSubmissionStatus(submissionId)
     } else {
-      val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError("Application submission failed" + failMessage)
+      // should never happen
+      logError("Application successfully submitted, but submission ID was not provided!")
     }
   }
 
@@ -249,9 +270,9 @@ private[deploy] class StandaloneRestClient extends Logging {
    * Poll the status of the specified submission and log it.
    * This retries up to a fixed number of times before giving up.
    */
-  private def pollSubmissionStatus(master: String, submissionId: String): Unit = {
+  private def pollSubmissionStatus(submissionId: String): Unit = {
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
-      val response = requestSubmissionStatus(master, submissionId, quiet = true)
+      val response = requestSubmissionStatus(submissionId, quiet = true)
       val statusResponse = response match {
         case s: SubmissionStatusResponse => s
         case _ => return // unexpected type, let upstream caller handle it
@@ -311,10 +332,10 @@ private[rest] object StandaloneRestClient {
     }
     val sparkProperties = conf.getAll.toMap
     val environmentVariables = env.filter { case (k, _) => k.startsWith("SPARK_") }
-    val client = new StandaloneRestClient
+    val client = new StandaloneRestClient(master)
     val submitRequest = client.constructSubmitRequest(
       appResource, mainClass, appArgs, sparkProperties, environmentVariables)
-    client.createSubmission(master, submitRequest)
+    client.createSubmission(submitRequest)
   }
 
   def main(args: Array[String]): Unit = {

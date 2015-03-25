@@ -35,16 +35,15 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   extends Actor with ActorLogReceive with Logging {
 
-  var masterActor: ActorSelection = _
+  var mastersActor = driverArgs.masters.map { m =>
+    context.actorSelection(Master.toAkkaUrl(m, AkkaUtils.protocol(context.system)))
+  }
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
-    masterActor = context.actorSelection(
-      Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
-
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
-    println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
+    println(s"Sending ${driverArgs.cmd} command to ${driverArgs.masters}")
 
     driverArgs.cmd match {
       case "launch" =>
@@ -79,10 +78,12 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.supervise,
           command)
 
+      for (masterActor <- mastersActor)
         masterActor ! RequestSubmitDriver(driverDescription)
 
       case "kill" =>
         val driverId = driverArgs.driverId
+      for (masterActor <- mastersActor)
         masterActor ! RequestKillDriver(driverId)
     }
   }
@@ -92,29 +93,33 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     println(s"... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
-    val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
-      .mapTo[DriverStatusResponse]
-    val statusResponse = Await.result(statusFuture, timeout)
+    for (masterActor <- mastersActor) {
+      val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
+        .mapTo[DriverStatusResponse]
+      val statusResponse = Await.result(statusFuture, timeout)
 
-    statusResponse.found match {
-      case false =>
-        println(s"ERROR: Cluster master did not recognize $driverId")
-        System.exit(-1)
-      case true =>
-        println(s"State of $driverId is ${statusResponse.state.get}")
-        // Worker node, if present
-        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            println(s"Driver running on $hostPort ($id)")
-          case _ =>
-        }
-        // Exception, if present
-        statusResponse.exception.map { e =>
-          println(s"Exception from cluster was: $e")
-          e.printStackTrace()
-          System.exit(-1)
-        }
-        System.exit(0)
+      statusResponse.found match {
+        case false =>
+          statusResponse.exception.getOrElse {
+            println(s"ERROR: Cluster master did not recognize $driverId")
+            System.exit(-1)
+          }
+        case true =>
+          println(s"State of $driverId is ${statusResponse.state.get}")
+          // Worker node, if present
+          (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+            case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+              println(s"Driver running on $hostPort ($id)")
+            case _ =>
+          }
+          // Exception, if present
+          statusResponse.exception.map { e =>
+            println(s"Exception from cluster was: $e")
+            e.printStackTrace()
+            System.exit(-1)
+          }
+          System.exit(0)
+      }
     }
   }
 
@@ -122,18 +127,27 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId.get) else System.exit(-1)
+      if (success) {
+        pollAndReportStatus(driverId.get)
+      } else if (!message.contains("Can only")) {
+        System.exit(-1)
+      }
+
 
     case KillDriverResponse(driverId, success, message) =>
       println(message)
-      if (success) pollAndReportStatus(driverId) else System.exit(-1)
+      if (success) {
+        pollAndReportStatus(driverId)
+      } else if (!message.contains("Can only")) {
+        System.exit(-1)
+      }
 
     case DisassociatedEvent(_, remoteAddress, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+      println(s"Error connecting to master ${driverArgs.masters} ($remoteAddress), exiting.")
       System.exit(-1)
 
     case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+      println(s"Error connecting to master ${driverArgs.masters} ($remoteAddress), exiting.")
       println(s"Cause was: $cause")
       System.exit(-1)
   }
@@ -163,7 +177,9 @@ object Client {
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
-    Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(actorSystem))
+    for (m <- driverArgs.masters) {
+      Master.toAkkaUrl(m, AkkaUtils.protocol(actorSystem))
+    }
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

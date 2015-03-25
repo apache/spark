@@ -115,8 +115,8 @@ object SparkSubmit {
 
   /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .killSubmission(args.master, args.submissionToKill)
+    new StandaloneRestClient(args.master)
+      .killSubmission(args.submissionToKill)
   }
 
   /**
@@ -124,8 +124,8 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
+    new StandaloneRestClient(args.master)
+      .requestSubmissionStatus(args.submissionToRequestStatusFor)
   }
 
   /**
