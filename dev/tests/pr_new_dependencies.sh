@@ -37,23 +37,21 @@ MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null
-
-#${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
-#  sed -n -e '/Building Spark Project Assembly/,$p' | \
-#  grep --context=1 -m 2 "Dependencies classpath:" | \
-#  head -n 3 | \
-#  tail -n 1 | \
-#  tr ":" "\n" | \
-#  rev | \
-#  cut -d "/" -f 1 | \
-#  rev | \
-#  sort > ${CURR_CP_FILE}
+${MVN_BIN} clean package dependency:build-classpath 2>/dev/null | \
+  sed -n -e '/Building Spark Project Assembly/,$p' | \
+  grep --context=1 -m 2 "Dependencies classpath:" | \
+  head -n 3 | \
+  tail -n 1 | \
+  tr ":" "\n" | \
+  rev | \
+  cut -d "/" -f 1 | \
+  rev | \
+  sort > ${CURR_CP_FILE}
 
 # Checkout the master branch to compare against
 git checkout master &>/dev/null
 
-${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
+${MVN_BIN} clean package dependency:build-classpath 2>/dev/null | \
   sed -n -e '/Building Spark Project Assembly/,$p' | \
   grep --context=1 -m 2 "Dependencies classpath:" | \
   head -n 3 | \
@@ -67,7 +65,7 @@ ${MVN_BIN} clean compile dependency:build-classpath 2>/dev/null | \
 DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
 
 if [ -z "${DIFF_RESULTS}" ]; then
-  echo " * This patch adds no new dependencies."
+  echo " * This patch does not change any dependencies."
 else
   # Pretty print the new dependencies
   added_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
@@ -75,10 +73,16 @@ else
   added_deps_text=" * This patch **adds the following new dependencies:**\n${added_deps}"
   removed_deps_text=" * This patch **removes the following dependencies:**\n${removed_deps}"
 
-  echo "${added_deps_text}\n${removed_deps_text}\n"
-  # Construct the final returned message
-  #return_mssg=""
-  #[ -n "${added_deps}" ] && return_mssg="${return_mssg}"
+  # Construct the final returned message with proper 
+  return_mssg=""
+  [ -n "${added_deps}" ] && return_mssg="${added_deps_text}"
+  if [ -n "${removed_deps}" ]; then
+    if [ -n "${return_mssg}" ]; then
+      return_mssg="${return_mssg}\n${removed_deps_text}"
+    else
+      return_mssg="${removed_deps_text}"
+    fi
+  fi
 fi
   
 # Remove the files we've left over
