@@ -26,7 +26,6 @@ import scala.util.Random
 
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
-import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.concurrent.Eventually
 
@@ -61,15 +60,12 @@ class ReliableKafkaStreamSuite extends FunSuite
       "group.id" -> groupId,
       "auto.offset.reset" -> "smallest"
     )
-    Utils.deleteRecursively(tempDirectory)
-    tearDownKafka()
+
+    tempDirectory = Utils.createTempDir()
   }
 
   override def afterAll(): Unit = {
-    if (tempDirectory != null && tempDirectory.exists()) {
-      FileUtils.deleteDirectory(tempDirectory)
-      tempDirectory = null
-    }
+    Utils.deleteRecursively(tempDirectory)
 
     if (kafkaTestUtils != null) {
       kafkaTestUtils.teardown()
@@ -79,7 +75,6 @@ class ReliableKafkaStreamSuite extends FunSuite
 
   before {
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
-    tempDirectory = Files.createTempDir()
     ssc.checkpoint(tempDirectory.getAbsolutePath)
   }
 
@@ -89,7 +84,6 @@ class ReliableKafkaStreamSuite extends FunSuite
       ssc = null
     }
   }
-
 
   test("Reliable Kafka input stream with single topic") {
     val topic = "test-topic"
