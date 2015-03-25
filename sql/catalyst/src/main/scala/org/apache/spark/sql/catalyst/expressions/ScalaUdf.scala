@@ -39,11 +39,12 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
 
     (1 to 22).map { x =>
       val anys = (1 to x).map(x => "Any").reduce(_ + ", " + _)
-      val evals = (0 to x - 1).map(x => s"ScalaReflection.convertToScala(e$x.eval(input), e$x.dataType)").reduce(_ + ",\n          " + _)
-      val elems = (0 to x - 1).map(x => s"e$x").reduce(_ + " :: " + _)
+      val childs = (0 to x - 1).map(x => s"val child$x = children($x)").reduce(_ + "\n      " + _)
+      val evals = (0 to x - 1).map(x => s"ScalaReflection.convertToScala(child$x.eval(input), child$x.dataType)").reduce(_ + ",\n          " + _)
 
-      s"""    case $elems :: Nil =>
+      s"""    case $x =>
       val func = function.asInstanceOf[($anys) => Any]
+      $childs
       (input: Row) => {
         func(
           $evals)
@@ -53,396 +54,649 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
 
   */
   
-  val f = children match {
-    case Nil => 
+  val f = children.size match {
+    case 0 => 
       val func = function.asInstanceOf[() => Any]
       (input: Row) => {
         func()
       }
       
-    case e0 :: Nil =>
+    case 1 =>
       val func = function.asInstanceOf[(Any) => Any]
+      val child0 = children(0)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType))
       }
       
-    case e0 :: e1 :: Nil =>
+    case 2 =>
       val func = function.asInstanceOf[(Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType))
       }
       
-    case e0 :: e1 :: e2 :: Nil =>
+    case 3 =>
       val func = function.asInstanceOf[(Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: Nil =>
+    case 4 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: Nil =>
+    case 5 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: Nil =>
+    case 6 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: Nil =>
+    case 7 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: Nil =>
+    case 8 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: Nil =>
+    case 9 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: Nil =>
+    case 10 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: Nil =>
+    case 11 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: Nil =>
+    case 12 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: Nil =>
+    case 13 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: Nil =>
+    case 14 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: Nil =>
+    case 15 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: Nil =>
+    case 16 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: Nil =>
+    case 17 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: Nil =>
+    case 18 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
+      val child17 = children(17)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType),
-          ScalaReflection.convertToScala(e17.eval(input), e17.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType),
+          ScalaReflection.convertToScala(child17.eval(input), child17.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: e18 :: Nil =>
+    case 19 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
+      val child17 = children(17)
+      val child18 = children(18)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType),
-          ScalaReflection.convertToScala(e17.eval(input), e17.dataType),
-          ScalaReflection.convertToScala(e18.eval(input), e18.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType),
+          ScalaReflection.convertToScala(child17.eval(input), child17.dataType),
+          ScalaReflection.convertToScala(child18.eval(input), child18.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: e18 :: e19 :: Nil =>
+    case 20 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
+      val child17 = children(17)
+      val child18 = children(18)
+      val child19 = children(19)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType),
-          ScalaReflection.convertToScala(e17.eval(input), e17.dataType),
-          ScalaReflection.convertToScala(e18.eval(input), e18.dataType),
-          ScalaReflection.convertToScala(e19.eval(input), e19.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType),
+          ScalaReflection.convertToScala(child17.eval(input), child17.dataType),
+          ScalaReflection.convertToScala(child18.eval(input), child18.dataType),
+          ScalaReflection.convertToScala(child19.eval(input), child19.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: e18 :: e19 :: e20 :: Nil =>
+    case 21 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
+      val child17 = children(17)
+      val child18 = children(18)
+      val child19 = children(19)
+      val child20 = children(20)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType),
-          ScalaReflection.convertToScala(e17.eval(input), e17.dataType),
-          ScalaReflection.convertToScala(e18.eval(input), e18.dataType),
-          ScalaReflection.convertToScala(e19.eval(input), e19.dataType),
-          ScalaReflection.convertToScala(e20.eval(input), e20.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType),
+          ScalaReflection.convertToScala(child17.eval(input), child17.dataType),
+          ScalaReflection.convertToScala(child18.eval(input), child18.dataType),
+          ScalaReflection.convertToScala(child19.eval(input), child19.dataType),
+          ScalaReflection.convertToScala(child20.eval(input), child20.dataType))
       }
       
-    case e0 :: e1 :: e2 :: e3 :: e4 :: e5 :: e6 :: e7 :: e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: e18 :: e19 :: e20 :: e21 :: Nil =>
+    case 22 =>
       val func = function.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any]
+      val child0 = children(0)
+      val child1 = children(1)
+      val child2 = children(2)
+      val child3 = children(3)
+      val child4 = children(4)
+      val child5 = children(5)
+      val child6 = children(6)
+      val child7 = children(7)
+      val child8 = children(8)
+      val child9 = children(9)
+      val child10 = children(10)
+      val child11 = children(11)
+      val child12 = children(12)
+      val child13 = children(13)
+      val child14 = children(14)
+      val child15 = children(15)
+      val child16 = children(16)
+      val child17 = children(17)
+      val child18 = children(18)
+      val child19 = children(19)
+      val child20 = children(20)
+      val child21 = children(21)
       (input: Row) => {
         func(
-          ScalaReflection.convertToScala(e0.eval(input), e0.dataType),
-          ScalaReflection.convertToScala(e1.eval(input), e1.dataType),
-          ScalaReflection.convertToScala(e2.eval(input), e2.dataType),
-          ScalaReflection.convertToScala(e3.eval(input), e3.dataType),
-          ScalaReflection.convertToScala(e4.eval(input), e4.dataType),
-          ScalaReflection.convertToScala(e5.eval(input), e5.dataType),
-          ScalaReflection.convertToScala(e6.eval(input), e6.dataType),
-          ScalaReflection.convertToScala(e7.eval(input), e7.dataType),
-          ScalaReflection.convertToScala(e8.eval(input), e8.dataType),
-          ScalaReflection.convertToScala(e9.eval(input), e9.dataType),
-          ScalaReflection.convertToScala(e10.eval(input), e10.dataType),
-          ScalaReflection.convertToScala(e11.eval(input), e11.dataType),
-          ScalaReflection.convertToScala(e12.eval(input), e12.dataType),
-          ScalaReflection.convertToScala(e13.eval(input), e13.dataType),
-          ScalaReflection.convertToScala(e14.eval(input), e14.dataType),
-          ScalaReflection.convertToScala(e15.eval(input), e15.dataType),
-          ScalaReflection.convertToScala(e16.eval(input), e16.dataType),
-          ScalaReflection.convertToScala(e17.eval(input), e17.dataType),
-          ScalaReflection.convertToScala(e18.eval(input), e18.dataType),
-          ScalaReflection.convertToScala(e19.eval(input), e19.dataType),
-          ScalaReflection.convertToScala(e20.eval(input), e20.dataType),
-          ScalaReflection.convertToScala(e21.eval(input), e21.dataType))
+          ScalaReflection.convertToScala(child0.eval(input), child0.dataType),
+          ScalaReflection.convertToScala(child1.eval(input), child1.dataType),
+          ScalaReflection.convertToScala(child2.eval(input), child2.dataType),
+          ScalaReflection.convertToScala(child3.eval(input), child3.dataType),
+          ScalaReflection.convertToScala(child4.eval(input), child4.dataType),
+          ScalaReflection.convertToScala(child5.eval(input), child5.dataType),
+          ScalaReflection.convertToScala(child6.eval(input), child6.dataType),
+          ScalaReflection.convertToScala(child7.eval(input), child7.dataType),
+          ScalaReflection.convertToScala(child8.eval(input), child8.dataType),
+          ScalaReflection.convertToScala(child9.eval(input), child9.dataType),
+          ScalaReflection.convertToScala(child10.eval(input), child10.dataType),
+          ScalaReflection.convertToScala(child11.eval(input), child11.dataType),
+          ScalaReflection.convertToScala(child12.eval(input), child12.dataType),
+          ScalaReflection.convertToScala(child13.eval(input), child13.dataType),
+          ScalaReflection.convertToScala(child14.eval(input), child14.dataType),
+          ScalaReflection.convertToScala(child15.eval(input), child15.dataType),
+          ScalaReflection.convertToScala(child16.eval(input), child16.dataType),
+          ScalaReflection.convertToScala(child17.eval(input), child17.dataType),
+          ScalaReflection.convertToScala(child18.eval(input), child18.dataType),
+          ScalaReflection.convertToScala(child19.eval(input), child19.dataType),
+          ScalaReflection.convertToScala(child20.eval(input), child20.dataType),
+          ScalaReflection.convertToScala(child21.eval(input), child21.dataType))
       }
   }
   
