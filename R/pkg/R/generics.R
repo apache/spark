@@ -204,6 +204,9 @@ setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") }
 #' @export
 setGeneric("zipWithIndex", function(x) { standardGeneric("zipWithIndex") })
 
+#' @rdname glom
+#' @export
+setGeneric("glom", function(x) { standardGeneric("glom") })
 
 ############ Binary Functions #############
 

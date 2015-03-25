@@ -1368,6 +1368,30 @@ setMethod("zipWithIndex",
            lapplyPartitionsWithIndex(x, partitionFunc)
          })
 
+#' Coalesce all elements within each partition of an RDD into a list.
+#'
+#' @param x An RDD.
+#' @return An RDD created by coalescing all elements within
+#'         each partition into a list.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, as.list(1:4), 2L)
+#' collect(glom(rdd))
+#' # list(list(1, 2), list(3, 4))
+#'}
+#' @rdname glom
+#' @aliases glom,RDD
+setMethod("glom",
+          signature(x = "RDD"),
+          function(x) {
+            partitionFunc <- function(part) {
+              list(part)
+            }
+            
+            lapplyPartition(x, partitionFunc)
+          })
+
 ############ Binary Functions #############
 
 #' Return the union RDD of two RDDs.
