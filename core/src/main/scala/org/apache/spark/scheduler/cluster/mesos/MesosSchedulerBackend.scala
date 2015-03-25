@@ -68,7 +68,7 @@ private[spark] class MesosSchedulerBackend(
   // The listener bus to publish executor added/removed events.
   val listenerBus = sc.listenerBus
   
-  val executorCores = sc.conf.getInt("spark.mesos.executor.cores", 1)
+  val executorCores = sc.conf.getDouble("spark.mesos.executor.cores", 1)
 
   @volatile var appId: String = _
 
@@ -236,7 +236,7 @@ private[spark] class MesosSchedulerBackend(
         } else {
           // If the executor doesn't exist yet, subtract CPU for executor
           // TODO(pwendell): Should below just subtract "1"?
-          getResource(o.getResourcesList, "cpus").toInt - executorCores
+          (getResource(o.getResourcesList, "cpus") - executorCores).toInt
         }
         new WorkerOffer(
           o.getSlaveId.getValue,
