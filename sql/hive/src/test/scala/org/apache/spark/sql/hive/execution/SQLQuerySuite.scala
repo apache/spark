@@ -470,15 +470,13 @@ class SQLQuerySuite extends QueryTest {
   }
   
   test("SPARK-5203 union with different decimal precision") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-    sql("CREATE TABLE test_decimal1 (key INT, value DECIMAL(3, 1))")
-    testData.insertInto("test_decimal1")
-    sql("CREATE TABLE test_decimal2 (key INT, value DECIMAL(14, 1))")
-    testData.insertInto("test_decimal2")
-    testData.insertInto("test_decimal2")
-    checkAnswer(
-      sql("SELECT value FROM test_decimal1 UNION ALL SELECT value * 1 FROM test_decimal1"),
-      sql("SELECT value From test_decimal2").collect().toSeq)
+    Seq.empty[(Decimal, Decimal)]
+      .toDF("d1", "d2")
+      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .registerTempTable("dn")
+
+    sql("select d from dn union all select d * 2 from dn")
+      .queryExecution.analyzed
   }
 
 }

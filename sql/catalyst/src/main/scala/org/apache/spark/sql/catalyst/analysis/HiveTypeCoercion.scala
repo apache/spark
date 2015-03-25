@@ -285,6 +285,7 @@ trait HiveTypeCoercion {
    * Calculates and propagates precision for fixed-precision decimals. Hive has a number of
    * rules for this based on the SQL standard and MS SQL:
    * https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+   * https://msdn.microsoft.com/en-us/library/ms190476.aspx
    *
    * In particular, if we have expressions e1 and e2 with precision/scale p1/s2 and p2/s2
    * respectively, then the following operations have the following precision / scale:
@@ -338,8 +339,8 @@ trait HiveTypeCoercion {
               case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
                 // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
                 // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-                val fixType = DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-                (Alias(Cast(l, fixType), l.name)(), Alias(Cast(r, fixType), r.name)())
+                val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
+                (Alias(Cast(l, fixedType), l.name)(), Alias(Cast(r, fixedType), r.name)())
               case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
                 (Alias(Cast(l, intTypeToFixed(t)), l.name)(), r)
               case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
@@ -370,6 +371,7 @@ trait HiveTypeCoercion {
           }
 
         Union(newLeft, newRight)
+
       // fix decimal precision for expressions
       case q => q.transformExpressions {
         // Skip nodes whose children have not been resolved yet

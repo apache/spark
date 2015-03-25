@@ -934,7 +934,9 @@ object StructType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
             DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
+        DecimalType(
+          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
+          max(leftScale, rightScale))
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
