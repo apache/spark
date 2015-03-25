@@ -114,17 +114,16 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
     var suc: Boolean = false
     var response: SubmitRestProtocolResponse = null
+    masters.foreach(println(_))
     for (m <- masters) {
       validateMaster(m)
       response = get(getStatusUrl(m, submissionId))
       response match {
-        case s: SubmissionStatusResponse =>
-          if (!s.message.contains("Can only")) {
-            if (!quiet) {
-              handleRestResponse(s)
-            }
-            suc = true
+        case s: SubmissionStatusResponse if s.success =>
+          if (!quiet) {
+            handleRestResponse(s)
           }
+          suc = true
         case unexpected =>
           handleUnexpectedRestResponse(unexpected)
       }
