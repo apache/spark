@@ -25,7 +25,7 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$FWDIR"/bin/load-spark-env.sh
 
-function addClassPath(){
+function appendToClasspath(){
   if [ -n "$1" ]; then
     if [ -n "$CLASSPATH" ]; then
       CLASSPATH="$CLASSPATH:$1"
@@ -35,14 +35,14 @@ function addClassPath(){
   fi
 }
 
-addClassPath "$SPARK_CLASSPATH"
-addClassPath "$SPARK_SUBMIT_CLASSPATH"
+appendToClasspath "$SPARK_CLASSPATH"
+appendToClasspath "$SPARK_SUBMIT_CLASSPATH"
 
 # Build up classpath
 if [ -n "$SPARK_CONF_DIR" ]; then
-  addClassPath "$SPARK_CONF_DIR"
+  appendToClasspath "$SPARK_CONF_DIR"
 else
-  addClassPath "$FWDIR/conf"
+  appendToClasspath "$FWDIR/conf"
 fi
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SPARK_SCALA_VERSION"
@@ -58,20 +58,20 @@ if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   echo "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark"\
     "classes ahead of assembly." >&2
   # Spark classes
-  CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive-thriftserver/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/graphx/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/streaming/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/sql/catalyst/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/sql/core/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/sql/hive-thriftserver/target/scala-$SPARK_SCALA_VERSION/classes"
+  appendToClasspath "$FWDIR/yarn/stable/target/scala-$SPARK_SCALA_VERSION/classes"
   # Jars for shaded deps in their original form (copied here during build)
-  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
+  appendToClasspath "$FWDIR/core/target/jars/*"
 fi
 
 # Use spark-assembly jar from either RELEASE or assembly directory
@@ -113,7 +113,7 @@ if [ $(command -v "$JAR_CMD") ] ; then
   fi
 fi
 
-CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+appendToClasspath "$ASSEMBLY_JAR"
 
 # When Hive support is needed, Datanucleus jars must be included on the classpath.
 # Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
@@ -131,37 +131,31 @@ datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
 if [ -n "$datanucleus_jars" ]; then
-  CLASSPATH="$CLASSPATH:$datanucleus_jars"
+  appendToClasspath "$datanucleus_jars"
 fi
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
 if [[ $SPARK_TESTING == 1 ]]; then
-  CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SPARK_SCALA_VERSION/test-classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/graphx/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/streaming/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/sql/catalyst/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/sql/core/target/scala-$SPARK_SCALA_VERSION/test-classes"
+  appendToClasspath "$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/test-classes"
 fi
 
 # Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !
 # Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
 # the configurtion files.
-if [ -n "$HADOOP_CONF_DIR" ]; then
-  CLASSPATH="$CLASSPATH:$HADOOP_CONF_DIR"
-fi
-if [ -n "$YARN_CONF_DIR" ]; then
-  CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
-fi
+appendToClasspath "$HADOOP_CONF_DIR"
+appendToClasspath "$YARN_CONF_DIR"
 
 # To allow for distributions to append needed libraries to the classpath (e.g. when
 # using the "hadoop-provided" profile to build Spark), check SPARK_DIST_CLASSPATH and
 # append it to tbe final classpath.
-if [ -n "$SPARK_DIST_CLASSPATH" ]; then
-  CLASSPATH="$CLASSPATH:$SPARK_DIST_CLASSPATH"
-fi
+appendToClasspath "$SPARK_DIST_CLASSPATH"
 
 echo "$CLASSPATH"
