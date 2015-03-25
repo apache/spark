@@ -29,9 +29,9 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
 
   type EvaluatedType = Any
 
-  def nullable = true
+  override def nullable: Boolean = true
 
-  override def toString = s"scalaUDF(${children.mkString(",")})"
+  override def toString: String = s"scalaUDF(${children.mkString(",")})"
 
   // scalastyle:off
 
