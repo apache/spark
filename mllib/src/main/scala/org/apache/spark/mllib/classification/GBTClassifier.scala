@@ -19,7 +19,7 @@ package org.apache.spark.mllib.classification
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.{DecisionTreeRegressionModel, LabeledPoint}
@@ -28,6 +28,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, LogLoss => OldLogLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
@@ -170,7 +171,7 @@ object GBTClassifier {
 class GBTClassificationModel(
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])
-  extends TreeEnsembleModel with Serializable {
+  extends TreeEnsembleModel with Serializable with Saveable {
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -186,11 +187,26 @@ class GBTClassificationModel(
   override def toString: String = {
     s"GBTClassificationModel with $numTrees trees"
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    this.toOld.save(sc, path)
+  }
+
+  override protected def formatVersion: String = OldGradientBoostedTreesModel.formatVersion
+
+  /** Convert to a model in the old API */
+  private[mllib] def toOld: OldGradientBoostedTreesModel = {
+    new OldGradientBoostedTreesModel(OldAlgo.Classification, trees.map(_.toOld), treeWeights)
+  }
 }
 
-private[mllib] object GBTClassificationModel {
+object GBTClassificationModel extends Loader[GBTClassificationModel] {
 
-  def fromOld(oldModel: OldGradientBoostedTreesModel): GBTClassificationModel = {
+  override def load(sc: SparkContext, path: String): GBTClassificationModel = {
+    GBTClassificationModel.fromOld(OldGradientBoostedTreesModel.load(sc, path))
+  }
+
+  private[mllib] def fromOld(oldModel: OldGradientBoostedTreesModel): GBTClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification GradientBoostedTreesModel (old API) to" +
         s" GBTClassificationModel (new API).  Algo is: ${oldModel.algo}")

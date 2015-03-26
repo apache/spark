@@ -20,9 +20,13 @@ package org.apache.spark.mllib.classification
 import org.scalatest.FunSuite
 import org.apache.spark.mllib.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
+import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDecisionTreeSuite, EnsembleTestHelper,
+  GradientBoostedTrees => OldGBT}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 
 /**
@@ -63,8 +67,6 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  // TODO: test("model save/load") {
-
   test("runWithValidation stops early and performs better on a validation dataset") {
     val categoricalFeatures = Map.empty[Int, Int]
     // Set numIterations large enough so that it stops early.
@@ -77,6 +79,29 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
         .setValidationTol(0.0)
       compareAPIs(trainData, None, gbt, categoricalFeatures)
       compareAPIs(trainData, Some(validationData), gbt, categoricalFeatures)
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of model save/load
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val trees = Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Regression)).toArray
+    val treeWeights = Array(0.1, 0.3, 1.1)
+    val oldModel = new OldGBTModel(OldAlgo.Classification, trees, treeWeights)
+    val newModel = GBTClassificationModel.fromOld(oldModel)
+
+    // Save model, load it back, and compare.
+    try {
+      newModel.save(sc, path)
+      val sameNewModel = GBTClassificationModel.load(sc, path)
+      TreeTests.checkEqual(newModel, sameNewModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 }

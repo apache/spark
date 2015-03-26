@@ -20,9 +20,13 @@ package org.apache.spark.mllib.regression
 import org.scalatest.FunSuite
 import org.apache.spark.mllib.impl.TreeTests
 import org.apache.spark.mllib.tree.EnsembleTestHelper
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDecisionTreeSuite,
+  RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 
 /**
@@ -74,7 +78,23 @@ class RandomForestRegressorSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: test("model save/load")
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val trees = Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Regression)).toArray
+    val oldModel = new OldRandomForestModel(OldAlgo.Regression, trees)
+    val newModel = RandomForestRegressionModel.fromOld(oldModel)
+
+    // Save model, load it back, and compare.
+    try {
+      newModel.save(sc, path)
+      val sameNewModel = RandomForestRegressionModel.load(sc, path)
+      TreeTests.checkEqual(newModel, sameNewModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
 private object RandomForestRegressorSuite extends FunSuite {

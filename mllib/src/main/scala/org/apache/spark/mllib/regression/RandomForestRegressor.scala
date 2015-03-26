@@ -19,11 +19,13 @@ package org.apache.spark.mllib.regression
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
@@ -105,7 +107,7 @@ object RandomForestRegressor {
 class RandomForestRegressionModel(
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])
-  extends TreeEnsembleModel with Serializable {
+  extends TreeEnsembleModel with Serializable with Saveable {
 
   private val sumWeights = math.max(treeWeights.sum, 1e-15)
 
@@ -122,11 +124,28 @@ class RandomForestRegressionModel(
   override def toString: String = {
     s"RandomForestRegressionModel with $numTrees trees"
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    this.toOld.save(sc, path)
+  }
+
+  override protected def formatVersion: String = OldRandomForestModel.formatVersion
+
+  /** Convert to a model in the old API */
+  private[mllib] def toOld: OldRandomForestModel = {
+    assert(treeWeights.forall(_ == 1.0), "Failed to convert RandomForestRegressionModel"
+      + " to old RandomForestModel format since old format does not support weights")
+    new OldRandomForestModel(OldAlgo.Regression, trees.map(_.toOld))
+  }
 }
 
-private[mllib] object RandomForestRegressionModel {
+object RandomForestRegressionModel extends Loader[RandomForestRegressionModel] {
 
-  def fromOld(oldModel: OldRandomForestModel): RandomForestRegressionModel = {
+  override def load(sc: SparkContext, path: String): RandomForestRegressionModel = {
+    RandomForestRegressionModel.fromOld(OldRandomForestModel.load(sc, path))
+  }
+
+  private[mllib] def fromOld(oldModel: OldRandomForestModel): RandomForestRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression RandomForestModel (old API) to" +
         s" RandomForestRegressionModel (new API).  Algo is: ${oldModel.algo}")

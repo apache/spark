@@ -30,6 +30,8 @@ trait Split {
   /** Return true (split to left) or false (split to right) */
   private[mllib] def goLeft(features: Vector): Boolean
 
+  /** Convert to old Split format */
+  private[tree] def toOld: OldSplit
 }
 
 private[mllib] object Split {
@@ -38,7 +40,7 @@ private[mllib] object Split {
     oldSplit.featureType match {
       case OldFeatureType.Categorical =>
         new CategoricalSplit(feature = oldSplit.feature,
-          categories = oldSplit.categories.map(_.toInt).toSet)
+          categories = oldSplit.categories.toSet)
       case OldFeatureType.Continuous =>
         new ContinuousSplit(feature = oldSplit.feature, threshold = oldSplit.threshold)
     }
@@ -46,10 +48,10 @@ private[mllib] object Split {
 
 }
 
-class CategoricalSplit(override val feature: Int, val categories: Set[Int]) extends Split {
+class CategoricalSplit(override val feature: Int, val categories: Set[Double]) extends Split {
 
   override private[mllib] def goLeft(features: Vector): Boolean = {
-    categories.contains(features(feature).toInt)
+    categories.contains(features(feature))
   }
 
   override def equals(o: Any): Boolean = {
@@ -59,6 +61,10 @@ class CategoricalSplit(override val feature: Int, val categories: Set[Int]) exte
       case _ =>
         false
     }
+  }
+
+  override private[tree] def toOld: OldSplit = {
+    OldSplit(feature, threshold = 0.0, OldFeatureType.Categorical, categories.toList)
   }
 }
 
@@ -75,5 +81,9 @@ class ContinuousSplit(override val feature: Int, val threshold: Double) extends 
       case _ =>
         false
     }
+  }
+
+  override private[tree] def toOld: OldSplit = {
+    OldSplit(feature, threshold, OldFeatureType.Continuous, List.empty[Double])
   }
 }

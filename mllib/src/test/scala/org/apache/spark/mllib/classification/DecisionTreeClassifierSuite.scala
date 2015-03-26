@@ -24,8 +24,10 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 
 class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
@@ -229,7 +231,22 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: test("model save/load")
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val oldModel = OldDecisionTreeSuite.createModel(OldAlgo.Classification)
+    val newModel = DecisionTreeClassificationModel.fromOld(oldModel)
+
+    // Save model, load it back, and compare.
+    try {
+      newModel.save(sc, path)
+      val sameNewModel = DecisionTreeClassificationModel.load(sc, path)
+      TreeTests.checkEqual(newModel, sameNewModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
 private[mllib] object DecisionTreeClassifierSuite extends FunSuite {

@@ -17,12 +17,14 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
@@ -85,19 +87,31 @@ object DecisionTreeClassifier {
 }
 
 class DecisionTreeClassificationModel private[mllib] (rootNode: Node)
-  extends DecisionTreeModel(rootNode) with Serializable {
+  extends DecisionTreeModel(rootNode) with Serializable with Saveable {
 
   override def toString: String = {
     s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
   }
 
-  // TODO
-  //override def save(sc: SparkContext, path: String): Unit = {
+  override def save(sc: SparkContext, path: String): Unit = {
+    this.toOld.save(sc, path)
+  }
+
+  override protected def formatVersion: String = OldDecisionTreeModel.formatVersion
+
+  /** Convert to a model in the old API */
+  private[mllib] def toOld: OldDecisionTreeModel = {
+    new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)
+  }
 }
 
-private[mllib] object DecisionTreeClassificationModel {
+object DecisionTreeClassificationModel extends Loader[DecisionTreeClassificationModel] {
 
-  def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeClassificationModel = {
+  override def load(sc: SparkContext, path: String): DecisionTreeClassificationModel = {
+    DecisionTreeClassificationModel.fromOld(OldDecisionTreeModel.load(sc, path))
+  }
+
+  private[mllib] def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")

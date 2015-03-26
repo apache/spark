@@ -18,7 +18,8 @@
 package org.apache.spark.mllib.impl.tree
 
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.tree.model.{Node => OldNode}
+import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
+  Node => OldNode, Predict => OldPredict}
 
 
 /**
@@ -54,6 +55,12 @@ sealed trait Node {
    * E.g.: Depth 0 means this is a leaf node.  Depth 1 means 1 internal and 2 leaf nodes.
    */
   private[tree] def subtreeDepth: Int
+
+  /**
+   * Create a copy of this node in the old Node format, recursively creating child nodes as needed.
+   * @param id  Node ID using old format IDs
+   */
+  private[mllib] def toOld(id: Int): OldNode
 }
 
 private[mllib] object Node {
@@ -67,9 +74,14 @@ private[mllib] object Node {
       //       statistics here.
       new LeafNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity)
     } else {
+      val gain = if (oldNode.stats.nonEmpty) {
+        oldNode.stats.get.gain
+      } else {
+        0.0
+      }
       new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
-        leftChild = fromOld(oldNode.leftNode.get), rightChild = fromOld(oldNode.rightNode.get),
-        split = Split.fromOld(oldNode.split.get))
+        gain = gain, leftChild = fromOld(oldNode.leftNode.get),
+        rightChild = fromOld(oldNode.rightNode.get), split = Split.fromOld(oldNode.split.get))
     }
   }
 
@@ -120,12 +132,20 @@ class LeafNode private[mllib] (
   }
 
   override private[tree] def subtreeDepth: Int = 0
+
+  override private[mllib] def toOld(id: Int): OldNode = {
+    // NOTE: We do NOT store 'prob' in the new API currently.
+    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = true,
+      None, None, None, None)
+  }
 }
 
 /**
  * Internal Decision Tree node
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
+ * @param gain Information gain value.
+ *             Values < 0 indicate missing values; this quirk will be removed with future updates.
  * @param leftChild  Left-hand child node
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
@@ -133,6 +153,7 @@ class LeafNode private[mllib] (
 class InternalNode private[mllib] (
     override val prediction: Double,
     override val impurity: Double,
+    val gain: Double,
     val leftChild: Node,
     val rightChild: Node,
     val split: Split) extends Node {
@@ -163,5 +184,17 @@ class InternalNode private[mllib] (
 
   override private[tree] def subtreeDepth: Int = {
     1 + math.max(leftChild.subtreeDepth, rightChild.subtreeDepth)
+  }
+
+  override private[mllib] def toOld(id: Int): OldNode = {
+    assert(id.toLong * 2 < Int.MaxValue, "Decision Tree could not be converted from new to old API"
+      + " since the old API does not support deep trees.")
+    // NOTE: We do NOT store 'prob' in the new API currently.
+    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = false,
+      Some(split.toOld), Some(leftChild.toOld(OldNode.leftChildIndex(id))),
+      Some(rightChild.toOld(OldNode.rightChildIndex(id))),
+      Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
+        new OldPredict(leftChild.prediction, prob = 0.0),
+        new OldPredict(rightChild.prediction, prob = 0.0))))
   }
 }

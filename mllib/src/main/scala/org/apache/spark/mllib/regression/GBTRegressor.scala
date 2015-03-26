@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
@@ -27,6 +27,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, LogLoss => OldLogLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
@@ -163,7 +164,7 @@ object GBTRegressor {
 class GBTRegressionModel(
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])
-  extends TreeEnsembleModel with Serializable {
+  extends TreeEnsembleModel with Serializable with Saveable {
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -179,11 +180,26 @@ class GBTRegressionModel(
   override def toString: String = {
     s"GBTRegressionModel with $numTrees trees"
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    this.toOld.save(sc, path)
+  }
+
+  override protected def formatVersion: String = OldGradientBoostedTreesModel.formatVersion
+
+  /** Convert to a model in the old API */
+  private[mllib] def toOld: OldGradientBoostedTreesModel = {
+    new OldGradientBoostedTreesModel(OldAlgo.Regression, trees.map(_.toOld), treeWeights)
+  }
 }
 
-private[mllib] object GBTRegressionModel {
+object GBTRegressionModel extends Loader[GBTRegressionModel] {
 
-  def fromOld(oldModel: OldGradientBoostedTreesModel): GBTRegressionModel = {
+  override def load(sc: SparkContext, path: String): GBTRegressionModel = {
+    GBTRegressionModel.fromOld(OldGradientBoostedTreesModel.load(sc, path))
+  }
+
+  private[mllib] def fromOld(oldModel: OldGradientBoostedTreesModel): GBTRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression GradientBoostedTreesModel (old API) to" +
         s" GBTRegressionModel (new API).  Algo is: ${oldModel.algo}")

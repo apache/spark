@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
+
 /**
  * :: Experimental ::
  * Represents a random forest model.
@@ -58,10 +59,12 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
 
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
+  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 object RandomForestModel extends Loader[RandomForestModel] {
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): RandomForestModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
@@ -109,8 +112,6 @@ class GradientBoostedTreesModel(
       GradientBoostedTreesModel.SaveLoadV1_0.thisClassName)
   }
 
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
-
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
@@ -146,12 +147,10 @@ class GradientBoostedTreesModel(
       predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
         val currentTree = broadcastTrees.value(nTree)
         val currentTreeWeight = broadcastWeights.value(nTree)
-        iter.map {
-          case (point, (pred, error)) => {
-            val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-            val newError = loss.computeError(newPred, point.label)
-            (newPred, newError)
-          }
+        iter.map { case (point, (pred, error)) =>
+          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+          val newError = loss.computeError(newPred, point.label)
+          (newPred, newError)
         }
       }
       evaluationArray(nTree) = predictionAndError.values.mean()
@@ -162,9 +161,12 @@ class GradientBoostedTreesModel(
     evaluationArray
   }
 
+  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)

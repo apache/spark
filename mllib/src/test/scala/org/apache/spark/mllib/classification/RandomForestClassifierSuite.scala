@@ -22,9 +22,13 @@ import org.apache.spark.mllib.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDecisionTreeSuite,
+  RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 
 /**
@@ -111,8 +115,28 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     compareAPIs(rdd, rf2, categoricalFeatures, numClasses)
   }
 
-  // TODO
-  // test("model save/load") {
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of model save/load
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val trees =
+      Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Classification)).toArray
+    val oldModel = new OldRandomForestModel(OldAlgo.Classification, trees)
+    val newModel = RandomForestClassificationModel.fromOld(oldModel)
+
+    // Save model, load it back, and compare.
+    try {
+      newModel.save(sc, path)
+      val sameNewModel = RandomForestClassificationModel.load(sc, path)
+      TreeTests.checkEqual(newModel, sameNewModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
 private object RandomForestClassifierSuite extends FunSuite {

@@ -19,12 +19,14 @@ package org.apache.spark.mllib.classification
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
@@ -109,7 +111,7 @@ object RandomForestClassifier {
 class RandomForestClassificationModel(
     val trees: Array[DecisionTreeClassificationModel],
     val treeWeights: Array[Double])
-  extends TreeEnsembleModel with Serializable {
+  extends TreeEnsembleModel with Serializable with Saveable {
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -128,11 +130,27 @@ class RandomForestClassificationModel(
   override def toString: String = {
     s"RandomForestClassificationModel with $numTrees trees"
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    this.toOld.save(sc, path)
+  }
+
+  override protected def formatVersion: String = OldRandomForestModel.formatVersion
+
+  /** Convert to a model in the old API */
+  private[mllib] def toOld: OldRandomForestModel = {
+    new OldRandomForestModel(OldAlgo.Classification, trees.map(_.toOld))
+  }
 }
 
-private[mllib] object RandomForestClassificationModel {
+object RandomForestClassificationModel
+  extends Loader[RandomForestClassificationModel] {
 
-  def fromOld(oldModel: OldRandomForestModel): RandomForestClassificationModel = {
+  override def load(sc: SparkContext, path: String): RandomForestClassificationModel = {
+    RandomForestClassificationModel.fromOld(OldRandomForestModel.load(sc, path))
+  }
+
+  private[mllib] def fromOld(oldModel: OldRandomForestModel): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification RandomForestModel (old API) to" +
         s" RandomForestClassificationModel (new API).  Algo is: ${oldModel.algo}")
