@@ -589,10 +589,11 @@ private[spark] class BlockManager(
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
+    val timeout = conf.getInt("spark.storage.fetchBlockTimeout", 1000) // seconds
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
       val data = blockTransferService.fetchBlockSync(
-        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
+        loc.host, loc.port, loc.executorId, blockId.toString, timeout).nioByteBuffer()
 
       if (data != null) {
         if (asBlockResult) {
