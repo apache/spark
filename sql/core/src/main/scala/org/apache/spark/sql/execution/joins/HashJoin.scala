@@ -81,17 +81,17 @@ trait HashJoin {
        *         tuples.
        */
       private final def fetchNext(): Boolean = {
-        currentHashMatches = null
+        currentHashMatches = CompactBuffer.constantEmpty[Row]()
         currentMatchPosition = -1
 
-        while (currentHashMatches == null && streamIter.hasNext) {
+        while (currentHashMatches.size == 0 && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
           if (!joinKeys(currentStreamedRow).anyNull) {
             currentHashMatches = hashedRelation.get(joinKeys.currentValue)
           }
         }
 
-        if (currentHashMatches == null) {
+        if (currentHashMatches.size == 0) {
           false
         } else {
           currentMatchPosition = 0
