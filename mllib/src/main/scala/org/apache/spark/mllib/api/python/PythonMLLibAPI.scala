@@ -34,6 +34,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature._
+import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -404,6 +405,33 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     val model =  als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
+  }
+
+  /**
+   * A Wrapper of FPGrowthModel to provide helpfer method for Python
+   */
+  private[python] class FPGrowthModelWrapper(model: FPGrowthModel[Any])
+    extends FPGrowthModel(model.freqItemsets) {
+    def getFreqItemsets: RDD[Array[Any]] = {
+      SerDe.fromTuple2RDD(model.freqItemsets.map(x => (x.javaItems, x.freq)))
+    }
+  }
+
+  /**
+   * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
+   * to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see
+   * the Py4J documentation.
+   */
+  def trainFPGrowthModel(data: JavaRDD[java.lang.Iterable[Any]],
+      minSupport: Double,
+      numPartition: Int): FPGrowthModel[Any] = {
+    val fpm = new FPGrowth()
+      .setMinSupport(minSupport)
+      .setNumPartitions(numPartition)
+
+    val model = fpm.run(data.rdd.map(_.asScala.toArray))
+    new FPGrowthModelWrapper(model)
   }
 
   /**
