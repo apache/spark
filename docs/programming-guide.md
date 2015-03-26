@@ -1120,12 +1120,12 @@ operations, `sortBy` can be used to perform a global sort. A similar operation,
 may be used to enact a Hadoop style shuffle.
 
 Operations which can cause a shuffle include **repartition** operations like
-[`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'byKey** operations
+[`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
 (except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and
 **join** operations like [`cogroup`](#CogroupLink) and [`join`](#JoinLink).
 
 #### Performance Impact
-**Shuffle** is an expensive operation since it involves disk I/O, data serialization, and
+The **Shuffle** is an expensive operation since it involves disk I/O, data serialization, and
 network I/O. To organize data for the shuffle, Spark generates sets of tasks - *map* tasks to
 organize the data, and a set of *reduce* tasks to aggregate it. This nomenclature comes from
 MapReduce and does not directly relate to Spark's `map` and `reduce` operations.
@@ -1136,8 +1136,8 @@ read the relevant sorted blocks.
         
 Certain shuffle operations can consume significant amounts of heap memory since they employ 
 in-memory data structures to organize records before or after transferring them. Specifically, 
-`reduceByKey` and `aggregateByKey` create these structures on the map-side and `'byKey` operations 
-generate these on the reduce-side. When data does not fit in memory Spark will spill these tables 
+`reduceByKey` and `aggregateByKey` create these structures on the map side and `'ByKey` operations 
+generate these on the reduce side. When data does not fit in memory Spark will spill these tables 
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
