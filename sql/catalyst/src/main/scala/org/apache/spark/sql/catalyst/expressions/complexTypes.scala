@@ -146,18 +146,17 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
-case class CreateStruct(children: Seq[Expression]) extends Expression {
+case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
   override type EvaluatedType = Row
 
   override def foldable: Boolean = children.forall(_.foldable)
 
   override lazy val resolved: Boolean = childrenResolved
 
-  override def dataType: StructType = {
+  override lazy val dataType: StructType = {
     assert(resolved, s"CreateStruct is called with unresolved children: $children.")
-    val fields = children.map {
-      case named: NamedExpression =>
-        StructField(named.name, named.dataType, named.nullable, named.metadata)
+    val fields = children.map { child =>
+      StructField(child.name, child.dataType, child.nullable, child.metadata)
     }
     StructType(fields)
   }

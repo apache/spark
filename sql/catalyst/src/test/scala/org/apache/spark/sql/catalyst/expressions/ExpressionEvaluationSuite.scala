@@ -1083,8 +1083,8 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("CreateStruct") {
     val row = Row(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    val c3 = 'a.int.at(2)
+    val c1 = 'a.int.at(0).as("a")
+    val c3 = 'c.int.at(2).as("c")
     checkEvaluation(CreateStruct(Seq(c1, c3)), Row(1, 3), row)
   }
 }
