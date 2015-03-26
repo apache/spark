@@ -119,9 +119,9 @@ run_ml_tests
 run_streaming_tests
 
 # Try to test with Python 3
-if [ $(which python3) ]; then
-    export PYSPARK_PYTHON="python3"
-    echo "Testing with Python3 version:"
+if [ $(which python3.4) ]; then
+    export PYSPARK_PYTHON="python3.4"
+    echo "Testing with Python3.4 version:"
     $PYSPARK_PYTHON --version
 
     run_core_tests
