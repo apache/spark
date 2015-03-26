@@ -431,7 +431,7 @@ class DAGScheduler(
    *
    * @param job The job whose state to cleanup.
    */
-  private def cleanupStateForJobAndIndependentStages(job: ActiveJob) = {
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob): Unit = {
     val registeredStages = jobIdToStageIds.get(job.jobId)
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError("No stages registered for job " + job.jobId)
