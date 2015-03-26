@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 import org.apache.spark.sql.types._
-import org.scalatest.BeforeAndAfterAll
-
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.

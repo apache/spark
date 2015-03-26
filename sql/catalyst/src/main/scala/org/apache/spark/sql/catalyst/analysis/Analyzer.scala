@@ -170,13 +170,13 @@ class Analyzer(catalog: Catalog,
   object ResolveRelations extends Rule[LogicalPlan] {
     def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]) = {
       try {
-          // In hive, if there is same table name in database and CTE definition,
-          // hive will use the table in database, not the CTE one.
-          // Taking into account the reasonableness and the implementation complexity,
-          // here use the CTE definition first, check table name only and ignore database name
-          cteRelations.get(u.tableIdentifier.last)
-            .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
-            .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
+        // In hive, if there is same table name in database and CTE definition,
+        // hive will use the table in database, not the CTE one.
+        // Taking into account the reasonableness and the implementation complexity,
+        // here use the CTE definition first, check table name only and ignore database name
+        cteRelations.get(u.tableIdentifier.last)
+          .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
+          .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableName}")
@@ -184,19 +184,20 @@ class Analyzer(catalog: Catalog,
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = {
-      val cteRelations = new scala.collection.mutable.HashMap[String, LogicalPlan]()
+      val (realPlan, cteRelations) = plan match {
+        // TODO allow subquery to define CTE
+        // Add cte table to a temp relation map,drop `with` plan and keep its child
+        case With(child, relations) => (child, relations)
+        case other => (other, Map.empty[String, LogicalPlan])
+      }
 
-      plan transform {
-        // add cte table to a temp relation map,drop `with` plan and keep its child
-        case With(child, relations) =>
-          cteRelations ++= relations
-          child
-        case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
-        i.copy(
-          table = EliminateSubQueries(getTable(u, cteRelations.toMap)))
-      case u: UnresolvedRelation =>
-        getTable(u, cteRelations.toMap)
-    }
+      realPlan transform {
+        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
+          i.copy(
+            table = EliminateSubQueries(getTable(u, cteRelations)))
+        case u: UnresolvedRelation =>
+          getTable(u, cteRelations)
+      }
     }
   }
 
