@@ -19,27 +19,27 @@ package org.apache.spark.sql.catalyst.expressions
 
 
 protected class AttributeEquals(val a: Attribute) {
-  override def hashCode() = a match {
+  override def hashCode(): Int = a match {
     case ar: AttributeReference => ar.exprId.hashCode()
     case a => a.hashCode()
   }
 
-  override def equals(other: Any) = (a, other.asInstanceOf[AttributeEquals].a) match {
+  override def equals(other: Any): Boolean = (a, other.asInstanceOf[AttributeEquals].a) match {
     case (a1: AttributeReference, a2: AttributeReference) => a1.exprId == a2.exprId
     case (a1, a2) => a1 == a2
   }
 }
 
 object AttributeSet {
-  def apply(a: Attribute) =
-    new AttributeSet(Set(new AttributeEquals(a)))
+  def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
-  def apply(baseSet: Seq[Expression]) =
+  def apply(baseSet: Seq[Expression]): AttributeSet = {
     new AttributeSet(
       baseSet
         .flatMap(_.references)
         .map(new AttributeEquals(_)).toSet)
+  }
 }
 
 /**
@@ -57,7 +57,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
 
   /** Returns true if the members of this AttributeSet and other are the same. */
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case otherSet: AttributeSet => baseSet.map(_.a).forall(otherSet.contains)
     case _ => false
   }
@@ -81,32 +81,34 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
    * Returns true if the [[Attribute Attributes]] in this set are a subset of the Attributes in
    * `other`.
    */
-  def subsetOf(other: AttributeSet) = baseSet.subsetOf(other.baseSet)
+  def subsetOf(other: AttributeSet): Boolean = baseSet.subsetOf(other.baseSet)
 
   /**
    * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]] found
    * in `other`.
    */
-  def --(other: Traversable[NamedExpression]) =
+  def --(other: Traversable[NamedExpression]): AttributeSet =
     new AttributeSet(baseSet -- other.map(a => new AttributeEquals(a.toAttribute)))
 
   /**
    * Returns a new [[AttributeSet]] that contains all of the [[Attribute Attributes]] found
    * in `other`.
    */
-  def ++(other: AttributeSet) = new AttributeSet(baseSet ++ other.baseSet)
+  def ++(other: AttributeSet): AttributeSet = new AttributeSet(baseSet ++ other.baseSet)
 
   /**
    * Returns a new [[AttributeSet]] contain only the [[Attribute Attributes]] where `f` evaluates to
    * true.
    */
-  override def filter(f: Attribute => Boolean) = new AttributeSet(baseSet.filter(ae => f(ae.a)))
+  override def filter(f: Attribute => Boolean): AttributeSet =
+    new AttributeSet(baseSet.filter(ae => f(ae.a)))
 
   /**
    * Returns a new [[AttributeSet]] that only contains [[Attribute Attributes]] that are found in
    * `this` and `other`.
    */
-  def intersect(other: AttributeSet) = new AttributeSet(baseSet.intersect(other.baseSet))
+  def intersect(other: AttributeSet): AttributeSet =
+    new AttributeSet(baseSet.intersect(other.baseSet))
 
   override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
 

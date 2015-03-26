@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -32,6 +33,9 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
   val batches =
+    // SubQueries are only needed for analysis and can be removed before execution.
+    Batch("Remove SubQueries", FixedPoint(100),
+      EliminateSubQueries) ::
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
@@ -137,7 +141,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       /** Applies a projection only when the child is producing unnecessary attributes */
-      def pruneJoinChild(c: LogicalPlan) = prunedChild(c, allReferences)
+      def pruneJoinChild(c: LogicalPlan): LogicalPlan = prunedChild(c, allReferences)
 
       Project(projectList, Join(pruneJoinChild(left), pruneJoinChild(right), joinType, condition))
 

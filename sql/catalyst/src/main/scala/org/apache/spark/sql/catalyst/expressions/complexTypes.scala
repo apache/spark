@@ -27,12 +27,12 @@ import org.apache.spark.sql.types._
 case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   type EvaluatedType = Any
 
-  val children = child :: ordinal :: Nil
+  val children: Seq[Expression] = child :: ordinal :: Nil
   /** `Null` is returned for invalid ordinals. */
-  override def nullable = true
-  override def foldable = child.foldable && ordinal.foldable
+  override def nullable: Boolean = true
+  override def foldable: Boolean = child.foldable && ordinal.foldable
 
-  def dataType = child.dataType match {
+  override def dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case MapType(_, vt, _) => vt
   }
@@ -40,7 +40,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
     childrenResolved &&
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
-  override def toString = s"$child[$ordinal]"
+  override def toString: String = s"$child[$ordinal]"
 
   override def eval(input: Row): Any = {
     val value = child.eval(input)
@@ -75,8 +75,8 @@ trait GetField extends UnaryExpression {
   self: Product =>
 
   type EvaluatedType = Any
-  override def foldable = child.foldable
-  override def toString = s"$child.${field.name}"
+  override def foldable: Boolean = child.foldable
+  override def toString: String = s"$child.${field.name}"
 
   def field: StructField
 }
@@ -86,8 +86,8 @@ trait GetField extends UnaryExpression {
  */
 case class StructGetField(child: Expression, field: StructField, ordinal: Int) extends GetField {
 
-  def dataType = field.dataType
-  override def nullable = child.nullable || field.nullable
+  override def dataType: DataType = field.dataType
+  override def nullable: Boolean = child.nullable || field.nullable
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
@@ -101,8 +101,8 @@ case class StructGetField(child: Expression, field: StructField, ordinal: Int) e
 case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, containsNull: Boolean)
   extends GetField {
 
-  def dataType = ArrayType(field.dataType, containsNull)
-  override def nullable = child.nullable
+  override def dataType: DataType = ArrayType(field.dataType, containsNull)
+  override def nullable: Boolean = child.nullable
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
@@ -120,7 +120,7 @@ case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, co
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
   
-  override def foldable = !children.exists(!_.foldable)
+  override def foldable: Boolean = !children.exists(!_.foldable)
   
   lazy val childTypes = children.map(_.dataType).distinct
 
@@ -140,5 +140,5 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     children.map(_.eval(input))
   }
 
-  override def toString = s"Array(${children.mkString(",")})"
+  override def toString: String = s"Array(${children.mkString(",")})"
 }
