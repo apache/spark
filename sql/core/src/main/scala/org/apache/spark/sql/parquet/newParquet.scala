@@ -435,11 +435,18 @@ private[sql] case class ParquetRelation2(
     // Push down filters when possible. Notice that not all filters can be converted to Parquet
     // filter predicate. Here we try to convert each individual predicate and only collect those
     // convertible ones.
-    predicates
-      .flatMap(ParquetFilters.createFilter)
-      .reduceOption(FilterApi.and)
-      .filter(_ => sqlContext.conf.parquetFilterPushDown)
-      .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    if (sqlContext.conf.parquetFilterPushDown) {
+      predicates
+        // Don't push down predicates which reference partition columns
+        .filter { pred =>
+          val partitionColNames = partitionColumns.map(_.name).toSet
+          val referencedColNames = pred.references.map(_.name).toSet
+          referencedColNames.intersect(partitionColNames).isEmpty
+        }
+        .flatMap(ParquetFilters.createFilter)
+        .reduceOption(FilterApi.and)
+        .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    }
 
     if (isPartitioned) {
       logInfo {

@@ -321,6 +321,21 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
   override protected def afterAll(): Unit = {
     sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
+
+  test("SPARK-6554: don't push down predicates which reference partition columns") {
+    import sqlContext.implicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+
+        checkAnswer(
+          sqlContext.parquetFile(path).filter("part = 1"),
+          (1 to 3).map(i => Row(i, i.toString, 1)))
+      }
+    }
+  }
 }
 
 class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
