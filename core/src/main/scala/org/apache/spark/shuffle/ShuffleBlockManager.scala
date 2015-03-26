@@ -17,7 +17,9 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.network.buffer.{LargeByteBuffer, ManagedBuffer}
+import java.nio.ByteBuffer
+
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.ShuffleBlockId
 
 private[spark]
@@ -28,7 +30,7 @@ trait ShuffleBlockManager {
    * Get shuffle block data managed by the local ShuffleBlockManager.
    * @return Some(ByteBuffer) if block found, otherwise None.
    */
-  def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer]
+  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
 
   def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 

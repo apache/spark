@@ -198,7 +198,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).firstByteBuffer()) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).asByteBuffer()) })
   }
 
   /** Test error handling when blocks that cannot be stored */

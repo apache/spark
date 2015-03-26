@@ -23,7 +23,7 @@ import java.util.ArrayList;
 
 public class LargeByteBufferHelper {
 
-    static final int DEFAULT_MAX_CHUNK = Integer.MAX_VALUE - 1000000;
+    public static final int DEFAULT_MAX_CHUNK = Integer.MAX_VALUE - 1000000;
 
     public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
         return new WrappedLargeByteBuffer(new ByteBuffer[]{buffer});

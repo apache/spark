@@ -55,7 +55,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public LargeByteBuffer nioByteBuffer() throws IOException {
+  public ByteBuffer nioByteBuffer() throws IOException {
     FileChannel channel = null;
     try {
       channel = new RandomAccessFile(file, "r").getChannel();
@@ -71,9 +71,12 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
           }
         }
         buf.flip();
-        return LargeByteBufferHelper.asLargeByteBuffer(buf);
+        return buf;
       } else {
-        return LargeByteBufferHelper.mapFile(channel, FileChannel.MapMode.READ_ONLY, offset, length);
+        if (length > LargeByteBufferHelper.DEFAULT_MAX_CHUNK) {
+          throw new BufferTooLargeException(length);
+        }
+        return channel.map(FileChannel.MapMode.READ_ONLY, offset, length);
       }
     } catch (IOException e) {
       try {

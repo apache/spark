@@ -16,132 +16,149 @@
 */
 package org.apache.spark.network.buffer;
 
+import sun.nio.ch.DirectBuffer;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
-    //only public for tests for the moment ...
-    public final ByteBuffer[] underlying;
-    private final Long totalCapacity;
-    private final long[] chunkOffsets;
+  //only public for tests for the moment ...
+  public final ByteBuffer[] underlying;
+  private final Long totalCapacity;
+  private final long[] chunkOffsets;
 
-    private long _pos;
-    private int currentBufferIdx;
-    private ByteBuffer currentBuffer;
-    private long limit;
+  private long _pos;
+  private int currentBufferIdx;
+  private ByteBuffer currentBuffer;
+  private long size;
 
 
-    public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
-        this.underlying = underlying;
-        long sum = 0l;
-        chunkOffsets = new long[underlying.length];
-        for (int i = 0; i < underlying.length; i++) {
-            chunkOffsets[i] = sum;
-            sum += underlying[i].capacity();
-        }
-        totalCapacity = sum;
-        _pos = 0l;
-        currentBufferIdx = 0;
-        currentBuffer = underlying[0];
-        limit = totalCapacity;
+  public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
+    this.underlying = underlying;
+    long sum = 0l;
+    chunkOffsets = new long[underlying.length];
+    for (int i = 0; i < underlying.length; i++) {
+      chunkOffsets[i] = sum;
+      sum += underlying[i].capacity();
     }
+    totalCapacity = sum;
+    _pos = 0l;
+    currentBufferIdx = 0;
+    currentBuffer = underlying[0];
+    size = totalCapacity;
+  }
 
-    @Override
-    public long capacity() {return totalCapacity;}
-
-    @Override
-    public void get(byte[] dest, int offset, int length){
-        int moved = 0;
-        while (moved < length) {
-            int toRead = Math.min(length - moved, currentBuffer.remaining());
-            currentBuffer.get(dest, offset + moved, toRead);
-            moved += toRead;
-            updateCurrentBuffer();
-        }
-        _pos += moved;
+  @Override
+  public void get(byte[] dest, int offset, int length) {
+    int moved = 0;
+    while (moved < length) {
+      int toRead = Math.min(length - moved, currentBuffer.remaining());
+      currentBuffer.get(dest, offset + moved, toRead);
+      moved += toRead;
+      updateCurrentBuffer();
     }
+    _pos += moved;
+  }
 
-    @Override
-    public byte get() {
-        byte r = currentBuffer.get();
-        _pos += 1;
-        updateCurrentBuffer();
-        return r;
+  @Override
+  public byte get() {
+    byte r = currentBuffer.get();
+    _pos += 1;
+    updateCurrentBuffer();
+    return r;
+  }
+
+  private void updateCurrentBuffer() {
+    //TODO fix end condition
+    while (currentBuffer != null && !currentBuffer.hasRemaining()) {
+      currentBufferIdx += 1;
+      currentBuffer = currentBufferIdx < underlying.length ? underlying[currentBufferIdx] : null;
     }
+  }
 
-    private void updateCurrentBuffer() {
-        //TODO fix end condition
-        while(currentBuffer != null && !currentBuffer.hasRemaining()) {
-            currentBufferIdx += 1;
-            currentBuffer = currentBufferIdx < underlying.length ? underlying[currentBufferIdx] : null;
-        }
+  @Override
+  public void put(LargeByteBuffer bytes) {
+    throw new RuntimeException("not yet implemented");
+  }
+
+  @Override
+  public long position() {
+    return _pos;
+  }
+
+  @Override
+  public void position(long newPosition) {
+    //XXX check range?
+    _pos = newPosition;
+  }
+
+  @Override
+  public long remaining() {
+    return size - _pos;
+  }
+
+  @Override
+  public WrappedLargeByteBuffer duplicate() {
+    ByteBuffer[] duplicates = new ByteBuffer[underlying.length];
+    for (int i = 0; i < underlying.length; i++) {
+      duplicates[i] = underlying[i].duplicate();
     }
+    //we could also avoid initializing offsets here, if we cared ...
+    return new WrappedLargeByteBuffer(duplicates);
+  }
 
-    @Override
-    public void put(LargeByteBuffer bytes) {
-        throw new RuntimeException("not yet implemented");
+  @Override
+  public long size() {
+    return size;
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    long written = 0l;
+    for (ByteBuffer buffer : underlying) {
+      //TODO test this
+      written += buffer.remaining();
+      while (buffer.hasRemaining())
+        channel.write(buffer);
     }
+    return written;
+  }
 
-    @Override
-    public long position() { return _pos;}
+  @Override
+  public ByteBuffer asByteBuffer() {
+    return underlying[0];
+  }
 
-    @Override
-    public void position(long newPosition) {
-        //XXX check range?
-        _pos = newPosition;
+  @Override
+  public List<ByteBuffer> nioBuffers() {
+    return Arrays.asList(underlying);
+  }
+
+  /**
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
+   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+   * unfortunately no standard API to do this.
+   */
+  private static void dispose(ByteBuffer buffer) {
+    if (buffer != null && buffer instanceof MappedByteBuffer) {
+      DirectBuffer db = (DirectBuffer) buffer;
+      if (db.cleaner() != null) {
+        db.cleaner().clean();
+      }
     }
+  }
 
-    @Override
-    public long remaining() {
-        return limit - _pos;
+  @Override
+  public void dispose() {
+    for (ByteBuffer bb : underlying) {
+      dispose(bb);
     }
+  }
 
-    @Override
-    public WrappedLargeByteBuffer duplicate() {
-        ByteBuffer[] duplicates = new ByteBuffer[underlying.length];
-        for (int i = 0; i < underlying.length; i++) {
-            duplicates[i] = underlying[i].duplicate();
-        }
-        //we could also avoid initializing offsets here, if we cared ...
-        return new WrappedLargeByteBuffer(duplicates);
-    }
-
-    @Override
-    public long limit() {
-        return limit;
-    }
-
-    @Override
-    public void limit(long newLimit) {
-        //XXX check range?  set limits in sub buffers?
-        limit = newLimit;
-    }
-
-    @Override
-    public long writeTo(WritableByteChannel channel) throws IOException {
-        long written = 0l;
-        for(ByteBuffer buffer: underlying) {
-            //TODO test this
-            //XXX do we care about respecting the limit here?
-            written += buffer.remaining();
-            while (buffer.hasRemaining())
-                channel.write(buffer);
-        }
-        return written;
-    }
-
-    @Override
-    public ByteBuffer firstByteBuffer() {
-        return underlying[0];
-    }
-
-    @Override
-    public List<ByteBuffer> nioBuffers() {
-        return Arrays.asList(underlying);
-    }
 }

@@ -97,8 +97,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      val putAttempt = tryToPut(blockId, bytes, bytes.size(), deserialized = false)
+      PutResult(bytes.size(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
 
@@ -113,8 +113,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       PutResult(sizeEstimate, Left(values.iterator), putAttempt.droppedBlocks)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      val putAttempt = tryToPut(blockId, bytes, bytes.size(), deserialized = false)
+      PutResult(bytes.size(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
 

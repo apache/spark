@@ -186,7 +186,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in write ahead log
     val storeInWriteAheadLogFuture = Future {
-      logManager.writeToLog(serializedBlock.firstByteBuffer())
+      logManager.writeToLog(serializedBlock.asByteBuffer())
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log segment

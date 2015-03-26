@@ -77,7 +77,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // Just blindly assume there is only one byte buffer here, b/c we expect
               // task results to be small.
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get.firstByteBuffer())
+                serializedTaskResult.get.asByteBuffer())
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }

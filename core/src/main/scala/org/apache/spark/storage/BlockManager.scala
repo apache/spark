@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.io.{BufferedOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -34,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer, ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -308,7 +308,7 @@ private[spark] class BlockManager(
         .asInstanceOf[Option[LargeByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        new NioManagedBuffer(buffer)
+        new NioManagedBuffer(buffer.asByteBuffer())
       } else {
         throw new BlockNotFoundException(blockId.toString)
       }
@@ -319,7 +319,7 @@ private[spark] class BlockManager(
    * Put the block locally, using the given storage level.
    */
   override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(blockId, data.nioByteBuffer(), level)
+    putBytes(blockId, LargeByteBufferHelper.asLargeByteBuffer(data.nioByteBuffer()), level)
   }
 
   /**
@@ -443,7 +443,7 @@ private[spark] class BlockManager(
       val shuffleBlockManager = shuffleManager.shuffleBlockManager
       shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
         case Some(bytes) =>
-          Some(bytes)
+          Some(LargeByteBufferHelper.asLargeByteBuffer(bytes))
         case None =>
           throw new BlockException(
             blockId, s"Block $blockId not found on disk, though it should be")
@@ -536,7 +536,7 @@ private[spark] class BlockManager(
               /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
-              val copyForMemory = LargeByteBufferHelper.allocate(bytes.limit)
+              val copyForMemory = LargeByteBufferHelper.allocate(bytes.size)
               copyForMemory.put(bytes)
               memoryStore.putBytes(blockId, copyForMemory, level)
               bytes.position(0L)
@@ -593,13 +593,13 @@ private[spark] class BlockManager(
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
       // the fetch will always be one byte buffer till we fix SPARK-5928
-      val data: LargeByteBuffer = blockTransferService.fetchBlockSync(
+      val data: ByteBuffer = blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
       if (data != null) {
         if (asBlockResult) {
           return Some(new BlockResult(
-            dataDeserialize(blockId, data),
+            dataDeserialize(blockId, LargeByteBufferHelper.asLargeByteBuffer(data)),
             DataReadMethod.Network,
             data.limit()))
         } else {
@@ -751,7 +751,12 @@ private[spark] class BlockManager(
     val replicationFuture = data match {
       case b: ByteBufferValues if putLevel.replication > 1 =>
         // Duplicate doesn't copy the bytes, but just creates a wrapper
-        val bufferView = b.buffer.duplicate()
+        val bufferView = try {
+          b.buffer.asByteBuffer()
+        } catch {
+          case ex: BufferTooLargeException =>
+            throw new ReplicationBlockSizeLimitException(ex)
+        }
         Future { replicate(blockId, bufferView, putLevel) }
       case _ => null
     }
@@ -847,7 +852,12 @@ private[spark] class BlockManager(
             }
             bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
           }
-          replicate(blockId, bytesAfterPut, putLevel)
+          try {
+            replicate(blockId, bytesAfterPut.asByteBuffer(), putLevel)
+          } catch {
+            case ex: BufferTooLargeException =>
+              throw new ReplicationBlockSizeLimitException(ex)
+          }
           logDebug("Put block %s remotely took %s"
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
       }
@@ -886,7 +896,7 @@ private[spark] class BlockManager(
    * Replicate block to another node. Not that this is a blocking call that returns after
    * the block has been replicated.
    */
-  private def replicate(blockId: BlockId, data: LargeByteBuffer, level: StorageLevel): Unit = {
+  private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val numPeersToReplicateTo = level.replication - 1
     val peersForReplication = new ArrayBuffer[BlockManagerId]
@@ -940,7 +950,7 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            data.position(0L)
+            data.position(0)
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
@@ -1273,3 +1283,42 @@ private[spark] object BlockManager extends Logging {
     blockManagers.toMap
   }
 }
+
+
+abstract class BlockSizeLimitException(msg: String, cause: BufferTooLargeException)
+  extends SparkException(msg, cause)
+
+object BlockSizeLimitException {
+  def sizeMsg(cause: BufferTooLargeException): String = {
+    s"that was ${Utils.bytesToString(cause.actualSize)} (too " +
+    s"large by ${Utils.bytesToString(cause.extra)} / " +
+      s"${cause.actualSize.toDouble / LargeByteBufferHelper.DEFAULT_MAX_CHUNK}x)."
+  }
+
+  def sizeMsgAndAdvice(cause: BufferTooLargeException): String = {
+    sizeMsg(cause) +
+      " You should figure out which stage created these partitions, then increase the number of " +
+      "partitions used by that stage. That way, you will have less data per partition. You may " +
+      "want to make the number of partitions an easily configurable parameter so you can " +
+      "continue to update it as needed."
+  }
+
+}
+
+class ReplicationBlockSizeLimitException(cause: BufferTooLargeException)
+  extends BlockSizeLimitException("Spark cannot replicate partitions that are greater than 2GB.  " +
+    "You tried to replicate a partition " + BlockSizeLimitException.sizeMsgAndAdvice(cause) +
+    "  Or, you can turn off replication.", cause)
+
+class TachyonBlockSizeLimitException(cause: BufferTooLargeException)
+  extends BlockSizeLimitException("Spark cannot store partitions greater than 2GB in tachyon.  " +
+    "You tried to store a partition " + BlockSizeLimitException.sizeMsgAndAdvice(cause) +
+    "  Or, you can use a different storage mechanism.", cause)
+
+class ShuffleBlockSizeLimitException(cause: BufferTooLargeException)
+  extends BlockSizeLimitException("Spark cannot shuffle partitions that are greater than 2GB.  " +
+    "You tried to shuffle a block " + BlockSizeLimitException.sizeMsg(cause) +
+    "You should try to increase the number of partitions of this shuffle, and / or increase the " +
+    "figure out which stage created the partitions before the shuffle, and increase the number " +
+    "of partitions for that stage.  You may want to make both of these numbers easily " +
+    "configurable parameters so you can continue to update as needed.", cause)

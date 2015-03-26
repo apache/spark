@@ -18,6 +18,7 @@
 package org.apache.spark.network
 
 import java.io.Closeable
+import java.nio.ByteBuffer
 
 import scala.concurrent.{Promise, Await, Future}
 import scala.concurrent.duration.Duration
@@ -91,11 +92,10 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = LargeByteBufferHelper.allocate(data.size)
+          val ret = ByteBuffer.allocate(data.size.toInt)
           ret.put(data.nioByteBuffer())
-          ret.position(0L)
-          result.success(new NioManagedBuffer(ret))
-        }
+          ret.flip()
+          result.success(new NioManagedBuffer(ret))        }
       })
 
     Await.result(result.future, Duration.Inf)

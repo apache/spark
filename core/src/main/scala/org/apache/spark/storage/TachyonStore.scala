@@ -21,7 +21,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
+import org.apache.spark.network.buffer.{BufferTooLargeException, LargeByteBufferHelper, LargeByteBuffer}
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
@@ -70,25 +70,26 @@ private[spark] class TachyonStore(
       blockId: BlockId,
       bytes: LargeByteBuffer,
       returnValues: Boolean): PutResult = {
-    // So that we do not modify the input offsets !
-    // duplicate does not copy buffer, so inexpensive
-    val byteBuffer = bytes.duplicate()
-    byteBuffer.position(0L)
+    val byteBuffer = try {
+      bytes.asByteBuffer()
+    } catch {
+      case ex: BufferTooLargeException =>
+        throw new TachyonBlockSizeLimitException(ex)
+    }
     logDebug(s"Attempting to put block $blockId into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    // XXX not sure about the right fix for blocks over 2gb
-    os.write(byteBuffer.firstByteBuffer().array)
+    os.write(byteBuffer.array)
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
-      blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
+      blockId, Utils.bytesToString(byteBuffer.limit()), finishTime - startTime))
 
     if (returnValues) {
-      PutResult(bytes.limit(), Right(bytes.duplicate()))
+      PutResult(bytes.size(), Right(bytes.duplicate()))
     } else {
-      PutResult(bytes.limit(), null)
+      PutResult(bytes.size(), null)
     }
   }
 

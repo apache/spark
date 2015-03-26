@@ -41,8 +41,8 @@ public final class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public LargeByteBuffer nioByteBuffer() throws IOException {
-    return LargeByteBufferHelper.asLargeByteBuffer(buf.nioBuffer());
+  public ByteBuffer nioByteBuffer() throws IOException {
+    return buf.nioBuffer();
   }
 
   @Override

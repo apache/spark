@@ -19,6 +19,7 @@ package org.apache.spark.network.buffer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 
 /**
  * This interface provides an immutable view for data in the form of bytes. The implementation
@@ -43,7 +44,7 @@ public abstract class ManagedBuffer {
    * returned ByteBuffer should not affect the content of this buffer.
    */
   // TODO: Deprecate this, usage may require expensive memory mapping or allocation.
-  public abstract LargeByteBuffer nioByteBuffer() throws IOException;
+  public abstract ByteBuffer nioByteBuffer() throws IOException;
 
   /**
    * Exposes this buffer's data as an InputStream. The underlying implementation does not

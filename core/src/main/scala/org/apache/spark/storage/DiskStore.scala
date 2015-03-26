@@ -55,8 +55,8 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
-    PutResult(bytes.limit(), Right(bytes.duplicate()))
+      file.getName, Utils.bytesToString(bytes.size()), finishTime - startTime))
+    PutResult(bytes.size(), Right(bytes.duplicate()))
   }
 
   override def putArray(

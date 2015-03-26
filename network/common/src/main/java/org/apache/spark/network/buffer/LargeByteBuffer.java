@@ -22,8 +22,6 @@ import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
 public interface LargeByteBuffer {
-    public long capacity();
-
     public byte get();
 
     public void get(byte[] dst,int offset, int length);
@@ -39,28 +37,43 @@ public interface LargeByteBuffer {
 
     public long remaining();
 
-    //TODO checks on limit semantics
-
     /**
-     * Sets this buffer's limit. If the position is larger than the new limit then it is set to the
-     * new limit. If the mark is defined and larger than the new limit then it is discarded.
-     */
-    public void limit(long newLimit);
-
-    /**
-     * return this buffer's limit
+     * the total number of bytes in this buffer
      * @return
      */
-    public long limit();
+    public long size();
 
-    //an alternative to having this method would be having a foreachBuffer(f: Buffer => T)
+    /**
+     * writes the entire contents of this buffer to the given channel
+     *
+     * @param channel
+     * @return
+     * @throws IOException
+     */
     public long writeTo(WritableByteChannel channel) throws IOException;
 
+    /**
+     * get the entire contents of this as one ByteBuffer, if possible.  The returned ByteBuffer
+     * will always have the position set 0, and the limit set to the end of the data.  Each
+     * call will return a new ByteBuffer, but will not require copying the data (eg., it will
+     * use ByteBuffer#duplicate()). Updates to the ByteBuffer will be reflected in this
+     * LargeByteBuffer.
+     *
+     * @return
+     * @throws BufferTooLargeException if this buffer is too large to fit in one {@link ByteBuffer}
+     */
+    public ByteBuffer asByteBuffer() throws BufferTooLargeException;
 
-    //TODO this should be deleted -- just to help me get going
-    public ByteBuffer firstByteBuffer();
+    /**
+     * Attempt to clean up if it is memory-mapped. This uses an *unsafe* Sun API that
+     * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+     * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+     * unfortunately no standard API to do this.
+     */
+    public void dispose();
 
     //List b/c we need to know the size.  Could also use Iterator w/ separate numBuffers method
+    //TODO delete
     public List<ByteBuffer> nioBuffers();
 
 }
