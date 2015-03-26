@@ -24,7 +24,9 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{HasInputCols, HasOutputCol, ParamMap}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.CreateStruct
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -43,8 +45,11 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     val map = this.paramMap ++ paramMap
-    val assembleFunc = udf(VectorAssembler.assemble _)
-    dataset.select(col("*"), assembleFunc(map(inputCols).map(col): _*).as(map(outputCol)))
+    val assembleFunc = udf { r: Row =>
+      VectorAssembler.assemble(r.toSeq: _*)
+    }
+    val args = map(inputCols).map(c => UnresolvedAttribute(c))
+    dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
