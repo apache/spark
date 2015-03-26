@@ -30,7 +30,7 @@
 
 ghprbActualCommit="$1"
 sha1="$2"
-current_pr_commit="$3"
+current_pr_head="$3"
 
 MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
