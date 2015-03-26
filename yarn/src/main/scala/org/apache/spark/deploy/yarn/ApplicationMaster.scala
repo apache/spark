@@ -24,22 +24,20 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
-import akka.actor._
-import akka.remote._
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
+import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader,
-  SignalLogger, Utils}
+import org.apache.spark.util._
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -72,8 +70,8 @@ private[spark] class ApplicationMaster(
   @volatile private var allocator: YarnAllocator = _
 
   // Fields used in client mode.
-  private var actorSystem: ActorSystem = null
-  private var actor: ActorRef = _
+  private var rpcEnv: RpcEnv = null
+  private var amEndpoint: RpcEndpointRef = _
 
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
@@ -245,13 +243,9 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
-    val driverUrl = AkkaUtils.address(
-      AkkaUtils.protocol(actorSystem),
-      SparkEnv.driverActorSystemName,
-      host,
-      port,
-      YarnSchedulerBackend.ACTOR_NAME)
-    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, isClusterMode)), name = "YarnAM")
+    val driverEndpont = rpcEnv.setupEndpointRef(
+      SparkEnv.driverActorSystemName, RpcAddress(host, port.toInt), YarnSchedulerBackend.ACTOR_NAME)
+    amEndpoint = rpcEnv.setupEndpoint("YarnAM", new AMActor(rpcEnv, driverEndpont, isClusterMode))
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -268,7 +262,7 @@ private[spark] class ApplicationMaster(
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
-      actorSystem = sc.env.actorSystem
+      rpcEnv = sc.env.rpcEnv
       runAMActor(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
@@ -279,8 +273,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-      conf = sparkConf, securityManager = securityMgr)._1
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
@@ -439,7 +432,7 @@ private[spark] class ApplicationMaster(
       System.setProperty("spark.ui.filters", amFilter)
       params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
-      actor ! AddWebUIFilter(amFilter, params.toMap, proxyBase)
+      amEndpoint.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
     }
   }
 
@@ -503,42 +496,26 @@ private[spark] class ApplicationMaster(
   /**
    * An actor that communicates with the driver's scheduler backend.
    */
-  private class AMActor(driverUrl: String, isClusterMode: Boolean) extends Actor {
-    var driver: ActorSelection = _
+  private class AMActor(override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
+    extends RpcEndpoint with Logging {
 
-    override def preStart() = {
-      logInfo("Listen to driver: " + driverUrl)
-      driver = context.actorSelection(driverUrl)
-      // Send a hello message to establish the connection, after which
-      // we can monitor Lifecycle Events.
-      driver ! "Hello"
-      driver ! RegisterClusterManager
-      // In cluster mode, the AM can directly monitor the driver status instead
-      // of trying to deduce it from the lifecycle of the driver's actor
-      if (!isClusterMode) {
-        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-      }
+    override def onStart() = {
+      driver.send(RegisterClusterManager(self))
     }
 
-    override def receive = {
-      case x: DisassociatedEvent =>
-        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        // In cluster mode, do not rely on the disassociated event to exit
-        // This avoids potentially reporting incorrect exit codes if the driver fails
-        if (!isClusterMode) {
-          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
-        }
-
+    override def receive: PartialFunction[Any, Unit] = {
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
-        driver ! x
+        driver.send(x)
+    }
 
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RequestExecutors(requestedTotal) =>
         Option(allocator) match {
           case Some(a) => a.requestTotalExecutors(requestedTotal)
           case None => logWarning("Container allocator is not ready to request executors yet.")
         }
-        sender ! true
+        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
@@ -546,7 +523,16 @@ private[spark] class ApplicationMaster(
           case Some(a) => executorIds.foreach(a.killExecutor)
           case None => logWarning("Container allocator is not ready to kill executors yet.")
         }
-        sender ! true
+        context.reply(true)
+    }
+
+    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+      logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
+      // In cluster mode, do not rely on the disassociated event to exit
+      // This avoids potentially reporting incorrect exit codes if the driver fails
+      if (!isClusterMode) {
+        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+      }
     }
   }
 
