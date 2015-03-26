@@ -21,7 +21,7 @@
 
 usage="Usage: start-slave.sh <worker#> <spark-master-URL> where <spark-master-URL> is like "spark://localhost:7077"
 
-if [ $# -le 1 ]; then
+if [ $# -lt 2 ]; then
   echo $usage
   exit 1
 fi
