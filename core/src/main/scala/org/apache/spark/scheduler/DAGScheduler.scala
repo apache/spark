@@ -150,7 +150,7 @@ class DAGScheduler(
       result: Any,
       accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics): Unit ={
+      taskMetrics: TaskMetrics): Unit = {
     eventProcessLoop.post(
       CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
   }
@@ -229,7 +229,7 @@ class DAGScheduler(
   /**
    * Helper function to eliminate some code re-use when creating new stages.
    */
-  def getParentStagesAndId(rdd: RDD[_], jobId: Int): (List[Stage], Int) = {
+  private def getParentStagesAndId(rdd: RDD[_], jobId: Int): (List[Stage], Int) = {
     val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     (parentStages, id)
@@ -411,7 +411,7 @@ class DAGScheduler(
    * Registers the given jobId among the jobs that need the given stage and
    * all of that stage's ancestors.
    */
-  private def updateJobIdStageIdMaps(jobId: Int, stage: Stage) = {
+  private def updateJobIdStageIdMaps(jobId: Int, stage: Stage): Unit = {
     def updateJobIdStageIdMapsList(stages: List[Stage]) {
       if (stages.nonEmpty) {
         val s = stages.head
@@ -829,7 +829,6 @@ class DAGScheduler(
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
-
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
@@ -1444,7 +1443,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     dagScheduler.sc.stop()
   }
 
-  override def onStop(): Unit ={
+  override def onStop(): Unit = {
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
   }
