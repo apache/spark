@@ -491,6 +491,7 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   /**
    * Create a BoostingStrategy instance to use with the old API.
+   * NOTE: The caller should set numClasses and algo.
    * TODO: Remove once we move implementation to new API.
    */
   private[mllib] def getOldBoostingStrategy(

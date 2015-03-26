@@ -24,7 +24,8 @@ import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.{DecisionTreeRegressionModel, LabeledPoint}
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
+  BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, LogLoss => OldLogLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
@@ -32,7 +33,8 @@ import org.apache.spark.rdd.RDD
 
 class GBTClassifier
   extends TreeClassifierWithValidate[GBTClassificationModel]
-  with GBTParams[GBTClassifier] with TreeClassifierParams[GBTClassifier]
+  with GBTParams[GBTClassifier]
+  with TreeClassifierParams[GBTClassifier]
   with Logging {
 
   protected var lossStr: String = "LogLoss"
@@ -145,6 +147,17 @@ class GBTClassifier
     val oldGBT = new OldGBT(boostingStrategy)
     val oldModel = oldGBT.runWithValidation(input, validationInput)
     GBTClassificationModel.fromOld(oldModel)
+  }
+
+  /**
+   * Create a BoostingStrategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldBoostingStrategy(
+      categoricalFeatures: Map[Int, Int]): OldBoostingStrategy = {
+    val strategy = super.getOldBoostingStrategy(categoricalFeatures)
+    strategy.treeStrategy.algo = OldAlgo.Classification
+    strategy
   }
 }
 

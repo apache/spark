@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.classification
+package org.apache.spark.mllib.regression
 
 import org.scalatest.FunSuite
 import org.apache.spark.mllib.impl.TreeTests
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
 
 /**
- * Test suite for [[GBTClassifier]].
+ * Test suite for [[GBTRegressor]].
  */
-class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
 
-  import GBTClassifierSuite.compareAPIs
+  import GBTRegressorSuite.compareAPIs
 
   // Combinations for estimators, learning rates and subsamplingRate
   private val testCombinations =
@@ -49,28 +48,30 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
   }
 
-  test("Binary classification with continuous features: Log Loss") {
+  test("Regression with continuous features: SquaredError") {
     val categoricalFeatures = Map.empty[Int, Int]
-    testCombinations.foreach {
-      case (numIterations, learningRate, subsamplingRate) =>
-        val gbt = new GBTClassifier()
-          .setMaxDepth(2)
-          .setSubsamplingRate(subsamplingRate)
-          .setLoss("LogLoss")
-          .setNumIterations(numIterations)
-          .setLearningRate(learningRate)
-        compareAPIs(data, None, gbt, categoricalFeatures)
+    GBTRegressor.supportedLosses.foreach { loss =>
+      testCombinations.foreach {
+        case (numIterations, learningRate, subsamplingRate) =>
+          val gbt = new GBTRegressor()
+            .setMaxDepth(2)
+            .setSubsamplingRate(subsamplingRate)
+            .setLoss(loss)
+            .setNumIterations(numIterations)
+            .setLearningRate(learningRate)
+          compareAPIs(data, None, gbt, categoricalFeatures)
+      }
     }
   }
 
-  // TODO: test("model save/load") {
+  // TODO: test("model save/load")
 
   test("runWithValidation stops early and performs better on a validation dataset") {
     val categoricalFeatures = Map.empty[Int, Int]
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
-    GBTClassifier.supportedLosses.foreach { loss =>
-      val gbt = new GBTClassifier()
+    GBTRegressor.supportedLosses.foreach { loss =>
+      val gbt = new GBTRegressor()
         .setNumIterations(numIterations)
         .setMaxDepth(2)
         .setLoss(loss)
@@ -81,7 +82,7 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private object GBTClassifierSuite {
+private object GBTRegressorSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -90,7 +91,7 @@ private object GBTClassifierSuite {
   def compareAPIs(
       data: RDD[LabeledPoint],
       validationData: Option[RDD[LabeledPoint]],
-      gbt: GBTClassifier,
+      gbt: GBTRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures)
     val oldGBT = new OldGBT(oldBoostingStrategy)
@@ -102,7 +103,7 @@ private object GBTClassifierSuite {
         (oldGBT.runWithValidation(data, valData),
           gbt.runWithValidation(data, valData, categoricalFeatures))
     }
-    val oldModelAsNew = GBTClassificationModel.fromOld(oldModel)
+    val oldModelAsNew = GBTRegressionModel.fromOld(oldModel)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

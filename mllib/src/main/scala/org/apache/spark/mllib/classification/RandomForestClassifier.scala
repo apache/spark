@@ -92,7 +92,7 @@ class RandomForestClassifier
       numClasses: Int): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
     strategy.algo = OldAlgo.Classification
-    strategy.setSubsamplingRate(getSubsamplingRate)
+    strategy.impurity = getOldImpurity
     strategy
   }
 }

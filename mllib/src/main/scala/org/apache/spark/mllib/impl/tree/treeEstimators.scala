@@ -69,7 +69,7 @@ private[mllib] abstract class TreeEstimator[M] {
  * These methods are somewhat specific to trees since they take the categoricalFeatures param.
  * @tparam M  Concrete class implementing this trait.
  */
-private[mllib] abstract class AbstractTreeClassifier[M] extends TreeEstimator[M] {
+private[mllib] abstract class TreeClassifier[M] extends TreeEstimator[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
@@ -102,7 +102,9 @@ private[mllib] abstract class AbstractTreeClassifier[M] extends TreeEstimator[M]
    */
   override def run(
       input: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M
+      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M = {
+    run(input, categoricalFeatures, numClasses = 2)
+  }
 
   /**
    * Java-compatible version of [[run()]].
@@ -111,25 +113,10 @@ private[mllib] abstract class AbstractTreeClassifier[M] extends TreeEstimator[M]
   def run(
       input: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
-      numClasses: Int): M
-}
-
-private[mllib] abstract class TreeClassifier[M] extends AbstractTreeClassifier[M] {
-
-  override def run(
-      input: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M = {
-    run(input, categoricalFeatures, numClasses = 2)
-  }
-
-  override def run(
-      input: JavaRDD[LabeledPoint],
-      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): M = {
     run(input.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
   }
-
 }
 
 /**
@@ -137,10 +124,10 @@ private[mllib] abstract class TreeClassifier[M] extends AbstractTreeClassifier[M
  * These methods are somewhat specific to trees since they take the categoricalFeatures param.
  * @tparam M  Concrete class implementing this trait.
  */
-private[mllib] trait TreeRegressor[M] extends TreeEstimator[M]
+private[mllib] abstract class TreeRegressor[M] extends TreeEstimator[M]
 
 /** Version of [[TreeEstimator]] for algorithms which support runWithValidation(). */
-private[mllib] trait TreeEstimatorWithValidate[M] extends TreeEstimator[M] {
+private[mllib] trait TreeEstimatorWithValidate[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
@@ -168,9 +155,7 @@ private[mllib] trait TreeEstimatorWithValidate[M] extends TreeEstimator[M] {
    */
   def runWithValidation(
       input: JavaRDD[LabeledPoint],
-      validationInput: JavaRDD[LabeledPoint]): M = {
-    runWithValidation(input.rdd, validationInput.rdd)
-  }
+      validationInput: JavaRDD[LabeledPoint]): M
 
   /**
    * Java-compatible version of [[runWithValidation()]].
@@ -179,16 +164,13 @@ private[mllib] trait TreeEstimatorWithValidate[M] extends TreeEstimator[M] {
   def runWithValidation(
       input: JavaRDD[LabeledPoint],
       validationInput: JavaRDD[LabeledPoint],
-      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer]): M = {
-    runWithValidation(input.rdd, validationInput.rdd,
-      categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
-  }
+      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer]): M
 }
 
 /** Version of [[TreeClassifier]] for algorithms which support runWithValidation(). */
-private[mllib] trait TreeClassifierWithValidate[M]
-  extends TreeEstimatorWithValidate[M]
-  with TreeClassifier[M] {
+private[mllib] abstract class TreeClassifierWithValidate[M]
+  extends TreeClassifier[M]
+  with TreeEstimatorWithValidate[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
@@ -220,11 +202,25 @@ private[mllib] trait TreeClassifierWithValidate[M]
    * @return Learned model
    * @group run
    */
-  def runWithValidation(
+  override def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M = {
     runWithValidation(input, validationInput, categoricalFeatures, numClasses = 2)
+  }
+
+  override def runWithValidation(
+      input: JavaRDD[LabeledPoint],
+      validationInput: JavaRDD[LabeledPoint]): M = {
+    runWithValidation(input.rdd, validationInput.rdd)
+  }
+
+  override def runWithValidation(
+      input: JavaRDD[LabeledPoint],
+      validationInput: JavaRDD[LabeledPoint],
+      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer]): M = {
+    runWithValidation(input.rdd, validationInput.rdd,
+      categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
   /**
@@ -242,6 +238,21 @@ private[mllib] trait TreeClassifierWithValidate[M]
 }
 
 /** Version of [[TreeRegressor]] for algorithms which support runWithValidation(). */
-private[mllib] trait TreeRegressorWithValidate[M]
-  extends TreeEstimatorWithValidate[M]
-  with TreeRegressor[M]
+private[mllib] abstract class TreeRegressorWithValidate[M]
+  extends TreeRegressor[M]
+  with TreeEstimatorWithValidate[M] {
+
+  override def runWithValidation(
+      input: JavaRDD[LabeledPoint],
+      validationInput: JavaRDD[LabeledPoint]): M = {
+    runWithValidation(input.rdd, validationInput.rdd)
+  }
+
+  override def runWithValidation(
+      input: JavaRDD[LabeledPoint],
+      validationInput: JavaRDD[LabeledPoint],
+      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer]): M = {
+    runWithValidation(input.rdd, validationInput.rdd,
+      categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
+}

@@ -19,7 +19,8 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.impl.tree.TreeUtils.checkEqual
+import org.apache.spark.mllib.impl.TreeTests
+import TreeTests.checkEqual
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext

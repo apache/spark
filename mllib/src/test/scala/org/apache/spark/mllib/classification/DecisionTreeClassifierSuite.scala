@@ -19,8 +19,8 @@ package org.apache.spark.mllib.classification
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.impl.tree.TreeUtils
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -247,6 +247,6 @@ private[mllib] object DecisionTreeClassifierSuite extends FunSuite {
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newTree = dt.run(data, categoricalFeatures, numClasses)
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree)
-    TreeUtils.checkEqual(oldTreeAsNew, newTree)
+    TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

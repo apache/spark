@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl.tree
+package org.apache.spark.mllib.impl
 
 import org.scalatest.FunSuite
 
-private[mllib] object TreeUtils extends FunSuite {
+import org.apache.spark.mllib.impl.tree._
+
+private[mllib] object TreeTests extends FunSuite {
 
   /**
    * Check if the two trees are exactly the same.
@@ -64,7 +66,7 @@ private[mllib] object TreeUtils extends FunSuite {
   def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
     try {
       a.getTrees.zip(b.getTrees).foreach { case (treeA, treeB) =>
-        TreeUtils.checkEqual(treeA, treeB)
+        TreeTests.checkEqual(treeA, treeB)
       }
       assert(a.getTreeWeights === b.getTreeWeights)
     } catch {

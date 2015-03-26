@@ -18,8 +18,7 @@
 package org.apache.spark.mllib.classification
 
 import org.scalatest.FunSuite
-
-import org.apache.spark.mllib.impl.tree.TreeUtils
+import org.apache.spark.mllib.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
@@ -28,6 +27,9 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * Test suite for [[RandomForestClassifier]].
+ */
 class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   import RandomForestClassifierSuite.compareAPIs
@@ -48,7 +50,6 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   /////////////////////////////////////////////////////////////////////////////
 
   def binaryClassificationTestWithContinuousFeatures(rf: RandomForestClassifier) {
-    val rdd = orderedLabeledPoints50_1000
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
     val newRF = rf
@@ -130,6 +131,6 @@ private object RandomForestClassifierSuite extends FunSuite {
       data, oldStrategy, rf.getNumTrees, rf.getFeaturesPerNodeStr, rf.getSeed.toInt)
     val newModel = rf.run(data, categoricalFeatures, numClasses)
     val oldModelAsNew = RandomForestClassificationModel.fromOld(oldModel)
-    TreeUtils.checkEqual(oldModelAsNew, newModel)
+    TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }
