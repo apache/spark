@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
-import java.net.{HttpURLConnection, SocketException, URL}
+import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import javax.servlet.http.HttpServletResponse
 
 import scala.io.Source
@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
+import scala.collection.mutable
 
 /**
  * A client that submits applications to the standalone Master using a REST protocol.
@@ -57,6 +58,8 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
 
   val masters: Array[String] = master.stripPrefix("spark://").split(",").map("spark://" + _)
 
+  private val lostMasters = new mutable.HashSet[String]
+
   /**
    * Submit an application specified by the parameters in the provided request.
    *
@@ -71,16 +74,24 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     for (m <- masters if !suc) {
       validateMaster(m)
       val url = getSubmitUrl(m)
-      response = postJson(url, request.toJson)
-      response match {
-        case s: CreateSubmissionResponse =>
-          if (s.success) {
-            reportSubmissionStatus(s)
-            handleRestResponse(s)
-            suc = true
+      try {
+        response = postJson(url, request.toJson)
+        response match {
+          case s: CreateSubmissionResponse =>
+            if (s.success) {
+              reportSubmissionStatus(s)
+              handleRestResponse(s)
+              suc = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
+          if(handleSubmitRestConnectionException(m)) {
+            throw new SubmitRestConnectionException(
+              "No master is available for createSubmission.", new Throwable(""))
           }
-        case unexpected =>
-          handleUnexpectedRestResponse(unexpected)
       }
     }
     response
@@ -93,15 +104,24 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !suc) {
       validateMaster(m)
-      response = post(getKillUrl(m, submissionId))
-      response match {
-        case k: KillSubmissionResponse =>
-          if (!k.message.contains("Can only")) {
-            handleRestResponse(k)
-            suc = true
+      val url = getKillUrl(m, submissionId)
+      try {
+        response = post(url)
+        response match {
+          case k: KillSubmissionResponse =>
+            if (!k.message.contains("Can only")) {
+              handleRestResponse(k)
+              suc = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
+          if(handleSubmitRestConnectionException(m)) {
+            throw new SubmitRestConnectionException(
+              "No master is available for killSubmission.", new Throwable(""))
           }
-        case unexpected =>
-          handleUnexpectedRestResponse(unexpected)
       }
     }
     response
@@ -114,18 +134,26 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
     var suc: Boolean = false
     var response: SubmitRestProtocolResponse = null
-    masters.foreach(println(_))
     for (m <- masters) {
       validateMaster(m)
-      response = get(getStatusUrl(m, submissionId))
-      response match {
-        case s: SubmissionStatusResponse if s.success =>
-          if (!quiet) {
-            handleRestResponse(s)
+      val url = getStatusUrl(m, submissionId)
+      try {
+        response = get(url)
+        response match {
+          case s: SubmissionStatusResponse if s.success =>
+            if (!quiet) {
+              handleRestResponse(s)
+            }
+            suc = true
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
+          if(handleSubmitRestConnectionException(m)) {
+            throw new SubmitRestConnectionException(
+              "No master is available for requestSubmissionStatus.", new Throwable(""))
           }
-          suc = true
-        case unexpected =>
-          handleUnexpectedRestResponse(unexpected)
       }
     }
     response
@@ -308,6 +336,14 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   /** Log an appropriate error if the response sent by the server is not of the expected type. */
   private def handleUnexpectedRestResponse(unexpected: SubmitRestProtocolResponse): Unit = {
     logError(s"Error: Server responded with message of unexpected type ${unexpected.messageType}.")
+  }
+
+  private def handleSubmitRestConnectionException(url: String): Boolean = {
+    if (!lostMasters.contains(url)) {
+      logWarning(s"Unable to connect to server ${url}.")
+      lostMasters += url
+    }
+    lostMasters.size >= masters.size
   }
 }
 
