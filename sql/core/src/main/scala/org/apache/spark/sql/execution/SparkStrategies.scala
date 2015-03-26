@@ -90,6 +90,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
+      // for now let's support inner join first, then add outer join
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.conf.autoSortMergeJoin =>
+        val mergeJoin =
+          joins.SortMergeJoin(leftKeys, rightKeys, Inner, planLater(left), planLater(right))
+        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {

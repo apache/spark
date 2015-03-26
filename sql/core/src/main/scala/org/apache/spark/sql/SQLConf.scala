@@ -27,6 +27,7 @@ private[spark] object SQLConf {
   val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
   val IN_MEMORY_PARTITION_PRUNING = "spark.sql.inMemoryColumnarStorage.partitionPruning"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
+  val AUTO_SORTMERGEJOIN = "spark.sql.autoSortMergeJoin"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
@@ -142,6 +143,12 @@ private[sql] class SQLConf extends Serializable {
    */
   private[spark] def autoBroadcastJoinThreshold: Int =
     getConf(AUTO_BROADCASTJOIN_THRESHOLD, (10 * 1024 * 1024).toString).toInt
+
+  /**
+   * By default it will choose sort merge join.
+   */
+  private[spark] def autoSortMergeJoin: Boolean =
+    getConf(AUTO_SORTMERGEJOIN, true.toString).toBoolean
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
