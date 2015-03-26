@@ -961,7 +961,10 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
+    queryExecution.executedPlan.execute().mapPartitions(rows => {
+      val converters = ScalaReflection.createConvertersForStruct(schema)
+      rows.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+    })
   }
 
   /**

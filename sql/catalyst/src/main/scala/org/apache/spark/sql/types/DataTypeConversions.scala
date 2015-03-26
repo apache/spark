@@ -21,23 +21,20 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 
 
 private[sql] object DataTypeConversions {
 
   def productToRow(product: Product, schema: StructType): Row = {
-    val mutableRow = new GenericMutableRow(product.productArity)
-    val schemaFields = schema.fields.toArray
-
+    val ar = new Array[Any](schema.length)
     var i = 0
-    while (i < mutableRow.length) {
-      mutableRow(i) =
-        ScalaReflection.convertToCatalyst(product.productElement(i), schemaFields(i).dataType)
+    while (i < schema.length) {
+      ar(i) =
+        ScalaReflection.convertToCatalyst(product.productElement(i), schema.fields(i).dataType)
       i += 1
     }
-
-    mutableRow
+    new GenericRowWithSchema(ar, schema)
   }
 
   def stringToTime(s: String): java.util.Date = {

@@ -80,8 +80,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
+
   def executeCollect(): Array[Row] = {
-    execute().map(ScalaReflection.convertRowToScala(_, schema)).collect()
+    execute().mapPartitions(iter => {
+      val converters = ScalaReflection.createConvertersForStruct(schema)
+      iter.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+    }).collect()
   }
 
   /**
@@ -125,7 +129,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
+    val converters = ScalaReflection.createConvertersForStruct(schema)
+    buf.toArray.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
   }
 
   protected def newProjection(

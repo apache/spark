@@ -32,9 +32,16 @@ case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNo
 
   override def execute(): RDD[Row] = rdd
 
-  override def executeCollect(): Array[Row] =
-    rows.map(ScalaReflection.convertRowToScala(_, schema)).toArray
 
-  override def executeTake(limit: Int): Array[Row] =
-    rows.map(ScalaReflection.convertRowToScala(_, schema)).take(limit).toArray
+  override def executeCollect(): Array[Row] = {
+    val converters = ScalaReflection.createConvertersForStruct(schema)
+    rows.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters)).toArray
+  }
+
+
+  override def executeTake(limit: Int): Array[Row] = {
+    val converters = ScalaReflection.createConvertersForStruct(schema)
+    rows.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+      .take(limit).toArray
+  }
 }
