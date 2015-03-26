@@ -16,7 +16,6 @@
 #
 
 import sys
-import itertools
 import warnings
 import random
 
@@ -534,6 +533,25 @@ class DataFrame(object):
 
     orderBy = sort
 
+    def describe(self, *cols):
+        """Computes statistics for numeric columns.
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical columns.
+
+        >>> df.describe().show()
+        summary age
+        count   2
+        mean    3.5
+        stddev  1.5
+        min     2
+        max     5
+        """
+        cols = ListConverter().convert(cols,
+                                       self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
     @ignore_unicode_prefix
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
@@ -1010,6 +1028,23 @@ class Column(object):
         return Column(jc)
 
     __getslice__ = substr
+
+    def inSet(self, *cols):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.inSet("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.inSet([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cols[0]
+        cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
 
     # order
     asc = _unary_op("asc", "Returns a sort expression based on the"

@@ -40,7 +40,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     new GenericRow(outputArray)
   }
 
-  override def toString = s"Row => [${exprArray.mkString(",")}]"
+  override def toString: String = s"Row => [${exprArray.mkString(",")}]"
 }
 
 /**
@@ -107,12 +107,12 @@ class JoinedRow extends Row {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int) =
+  override def apply(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  override def isNullAt(i: Int) =
+  override def isNullAt(i: Int): Boolean =
     if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
   override def getInt(i: Int): Int =
@@ -142,7 +142,7 @@ class JoinedRow extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy() = {
+  override def copy(): Row = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -153,7 +153,7 @@ class JoinedRow extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
+  override def toString: String = {
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
@@ -207,12 +207,12 @@ class JoinedRow2 extends Row {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int) =
+  override def apply(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  override def isNullAt(i: Int) =
+  override def isNullAt(i: Int): Boolean =
     if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
   override def getInt(i: Int): Int =
@@ -242,7 +242,7 @@ class JoinedRow2 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy() = {
+  override def copy(): Row = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -253,7 +253,7 @@ class JoinedRow2 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
+  override def toString: String = {
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
@@ -301,12 +301,12 @@ class JoinedRow3 extends Row {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int) =
+  override def apply(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  override def isNullAt(i: Int) =
+  override def isNullAt(i: Int): Boolean =
     if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
   override def getInt(i: Int): Int =
@@ -336,7 +336,7 @@ class JoinedRow3 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy() = {
+  override def copy(): Row = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -347,7 +347,7 @@ class JoinedRow3 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
+  override def toString: String = {
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
@@ -395,12 +395,12 @@ class JoinedRow4 extends Row {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int) =
+  override def apply(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  override def isNullAt(i: Int) =
+  override def isNullAt(i: Int): Boolean =
     if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
   override def getInt(i: Int): Int =
@@ -430,7 +430,7 @@ class JoinedRow4 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy() = {
+  override def copy(): Row = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -441,7 +441,7 @@ class JoinedRow4 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
+  override def toString: String = {
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
@@ -489,12 +489,12 @@ class JoinedRow5 extends Row {
 
   override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  override def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  override def apply(i: Int) =
+  override def apply(i: Int): Any =
     if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  override def isNullAt(i: Int) =
+  override def isNullAt(i: Int): Boolean =
     if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
   override def getInt(i: Int): Int =
@@ -524,7 +524,7 @@ class JoinedRow5 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy() = {
+  override def copy(): Row = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -535,7 +535,7 @@ class JoinedRow5 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
+  override def toString: String = {
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"

@@ -212,14 +212,28 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
           StructField("UPPERCase", IntegerType, nullable = true))))
     }
 
-    // Conflicting field count
-    assert(intercept[Throwable] {
+    // MetaStore schema is subset of parquet schema
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = false)))) {
+
       ParquetRelation2.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
         StructType(Seq(
           StructField("lowerCase", BinaryType),
+          StructField("UPPERCase", IntegerType, nullable = true))))
+    }
+
+    // Conflicting field count
+    assert(intercept[Throwable] {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("uppercase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType))),
+
+        StructType(Seq(
           StructField("UPPERCase", IntegerType, nullable = true))))
     }.getMessage.contains("detected conflicting schemas"))
 

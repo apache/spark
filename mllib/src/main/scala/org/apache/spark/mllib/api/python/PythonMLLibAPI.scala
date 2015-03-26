@@ -110,9 +110,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regParam: Double,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lrAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -134,8 +136,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lassoAlg = new LassoWithSGD()
+    lassoAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lassoAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -156,8 +162,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val ridgeAlg = new RidgeRegressionWithSGD()
+    ridgeAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     ridgeAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)

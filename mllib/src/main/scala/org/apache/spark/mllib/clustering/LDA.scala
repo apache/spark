@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
+import breeze.linalg.{DenseVector => BDV, normalize}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental

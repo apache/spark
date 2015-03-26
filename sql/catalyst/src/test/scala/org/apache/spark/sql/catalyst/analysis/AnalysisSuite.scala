@@ -32,9 +32,13 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseInsensitiveCatalog = new SimpleCatalog(false)
 
   val caseSensitiveAnalyzer =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
+    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
   val caseInsensitiveAnalyzer =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
 
   val checkAnalysis = new CheckAnalysis
 
