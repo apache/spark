@@ -47,7 +47,8 @@ git checkout "${current_pr_head}"
 # Check if any *.pom files from the current branch are different from the master
 difference_q=""
 for p in $(find -name "pom.xml"); do
-  difference_q="${difference_q}$(diff $p.gate $p)"
+  [ -f "${p}" && -f "${p}.gate" ] && \
+    difference_q="${difference_q}$(diff $p.gate $p)"
 done
 
 # If no pom files were changed we can easily say no new dependencies were added
