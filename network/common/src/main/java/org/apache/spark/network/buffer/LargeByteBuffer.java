@@ -26,14 +26,14 @@ public interface LargeByteBuffer {
 
     public void get(byte[] dst,int offset, int length);
 
-    public void position(long position);
+    public LargeByteBuffer position(long position);
 
     public long position();
 
     /** doesn't copy data, just copies references & offsets */
     public LargeByteBuffer duplicate();
 
-    public void put(LargeByteBuffer bytes);
+    public LargeByteBuffer put(LargeByteBuffer bytes);
 
     public long remaining();
 

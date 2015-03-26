@@ -415,8 +415,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
     implicit val cmv2: ClassTag[V2] = fakeClassTag
     implicit val cmw: ClassTag[W] = fakeClassTag
 
-    def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[W] =
+    def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[W] = {
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
+    }
     dstream.transformWith[(K2, V2), W](other.dstream, scalaTransform(_, _, _))
   }
 

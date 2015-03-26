@@ -536,9 +536,14 @@ private[spark] class BlockManager(
               /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
-              val copyForMemory = LargeByteBufferHelper.allocate(bytes.size)
-              copyForMemory.put(bytes)
-              memoryStore.putBytes(blockId, copyForMemory, level)
+              memoryStore.putBytes(blockId, bytes.size(), () => {
+                // https://issues.apache.org/jira/browse/SPARK-6076
+                // If the file size is bigger than the free memory, OOM will happen. So if we cannot
+                // put it into MemoryStore, copyForMemory should not be created. That's why this
+                // action is put into a `() => ByteBuffer` and created lazily.
+                val copyForMemory = LargeByteBufferHelper.allocate(bytes.size)
+                copyForMemory.put(bytes)
+              })
               bytes.position(0L)
             }
             if (!asBlockResult) {
@@ -1003,15 +1008,23 @@ private[spark] class BlockManager(
     putIterator(blockId, Iterator(value), level, tellMaster)
   }
 
+  def dropFromMemory(
+      blockId: BlockId,
+      data: Either[Array[Any], LargeByteBuffer]): Option[BlockStatus] = {
+    dropFromMemory(blockId, () => data)
+  }
+
   /**
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
    * store reaches its limit and needs to free up space.
+   *
+   * If `data` is not put on disk, it won't be created.
    *
    * Return the block status if the given block has been updated, else None.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[Array[Any], LargeByteBuffer]): Option[BlockStatus] = {
+      data: () => Either[Array[Any], LargeByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
@@ -1035,7 +1048,7 @@ private[spark] class BlockManager(
         // Drop to disk, if storage level requires
         if (level.useDisk && !diskStore.contains(blockId)) {
           logInfo(s"Writing block $blockId to disk")
-          data match {
+          data() match {
             case Left(elements) =>
               diskStore.putArray(blockId, elements, level, returnValues = false)
             case Right(bytes) =>

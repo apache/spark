@@ -252,7 +252,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     master.startsWith("spark://") && deployMode == "cluster"
   }
 
-  override def toString = {
+  override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
     |  deployMode              $deployMode

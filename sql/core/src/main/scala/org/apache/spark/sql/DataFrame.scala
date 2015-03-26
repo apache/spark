@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.types.{NumericType, StructType, StructField, StringType}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
 
@@ -749,6 +749,57 @@ class DataFrame private[sql](
       if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
+  }
+
+  /**
+   * Compute numerical statistics for given columns of this [[DataFrame]]:
+   * count, mean (avg), stddev (standard deviation), min, max.
+   * Each row of the resulting [[DataFrame]] contains column with statistic name
+   * and columns with statistic results for each given column.
+   * If no columns are given then computes for all numerical columns.
+   *
+   * {{{
+   *   df.describe("age", "height")
+   *
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // max     92.0  192.0
+   * }}}
+   */
+  @scala.annotation.varargs
+  def describe(cols: String*): DataFrame = {
+
+    def stddevExpr(expr: Expression) =
+      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
+
+    val statistics = List[(String, Expression => Expression)](
+      "count" -> Count,
+      "mean" -> Average,
+      "stddev" -> stddevExpr,
+      "min" -> Min,
+      "max" -> Max)
+
+    val aggCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+
+    val localAgg = if (aggCols.nonEmpty) {
+      val aggExprs = statistics.flatMap { case (_, colToAgg) =>
+        aggCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
+      }
+
+      agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+        .grouped(aggCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
+        Row(statistic :: aggregation.toList: _*)
+      }
+    } else {
+      statistics.map { case (name, _) => Row(name) }
+    }
+
+    val schema = StructType(("summary" :: aggCols).map(StructField(_, StringType)))
+    val rowRdd = sqlContext.sparkContext.parallelize(localAgg)
+    sqlContext.createDataFrame(rowRdd, schema)
   }
 
   /**

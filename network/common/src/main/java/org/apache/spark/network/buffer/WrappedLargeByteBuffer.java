@@ -82,7 +82,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
-  public void put(LargeByteBuffer bytes) {
+  public LargeByteBuffer put(LargeByteBuffer bytes) {
     throw new RuntimeException("not yet implemented");
   }
 
@@ -92,9 +92,10 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
-  public void position(long newPosition) {
+  public LargeByteBuffer position(long newPosition) {
     //XXX check range?
     _pos = newPosition;
+    return this;
   }
 
   @Override
