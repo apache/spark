@@ -30,62 +30,84 @@
 
 ghprbActualCommit="$1"
 sha1="$2"
+current_pr_commit="$3"
 
 MVN_BIN="`pwd`/build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
-${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
-  sed -n -e '/Building Spark Project Assembly/,$p' | \
-  grep --context=1 -m 2 "Dependencies classpath:" | \
-  head -n 3 | \
-  tail -n 1 | \
-  tr ":" "\n" | \
-  rev | \
-  cut -d "/" -f 1 | \
-  rev | \
-  sort > ${CURR_CP_FILE}
-
-# Checkout the master branch to compare against
+# First switch over to the master branch
 git checkout master &>/dev/null
+# Find and copy all pom.xml files into a *.gate file that we can check
+# against through various `git` changes
+find -name "pom.xml" -exec cp {} {}.gate \;
+# Switch back to the current PR
+git checkout "${current_pr_head}"
 
-${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
-  sed -n -e '/Building Spark Project Assembly/,$p' | \
-  grep --context=1 -m 2 "Dependencies classpath:" | \
-  head -n 3 | \
-  tail -n 1 | \
-  tr ":" "\n" | \
-  rev | \
-  cut -d "/" -f 1 | \
-  rev | \
-  sort > ${MASTER_CP_FILE}
+# Check if any *.pom files from the current branch are different from the master
+difference_q=""
+for p in $(find -name "pom.xml"); do
+  difference_q="${difference_q}$(diff $p.gate $p)"
+done
 
-DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
-
-if [ -z "${DIFF_RESULTS}" ]; then
+# If no pom files were changed we can easily say no new dependencies were added
+if [ -z "${difference_q}" ]; then
   echo " * This patch does not change any dependencies."
 else
-  # Pretty print the new dependencies
-  added_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
-  removed_deps=$(echo ${DIFF_RESULTS} | grep ">" | cut -d" " -f2 | awk '{print "   * "$1}')
-  added_deps_text=" * This patch **adds the following new dependencies:**\n${added_deps}"
-  removed_deps_text=" * This patch **removes the following dependencies:**\n${removed_deps}"
+# Else we need to manually build spark to determine what, if any, dependencies
+# were added into the Spark assembly jar
+  ${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
+    sed -n -e '/Building Spark Project Assembly/,$p' | \
+    grep --context=1 -m 2 "Dependencies classpath:" | \
+    head -n 3 | \
+    tail -n 1 | \
+    tr ":" "\n" | \
+    rev | \
+    cut -d "/" -f 1 | \
+    rev | \
+    sort > ${CURR_CP_FILE}
 
-  # Construct the final returned message with proper 
-  return_mssg=""
-  [ -n "${added_deps}" ] && return_mssg="${added_deps_text}"
-  if [ -n "${removed_deps}" ]; then
-    if [ -n "${return_mssg}" ]; then
-      return_mssg="${return_mssg}\n${removed_deps_text}"
-    else
-      return_mssg="${removed_deps_text}"
+  # Checkout the master branch to compare against
+  git checkout master &>/dev/null
+
+  ${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
+    sed -n -e '/Building Spark Project Assembly/,$p' | \
+    grep --context=1 -m 2 "Dependencies classpath:" | \
+    head -n 3 | \
+    tail -n 1 | \
+    tr ":" "\n" | \
+    rev | \
+    cut -d "/" -f 1 | \
+    rev | \
+    sort > ${MASTER_CP_FILE}
+
+  DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
+
+  if [ -z "${DIFF_RESULTS}" ]; then
+    echo " * This patch does not change any dependencies."
+  else
+    # Pretty print the new dependencies
+    added_deps=$(echo ${DIFF_RESULTS} | grep "<" | cut -d" " -f2 | awk '{print "   * "$1}')
+    removed_deps=$(echo ${DIFF_RESULTS} | grep ">" | cut -d" " -f2 | awk '{print "   * "$1}')
+    added_deps_text=" * This patch **adds the following new dependencies:**\n${added_deps}"
+    removed_deps_text=" * This patch **removes the following dependencies:**\n${removed_deps}"
+
+    # Construct the final returned message with proper 
+    return_mssg=""
+    [ -n "${added_deps}" ] && return_mssg="${added_deps_text}"
+    if [ -n "${removed_deps}" ]; then
+      if [ -n "${return_mssg}" ]; then
+        return_mssg="${return_mssg}\n${removed_deps_text}"
+      else
+        return_mssg="${removed_deps_text}"
+      fi
     fi
   fi
-fi
   
-# Remove the files we've left over
-[ -f "${CURR_CP_FILE}" ] && rm -f "${CURR_CP_FILE}"
-[ -f "${MASTER_CP_FILE}" ] && rm -f "${MASTER_CP_FILE}"
+  # Remove the files we've left over
+  [ -f "${CURR_CP_FILE}" ] && rm -f "${CURR_CP_FILE}"
+  [ -f "${MASTER_CP_FILE}" ] && rm -f "${MASTER_CP_FILE}"
 
-# Clean up our mess from the Maven builds just in case
-${MVN_BIN} clean &>/dev/null
+  # Clean up our mess from the Maven builds just in case
+  ${MVN_BIN} clean &>/dev/null
+fi

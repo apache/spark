@@ -55,8 +55,8 @@ TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 # To write a PR test:
 #+  * the file must reside within the dev/tests directory
 #+  * be an executable bash script
-#+  * accept two arguments on the command line, the first being the Github PR long commit
-#+    hash and the second the Github SHA1 hash
+#+  * accept three arguments on the command line, the first being the Github PR long commit
+#+    hash, the second the Github SHA1 hash, and the final the current PR hash
 #+  * and, lastly, return string output to be included in the pr message output that will
 #+    be posted to Github
 PR_TESTS=(
@@ -158,7 +158,7 @@ for t in "${PR_TESTS[@]}"; do
   # Ensure the test can be found and is a file
   if [ -f "${this_test}" ]; then
     echo "Running test: $t"
-    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}")"
+    this_mssg="$(bash -x "${this_test}" "${ghprbActualCommit}" "${sha1}" "${current_pr_head}")"
     # Check if this is the merge test as we submit that note *before* and *after*
     # the tests run
     [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
