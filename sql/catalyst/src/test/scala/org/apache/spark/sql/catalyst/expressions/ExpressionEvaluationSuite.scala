@@ -1080,4 +1080,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
   }
+
+  test("CreateStruct") {
+    val row = Row(1, 2, 3)
+    val c1 = 'a.int.at(0)
+    val c3 = 'a.int.at(2)
+    checkEvaluation(CreateStruct(Seq(c1, c3)), Row(1, 3), row)
+  }
 }
