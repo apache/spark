@@ -74,12 +74,6 @@
       <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <!-- ADDED FOR TESTING -->
-    <dependency>
-      <groupId>org.clojure</groupId>
-      <artifactId>clojure</artifactId>
-      <version>1.6.0</version>
-    </dependency>
   </dependencies>
 
   <build>

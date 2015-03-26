@@ -183,8 +183,7 @@ done
 
 # run tests
 {
-  # timeout "${TESTS_TIMEOUT}" ./dev/run-tests
-  echo "hello!"
+  timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
