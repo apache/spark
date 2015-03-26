@@ -985,6 +985,23 @@ class Column(object):
 
     __getslice__ = substr
 
+    def inSet(self, *cols):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.inSet("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.inSet([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cols[0]
+        cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
+
     # order
     asc = _unary_op("asc", "Returns a sort expression based on the"
                            " ascending order of the given column name.")
