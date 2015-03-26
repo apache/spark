@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
@@ -47,14 +49,14 @@ ROW                           COLUMN+CELL
 """
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, """
+        print("""
         Usage: hbase_inputformat <host> <table>
 
         Run with example jar:
         ./bin/spark-submit --driver-class-path /path/to/example/jar \
         /path/to/examples/hbase_inputformat.py <host> <table>
         Assumes you have some data in HBase already, running on <host>, in <table>
-        """
+        """, file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
@@ -74,6 +76,6 @@ if __name__ == "__main__":
         conf=conf)
     output = hbase_rdd.collect()
     for (k, v) in output:
-        print (k, v)
+        print((k, v))
 
     sc.stop()

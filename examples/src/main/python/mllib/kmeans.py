@@ -20,6 +20,7 @@ A K-means clustering program using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
 
 import sys
 
@@ -34,12 +35,12 @@ def parseVector(line):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: kmeans <file> <k>"
+        print("Usage: kmeans <file> <k>", file=sys.stderr)
         exit(-1)
     sc = SparkContext(appName="KMeans")
     lines = sc.textFile(sys.argv[1])
     data = lines.map(parseVector)
     k = int(sys.argv[2])
     model = KMeans.train(data, k)
-    print "Final centers: " + str(model.clusterCenters)
+    print("Final centers: " + str(model.clusterCenters))
     sc.stop()

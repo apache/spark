@@ -25,6 +25,7 @@
 
  Then create a text file in `localdir` and the words in the file will get counted.
 """
+from __future__ import print_function
 
 import sys
 
@@ -33,7 +34,7 @@ from pyspark.streaming import StreamingContext
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print >> sys.stderr, "Usage: hdfs_wordcount.py <directory>"
+        print("Usage: hdfs_wordcount.py <directory>", file=sys.stderr)
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingHDFSWordCount")
