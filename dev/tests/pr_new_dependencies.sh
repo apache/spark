@@ -88,8 +88,8 @@ else
     echo " * This patch does not change any dependencies."
   else
     # Pretty print the new dependencies
-    added_deps=$(echo -e ${DIFF_RESULTS} | grep "<" | cut -d' ' -f2 | awk '{print "   * "$1}')
-    removed_deps=$(echo -e ${DIFF_RESULTS} | grep ">" | cut -d' ' -f2 | awk '{print "   * "$1}')
+    added_deps=$(echo "${DIFF_RESULTS}" | grep "<" | cut -d' ' -f2 | awk '{print "   * "$1}')
+    removed_deps=$(echo "${DIFF_RESULTS}" | grep ">" | cut -d' ' -f2 | awk '{print "   * "$1}')
     added_deps_text=" * This patch **adds the following new dependencies:**\n${added_deps}"
     removed_deps_text=" * This patch **removes the following dependencies:**\n${removed_deps}"
 
