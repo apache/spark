@@ -18,7 +18,7 @@
 from pyspark import SparkContext
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 
-__all__ = ['FPGrowth','FPGrowthModel']
+__all__ = ['FPGrowth', 'FPGrowthModel']
 
 
 @inherit_doc
