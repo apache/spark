@@ -212,6 +212,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(c.copy(children = expandedArgs), name)() :: Nil
+            case Alias(c @ CreateStruct(args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(c.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)

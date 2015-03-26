@@ -120,7 +120,7 @@ case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, co
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
   
-  override def foldable: Boolean = !children.exists(!_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable)
   
   lazy val childTypes = children.map(_.dataType).distinct
 
@@ -141,4 +141,30 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def toString: String = s"Array(${children.mkString(",")})"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ */
+case class CreateStruct(children: Seq[Expression]) extends Expression {
+  override type EvaluatedType = Row
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override def dataType: StructType = {
+    assert(resolved, s"CreateStruct is called with unresolved children: $children.")
+    val fields = children.map {
+      case named: NamedExpression =>
+        StructField(named.name, named.dataType, named.nullable, named.metadata)
+    }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: Row): EvaluatedType = {
+    Row(children.map(_.eval(input)): _*)
+  }
 }
