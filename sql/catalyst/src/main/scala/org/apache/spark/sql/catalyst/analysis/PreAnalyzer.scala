@@ -29,16 +29,17 @@ class PreAnalyzer(caseSensitive: Boolean = true,
   val fixedPoint = FixedPoint(maxIterations)
 
   lazy val batches: Seq[Batch] = Seq(
-    Batch("ResolveSelfJoin", fixedPoint, ResolveSelfJoin)
+    Batch("Resolution", fixedPoint, ResolveConflictingAttributes)
   )
 
   /**
-   * Special handling for cases when self-join introduce duplicate expression ids
+   * Handling the cases in which the attributes of nodes are conflicting
    */
-  object ResolveSelfJoin extends Rule[LogicalPlan] {
+  object ResolveConflictingAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case p: LogicalPlan if !p.childrenResolved => p
 
+      // Special handling for cases when self-join introduce duplicate expression ids
       case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
         logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
