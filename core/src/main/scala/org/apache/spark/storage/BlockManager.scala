@@ -136,8 +136,8 @@ private[spark] class BlockManager(
   // Whether to compress shuffle output temporarily spilled to disk
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
-  private val slaveActor = rpcEnv.setupEndpoint(
-    "BlockManagerActor" + BlockManager.ID_GENERATOR.next,
+  private val slaveEndpoint = rpcEnv.setupEndpoint(
+    "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
     new BlockManagerSlaveEndpoint(rpcEnv, this, mapOutputTracker))
 
   // Pending re-registration action being executed asynchronously or null if none is pending.
@@ -186,7 +186,7 @@ private[spark] class BlockManager(
    * where it is only learned after registration with the TaskScheduler).
    *
    * This method initializes the BlockTransferService and ShuffleClient, registers with the
-   * BlockManagerMaster, starts the BlockManagerWorker actor, and registers with a local shuffle
+   * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
    * service if configured.
    */
   def initialize(appId: String): Unit = {
@@ -202,7 +202,7 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -265,7 +265,7 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -1219,7 +1219,7 @@ private[spark] class BlockManager(
       shuffleClient.close()
     }
     diskBlockManager.stop()
-    rpcEnv.stop(slaveActor)
+    rpcEnv.stop(slaveEndpoint)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()

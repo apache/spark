@@ -385,6 +385,10 @@ class BlockManagerMasterEndpoint(
       (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port)
     }
   }
+
+  override def onStop(): Unit = {
+    askThreadPool.shutdownNow()
+  }
 }
 
 @DeveloperApi

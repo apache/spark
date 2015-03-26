@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 private[spark] case object TriggerThreadDump
 
 /**
- * Actor that runs inside of executors to enable driver -> executor RPC.
+ * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
  */
 private[spark]
 class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
@@ -36,4 +36,8 @@ class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends 
       context.reply(Utils.getThreadDump())
   }
 
+}
+
+object ExecutorEndpoint {
+  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
 }

@@ -66,7 +66,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  class DriverActor(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
+  class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends RpcEndpoint with Logging {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
 
@@ -104,7 +104,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case KillTask(taskId, executorId, interruptThread) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
-            executorInfo.executorActor.send(KillTask(taskId, executorId, interruptThread))
+            executorInfo.executorEndpoint.send(KillTask(taskId, executorId, interruptThread))
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
@@ -146,7 +146,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
         for ((_, executorData) <- executorDataMap) {
-          executorData.executorActor.send(StopExecutor)
+          executorData.executorEndpoint.send(StopExecutor)
         }
         context.reply(true)
 
@@ -200,7 +200,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-          executorData.executorActor.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
     }
@@ -230,7 +230,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  var driverActor: RpcEndpointRef = null
+  var driverEndpoint: RpcEndpointRef = null
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
   override def start() {
@@ -241,15 +241,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
     // TODO (prashant) send conf instead of properties
-    driverActor = rpcEnv.setupThreadSafeEndpoint(
-      CoarseGrainedSchedulerBackend.ACTOR_NAME, new DriverActor(rpcEnv, properties))
+    driverEndpoint = rpcEnv.setupThreadSafeEndpoint(
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME, new DriverEndpoint(rpcEnv, properties))
   }
 
   def stopExecutors() {
     try {
-      if (driverActor != null) {
+      if (driverEndpoint != null) {
         logInfo("Shutting down all executors")
-        driverActor.askWithReply[Boolean](StopExecutors)
+        driverEndpoint.askWithReply[Boolean](StopExecutors)
       }
     } catch {
       case e: Exception =>
@@ -260,21 +260,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def stop() {
     stopExecutors()
     try {
-      if (driverActor != null) {
-        driverActor.askWithReply[Boolean](StopDriver)
+      if (driverEndpoint != null) {
+        driverEndpoint.askWithReply[Boolean](StopDriver)
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error stopping standalone scheduler's driver actor", e)
+        throw new SparkException("Error stopping standalone scheduler's driver endpoint", e)
     }
   }
 
   override def reviveOffers() {
-    driverActor.send(ReviveOffers)
+    driverEndpoint.send(ReviveOffers)
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
-    driverActor.send(KillTask(taskId, executorId, interruptThread))
+    driverEndpoint.send(KillTask(taskId, executorId, interruptThread))
   }
 
   override def defaultParallelism(): Int = {
@@ -284,10 +284,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Called by subclasses when notified of a lost worker
   def removeExecutor(executorId: String, reason: String) {
     try {
-      driverActor.askWithReply[Boolean](RemoveExecutor(executorId, reason))
+      driverEndpoint.askWithReply[Boolean](RemoveExecutor(executorId, reason))
     } catch {
       case e: Exception =>
-        throw new SparkException("Error notifying standalone scheduler's driver actor", e)
+        throw new SparkException("Error notifying standalone scheduler's driver endpoint", e)
     }
   }
 
@@ -393,5 +393,5 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
-  val ACTOR_NAME = "CoarseGrainedScheduler"
+  val ENDPOINT_NAME = "CoarseGrainedScheduler"
 }

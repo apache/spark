@@ -65,11 +65,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
-  private val messageScheduler = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("heart-beat-receiver-thread"))
+  private val timeoutCheckingThread = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("heartbeat-timeout-checking-thread"))
+
+  private val killExecutorThread = Executors.newSingleThreadExecutor(
+    Utils.namedThreadFactory("kill-executor-thread"))
 
   override def onStart(): Unit = {
-    timeoutCheckingTask = messageScheduler.scheduleAtFixedRate(new Runnable {
+    timeoutCheckingTask = timeoutCheckingThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = {
         self.send(ExpireDeadHosts)
       }
@@ -100,7 +103,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
         scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
           s"timed out after ${now - lastSeenMs} ms"))
         if (sc.supportDynamicAllocation) {
-          sc.killExecutor(executorId)
+          // Asynchronously kill the executor to avoid blocking the current thread
+          killExecutorThread.submit(new Runnable {
+            override def run(): Unit = sc.killExecutor(executorId)
+          })
         }
         executorLastSeen.remove(executorId)
       }
@@ -111,5 +117,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel(true)
     }
+    timeoutCheckingThread.shutdownNow()
+    killExecutorThread.shutdownNow()
   }
+}
+
+object HeartbeatReceiver {
+  val ENDPOINT_NAME = "HeartbeatReceiver"
 }

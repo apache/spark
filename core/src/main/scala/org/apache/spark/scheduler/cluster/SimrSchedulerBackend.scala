@@ -41,7 +41,7 @@ private[spark] class SimrSchedulerBackend(
 
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
       RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
     val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)

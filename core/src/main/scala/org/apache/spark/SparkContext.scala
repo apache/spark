@@ -46,13 +46,13 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.TriggerThreadDump
+import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, SimrSchedulerBackend}
@@ -359,7 +359,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.rpcEnv.setupThreadSafeEndpoint(
-    "HeartbeatReceiver", new HeartbeatReceiver(this, taskScheduler))
+    HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this, taskScheduler))
 
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
@@ -448,7 +448,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       } else {
         val (host, port) = env.blockManager.master.getRpcHostPortForExecutor(executorId).get
         val endpointRef = env.rpcEnv.setupEndpointRef(
-          SparkEnv.executorActorSystemName, RpcAddress(host, port), "ExecutorEndpoint")
+          SparkEnv.executorActorSystemName,
+          RpcAddress(host, port),
+          ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
         Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {

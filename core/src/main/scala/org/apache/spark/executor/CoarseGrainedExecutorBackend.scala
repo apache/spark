@@ -50,7 +50,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
     logInfo("Connecting to driver: " + driverUrl)
-    rpcEnv.asyncSetupEndpointRefByUrl(driverUrl).flatMap { ref =>
+    rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
       ref.sendWithReply[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
@@ -147,7 +147,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         port,
         executorConf,
         new SecurityManager(executorConf))
-      val driver = fetcher.setupEndpointRefByUrl(driverUrl)
+      val driver = fetcher.setupEndpointRefByURI(driverUrl)
       val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
@@ -171,7 +171,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Start the CoarseGrainedExecutorBackend endpoint.
       val sparkHostPort = hostname + ":" + boundPort
-      env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
+      env.rpcEnv.setupThreadSafeEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))

@@ -234,18 +234,21 @@ private[spark] class ApplicationMaster(
   }
 
   /**
-   * Create an actor that communicates with the driver.
+   * Create an [[RpcEndpoint]] that communicates with the driver.
    *
    * In cluster mode, the AM and the driver belong to same process
-   * so the AM actor need not monitor lifecycle of the driver.
+   * so the AMEndpoint need not monitor lifecycle of the driver.
    */
-  private def runAMActor(
+  private def runAMEndpoint(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
     val driverEndpont = rpcEnv.setupEndpointRef(
-      SparkEnv.driverActorSystemName, RpcAddress(host, port.toInt), YarnSchedulerBackend.ACTOR_NAME)
-    amEndpoint = rpcEnv.setupEndpoint("YarnAM", new AMActor(rpcEnv, driverEndpont, isClusterMode))
+      SparkEnv.driverActorSystemName,
+      RpcAddress(host, port.toInt),
+      YarnSchedulerBackend.ENDPOINT_NAME)
+    amEndpoint =
+      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpont, isClusterMode))
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -263,7 +266,7 @@ private[spark] class ApplicationMaster(
         "Timed out waiting for SparkContext.")
     } else {
       rpcEnv = sc.env.rpcEnv
-      runAMActor(
+      runAMEndpoint(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
@@ -420,7 +423,7 @@ private[spark] class ApplicationMaster(
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    runAMActor(driverHost, driverPort.toString, isClusterMode = false)
+    runAMEndpoint(driverHost, driverPort.toString, isClusterMode = false)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -494,9 +497,10 @@ private[spark] class ApplicationMaster(
   }
 
   /**
-   * An actor that communicates with the driver's scheduler backend.
+   * An [[RpcEndpoint]] that communicates with the driver's scheduler backend.
    */
-  private class AMActor(override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
+  private class AMEndpoint(
+      override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
     extends RpcEndpoint with Logging {
 
     override def onStart() = {

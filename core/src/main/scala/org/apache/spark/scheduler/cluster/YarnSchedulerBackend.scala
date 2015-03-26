@@ -19,9 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import scala.concurrent.{Future, ExecutionContext}
 
-import _root_.akka.actor.{Actor, ActorRef, Props}
-import _root_.akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -46,8 +43,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerActor: RpcEndpointRef =
-    rpcEnv.setupEndpoint(YarnSchedulerBackend.ACTOR_NAME, new YarnSchedulerActor(rpcEnv))
+  private val yarnSchedulerEndpoint = rpcEnv.setupThreadSafeEndpoint(
+    YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
   private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
 
@@ -56,14 +53,14 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerActor.askWithReply[Boolean](RequestExecutors(requestedTotal))
+    yarnSchedulerEndpoint.askWithReply[Boolean](RequestExecutors(requestedTotal))
   }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    yarnSchedulerActor.askWithReply[Boolean](KillExecutors(executorIds))
+    yarnSchedulerEndpoint.askWithReply[Boolean](KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -93,18 +90,20 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
-   * An actor that communicates with the ApplicationMaster.
+   * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerActor(override val rpcEnv: RpcEnv) extends RpcEndpoint with Logging {
-    @volatile private var amActor: Option[RpcEndpointRef] = None
+  private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
+    extends RpcEndpoint with Logging {
+    private var amEndpoint: Option[RpcEndpointRef] = None
 
-    implicit val askAmActorExecutor = ExecutionContext.fromExecutor(
-      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-executor"))
+    private val askAmThreadPool =
+      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
+    implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
 
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
-        amActor = Some(am)
+        amEndpoint = Some(am)
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
@@ -112,17 +111,15 @@ private[spark] abstract class YarnSchedulerBackend(
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterClusterManager(am) =>
-        logInfo(s"ApplicationMaster registered as $am")
-        amActor = Some(am)
-
       case r: RequestExecutors =>
-        amActor match {
-          case Some(actor) =>
+        amEndpoint match {
+          case Some(am) =>
             Future {
-              context.reply(actor.askWithReply[Boolean](r))
+              context.reply(am.askWithReply[Boolean](r))
             } onFailure {
-              case NonFatal(e) => logError(s"Sending $r to AM was unsuccessful", e)
+              case NonFatal(e) =>
+                logError(s"Sending $r to AM was unsuccessful", e)
+                context.sendFailure(e)
             }
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
@@ -130,12 +127,14 @@ private[spark] abstract class YarnSchedulerBackend(
         }
 
       case k: KillExecutors =>
-        amActor match {
-          case Some(actor) =>
+        amEndpoint match {
+          case Some(am) =>
             Future {
-              context.reply(actor.askWithReply[Boolean](k))
+              context.reply(am.askWithReply[Boolean](k))
             } onFailure {
-              case NonFatal(e) => logError(s"Sending $k to AM was unsuccessful", e)
+              case NonFatal(e) =>
+                logError(s"Sending $k to AM was unsuccessful", e)
+                context.sendFailure(e)
             }
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
@@ -145,13 +144,17 @@ private[spark] abstract class YarnSchedulerBackend(
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-      if (amActor.exists(_.address == remoteAddress)) {
+      if (amEndpoint.exists(_.address == remoteAddress)) {
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
       }
+    }
+
+    override def onStop(): Unit ={
+      askAmThreadPool.shutdownNow()
     }
   }
 }
 
 private[spark] object YarnSchedulerBackend {
-  val ACTOR_NAME = "YarnScheduler"
+  val ENDPOINT_NAME = "YarnScheduler"
 }

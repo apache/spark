@@ -86,9 +86,9 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
-  // Create an actor for receiving RPCs from the driver
+  // Create an RpcEndpoint for receiving RPCs from the driver
   private val executorEndpoint = env.rpcEnv.setupEndpoint(
-    "ExecutorEndpoint", new ExecutorEndpoint(env.rpcEnv, executorId))
+    ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
 
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst: Boolean = {
@@ -389,7 +389,8 @@ private[spark] class Executor(
     }
   }
 
-  private val heartbeatReceiverRef = RpcUtils.makeDriverRef("HeartbeatReceiver", conf, env.rpcEnv)
+  private val heartbeatReceiverRef =
+    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {

@@ -342,7 +342,8 @@ object SparkEnv extends Logging {
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus), true), conf, isDriver)
+      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus), threadSafe = true),
+      conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,

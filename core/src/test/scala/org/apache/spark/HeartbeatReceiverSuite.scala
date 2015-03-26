@@ -34,7 +34,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
     val scheduler = mock(classOf[TaskScheduler])
     when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(true)
 
-    sc.env.rpcEnv.setupEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
+    sc.env.rpcEnv.setupThreadSafeEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
     val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
 
     val metrics = new TaskMetrics
@@ -52,7 +52,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
     val scheduler = mock(classOf[TaskScheduler])
     when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(false)
 
-    sc.env.rpcEnv.setupEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
+    sc.env.rpcEnv.setupThreadSafeEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
     val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
 
     val metrics = new TaskMetrics
