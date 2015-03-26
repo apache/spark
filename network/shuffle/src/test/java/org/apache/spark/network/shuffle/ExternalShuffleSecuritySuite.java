@@ -60,13 +60,13 @@ public class ExternalShuffleSecuritySuite {
 
   @Test
   public void testValid() throws IOException {
-    validate("my-app-id", "secret");
+    validate("my-app-id", "secret", false);
   }
 
   @Test
   public void testBadAppId() {
     try {
-      validate("wrong-app-id", "secret");
+      validate("wrong-app-id", "secret", false);
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Wrong appId!"));
     }
@@ -75,16 +75,21 @@ public class ExternalShuffleSecuritySuite {
   @Test
   public void testBadSecret() {
     try {
-      validate("my-app-id", "bad-secret");
+      validate("my-app-id", "bad-secret", false);
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
     }
   }
 
+  @Test
+  public void testEncryption() throws IOException {
+    validate("my-app-id", "secret", true);
+  }
+
   /** Creates an ExternalShuffleClient and attempts to register with the server. */
-  private void validate(String appId, String secretKey) throws IOException {
+  private void validate(String appId, String secretKey, boolean encrypt) throws IOException {
     ExternalShuffleClient client =
-      new ExternalShuffleClient(conf, new TestSecretKeyHolder(appId, secretKey), true);
+      new ExternalShuffleClient(conf, new TestSecretKeyHolder(appId, secretKey), true, encrypt);
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",

@@ -54,7 +54,8 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
         clientBootstrap: Option[TransportClientBootstrap]) = {
       if (authEnabled) {
         (Some(new SaslServerBootstrap(securityManager)),
-          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager)))
+          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
+            securityManager.isSaslEncryptionEnabled())))
       } else {
         (None, None)
       }
