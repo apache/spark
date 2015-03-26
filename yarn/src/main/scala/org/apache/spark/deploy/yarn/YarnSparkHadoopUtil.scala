@@ -126,11 +126,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     sparkConf.getOption("spark.yarn.principal").foreach { principal =>
       val keytab = sparkConf.get("spark.yarn.keytab")
 
+      def getRenewalInterval =
+        math.max((0.75 * (getLatestValidity - System.currentTimeMillis())).toLong, 0L)
+
       def scheduleRenewal(runnable: Runnable) = {
-        // Latest validity can be -ve if the original tokens expired, and then the AM died.
-        val renewalInterval =
-          math.max((0.75 * (getLatestValidity - System.currentTimeMillis())).toLong, 0L)
-        logInfo("Scheduling login from keytab in " + renewalInterval + "millis.")
+        val renewalInterval = getRenewalInterval
+        logInfo(s"Scheduling login from keytab in $renewalInterval millis.")
         delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
       }
 
@@ -139,7 +140,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         new Runnable {
           override def run(): Unit = {
             try {
-              renewCredentials(principal, keytab)
+              writeNewTokensToHDFS(principal, keytab)
             } catch {
               case e: Exception =>
                 logWarning("Failed to write out new credentials to HDFS, will try again in an " +
@@ -150,11 +151,15 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
             scheduleRenewal(this)
           }
         }
+      // If this is an AM restart, it is possible that the original tokens have expired, which
+      // means we need to login immediately to get new tokens.
+      if (getRenewalInterval == 0) writeNewTokensToHDFS(principal, keytab)
+      // Schedule update of credentials
       scheduleRenewal(driverTokenRenewerRunnable)
     }
   }
 
-  private def renewCredentials(principal: String, keytab: String): Unit = {
+  private def writeNewTokensToHDFS(principal: String, keytab: String): Unit = {
     if (!loggedInViaKeytab) {
       // Keytab is copied by YARN to the working directory of the AM, so full path is
       // not needed.
@@ -179,8 +184,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       delegationTokenRenewer.schedule(reloginRunnable, 6, TimeUnit.HOURS)
     }
     val nns = getNameNodesToAccess(sparkConf)
-    val newCredentials = loggedInUGI.getCredentials
-    obtainTokensForNamenodes(nns, conf, newCredentials)
+    obtainTokensForNamenodes(nns, conf, loggedInUGI.getCredentials)
     val remoteFs = FileSystem.get(conf)
     // If lastCredentialsFileSuffix is 0, then the AM is either started or restarted. If the AM
     // was restarted, then the lastCredentialsFileSuffix might be > 0, so find the newest file
@@ -201,7 +205,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val stream = Option(remoteFs.create(tempTokenPath, true))
     try {
       stream.foreach { s =>
-        newCredentials.writeTokenStorageToStream(s)
+        loggedInUGI.getCredentials.writeTokenStorageToStream(s)
         s.hflush()
         s.close()
         logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")
@@ -241,7 +245,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       sparkConf.getOption("spark.yarn.credentials.file").foreach { credentialsFile =>
         val credentialsFilePath = new Path(credentialsFile)
         val remoteFs = FileSystem.get(conf)
-
         listCredentialsFilesSorted(remoteFs, credentialsFilePath)
           .lastOption.foreach { credentialsStatus =>
           val suffix = getSuffixForCredentialsPath(credentialsStatus)
@@ -250,7 +253,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
             lastCredentialsFileSuffix = suffix
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
-
             val totalValidity = getLatestValidity - credentialsStatus.getModificationTime
             val timeToRunRenewal =
               credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
