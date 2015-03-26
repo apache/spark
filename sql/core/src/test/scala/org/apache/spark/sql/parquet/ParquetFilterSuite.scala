@@ -330,6 +330,8 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
         val path = s"${dir.getCanonicalPath}/part=1"
         (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
 
+        // If the "part = 1" filter gets pushed down, this query will throw an exception since
+        // "part" is not a valid column in the actual Parquet file
         checkAnswer(
           sqlContext.parquetFile(path).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
