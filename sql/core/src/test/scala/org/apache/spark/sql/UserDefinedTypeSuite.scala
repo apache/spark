@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import org.apache.spark.util.Utils
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
@@ -62,6 +64,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   }
 
   override def userClass = classOf[MyDenseVector]
+
+  private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest {
@@ -96,13 +100,13 @@ class UserDefinedTypeSuite extends QueryTest {
 
 
   test("UDTs with Parquet") {
-    val tempDir = File.createTempFile("parquet", "test")
+    val tempDir = Utils.createTempDir()
     tempDir.delete()
     pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
   }
 
   test("Repartition UDTs with Parquet") {
-    val tempDir = File.createTempFile("parquet", "test")
+    val tempDir = Utils.createTempDir()
     tempDir.delete()
     pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
   }

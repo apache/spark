@@ -37,8 +37,8 @@ import org.apache.spark.util.{Clock, SystemClock}
  * Manages the execution of one driver, including automatically restarting the driver on failure.
  * This is currently only used in standalone cluster deploy mode.
  */
-private[spark] class DriverRunner(
-    val conf: SparkConf,
+private[deploy] class DriverRunner(
+    conf: SparkConf,
     val driverId: String,
     val workDir: File,
     val sparkHome: File,
@@ -47,24 +47,30 @@ private[spark] class DriverRunner(
     val workerUrl: String)
   extends Logging {
 
-  @volatile var process: Option[Process] = None
-  @volatile var killed = false
+  @volatile private var process: Option[Process] = None
+  @volatile private var killed = false
 
   // Populated once finished
-  var finalState: Option[DriverState] = None
-  var finalException: Option[Exception] = None
-  var finalExitCode: Option[Int] = None
+  private[worker] var finalState: Option[DriverState] = None
+  private[worker] var finalException: Option[Exception] = None
+  private var finalExitCode: Option[Int] = None
 
   // Decoupled for testing
-  private[deploy] def setClock(_clock: Clock) = clock = _clock
-  private[deploy] def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
+  def setClock(_clock: Clock): Unit = {
+    clock = _clock
+  }
+
+  def setSleeper(_sleeper: Sleeper): Unit = {
+    sleeper = _sleeper
+  }
+
   private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
     def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
   }
 
   /** Starts a thread to run and manage the driver. */
-  def start() = {
+  private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
         try {
@@ -106,7 +112,7 @@ private[spark] class DriverRunner(
   }
 
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
-  def kill() {
+  private[worker] def kill() {
     synchronized {
       process.foreach(p => p.destroy())
       killed = true
@@ -155,7 +161,7 @@ private[spark] class DriverRunner(
 
   private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
     builder.directory(baseDir)
-    def initialize(process: Process) = {
+    def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
       CommandUtils.redirectStream(process.getInputStream, stdout)
@@ -169,8 +175,8 @@ private[spark] class DriverRunner(
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
-  private[deploy] def runCommandWithRetry(command: ProcessBuilderLike, initialize: Process => Unit,
-    supervise: Boolean) {
+  def runCommandWithRetry(
+      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.
@@ -216,8 +222,8 @@ private[deploy] trait ProcessBuilderLike {
 }
 
 private[deploy] object ProcessBuilderLike {
-  def apply(processBuilder: ProcessBuilder) = new ProcessBuilderLike {
-    def start() = processBuilder.start()
-    def command = processBuilder.command()
+  def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
+    override def start(): Process = processBuilder.start()
+    override def command: Seq[String] = processBuilder.command()
   }
 }

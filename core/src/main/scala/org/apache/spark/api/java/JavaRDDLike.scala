@@ -39,6 +39,14 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
+ * As a workaround for https://issues.scala-lang.org/browse/SI-8905, implementations
+ * of JavaRDDLike should extend this dummy abstract class instead of directly inheriting
+ * from the trait. See SPARK-3266 for additional details.
+ */
+private[spark] abstract class AbstractJavaRDDLike[T, This <: JavaRDDLike[T, This]]
+  extends JavaRDDLike[T, This]
+
+/**
  * Defines operations common to several Java RDD implementations.
  * Note that this trait is not intended to be implemented by user code.
  */

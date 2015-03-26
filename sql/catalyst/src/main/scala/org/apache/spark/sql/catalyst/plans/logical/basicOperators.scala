@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
-  def output = projectList.map(_.toAttribute)
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override lazy val resolved: Boolean = {
     val containsAggregatesOrGenerators = projectList.exists ( _.collect {
@@ -66,21 +66,26 @@ case class Generate(
     }
   }
 
-  override def output =
+  override def output: Seq[Attribute] =
     if (join) child.output ++ generatorOutput else generatorOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
-  override def output = left.output
+  override def output: Seq[Attribute] = left.output
 
-  override lazy val resolved =
+  override lazy val resolved: Boolean =
     childrenResolved &&
     !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(
@@ -89,7 +94,7 @@ case class Join(
   joinType: JoinType,
   condition: Option[Expression]) extends BinaryNode {
 
-  override def output = {
+  override def output: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
         left.output
@@ -103,10 +108,17 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  private def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  def output = left.output
+  override def output: Seq[Attribute] = left.output
 }
 
 case class InsertIntoTable(
@@ -116,11 +128,12 @@ case class InsertIntoTable(
     overwrite: Boolean)
   extends LogicalPlan {
 
-  override def children = child :: Nil
-  override def output = child.output
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = child.output
 
-  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
   }
 }
 
@@ -130,8 +143,8 @@ case class CreateTableAsSelect[T](
     child: LogicalPlan,
     allowExisting: Boolean,
     desc: Option[T] = None) extends UnaryNode {
-  override def output = Seq.empty[Attribute]
-  override lazy val resolved = databaseName != None && childrenResolved
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override lazy val resolved: Boolean = databaseName != None && childrenResolved
 }
 
 /**
@@ -147,7 +160,7 @@ case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends
 case class WriteToFile(
     path: String,
     child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -160,7 +173,7 @@ case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 case class Aggregate(
@@ -169,7 +182,7 @@ case class Aggregate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
 
 /**
@@ -183,7 +196,12 @@ case class Aggregate(
 case class Expand(
     projections: Seq[GroupExpression],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan) extends UnaryNode {
+  override def statistics: Statistics = {
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
 
 trait GroupingAnalytics extends UnaryNode {
   self: Product =>
@@ -191,7 +209,7 @@ trait GroupingAnalytics extends UnaryNode {
   def groupByExprs: Seq[Expression]
   def aggregations: Seq[NamedExpression]
 
-  override def output = aggregations.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
 }
 
 /**
@@ -256,7 +274,7 @@ case class Rollup(
     gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval(null).asInstanceOf[Int]
@@ -266,23 +284,32 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
-  override def output = child.output.map(_.withQualifiers(alias :: Nil))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
 case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)
     extends UnaryNode {
 
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 case class Distinct(child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 case object NoRelation extends LeafNode {
-  override def output = Nil
+  override def output: Seq[Attribute] = Nil
+
+  /**
+   * Computes [[Statistics]] for this plan. The default implementation assumes the output
+   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * of cartesian joins.
+   *
+   * [[LeafNode]]s must override this.
+   */
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output = left.output
+  override def output: Seq[Attribute] = left.output
 }

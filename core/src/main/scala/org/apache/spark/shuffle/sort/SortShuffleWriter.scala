@@ -63,6 +63,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       sorter.insertAll(records)
     }
 
+    // Don't bother including the time to open the merged output file in the shuffle write time,
+    // because it just opens a single file, so is typically too fast to measure accurately
+    // (see SPARK-3570).
     val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
     val blockId = shuffleBlockManager.consolidateId(dep.shuffleId, mapId)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
@@ -88,7 +91,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     } finally {
       // Clean up our sorter, which may have its own intermediate files
       if (sorter != null) {
+        val startTime = System.nanoTime()
         sorter.stop()
+        context.taskMetrics.shuffleWriteMetrics.foreach(
+          _.incShuffleWriteTime(System.nanoTime - startTime))
         sorter = null
       }
     }

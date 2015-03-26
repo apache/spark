@@ -53,10 +53,10 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
   def castAndRenameChildOutput(
       insertInto: InsertIntoTable,
       expectedOutput: Seq[Attribute],
-      child: LogicalPlan) = {
+      child: LogicalPlan): InsertIntoTable = {
     val newChildOutput = expectedOutput.zip(child.output).map {
       case (expected, actual) =>
-        val needCast = !DataType.equalsIgnoreNullability(expected.dataType, actual.dataType)
+        val needCast = !expected.dataType.sameType(actual.dataType)
         // We want to make sure the filed names in the data to be inserted exactly match
         // names in the schema.
         val needRename = expected.name != actual.name
@@ -79,7 +79,7 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
  * A rule to do various checks before inserting into or writing to a data source table.
  */
 private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => Unit) {
-  def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
+  def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {

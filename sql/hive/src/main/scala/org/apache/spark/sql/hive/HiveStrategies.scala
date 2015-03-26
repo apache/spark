@@ -58,9 +58,9 @@ private[hive] trait HiveStrategies {
   @Experimental
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: DataFrame) {
-      def lowerCase = DataFrame(s.sqlContext, s.logicalPlan)
+      def lowerCase: DataFrame = DataFrame(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]) = {
+      def addPartitioningAttributes(attrs: Seq[Attribute]): DataFrame = {
         // Don't add the partitioning key if its already present in the data.
         if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
           s
@@ -75,7 +75,7 @@ private[hive] trait HiveStrategies {
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
-      def fakeOutput(newOutput: Seq[Attribute]) =
+      def fakeOutput(newOutput: Seq[Attribute]): OutputFaker =
         OutputFaker(
           originalPlan.output.map(a =>
             newOutput.find(a.name.toLowerCase == _.name.toLowerCase)

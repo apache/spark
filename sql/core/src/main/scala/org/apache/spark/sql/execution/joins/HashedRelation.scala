@@ -38,7 +38,7 @@ private[joins] sealed trait HashedRelation {
 private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, CompactBuffer[Row]])
   extends HashedRelation with Serializable {
 
-  override def get(key: Row) = hashTable.get(key)
+  override def get(key: Row): CompactBuffer[Row] = hashTable.get(key)
 }
 
 
@@ -49,7 +49,7 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
 private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Serializable {
 
-  override def get(key: Row) = {
+  override def get(key: Row): CompactBuffer[Row] = {
     val v = hashTable.get(key)
     if (v eq null) null else CompactBuffer(v)
   }

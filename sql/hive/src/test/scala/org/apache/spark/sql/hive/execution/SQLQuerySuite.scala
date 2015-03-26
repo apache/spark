@@ -31,12 +31,22 @@ case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
 case class Nested3(f3: Int)
 
+case class NestedArray2(b: Seq[Int])
+case class NestedArray1(a: NestedArray2)
+
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+
+  test("explode nested Field") {
+    Seq(NestedArray1(NestedArray2(Seq(1,2,3)))).toDF.registerTempTable("nestedArray")
+    checkAnswer(
+      sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
@@ -405,6 +415,13 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
+  }
+
+  test("resolve udtf with single alias") {
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    val df = sql("SELECT explode(a) AS val FROM data")
+    val col = df("val")
   }
 
   test("logical.Project should not be resolved if it contains aggregates or generators") {

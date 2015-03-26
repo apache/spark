@@ -64,9 +64,7 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*),
-    Batch("Remove SubQueries", fixedPoint,
-      EliminateSubQueries)
+      extendedResolutionRules : _*)
   )
 
   /**
@@ -181,7 +179,7 @@ class Analyzer(catalog: Catalog,
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+          u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
@@ -251,22 +249,33 @@ class Analyzer(catalog: Catalog,
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+        val (oldRelation, newRelation) = right.collect {
+          // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
             val newVersion = oldVersion.newInstance()
-            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
-            (oldVersion, newVersion, newAttributes)
+            (oldVersion, newVersion)
+
+          // Handle projects that create conflicting aliases.
+          case oldVersion @ Project(projectList, _)
+              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+
+          case oldVersion @ Aggregate(_, aggregateExpressions, _)
+              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
         }.head // Only handle first case found, others will be fixed on the next pass.
 
+        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
         val newRight = right transformUp {
           case r if r == oldRelation => newRelation
+        } transformUp {
           case other => other transformExpressions {
             case a: Attribute => attributeRewrites.get(a).getOrElse(a)
           }
         }
-
         j.copy(right = newRight)
 
       case q: LogicalPlan =>
@@ -278,12 +287,24 @@ class Analyzer(catalog: Catalog,
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolveChildren(name, resolver).getOrElse(u)
+            val result =
+              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
             resolveGetField(child, fieldName)
         }
+    }
+
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     /**
@@ -324,7 +345,7 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
@@ -335,7 +356,8 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+        val requiredAttributes =
+          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {

@@ -108,6 +108,13 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("self join with aliases") {
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
   test("explode") {
     val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
     val df2 =
@@ -434,6 +441,51 @@ class DataFrameSuite extends QueryTest {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("describe") {
+
+    val describeTestData = Seq(
+      ("Bob",   16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy",   24, 180)).toDF("name", "age", "height")
+
+    val describeResult = Seq(
+      Row("count",   4,               4),
+      Row("mean",    33.0,            178.0),
+      Row("stddev",  16.583123951777, 10.0),
+      Row("min",     16,              164),
+      Row("max",     60,              192))
+
+    val emptyDescribeResult = Seq(
+      Row("count",   0,    0),
+      Row("mean",    null, null),
+      Row("stddev",  null, null),
+      Row("min",     null, null),
+      Row("max",     null, null))
+
+    def getSchemaAsSeq(df: DataFrame) = df.schema.map(_.name).toSeq
+
+    val describeTwoCols = describeTestData.describe("age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeTwoCols, describeResult)
+
+    val describeAllCols = describeTestData.describe()
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeAllCols, describeResult)
+
+    val describeOneCol = describeTestData.describe("age")
+    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+
+    val describeNoCol = describeTestData.select("name").describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+
+    val emptyDescription = describeTestData.limit(0).describe()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
   test("apply on query results (SPARK-5462)") {

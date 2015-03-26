@@ -25,7 +25,7 @@ import org.apache.spark.SparkConf
 /**
  * Command-line parser for the worker.
  */
-private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
+private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
@@ -63,7 +63,7 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   checkWorkerMemory()
 
-  def parse(args: List[String]): Unit = args match {
+  private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
       host = value
