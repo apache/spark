@@ -172,8 +172,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
-    store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
-    store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemory("a1", null: Either[Array[Any], LargeByteBuffer])
+    store.dropFromMemory("a2", null: Either[Array[Any], LargeByteBuffer])
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
@@ -415,8 +415,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       t2.join()
       t3.join()
 
-      store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
-      store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemory("a1", null: Either[Array[Any], LargeByteBuffer])
+      store.dropFromMemory("a2", null: Either[Array[Any], LargeByteBuffer])
       store.waitForAsyncReregister()
     }
   }
@@ -1242,9 +1242,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
-    var bytes: ByteBuffer = null
+    var bytes: LargeByteBuffer = null
     val result = memoryStore.putBytes(blockId, 10000, () => {
-      bytes = ByteBuffer.allocate(10000)
+      bytes = LargeByteBufferHelper.allocate(10000)
       bytes
     })
     assert(result.size === 10000)
