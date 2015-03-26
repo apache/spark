@@ -444,7 +444,6 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("describe") {
-
     val describeTestData = Seq(
       ("Bob",   16, 176),
       ("Alice", 32, 164),
@@ -465,7 +464,7 @@ class DataFrameSuite extends QueryTest {
       Row("min",     null, null),
       Row("max",     null, null))
 
-    def getSchemaAsSeq(df: DataFrame) = df.schema.map(_.name).toSeq
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
