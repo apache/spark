@@ -17,17 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
-
-import scala.collection.immutable.HashSet
-
-import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
-import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.IntegerType
 
 class AttributeSetSuite extends FunSuite {
 
