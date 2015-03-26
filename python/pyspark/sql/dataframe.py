@@ -520,6 +520,25 @@ class DataFrame(object):
 
     orderBy = sort
 
+    def describe(self, *cols):
+        """Computes statistics for numeric columns.
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical columns.
+
+        >>> df.describe().show()
+        summary age
+        count   2
+        mean    3.5
+        stddev  1.5
+        min     2
+        max     5
+        """
+        cols = ListConverter().convert(cols,
+                                       self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
 
