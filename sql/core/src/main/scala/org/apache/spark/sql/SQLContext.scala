@@ -212,22 +212,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   val udf: UDFRegistration = new UDFRegistration(this)
 
   /**
-   * Call an user-defined function which is registered
-   * in functionRegistry.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *
-   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlctx = df.sqlContext
-   *  sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", sqlctx.callUdf("simpleUdf", $"value"))
-   * }}}
-   */
-  def callUdf(udfName: String, cols: Column*): Column =
-    Column(UnresolvedFunction(udfName, cols.map(_.expr)))
-
-  /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
    */
