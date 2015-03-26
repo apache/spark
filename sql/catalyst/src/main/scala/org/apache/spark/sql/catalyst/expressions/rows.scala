@@ -66,7 +66,7 @@ object EmptyRow extends Row {
  */
 class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
@@ -172,11 +172,14 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   extends GenericRow(values) {
+
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null, null)
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   /** No-arg constructor for serialization. */
-  def this() = this(null)
+  protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
