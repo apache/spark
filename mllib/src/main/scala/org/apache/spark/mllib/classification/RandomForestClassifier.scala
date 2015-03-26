@@ -98,8 +98,11 @@ class RandomForestClassifier
 
 object RandomForestClassifier {
 
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurity settings */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
+
+  /** Accessor for supported featuresPerNode settings */
+  final val supportedFeaturesPerNode: Array[String] = RandomForestParams.supportedFeaturesPerNode
 }
 
 class RandomForestClassificationModel(

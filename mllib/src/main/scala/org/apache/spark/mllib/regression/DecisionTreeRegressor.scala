@@ -17,6 +17,76 @@
 
 package org.apache.spark.mllib.regression
 
-class DecisionTreeRegressor {
+import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.mllib.impl.tree.{DecisionTreeRegressorParams, TreeRegressor,
+  TreeRegressorParams}
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
+import org.apache.spark.rdd.RDD
 
+
+class DecisionTreeRegressor
+  extends TreeRegressor[DecisionTreeRegressionModel]
+  with DecisionTreeRegressorParams[DecisionTreeRegressor] {
+
+  // Override parameter setters from parent trait for Java API compatibility.
+
+  override def setMaxDepth(maxDepth: Int): DecisionTreeRegressor = super.setMaxDepth(maxDepth)
+
+  override def setMaxBins(maxBins: Int): DecisionTreeRegressor = super.setMaxBins(maxBins)
+
+  override def setMinInstancesPerNode(minInstancesPerNode: Int): DecisionTreeRegressor =
+    super.setMinInstancesPerNode(minInstancesPerNode)
+
+  override def setMinInfoGain(minInfoGain: Double): DecisionTreeRegressor =
+    super.setMinInfoGain(minInfoGain)
+
+  override def setMaxMemoryInMB(maxMemoryInMB: Int): DecisionTreeRegressor =
+    super.setMaxMemoryInMB(maxMemoryInMB)
+
+  override def setCacheNodeIds(cacheNodeIds: Boolean): DecisionTreeRegressor =
+    super.setCacheNodeIds(cacheNodeIds)
+
+  override def setCheckpointInterval(checkpointInterval: Int): DecisionTreeRegressor =
+    super.setCheckpointInterval(checkpointInterval)
+
+  override def setImpurity(impurity: String): DecisionTreeRegressor =
+    super.setImpurity(impurity)
+
+  override def run(
+      input: RDD[LabeledPoint],
+      categoricalFeatures: Map[Int, Int]): DecisionTreeRegressionModel = {
+    val strategy = getOldStrategy(categoricalFeatures)
+    val oldModel = OldDecisionTree.train(input, strategy)
+    DecisionTreeRegressionModel.fromOld(oldModel)
+  }
+}
+
+object DecisionTreeRegressor {
+
+  /** Accessor for supported impurities */
+  final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
+}
+
+class DecisionTreeRegressionModel private[mllib] (rootNode: Node)
+  extends DecisionTreeModel(rootNode) with Serializable {
+
+  override def toString: String = {
+    s"DecisionTreeRegressionModel of depth $depth with $numNodes nodes"
+  }
+
+  // TODO
+  //override def save(sc: SparkContext, path: String): Unit = {
+}
+
+private[mllib] object DecisionTreeRegressionModel {
+
+  def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeRegressionModel = {
+    require(oldModel.algo == OldAlgo.Regression,
+      s"Cannot convert non-Regression DecisionTreeModel (old API) to" +
+        s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
+    val rootNode = Node.fromOld(oldModel.topNode)
+    new DecisionTreeRegressionModel(rootNode)
+  }
 }

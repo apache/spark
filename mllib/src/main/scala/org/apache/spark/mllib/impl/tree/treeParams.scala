@@ -312,6 +312,7 @@ private[mllib] trait DecisionTreeClassifierParams[M]
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.algo = OldAlgo.Classification
     strategy.setImpurity(getOldImpurity)
     strategy
   }
@@ -324,10 +325,9 @@ private[mllib] trait DecisionTreeRegressorParams[M]
    * Create a Strategy instance to use with the old API.
    * TODO: Remove once we move implementation to new API.
    */
-  override private[mllib] def getOldStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+  private[mllib] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
+    strategy.algo = OldAlgo.Regression
     strategy.setImpurity(getOldImpurity)
     strategy
   }
@@ -558,9 +558,8 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
    * TODO: Remove once we move implementation to new API.
    */
   private[mllib] def getOldBoostingStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldBoostingStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+      categoricalFeatures: Map[Int, Int]): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2)
     // NOTE: The old API does not support "seed" so we ignore it.
     new OldBoostingStrategy(strategy, getOldLoss, numIterations, learningRate, validationTol)
   }

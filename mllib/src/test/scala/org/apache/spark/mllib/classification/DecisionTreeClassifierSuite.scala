@@ -20,7 +20,7 @@ package org.apache.spark.mllib.classification
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.mllib.impl.tree.TreeUtils
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -29,6 +29,8 @@ import org.apache.spark.rdd.RDD
 
 
 class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
+
+  import DecisionTreeClassifierSuite.compareAPIs
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
   private var orderedLabeledPointsWithLabel0RDD: RDD[LabeledPoint] = _
@@ -54,7 +56,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   /////////////////////////////////////////////////////////////////////////////
-  // Tests calling train() and comparing with the old API
+  // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
   test("Binary classification stump with ordered categorical features") {
@@ -64,8 +66,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(
-      categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
+    compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
 
   test("Binary classification stump with fixed labels 0,1 for Entropy,Gini") {
@@ -76,8 +77,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     Array(orderedLabeledPointsWithLabel0RDD, orderedLabeledPointsWithLabel1RDD).foreach { rdd =>
       DecisionTreeClassifier.supportedImpurities.foreach { impurity =>
         dt.setImpurity(impurity)
-        DecisionTreeClassifierSuite.compareAPIs(
-          rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+        compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
       }
     }
   }
@@ -89,7 +89,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxDepth(4)
     val numClasses = 3
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
@@ -103,8 +103,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setImpurity("Gini")
       .setMaxDepth(4)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(
-      rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
   test("Binary classification stump with 2 continuous features") {
@@ -118,8 +117,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setImpurity("Gini")
       .setMaxDepth(4)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(
-      rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
   test("Multiclass classification stump with unordered categorical features," +
@@ -132,7 +130,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(maxBins)
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
     val numClasses = 3
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("Multiclass classification stump with continuous features") {
@@ -142,8 +140,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxDepth(4)
       .setMaxBins(100)
     val numClasses = 3
-    DecisionTreeClassifierSuite.compareAPIs(
-      rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
   test("Multiclass classification stump with continuous + unordered categorical features") {
@@ -154,7 +151,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 3)
     val numClasses = 3
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("Multiclass classification stump with 10-ary (ordered) categorical features") {
@@ -165,7 +162,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(100)
     val categoricalFeatures = Map(0 -> 10, 1 -> 10)
     val numClasses = 3
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("Multiclass classification tree with 10-ary (ordered) categorical features," +
@@ -177,7 +174,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxBins(10)
     val categoricalFeatures = Map(0 -> 10, 1 -> 10)
     val numClasses = 3
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("split must satisfy min instances per node requirements") {
@@ -191,8 +188,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxDepth(2)
       .setMinInstancesPerNode(2)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(
-      rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
   test("do not choose split that does not satisfy min instance per node requirements") {
@@ -211,7 +207,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMinInstancesPerNode(2)
     val categoricalFeatures = Map(0 -> 2, 1-> 2)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(rdd, dt, categoricalFeatures, numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
 
   test("split must satisfy min info gain requirements") {
@@ -226,8 +222,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxDepth(2)
       .setMinInfoGain(1.0)
     val numClasses = 2
-    DecisionTreeClassifierSuite.compareAPIs(
-      rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
+    compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -237,7 +232,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // TODO: test("model save/load")
 }
 
-private object DecisionTreeClassifierSuite extends FunSuite {
+private[mllib] object DecisionTreeClassifierSuite extends FunSuite {
 
   /**
    * Train 2 decision trees on the given dataset, one using the old API and one using the new API.
@@ -252,42 +247,6 @@ private object DecisionTreeClassifierSuite extends FunSuite {
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newTree = dt.run(data, categoricalFeatures, numClasses)
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree)
-    checkEqual(oldTreeAsNew, newTree)
-  }
-
-  /**
-   * Check if the two trees are exactly the same.
-   * Note: I hesitate to override Node.equals since it could cause problems if users
-   *       make mistakes such as creating loops of Nodes.
-   * If the trees are not equal, this prints the two trees and throws an exception.
-   */
-  def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
-    try {
-      checkEqual(a.rootNode, b.rootNode)
-    } catch {
-      case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
-          "TREE A:\n" + a.toDebugString + "\n" +
-          "TREE B:\n" + b.toDebugString + "\n", ex)
-    }
-  }
-
-  /**
-   * Return true iff the two nodes and their descendents are exactly the same.
-   * Note: I hesitate to override Node.equals since it could cause problems if users
-   *       make mistakes such as creating loops of Nodes.
-   */
-  def checkEqual(a: Node, b: Node): Unit = {
-    assert(a.prediction === b.prediction)
-    assert(a.impurity === b.impurity)
-    (a, b) match {
-      case (aye: InternalNode, bee: InternalNode) =>
-        assert(aye.split === bee.split)
-        checkEqual(aye.leftChild, bee.leftChild)
-        checkEqual(aye.rightChild, bee.rightChild)
-      case (aye: LeafNode, bee: LeafNode) => // do nothing
-      case _ =>
-        throw new AssertionError("Found mismatched nodes")
-    }
+    TreeUtils.checkEqual(oldTreeAsNew, newTree)
   }
 }

@@ -17,15 +17,22 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.impl.tree.{GBTClassifierParams, GBTParams, TreeClassifierParams, TreeClassifier}
-import org.apache.spark.mllib.regression.LabeledPoint
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
+
+import org.apache.spark.Logging
+import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.{DecisionTreeRegressionModel, LabeledPoint}
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 
-/*
+
 class GBTClassifier
-  extends TreeClassifier[GBTClassificationModel]
-  with GBTClassifierParams[GBTClassifier] {
+  extends TreeClassifierWithValidate[GBTClassificationModel]
+  with GBTClassifierParams[GBTClassifier]
+  with Logging {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -50,13 +57,21 @@ class GBTClassifier
   override def setCheckpointInterval(checkpointInterval: Int): GBTClassifier =
     super.setCheckpointInterval(checkpointInterval)
 
-  override def setImpurity(impurity: String): GBTClassifier = super.setImpurity(impurity)
+  /**
+   * The impurity setting is ignored for GBT models.
+   * Individual trees are built using impurity "Variance."
+   */
+  override def setImpurity(impurity: String): GBTClassifier = {
+    logWarning("GBTClassifier.setImpurity should NOT be used")
+    this
+  }
 
   // Parameters from TreeEnsembleParams:
 
   override def setSubsamplingRate(subsamplingRate: Double): GBTClassifier =
     super.setSubsamplingRate(subsamplingRate)
 
+  /** WARNING: This parameter is currently ignored by Gradient Boosting. It will be added later. */
   override def setSeed(seed: Long): GBTClassifier = super.setSeed(seed)
 
   // Parameters from GBTParams:
@@ -75,15 +90,65 @@ class GBTClassifier
   override def setLoss(loss: String): GBTClassifier = super.setLoss(loss)
 
   override def run(
-                    input: RDD[LabeledPoint],
-                    categoricalFeatures: Map[Int, Int],
-                    numClasses: Int): RandomForestClassificationModel = {
-    val boostingStrategy = getOldBoostingStrategy(categoricalFeatures, numClasses)
-    val oldModel = OldGBT.train(input, boostingStrategy)
+      input: RDD[LabeledPoint],
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): GBTClassificationModel = {
+    require(numClasses == 2,
+      s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
+    val boostingStrategy = getOldBoostingStrategy(categoricalFeatures)
+    val oldGBT = new OldGBT(boostingStrategy)
+    val oldModel = oldGBT.run(input)
     GBTClassificationModel.fromOld(oldModel)
   }
 
+  override def runWithValidation(
+      input: RDD[LabeledPoint],
+      validationInput: RDD[LabeledPoint],
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): GBTClassificationModel = {
+    require(numClasses == 2,
+      s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
+    val boostingStrategy = getOldBoostingStrategy(categoricalFeatures)
+    val oldGBT = new OldGBT(boostingStrategy)
+    val oldModel = oldGBT.runWithValidation(input, validationInput)
+    GBTClassificationModel.fromOld(oldModel)
+  }
 }
 
-class GBTClassificationModel
-*/
+object GBTClassifier {
+
+  /** Accessor for supported loss settings */
+  final val supportedLosses: Array[String] = GBTClassifierParams.supportedLosses
+}
+
+class GBTClassificationModel(
+    val trees: Array[DecisionTreeRegressionModel],
+    val treeWeights: Array[Double])
+  extends TreeEnsembleModel with Serializable {
+
+  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+
+  override def getTreeWeights: Array[Double] = treeWeights
+
+  override def predict(features: Vector): Double = {
+    // Classifies by thresholding sum of weighted tree predictions
+    val treePredictions = trees.map(_.predict(features))
+    val prediction = blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
+    if (prediction > 0.0) 1.0 else 0.0
+  }
+
+  override def toString: String = {
+    s"GBTClassificationModel with $numTrees trees"
+  }
+}
+
+private[mllib] object GBTClassificationModel {
+
+  def fromOld(oldModel: OldGradientBoostedTreesModel): GBTClassificationModel = {
+    require(oldModel.algo == OldAlgo.Classification,
+      s"Cannot convert non-classification GradientBoostedTreesModel (old API) to" +
+        s" GBTClassificationModel (new API).  Algo is: ${oldModel.algo}")
+    new GBTClassificationModel(oldModel.trees.map(DecisionTreeRegressionModel.fromOld),
+      oldModel.treeWeights)
+  }
+}

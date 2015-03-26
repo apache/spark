@@ -19,17 +19,18 @@ package org.apache.spark.mllib.classification
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.impl.tree.TreeUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
 
 class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
+
+  import RandomForestClassifierSuite.compareAPIs
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
@@ -50,16 +51,13 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val rdd = orderedLabeledPoints50_1000
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
-    val newModel = rf
+    val newRF = rf
       .setImpurity("Gini")
       .setMaxDepth(2)
       .setNumTrees(1)
       .setFeaturesPerNode("auto")
       .setSeed(123)
-      .run(rdd, categoricalFeatures, numClasses)
-    val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
-    val oldModel = OldRandomForest.trainClassifier(rdd, oldStrategy, numTrees = 1, "auto", 123)
-    RandomForestClassifierSuite.checkEqual(newModel, oldModel)
+    compareAPIs(orderedLabeledPoints50_1000, newRF, categoricalFeatures, numClasses)
   }
 
   test("Binary classification with continuous features:" +
@@ -91,16 +89,12 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setNumTrees(2)
       .setFeaturesPerNode("sqrt")
       .setSeed(12345)
-
-    val newModel = rf.run(rdd, categoricalFeatures, numClasses)
-    val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
-    val oldModel = OldRandomForest.trainClassifier(rdd, oldStrategy, numTrees = 2, "sqrt", 12345)
-    RandomForestClassifierSuite.checkEqual(newModel, oldModel)
+    compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
   test("subsampling rate in RandomForest"){
     val rdd = orderedLabeledPoints5_20
-    val categoricalFeaturesInfo = Map.empty[Int, Int]
+    val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
 
     val rf1 = new RandomForestClassifier()
@@ -110,16 +104,10 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setNumTrees(3)
       .setFeaturesPerNode("auto")
       .setSeed(123)
-    val model1 = rf1.run(rdd, categoricalFeaturesInfo, numClasses)
-    val oldStrategy1 = rf1.getOldStrategy(categoricalFeaturesInfo, numClasses)
-    val oldModel1 = OldRandomForest.trainClassifier(rdd, oldStrategy1, numTrees = 3, "auto", 123)
-    RandomForestClassifierSuite.checkEqual(model1, oldModel1)
+    compareAPIs(rdd, rf1, categoricalFeatures, numClasses)
 
     val rf2 = rf1.setSubsamplingRate(0.5)
-    val model2 = rf2.run(rdd, categoricalFeaturesInfo, numClasses)
-    val oldStrategy2 = rf2.getOldStrategy(categoricalFeaturesInfo, numClasses)
-    val oldModel2 = OldRandomForest.trainClassifier(rdd, oldStrategy2, numTrees = 3, "auto", 123)
-    RandomForestClassifierSuite.checkEqual(model2, oldModel2)
+    compareAPIs(rdd, rf2, categoricalFeatures, numClasses)
   }
 
   // TODO
@@ -128,15 +116,20 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
 private object RandomForestClassifierSuite extends FunSuite {
 
-  /** Check to ensure the two models are exactly equal.  Fail if not equal. */
-  def checkEqual(
-      newModel: RandomForestClassificationModel,
-      oldModel: OldRandomForestModel): Unit = {
-    assert(oldModel.algo === OldAlgo.Classification)
-    newModel.trees.zip(oldModel.trees).foreach { case (newTree, oldTree) =>
-      val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree)
-      DecisionTreeClassifierSuite.checkEqual(newTree, oldTreeAsNew)
-    }
-    // Do not check treeWeights since they are all 1.0 for RandomForest.
+  /**
+   * Train 2 models on the given dataset, one using the old API and one using the new API.
+   * Convert the old model to the new format, compare them, and fail if they are not exactly equal.
+   */
+  def compareAPIs(
+      data: RDD[LabeledPoint],
+      rf: RandomForestClassifier,
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): Unit = {
+    val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
+    val oldModel = OldRandomForest.trainClassifier(
+      data, oldStrategy, rf.getNumTrees, rf.getFeaturesPerNodeStr, rf.getSeed.toInt)
+    val newModel = rf.run(data, categoricalFeatures, numClasses)
+    val oldModelAsNew = RandomForestClassificationModel.fromOld(oldModel)
+    TreeUtils.checkEqual(oldModelAsNew, newModel)
   }
 }
