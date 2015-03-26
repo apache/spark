@@ -111,7 +111,7 @@ private[hive] object HiveQl {
     
     "TOK_REVOKE",
     
-    "TOK_SHOW_COMPACTIONS"
+    "TOK_SHOW_COMPACTIONS",
     "TOK_SHOW_CREATETABLE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
