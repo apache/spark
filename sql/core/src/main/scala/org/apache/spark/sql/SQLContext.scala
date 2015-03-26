@@ -114,6 +114,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
   @transient
+  protected[sql] lazy val preAnalyzer: PreAnalyzer = new PreAnalyzer()
+  @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = true) {
       override val extendedResolutionRules =
@@ -1104,9 +1106,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * access to the intermediate phases of query execution for developers.
    */
   @DeveloperApi
-  protected[sql] class QueryExecution(val logical: LogicalPlan) {
+  protected[sql] class QueryExecution(val rawPlan: LogicalPlan) {
     def assertAnalyzed(): Unit = checkAnalysis(analyzed)
 
+    lazy val logical: LogicalPlan = preAnalyzer(rawPlan)
     lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()

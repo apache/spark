@@ -376,8 +376,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override protected[sql] val planner = hivePlanner
 
   /** Extends QueryExecution with hive specific features. */
-  protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
+  protected[sql] class QueryExecution(rawPlan: LogicalPlan)
+    extends super.QueryExecution(rawPlan) {
+
+    lazy val logicalPlan: LogicalPlan = preAnalyzer(rawPlan)
+
     // Like what we do in runHive, makes sure the session represented by the
     // `sessionState` field is activated.
     if (SessionState.get() != sessionState) {

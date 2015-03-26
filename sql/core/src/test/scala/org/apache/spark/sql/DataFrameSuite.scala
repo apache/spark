@@ -113,6 +113,10 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {
