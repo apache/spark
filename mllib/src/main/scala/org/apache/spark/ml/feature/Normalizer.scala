@@ -26,16 +26,16 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * :: AlphaComponent ::
- * Normalize a vector into another one with a given p-norm.
+ * Normalize a vector to have unit norm using the given p-norm.
  */
 @AlphaComponent
 class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
   /**
-   * p norm of the vector
+   * Normalization in L^p^ space, p = 2 by default.
    * @group param
    */
-  val p = new DoubleParam(this, "p", "p-norm", Some(2))
+  val p = new DoubleParam(this, "p", "the p norm value", Some(2))
 
   /** @group getParam */
   def getP: Double = get(p)
