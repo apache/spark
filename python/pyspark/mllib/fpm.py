@@ -24,7 +24,7 @@ __all__ = ['FPGrowth', 'FPGrowthModel']
 @inherit_doc
 class FPGrowthModel(JavaModelWrapper):
 
-    """A FP-Growth model for mining frequent itemsets using Parallel FP-Growth algorithm.
+    """A FP-Growth model for mining frequent itemsets using the Parallel FP-Growth algorithm.
 
     >>> r1 = ["r","z","h","k","p"]
     >>> r2 = ["z","y","x","w","v","u","t","s"]
