@@ -42,12 +42,12 @@ git checkout master &>/dev/null
 # against through various `git` changes
 find -name "pom.xml" -exec cp {} {}.gate \;
 # Switch back to the current PR
-git checkout "${current_pr_head}"
+git checkout "${current_pr_head}" &>/dev/null
 
 # Check if any *.pom files from the current branch are different from the master
 difference_q=""
 for p in $(find -name "pom.xml"); do
-  [ -f "${p}" && -f "${p}.gate" ] && \
+  [[ -f "${p}" && -f "${p}.gate" ]] && \
     difference_q="${difference_q}$(diff $p.gate $p)"
 done
 
