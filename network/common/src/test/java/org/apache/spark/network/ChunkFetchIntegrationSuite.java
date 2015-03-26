@@ -37,7 +37,9 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-import org.apache.spark.network.buffer.*;
+import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -71,8 +73,7 @@ public class ChunkFetchIntegrationSuite {
       buf.put((byte) i);
     }
     buf.flip();
-    final LargeByteBuffer lBuf = LargeByteBufferHelper.asLargeByteBuffer(buf);
-    bufferChunk = new NioManagedBuffer(lBuf);
+    bufferChunk = new NioManagedBuffer(buf);
 
     testFile = File.createTempFile("shuffle-test-file", "txt");
     testFile.deleteOnExit();
@@ -90,7 +91,7 @@ public class ChunkFetchIntegrationSuite {
       public ManagedBuffer getChunk(long streamId, int chunkIndex) {
         assertEquals(STREAM_ID, streamId);
         if (chunkIndex == BUFFER_CHUNK_INDEX) {
-          return new NioManagedBuffer(lBuf);
+          return new NioManagedBuffer(buf);
         } else if (chunkIndex == FILE_CHUNK_INDEX) {
           return new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
         } else {
@@ -221,10 +222,10 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
-    LargeByteBuffer nio0 = buffer0.nioByteBuffer();
-    LargeByteBuffer nio1 = buffer1.nioByteBuffer();
+    ByteBuffer nio0 = buffer0.nioByteBuffer();
+    ByteBuffer nio1 = buffer1.nioByteBuffer();
 
-    long len = nio0.remaining();
+    int len = nio0.remaining();
     assertEquals(nio0.remaining(), nio1.remaining());
     for (int i = 0; i < len; i ++) {
       assertEquals(nio0.get(), nio1.get());

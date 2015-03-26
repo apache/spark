@@ -95,7 +95,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           val ret = ByteBuffer.allocate(data.size.toInt)
           ret.put(data.nioByteBuffer())
           ret.flip()
-          result.success(new NioManagedBuffer(ret))        }
+          result.success(new NioManagedBuffer(ret))
+        }
       })
 
     Await.result(result.future, Duration.Inf)

@@ -32,8 +32,6 @@ public class BlockTransferMessagesSuite {
       new String[] { "/local1", "/local2" }, 32, "MyShuffleManager")));
     checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[] { 1, 2 },
       new byte[] { 4, 5, 6, 7} ));
-    checkSerializeDeserialize(new UploadPartialBlock("app-1", "exec-2", "block-3", 3, 4,
-            ((long)Integer.MAX_VALUE) + 10, new byte[] {1,2}, new byte[] { 4, 5, 6, 7} ));
     checkSerializeDeserialize(new StreamHandle(12345, 16));
   }
 

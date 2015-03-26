@@ -25,7 +25,6 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import org.apache.spark.network.buffer.LargeByteBufferHelper;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,9 +47,9 @@ import static org.apache.spark.network.shuffle.RetryingBlockFetcher.BlockFetchSt
  */
 public class RetryingBlockFetcherSuite {
 
-  ManagedBuffer block0 = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[13]));
-  ManagedBuffer block1 = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[7]));
-  ManagedBuffer block2 = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[19]));
+  ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
+  ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
+  ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
 
   @Before
   public void beforeEach() {

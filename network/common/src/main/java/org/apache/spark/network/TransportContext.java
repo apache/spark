@@ -130,6 +130,4 @@ public class TransportContext {
   }
 
   public TransportConf getConf() { return conf; }
-
-  public void close() { rpcHandler.close(); }
 }

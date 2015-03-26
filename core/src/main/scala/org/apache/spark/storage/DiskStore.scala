@@ -49,7 +49,6 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    logTrace(s"Block $blockId will be written to $file")
     val channel = new FileOutputStream(file).getChannel
     bytes.writeTo(channel)
     channel.close()
@@ -76,7 +75,6 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    logTrace(s"Block $blockId will be written to $file")
     val outputStream = new FileOutputStream(file)
     try {
       try {

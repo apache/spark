@@ -233,7 +233,6 @@ private[spark] class Executor(
 
         val accumUpdates = Accumulators.values
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
-        // TODO should we allow task results over 2gb?
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
 

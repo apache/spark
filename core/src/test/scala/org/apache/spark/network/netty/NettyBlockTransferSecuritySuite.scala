@@ -25,7 +25,7 @@ import scala.concurrent.{Await, Promise}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.commons.io.IOUtils
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer, ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
@@ -100,7 +100,7 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     val blockManager = mock[BlockDataManager]
     val blockId = ShuffleBlockId(0, 1, 2)
     val blockString = "Hello, world!"
-    val blockBuffer = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(blockString.getBytes))
+    val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(blockString.getBytes))
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
