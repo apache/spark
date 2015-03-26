@@ -20,14 +20,15 @@ package org.apache.spark.mllib.classification
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 
 
 class DecisionTreeClassifier
   extends TreeClassifier[DecisionTreeClassificationModel]
-  with DecisionTreeClassifierParams[DecisionTreeClassifier] {
+  with DecisionTreeParams[DecisionTreeClassifier]
+  with TreeClassifierParams[DecisionTreeClassifier] {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -60,6 +61,19 @@ class DecisionTreeClassifier
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldDecisionTree.train(input, strategy)
     DecisionTreeClassificationModel.fromOld(oldModel)
+  }
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  override private[mllib] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.algo = OldAlgo.Classification
+    strategy.setImpurity(getOldImpurity)
+    strategy
   }
 }
 

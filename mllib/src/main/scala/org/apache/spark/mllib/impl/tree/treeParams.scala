@@ -301,38 +301,6 @@ private[mllib] object TreeRegressorParams {
   val supportedImpurities: Array[String] = Array("variance")
 }
 
-private[mllib] trait DecisionTreeClassifierParams[M]
-  extends DecisionTreeParams[M] with TreeClassifierParams[M] {
-
-  /**
-   * Create a Strategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
-   */
-  override private[mllib] def getOldStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.algo = OldAlgo.Classification
-    strategy.setImpurity(getOldImpurity)
-    strategy
-  }
-}
-
-private[mllib] trait DecisionTreeRegressorParams[M]
-  extends DecisionTreeParams[M] with TreeRegressorParams[M] {
-
-  /**
-   * Create a Strategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
-   */
-  private[mllib] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
-    strategy.algo = OldAlgo.Regression
-    strategy.setImpurity(getOldImpurity)
-    strategy
-  }
-}
-
 /**
  * (private trait) Parameters for Decision Trees.
  * @tparam M  Concrete class implementing this parameter trait
@@ -456,38 +424,6 @@ private[mllib] object RandomForestParams {
   val supportedFeaturesPerNode: Array[String] = Array("auto", "all", "onethird", "sqrt", "log2")
 }
 
-private[mllib] trait RandomForestClassifierParams[M]
-  extends TreeEnsembleParams[M] with TreeClassifierParams[M] {
-
-  /**
-   * Create a Strategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
-   */
-  override private[mllib] def getOldStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.setImpurity(getOldImpurity)
-    strategy
-  }
-}
-
-private[mllib] trait RandomForestRegressorParams[M]
-  extends TreeEnsembleParams[M] with TreeRegressorParams[M] {
-
-  /**
-   * Create a Strategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
-   */
-  override private[mllib] def getOldStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.setImpurity(getOldImpurity)
-    strategy
-  }
-}
-
 private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   protected var numIterations: Int = 20
@@ -566,51 +502,7 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   protected def getOldLoss: OldLoss
 }
-
-private[mllib] trait GBTClassifierParams[M]
-  extends GBTParams[M] with TreeClassifierParams[M] {
-
-  protected var lossStr: String = "LogLoss"
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "LogLoss"
-   * (default = LogLoss)
-   * @param loss  String for loss (case-insensitive)
-   * @group setParam
-   */
-  def setLoss(loss: String): M = {
-    val lossStr = loss.toLowerCase
-    require(GBTClassifierParams.supportedLosses.contains(lossStr),
-      s"GBTClassifierParams was given bad loss: $loss." +
-      s"  Supported options: ${GBTClassifierParams.supportedLosses.mkString(", ")}")
-    this.lossStr = lossStr
-    this.asInstanceOf[M]
-  }
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "LogLoss"
-   * (default = LogLoss)
-   * @group getParam
-   */
-  def getLossStr: String = lossStr
-
-  /** Convert new loss to old loss. */
-  override protected def getOldLoss: OldLoss = {
-    lossStr match {
-      case "logloss" => OldLogLoss
-      case _ =>
-        // Should never happen because of check in setter method.
-        throw new RuntimeException(s"GBTClassifierParams was given bad loss: $lossStr")
-    }
-  }
-}
-
-private[mllib] object GBTClassifierParams {
-  val supportedLosses: Array[String] = Array("logloss")
-}
-
+/*
 private[mllib] trait GBTRegressorParams[M]
   extends GBTParams[M] with TreeRegressorParams[M] {
 
@@ -655,3 +547,4 @@ private[mllib] trait GBTRegressorParams[M]
 private[mllib] object GBTRegressorParams {
   val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
 }
+*/

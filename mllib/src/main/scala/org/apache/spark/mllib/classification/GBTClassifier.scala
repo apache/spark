@@ -25,14 +25,51 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.{DecisionTreeRegressionModel, LabeledPoint}
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, LogLoss => OldLogLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 
 
 class GBTClassifier
   extends TreeClassifierWithValidate[GBTClassificationModel]
-  with GBTClassifierParams[GBTClassifier]
+  with GBTParams[GBTClassifier] with TreeClassifierParams[GBTClassifier]
   with Logging {
+
+  protected var lossStr: String = "LogLoss"
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "LogLoss"
+   * (default = LogLoss)
+   * @param loss  String for loss (case-insensitive)
+   * @group setParam
+   */
+  def setLoss(loss: String): GBTClassifier = {
+    val lossStr = loss.toLowerCase
+    require(GBTClassifier.supportedLosses.contains(lossStr),
+      s"GBTClassifier was given bad loss: $loss." +
+        s"  Supported options: ${GBTClassifier.supportedLosses.mkString(", ")}")
+    this.lossStr = lossStr
+    this
+  }
+
+  /**
+   * Loss function which GBT tries to minimize.
+   * Supported: "LogLoss"
+   * (default = LogLoss)
+   * @group getParam
+   */
+  def getLossStr: String = lossStr
+
+  /** Convert new loss to old loss. */
+  override protected def getOldLoss: OldLoss = {
+    lossStr match {
+      case "logloss" => OldLogLoss
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTClassifierParams was given bad loss: $lossStr")
+    }
+  }
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -85,10 +122,6 @@ class GBTClassifier
   override def setValidationTol(validationTol: Double): GBTClassifier =
     super.setValidationTol(validationTol)
 
-  // Parameters from GBTParams:
-
-  override def setLoss(loss: String): GBTClassifier = super.setLoss(loss)
-
   override def run(
       input: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
@@ -118,7 +151,7 @@ class GBTClassifier
 object GBTClassifier {
 
   /** Accessor for supported loss settings */
-  final val supportedLosses: Array[String] = GBTClassifierParams.supportedLosses
+  final val supportedLosses: Array[String] = Array("logloss")
 }
 
 class GBTClassificationModel(

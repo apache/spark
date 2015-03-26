@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
  * These methods are somewhat specific to trees since they take the categoricalFeatures param.
  * @tparam M  Concrete class implementing this trait.
  */
-private[mllib] trait TreeEstimator[M] {
+private[mllib] abstract class TreeEstimator[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
@@ -69,7 +69,7 @@ private[mllib] trait TreeEstimator[M] {
  * These methods are somewhat specific to trees since they take the categoricalFeatures param.
  * @tparam M  Concrete class implementing this trait.
  */
-private[mllib] trait TreeClassifier[M] extends TreeEstimator[M] {
+private[mllib] abstract class AbstractTreeClassifier[M] extends TreeEstimator[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
@@ -102,9 +102,7 @@ private[mllib] trait TreeClassifier[M] extends TreeEstimator[M] {
    */
   override def run(
       input: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M = {
-    run(input, categoricalFeatures, numClasses = 2)
-  }
+      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M
 
   /**
    * Java-compatible version of [[run()]].
@@ -113,10 +111,25 @@ private[mllib] trait TreeClassifier[M] extends TreeEstimator[M] {
   def run(
       input: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
+      numClasses: Int): M
+}
+
+private[mllib] abstract class TreeClassifier[M] extends AbstractTreeClassifier[M] {
+
+  override def run(
+      input: RDD[LabeledPoint],
+      categoricalFeatures: Map[Int, Int] = Map.empty[Int, Int]): M = {
+    run(input, categoricalFeatures, numClasses = 2)
+  }
+
+  override def run(
+      input: JavaRDD[LabeledPoint],
+      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): M = {
     run(input.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
   }
+
 }
 
 /**

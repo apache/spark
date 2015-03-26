@@ -18,17 +18,17 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.impl.tree._
-import org.apache.spark.mllib.impl.tree.{DecisionTreeRegressorParams, TreeRegressor,
-  TreeRegressorParams}
+import org.apache.spark.mllib.impl.tree.{TreeRegressor, TreeRegressorParams}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 
 
 class DecisionTreeRegressor
   extends TreeRegressor[DecisionTreeRegressionModel]
-  with DecisionTreeRegressorParams[DecisionTreeRegressor] {
+  with DecisionTreeParams[DecisionTreeRegressor]
+  with TreeRegressorParams[DecisionTreeRegressor] {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -60,6 +60,17 @@ class DecisionTreeRegressor
     val strategy = getOldStrategy(categoricalFeatures)
     val oldModel = OldDecisionTree.train(input, strategy)
     DecisionTreeRegressionModel.fromOld(oldModel)
+  }
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * TODO: Remove once we move implementation to new API.
+   */
+  private[mllib] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
+    strategy.algo = OldAlgo.Regression
+    strategy.setImpurity(getOldImpurity)
+    strategy
   }
 }
 

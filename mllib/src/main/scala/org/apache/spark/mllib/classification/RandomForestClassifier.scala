@@ -91,6 +91,7 @@ class RandomForestClassifier
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.algo = OldAlgo.Classification
     strategy.setSubsamplingRate(getSubsamplingRate)
     strategy
   }
