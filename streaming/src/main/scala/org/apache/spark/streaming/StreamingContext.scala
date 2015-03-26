@@ -513,7 +513,7 @@ class StreamingContext private[streaming] (
     val master = sc.conf.get("spark.master")
     val coresPerTask = sc.conf.getInt("spark.task.cpus", 1)
     val maxTaskNum = master match {
-      case "local" => 1
+      case "local" => 1 / coresPerTask
 
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
