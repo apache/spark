@@ -112,11 +112,11 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-#run_core_tests
+run_core_tests
 run_sql_tests
-#run_mllib_tests
-#run_ml_tests
-#run_streaming_tests
+run_mllib_tests
+run_ml_tests
+run_streaming_tests
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then
