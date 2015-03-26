@@ -254,7 +254,7 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("WorksWithoutBucketsForLargerDatasets") {
-    // Verify the case of slighly larger datasets
+    // Verify the case of slightly larger datasets
     val rdd = sc.parallelize(6 to 99)
     val (histogramBuckets, histogramResults) = rdd.histogram(8)
     val expectedHistogramResults =
@@ -265,8 +265,8 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
     assert(histogramBuckets === expectedHistogramBuckets)
   }
 
-  test("WorksWithoutBucketsWithIrrationalBucketEdges") {
-    // Verify the case of buckets with irrational edges. See #SPARK-2862.
+  test("WorksWithoutBucketsWithNonIntegralBucketEdges") {
+    // Verify the case of buckets with nonintegral edges. See #SPARK-2862.
     val rdd = sc.parallelize(6 to 99)
     val (histogramBuckets, histogramResults) = rdd.histogram(9)
     // Buckets are 6.0, 16.333333333333336, 26.666666666666668, 37.0, 47.333333333333336 ...
@@ -275,6 +275,15 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
     assert(histogramResults === expectedHistogramResults)
     assert(histogramBuckets(0) === 6.0)
     assert(histogramBuckets(9) === 99.0)
+  }
+
+  test("WorksWithHugeRange") {
+    val rdd = sc.parallelize(Array(0, 1.0e24, 1.0e30))
+    val histogramResults = rdd.histogram(1000000)._2
+    assert(histogramResults(0) === 1)
+    assert(histogramResults(1) === 1)
+    assert(histogramResults.last === 1)
+    assert((2 to histogramResults.length - 2).forall(i => histogramResults(i) == 0))
   }
 
   // Test the failure mode with an invalid RDD

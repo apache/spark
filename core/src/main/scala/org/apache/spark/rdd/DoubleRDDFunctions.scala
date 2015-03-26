@@ -196,6 +196,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       if (e.isNaN || e < min || e > max) {
         None
       } else {
+        // Compute ratio of e's distance along range to total range first, for better precision
         val bucketNumber = (((e - min) / (max - min)) * count).toInt
         // should be less than count, but will equal count if e == max, in which case
         // it's part of the last end-range-inclusive bucket, so return count-1
