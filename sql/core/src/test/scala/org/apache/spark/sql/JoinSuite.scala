@@ -424,8 +424,16 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("Resolution of equi-join key in post-join projection") {
     val df1 = testData2.as("df1")
     val df2 = testData2.as("df2")
-    val joinA = df2.join(df1, df1("a") === df2("a")).select("a")
-    val aCol = joinA("a")
-    println(aCol)
+    val df3 = largeAndSmallInts.as("df3")
+    val df2JoinDf1 = df2.join(df1, df1("a") === df2("a"))
+    val resolutionA = df2JoinDf1.select("a").columns
+    val df2A = df2JoinDf1.select("df2.a").columns
+    assert(resolutionA(0) == df2A(0))
+
+    //multi-join test
+    val muliJoinA = df3.join(df2JoinDf1, df2JoinDf1("a") === df3("a")).select("a").columns
+    val df3A = df3.join(df2JoinDf1, df2JoinDf1("a") === df3("a")).select("df3.a").columns
+    assert(muliJoinA(0) == df3A(0))
+
   }
 }
