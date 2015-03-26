@@ -1193,11 +1193,12 @@ def log_link(v, c, m, p):
         '</span></a>').format(**locals())
 
 
-def task_link(v, c, m, p):
+def task_instance_link(v, c, m, p):
     url = url_for(
         'airflow.task',
         dag_id=m.dag_id,
-        task_id=m.task_id)
+        task_id=m.task_id,
+        execution_date=m.execution_date.isoformat())
     return Markup(
         '<a href="{url}">{m.task_id}</a>'.format(**locals()))
 
@@ -1236,7 +1237,8 @@ class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     named_filter_urls = True
     column_formatters = dict(
-        log=log_link, task_id=task_link, dag_id=dag_link, duration=duration_f)
+        log=log_link, task_id=task_instance_link,
+        dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_list = (
         'dag_id', 'task_id', 'execution_date',
