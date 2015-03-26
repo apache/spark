@@ -49,7 +49,7 @@ private[mllib] class GridPartitioner(
   private val rowPartitions = math.ceil(rows * 1.0 / rowsPerPart).toInt
   private val colPartitions = math.ceil(cols * 1.0 / colsPerPart).toInt
 
-  override val numPartitions = rowPartitions * colPartitions
+  override val numPartitions: Int = rowPartitions * colPartitions
 
   /**
    * Returns the index of the partition the input coordinate belongs to.
@@ -84,6 +84,14 @@ private[mllib] class GridPartitioner(
       case _ =>
         false
     }
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(
+      rows: java.lang.Integer,
+      cols: java.lang.Integer,
+      rowsPerPart: java.lang.Integer,
+      colsPerPart: java.lang.Integer)
   }
 }
 
