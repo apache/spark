@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.Arrays
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -29,6 +30,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
@@ -97,7 +99,8 @@ private[spark] class TaskSetManager(
   var calculatedTasks = 0
 
   val runningTasksSet = new HashSet[Long]
-  override def runningTasks = runningTasksSet.size
+
+  override def runningTasks: Int = runningTasksSet.size
 
   // True once no more tasks should be launched for this task set manager. TaskSetManagers enter
   // the zombie state once at least one attempt of each task has completed successfully, or if the
@@ -168,9 +171,9 @@ private[spark] class TaskSetManager(
   var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
   var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
-  override def schedulableQueue = null
+  override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
-  override def schedulingMode = SchedulingMode.NONE
+  override def schedulingMode: SchedulingMode = SchedulingMode.NONE
 
   var emittedTaskSizeWarning = false
 
@@ -585,7 +588,7 @@ private[spark] class TaskSetManager(
   /**
    * Marks the task as getting result and notifies the DAG Scheduler
    */
-  def handleTaskGettingResult(tid: Long) = {
+  def handleTaskGettingResult(tid: Long): Unit = {
     val info = taskInfos(tid)
     info.markGettingResult()
     sched.dagScheduler.taskGettingResult(info)
@@ -612,7 +615,7 @@ private[spark] class TaskSetManager(
   /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]) = {
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
     info.markSuccessful()

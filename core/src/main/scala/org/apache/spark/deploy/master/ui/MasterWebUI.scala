@@ -26,7 +26,7 @@ import org.apache.spark.util.AkkaUtils
 /**
  * Web UI server for the standalone master.
  */
-private[spark]
+private[master]
 class MasterWebUI(val master: Master, requestedPort: Int)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
 
@@ -62,6 +62,6 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   }
 }
 
-private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
+private[master] object MasterWebUI {
+  private val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }

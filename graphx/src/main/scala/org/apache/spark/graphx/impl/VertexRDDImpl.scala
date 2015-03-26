@@ -103,6 +103,10 @@ class VertexRDDImpl[VD] private[graphx] (
   override def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
+  override def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
+    diff(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
+  }
+
   override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
     val otherPartition = other match {
       case other: VertexRDD[_] if this.partitioner == other.partitioner =>

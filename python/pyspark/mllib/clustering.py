@@ -19,14 +19,16 @@ from numpy import array
 
 from pyspark import RDD
 from pyspark import SparkContext
-from pyspark.mllib.common import callMLlibFunc, callJavaFunc
-from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
+from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture']
 
 
-class KMeansModel(object):
+@inherit_doc
+class KMeansModel(Saveable, Loader):
 
     """A clustering model derived from the k-means method.
 
@@ -55,6 +57,16 @@ class KMeansModel(object):
     True
     >>> type(model.clusterCenters)
     <type 'list'>
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = KMeansModel.load(sc, path)
+    >>> sameModel.predict(sparse_data[0]) == model.predict(sparse_data[0])
+    True
+    >>> try:
+    ...     os.removedirs(path)
+    ... except OSError:
+    ...     pass
     """
 
     def __init__(self, centers):
@@ -76,6 +88,16 @@ class KMeansModel(object):
                 best = i
                 best_distance = distance
         return best
+
+    def save(self, sc, path):
+        java_centers = _py2java(sc, map(_convert_to_vector, self.centers))
+        java_model = sc._jvm.org.apache.spark.mllib.clustering.KMeansModel(java_centers)
+        java_model.save(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = sc._jvm.org.apache.spark.mllib.clustering.KMeansModel.load(sc._jsc.sc(), path)
+        return KMeansModel(_java2py(sc, java_model.clusterCenters()))
 
 
 class KMeans(object):

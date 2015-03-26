@@ -108,6 +108,13 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("self join with aliases") {
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
   test("explode") {
     val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
     val df2 =

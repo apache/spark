@@ -74,7 +74,7 @@ options for deployment:
   in all supported languages (Scala, Java, Python)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
   * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model

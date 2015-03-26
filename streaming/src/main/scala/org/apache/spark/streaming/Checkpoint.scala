@@ -43,10 +43,13 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll
 
-  def sparkConf = {
-    new SparkConf(false).setAll(sparkConfPairs)
+  def createSparkConf(): SparkConf = {
+    val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
+    val newMasterOption = new SparkConf(loadDefaults = true).getOption("spark.master")
+    newMasterOption.foreach { newMaster => newSparkConf.setMaster(newMaster) }
+    newSparkConf
   }
 
   def validate() {
@@ -64,12 +67,12 @@ object Checkpoint extends Logging {
   val REGEX = (PREFIX + """([\d]+)([\w\.]*)""").r
 
   /** Get the checkpoint file for the given checkpoint time */
-  def checkpointFile(checkpointDir: String, checkpointTime: Time) = {
+  def checkpointFile(checkpointDir: String, checkpointTime: Time): Path = {
     new Path(checkpointDir, PREFIX + checkpointTime.milliseconds)
   }
 
   /** Get the checkpoint backup file for the given checkpoint time */
-  def checkpointBackupFile(checkpointDir: String, checkpointTime: Time) = {
+  def checkpointBackupFile(checkpointDir: String, checkpointTime: Time): Path = {
     new Path(checkpointDir, PREFIX + checkpointTime.milliseconds + ".bk")
   }
 
@@ -116,7 +119,10 @@ class CheckpointWriter(
   private var stopped = false
   private var fs_ : FileSystem = _
 
-  class CheckpointWriteHandler(checkpointTime: Time, bytes: Array[Byte]) extends Runnable {
+  class CheckpointWriteHandler(
+      checkpointTime: Time,
+      bytes: Array[Byte],
+      clearCheckpointDataLater: Boolean) extends Runnable {
     def run() {
       var attempts = 0
       val startTime = System.currentTimeMillis()
@@ -163,7 +169,7 @@ class CheckpointWriter(
           val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + checkpointFile +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
-          jobGenerator.onCheckpointCompletion(checkpointTime)
+          jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
           case ioe: IOException =>
@@ -177,7 +183,7 @@ class CheckpointWriter(
     }
   }
 
-  def write(checkpoint: Checkpoint) {
+  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
     val bos = new ByteArrayOutputStream()
     val zos = compressionCodec.compressedOutputStream(bos)
     val oos = new ObjectOutputStream(zos)
@@ -185,7 +191,8 @@ class CheckpointWriter(
     oos.close()
     bos.close()
     try {
-      executor.execute(new CheckpointWriteHandler(checkpoint.checkpointTime, bos.toByteArray))
+      executor.execute(new CheckpointWriteHandler(
+        checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
       logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
@@ -225,6 +232,8 @@ object CheckpointReader extends Logging {
   def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] =
   {
     val checkpointPath = new Path(checkpointDir)
+
+    // TODO(rxin): Why is this a def?!
     def fs = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files

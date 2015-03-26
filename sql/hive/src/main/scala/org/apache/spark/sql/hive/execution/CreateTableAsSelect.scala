@@ -45,7 +45,7 @@ case class CreateTableAsSelect(
     allowExisting: Boolean,
     desc: Option[CreateTableDesc]) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
       // Create Hive Table
