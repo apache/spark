@@ -151,7 +151,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Array[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (resolver(attribute.name, nameParts.head)
+        && !attribute.duplicateJoinKey) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
