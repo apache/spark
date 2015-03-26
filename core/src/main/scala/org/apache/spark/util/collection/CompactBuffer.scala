@@ -51,7 +51,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     }
   }
 
-  private def update(position: Int, value: T): Unit = {
+  def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
       throw new IndexOutOfBoundsException
     }
@@ -152,6 +152,20 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 }
 
 private[spark] object CompactBuffer {
+  def constantEmpty[T: ClassTag](): CompactBuffer[T] = new CompactBuffer[T] {
+    override def apply(position: Int): T =
+      sys.error("apply() is not valid for a constant empty buffer")
+
+    override def update(position: Int, value: T): Unit =
+      sys.error("update() is not valid for a constant empty buffer")
+
+    override def += (value: T): CompactBuffer[T] =
+      sys.error("+= is not valid for a constant empty buffer")
+
+    override def ++= (values: TraversableOnce[T]): CompactBuffer[T] =
+      sys.error("++= is not valid for a constant empty")
+  }
+
   def apply[T: ClassTag](): CompactBuffer[T] = new CompactBuffer[T]
 
   def apply[T: ClassTag](value: T): CompactBuffer[T] = {
