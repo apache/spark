@@ -1115,9 +1115,7 @@ organize those such that all values for any key lie within the same partition - 
 
 Although the set of elements in each partition of newly shuffled data will be deterministic, the
 ordering of these elements is not. If one desires predictably ordered data following shuffle
-operations, `sortBy` can be used to perform a global sort. A similar operation,
-[`repartitionAndSortWithinPartitions`](#Repartition2Link`) coupled with `mapPartitions`,
-may be used to enact a Hadoop style shuffle.
+operations, `sortBy` can be used to perform a global sort. 
 
 Operations which can cause a shuffle include **repartition** operations like
 [`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
