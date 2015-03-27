@@ -4,6 +4,7 @@ import json
 import subprocess
 from tempfile import NamedTemporaryFile
 
+
 from thrift.transport import TSocket
 from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
@@ -38,23 +39,26 @@ class HiveCliHook(BaseHook):
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
 
-        f = NamedTemporaryFile()
-        f.write(hql)
-        f.flush()
-        sp = subprocess.Popen(
-            "hive -f {f.name} {self.hive_cli_params}".format(**locals()),
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
-        all_err = ''
-        self.sp = sp
-        for line in iter(sp.stdout.readline, ''):
-            logging.info(line.strip())
-        sp.wait()
-        f.close()
+        with NamedTemporaryFile() as f:
+            f.write(hql)
+            f.flush()
+            fname = f.name
+            hive_cmd = ['hive' , '-f' , fname]
+            if self.hive_cli_params:
+                hive_params_list = self.hive_cli_params.split()
+                hive_cmd.extend(hive_params_list)
+            sp = subprocess.Popen(
+                hive_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+            all_err = ''
+            self.sp = sp
+            for line in iter(sp.stdout.readline, ''):
+                logging.info(line.strip())
+            sp.wait()
 
-        if sp.returncode:
-            raise Exception(all_err)
+            if sp.returncode:
+                raise Exception(all_err)
 
     def kill(self):
         if hasattr(self, 'sp'):
