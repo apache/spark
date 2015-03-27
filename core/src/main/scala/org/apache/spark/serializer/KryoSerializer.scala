@@ -61,7 +61,7 @@ class KryoSerializer(conf: SparkConf)
     throw new IllegalArgumentException("spark.kryoserializer.buffer.max.mb must be less than " +
       s"2048 mb, got: + $maxBufferSizeMb mb.")
   }
-  private val maxBufferSize = maxBufferSizeMb * 1026 * 1024
+  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
 
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
