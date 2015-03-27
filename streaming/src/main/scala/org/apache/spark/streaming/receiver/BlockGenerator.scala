@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{Utils, SystemClock}
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -79,9 +79,10 @@ private[streaming] class BlockGenerator(
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
   private val clock = new SystemClock()
-  private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
+  private val blockIntervalMs =
+    Utils.timeStringToMs(conf.get("spark.streaming.blockIntervalMs", "200ms"))
   private val blockIntervalTimer =
-    new RecurringTimer(clock, blockInterval, updateCurrentBuffer, "BlockGenerator")
+    new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
@@ -132,7 +133,7 @@ private[streaming] class BlockGenerator(
       val newBlockBuffer = currentBuffer
       currentBuffer = new ArrayBuffer[Any]
       if (newBlockBuffer.size > 0) {
-        val blockId = StreamBlockId(receiverId, time - blockInterval)
+        val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
         val newBlock = new Block(blockId, newBlockBuffer)
         listener.onGenerateBlock(blockId)
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
@@ -177,7 +178,7 @@ private[streaming] class BlockGenerator(
     logError(message, t)
     listener.onError(message, t)
   }
-  
+
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)

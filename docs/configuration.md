@@ -1344,10 +1344,10 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
-  <td>200</td>
+  <td>200ms</td>
   <td>
-    Interval (milliseconds) at which data received by Spark Streaming receivers is chunked
-    into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
+    Interval at which data received by Spark Streaming receivers is chunked
+    into blocks of data before storing them in Spark. Minimum recommended - 50ms. See the
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
      tuning</a> section in the Spark Streaming programing guide for more details.
   </td>
