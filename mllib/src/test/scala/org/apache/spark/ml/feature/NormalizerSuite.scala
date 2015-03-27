@@ -96,6 +96,7 @@ class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
 
     assertValues(result, l2Normalized)
   }
+
   test("Normalization with setter") {
     normalizer.setP(1)
 
