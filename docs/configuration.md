@@ -1125,10 +1125,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
-  <td>600</td>
+  <td>600s</td>
   <td>
-    If dynamic allocation is enabled and an executor has been idle for more than this duration
-    (in seconds), the executor will be removed. For more detail, see this
+    If dynamic allocation is enabled and an executor has been idle for more than this duration, 
+    the executor will be removed. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>

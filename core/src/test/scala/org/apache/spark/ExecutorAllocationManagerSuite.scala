@@ -686,7 +686,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout.toString)
       .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
         sustainedSchedulerBacklogTimeout.toString)
-      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout.toString)
+      .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
       .set("spark.dynamicAllocation.testing", "true")
     new SparkContext(conf)
   }

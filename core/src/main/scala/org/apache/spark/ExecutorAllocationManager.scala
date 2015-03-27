@@ -20,7 +20,7 @@ package org.apache.spark
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{SystemClock, Clock}
+import org.apache.spark.util.{Utils, SystemClock, Clock}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -86,8 +86,8 @@ private[spark] class ExecutorAllocationManager(
     "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", schedulerBacklogTimeout)
 
   // How long an executor must be idle for before it is removed (seconds)
-  private val executorIdleTimeout = conf.getLong(
-    "spark.dynamicAllocation.executorIdleTimeout", 600)
+  private val executorIdleTimeout = Utils.timeStringToS(conf.get(
+    "spark.dynamicAllocation.executorIdleTimeout", "600s"))
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
