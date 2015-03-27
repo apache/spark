@@ -38,7 +38,7 @@ class GBTClassifier
   with TreeClassifierParams[GBTClassifier]
   with Logging {
 
-  protected var lossStr: String = "LogLoss"
+  protected var lossStr: String = "logloss"
 
   /**
    * Loss function which GBT tries to minimize.
@@ -164,6 +164,7 @@ class GBTClassifier
 
 object GBTClassifier {
 
+  // The losses below should be lowercase.
   /** Accessor for supported loss settings */
   final val supportedLosses: Array[String] = Array("logloss")
 }

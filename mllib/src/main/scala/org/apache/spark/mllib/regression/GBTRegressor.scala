@@ -25,7 +25,8 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy}
-import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, LogLoss => OldLogLoss}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss => OldLoss,
+  SquaredError => OldSquaredError}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -37,7 +38,7 @@ class GBTRegressor
   with TreeRegressorParams[GBTRegressor]
   with Logging {
 
-  protected var lossStr: String = "SquaredError"
+  protected var lossStr: String = "squarederror"
 
   /**
    * Loss function which GBT tries to minimize.
@@ -66,7 +67,8 @@ class GBTRegressor
   /** Convert new loss to old loss. */
   override protected def getOldLoss: OldLoss = {
     lossStr match {
-      case "logloss" => OldLogLoss
+      case "squarederror" => OldSquaredError
+      case "absoluteerror" => OldAbsoluteError
       case _ =>
         // Should never happen because of check in setter method.
         throw new RuntimeException(s"GBTRegressorParams was given bad loss: $lossStr")
@@ -157,8 +159,9 @@ class GBTRegressor
 
 object GBTRegressor {
 
+  // The losses below should be lowercase.
   /** Accessor for supported loss settings */
-  final val supportedLosses: Array[String] = Array("logloss")
+  final val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
 }
 
 class GBTRegressionModel(

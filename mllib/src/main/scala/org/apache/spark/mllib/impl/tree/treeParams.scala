@@ -21,8 +21,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
   Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{Loss => OldLoss, AbsoluteError => OldAbsoluteError,
-  LogLoss => OldLogLoss, SquaredError => OldSquaredError}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.util.Utils
 
 
@@ -212,7 +211,7 @@ private[mllib] trait DecisionTreeParams[M] {
 
 private[mllib] trait TreeClassifierParams[M] {
 
-  protected var impurityStr: String = "Gini"
+  protected var impurityStr: String = "gini"
 
   /**
    * Criterion used for information gain calculation.
@@ -252,13 +251,13 @@ private[mllib] trait TreeClassifierParams[M] {
 }
 
 private[mllib] object TreeClassifierParams {
-  // Must be lower-case
+  // These options should be lowercase.
   val supportedImpurities: Array[String] = Array("entropy", "gini")
 }
 
 private[mllib] trait TreeRegressorParams[M] {
 
-  protected var impurityStr: String = "Variance"
+  protected var impurityStr: String = "variance"
 
   /**
    * Criterion used for information gain calculation.
@@ -297,7 +296,7 @@ private[mllib] trait TreeRegressorParams[M] {
 }
 
 private[mllib] object TreeRegressorParams {
-  // Must be lower-case
+  // These options should be lowercase.
   val supportedImpurities: Array[String] = Array("variance")
 }
 
@@ -421,6 +420,7 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
 }
 
 private[mllib] object RandomForestParams {
+  // These options should be lowercase.
   val supportedFeaturesPerNode: Array[String] = Array("auto", "all", "onethird", "sqrt", "log2")
 }
 
@@ -503,49 +503,3 @@ private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   protected def getOldLoss: OldLoss
 }
-/*
-private[mllib] trait GBTRegressorParams[M]
-  extends GBTParams[M] with TreeRegressorParams[M] {
-
-  protected var lossStr: String = "SquaredError"
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "SquaredError" and "AbsoluteError"
-   * (default = SquaredError)
-   * @param loss  String for loss (case-insensitive)
-   * @group setParam
-   */
-  def setLoss(loss: String): M = {
-    val lossStr = loss.toLowerCase
-    require(GBTRegressorParams.supportedLosses.contains(lossStr),
-      s"GBTRegressorParams was given bad loss: $loss." +
-        s"  Supported options: ${GBTRegressorParams.supportedLosses.mkString(", ")}")
-    this.lossStr = lossStr
-    this.asInstanceOf[M]
-  }
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "SquaredError" and "AbsoluteError"
-   * (default = SquaredError)
-   * @group getParam
-   */
-  def getLossStr: String = lossStr
-
-  /** Convert new loss to old loss. */
-  override protected def getOldLoss: OldLoss = {
-    lossStr match {
-      case "squarederror" => OldSquaredError
-      case "absoluteerror" => OldAbsoluteError
-      case _ =>
-        // Should never happen because of check in setter method.
-        throw new RuntimeException(s"GBTRegressorParams was given bad loss: $lossStr")
-    }
-  }
-}
-
-private[mllib] object GBTRegressorParams {
-  val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
-}
-*/

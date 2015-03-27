@@ -28,10 +28,13 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.classification.RandomForestClassificationModel;
+import org.apache.spark.mllib.classification.RandomForestClassifier;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.RandomForest;
-import org.apache.spark.mllib.tree.model.RandomForestModel;
+import org.apache.spark.mllib.regression.RandomForestRegressionModel;
+import org.apache.spark.mllib.regression.RandomForestRegressor;
 import org.apache.spark.mllib.util.MLUtils;
+
 
 public final class JavaRandomForestExample {
 
@@ -40,22 +43,30 @@ public final class JavaRandomForestExample {
    * For information on multiclass classification, please refer to the JavaDecisionTree.java
    * example.
    */
-  private static void testClassification(JavaRDD<LabeledPoint> trainingData,
-                                         JavaRDD<LabeledPoint> testData) {
+  private static void testClassification(
+      JavaRDD<LabeledPoint> trainingData,
+      JavaRDD<LabeledPoint> testData) {
     // Train a RandomForest model.
     //  Empty categoricalFeaturesInfo indicates all features are continuous.
     Integer numClasses = 2;
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
     Integer numTrees = 3; // Use more in practice.
-    String featureSubsetStrategy = "auto"; // Let the algorithm choose.
+    String featuresPerNode = "auto"; // Let the algorithm choose.
     String impurity = "gini";
     Integer maxDepth = 4;
     Integer maxBins = 32;
     Integer seed = 12345;
 
-    final RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
-        categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
-        seed);
+    RandomForestClassifier rf = new RandomForestClassifier()
+        .setNumTrees(numTrees)
+        .setFeaturesPerNode(featuresPerNode)
+        .setImpurity(impurity)
+        .setMaxDepth(maxDepth)
+        .setMaxBins(maxBins)
+        .setSeed(seed);
+
+    final RandomForestClassificationModel model =
+        rf.run(trainingData, categoricalFeaturesInfo, numClasses);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
@@ -76,21 +87,27 @@ public final class JavaRandomForestExample {
     System.out.println("Learned classification forest model:\n" + model.toDebugString());
   }
 
-  private static void testRegression(JavaRDD<LabeledPoint> trainingData,
-                                     JavaRDD<LabeledPoint> testData) {
+  private static void testRegression(
+      JavaRDD<LabeledPoint> trainingData,
+      JavaRDD<LabeledPoint> testData) {
     // Train a RandomForest model.
     //  Empty categoricalFeaturesInfo indicates all features are continuous.
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
     Integer numTrees = 3; // Use more in practice.
-    String featureSubsetStrategy = "auto"; // Let the algorithm choose.
+    String featuresPerNode = "auto"; // Let the algorithm choose.
     String impurity = "variance";
     Integer maxDepth = 4;
     Integer maxBins = 32;
     Integer seed = 12345;
 
-    final RandomForestModel model = RandomForest.trainRegressor(trainingData,
-        categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
-        seed);
+    RandomForestRegressor rf = new RandomForestRegressor()
+        .setNumTrees(numTrees)
+        .setFeaturesPerNode(featuresPerNode)
+        .setImpurity(impurity)
+        .setMaxDepth(maxDepth)
+        .setMaxBins(maxBins)
+        .setSeed(seed);
+    final RandomForestRegressionModel model = rf.run(trainingData, categoricalFeaturesInfo);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =

@@ -17,6 +17,10 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.mllib.classification.GBTClassificationModel;
+import org.apache.spark.mllib.classification.GBTClassifier;
+import org.apache.spark.mllib.regression.GBTRegressionModel;
+import org.apache.spark.mllib.regression.GBTRegressor;
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
@@ -27,18 +31,19 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.GradientBoostedTrees;
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel;
 import org.apache.spark.mllib.util.MLUtils;
+
+import java.util.HashMap;
+import java.util.Map;
+
 
 /**
  * Classification and regression using gradient-boosted decision trees.
  */
-public final class JavaGradientBoostedTreesRunner {
+public final class JavaGBTRunner {
 
   private static void usage() {
-    System.err.println("Usage: JavaGradientBoostedTreesRunner <libsvm format data file>" +
+    System.err.println("Usage: JavaGBTRunner <libsvm format data file>" +
         " <Classification/Regression>");
     System.exit(-1);
   }
@@ -55,16 +60,13 @@ public final class JavaGradientBoostedTreesRunner {
     if (args.length > 2) {
       usage();
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTreesRunner");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaGBTRunner");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 
-    // Set parameters.
-    //  Note: All features are treated as continuous.
-    BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(algo);
-    boostingStrategy.setNumIterations(10);
-    boostingStrategy.treeStrategy().setMaxDepth(5);
+    // Empty categoricalFeaturesInfo indicates all features are continuous.
+    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
 
     if (algo.equals("Classification")) {
       // Compute the number of classes from the data.
@@ -73,10 +75,12 @@ public final class JavaGradientBoostedTreesRunner {
           return p.label();
         }
       }).countByValue().size();
-      boostingStrategy.treeStrategy().setNumClasses(numClasses);
 
       // Train a GradientBoosting model for classification.
-      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      GBTClassifier gbt = new GBTClassifier()
+          .setNumIterations(10)
+          .setMaxDepth(5);
+      final GBTClassificationModel model = gbt.run(data, categoricalFeatures, numClasses);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
@@ -95,7 +99,10 @@ public final class JavaGradientBoostedTreesRunner {
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
-      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      GBTRegressor gbt = new GBTRegressor()
+          .setNumIterations(10)
+          .setMaxDepth(5);
+      final GBTRegressionModel model = gbt.run(data);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
