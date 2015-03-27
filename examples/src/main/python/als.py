@@ -69,8 +69,8 @@ if __name__ == "__main__":
     ITERATIONS = int(sys.argv[4]) if len(sys.argv) > 4 else 5
     partitions = int(sys.argv[5]) if len(sys.argv) > 5 else 2
 
-    print("Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" % \
-        (M, U, F, ITERATIONS, partitions))
+    print("Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" %
+          (M, U, F, ITERATIONS, partitions))
 
     R = matrix(rand(M, F)) * matrix(rand(U, F).T)
     ms = matrix(rand(M, F))

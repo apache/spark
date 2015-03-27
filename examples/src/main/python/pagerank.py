@@ -47,7 +47,8 @@ if __name__ == "__main__":
         exit(-1)
 
     print("""WARN: This is a naive implementation of PageRank and is
-          given as an example! Please refer to PageRank implementation provided by graphx""", file=sys.stderr)
+          given as an example! Please refer to PageRank implementation provided by graphx""",
+          file=sys.stderr)
 
     # Initialize the spark context.
     sc = SparkContext(appName="PythonPageRank")

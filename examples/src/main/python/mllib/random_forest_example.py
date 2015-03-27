@@ -63,8 +63,8 @@ def testRegression(trainingData, testData):
     # Evaluate model on test instances and compute test error
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-    testMSE = labelsAndPredictions.map(lambda v_p1: (v_p1[0] - v_p1[1]) * (v_p1[0] - v_p1[1])).sum()\
-        / float(testData.count())
+    testMSE = labelsAndPredictions.map(lambda v_p1: (v_p1[0] - v_p1[1]) * (v_p1[0] - v_p1[1]))\
+        .sum() / float(testData.count())
     print('Test Mean Squared Error = ' + str(testMSE))
     print('Learned regression forest model:')
     print(model.toDebugString())

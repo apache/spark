@@ -48,8 +48,8 @@ if __name__ == "__main__":
 
     # Example: RDD.sample() and RDD.takeSample()
     expectedSampleSize = int(numExamples * fraction)
-    print('Sampling RDD using fraction %g.  Expected sample size = %d.' \
-        % (fraction, expectedSampleSize))
+    print('Sampling RDD using fraction %g.  Expected sample size = %d.'
+          % (fraction, expectedSampleSize))
     sampledRDD = examples.sample(withReplacement=True, fraction=fraction)
     print('  RDD.sample(): sample has %d examples' % sampledRDD.count())
     sampledArray = examples.takeSample(withReplacement=True, num=expectedSampleSize)
@@ -70,8 +70,8 @@ if __name__ == "__main__":
     sampledByKeyRDD = keyedRDD.sampleByKey(withReplacement=True, fractions=fractions)
     keyCountsB = sampledByKeyRDD.countByKey()
     sizeB = sum(keyCountsB.values())
-    print('  Sampled %d examples using approximate stratified sampling (by label). ==> Sample' \
-        % sizeB)
+    print('  Sampled %d examples using approximate stratified sampling (by label). ==> Sample'
+          % sizeB)
 
     #  Compare samples
     print('   \tFractions of examples with key')

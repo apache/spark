@@ -38,8 +38,8 @@ if __name__ == "__main__":
 
     # Example: RandomRDDs.normalRDD
     normalRDD = RandomRDDs.normalRDD(sc, numExamples)
-    print('Generated RDD of %d examples sampled from the standard normal distribution'\
-        % normalRDD.count())
+    print('Generated RDD of %d examples sampled from the standard normal distribution'
+          % normalRDD.count())
     print('  First 5 samples:')
     for sample in normalRDD.take(5):
         print('    ' + str(sample))

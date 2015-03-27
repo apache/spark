@@ -84,8 +84,8 @@ def reindexClassLabels(data):
     numClasses = len(classCounts)
     # origToNewLabels: class --> index in 0,...,numClasses-1
     if (numClasses < 2):
-        print("Dataset for classification should have at least 2 classes." + \
-            " The given dataset had only %d classes." % numClasses, file=sys.stderr)
+        print("Dataset for classification should have at least 2 classes."
+              " The given dataset had only %d classes." % numClasses, file=sys.stderr)
         exit(1)
     origToNewLabels = dict([(sortedClasses[i], i) for i in range(0, numClasses)])
 
