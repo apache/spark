@@ -42,9 +42,9 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
-try:
+if sys.version < "3":
     from urllib2 import urlopen, Request, HTTPError
-except ImportError:
+else:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
 

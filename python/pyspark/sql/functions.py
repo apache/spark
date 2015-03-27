@@ -18,6 +18,10 @@
 """
 A collections of builtin functions
 """
+import sys
+
+if sys.version < "3":
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter
 

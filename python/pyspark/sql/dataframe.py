@@ -22,6 +22,8 @@ import random
 if sys.version >= '3':
     basestring = unicode = str
     long = int
+else:
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter, MapConverter
 

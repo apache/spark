@@ -34,9 +34,10 @@ import socket
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
 
-if sys.version >= '3':
-    basestring = str
-    unicode = str
+if sys.version > '3':
+    basestring = unicode = str
+else:
+    from itertools import imap as map, ifilter as filter
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \

@@ -21,6 +21,8 @@ import json
 
 if sys.version >= '3':
     basestring = unicode = str
+else:
+    from itertools import imap as map
 
 from py4j.protocol import Py4JError
 from py4j.java_collections import MapConverter

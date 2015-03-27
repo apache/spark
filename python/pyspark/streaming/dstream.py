@@ -15,10 +15,14 @@
 # limitations under the License.
 #
 
-from itertools import chain
+import sys
 import operator
 import time
+from itertools import chain
 from datetime import datetime
+
+if sys.version < "3":
+    from itertools import imap as map, ifilter as filter
 
 from py4j.protocol import Py4JJavaError
 
