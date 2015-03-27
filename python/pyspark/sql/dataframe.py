@@ -1031,6 +1031,7 @@ class Column(object):
 
     __getslice__ = substr
 
+    @ignore_unicode_prefix
     def inSet(self, *cols):
         """ A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
