@@ -73,9 +73,9 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
   test("from conf with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10")
+    myConf.set("spark.cleaner.ttl", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("from existing SparkContext") {
@@ -85,24 +85,25 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
   test("from existing SparkContext with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10")
+    myConf.set("spark.cleaner.ttl", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("from checkpoint") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10")
+    myConf.set("spark.cleaner.ttl", "10s")
     val ssc1 = new StreamingContext(myConf, batchDuration)
     addInputStream(ssc1).register()
     ssc1.start()
     val cp = new Checkpoint(ssc1, Time(1000))
-    assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
+    assert(
+      Utils.timeStringToS(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1s")) === 10)
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.createSparkConf().getInt("spark.cleaner.ttl", -1) === 10)
+    assert(Utils.timeStringToS(newCp.createSparkConf().get("spark.cleaner.ttl", "-1s")) === 10)
     ssc = new StreamingContext(null, newCp, null)
-    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("start and stop state check") {

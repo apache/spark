@@ -706,7 +706,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.ttl</code></td>
   <td>(infinite)</td>
   <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
+    Duration of how long Spark will remember any metadata (stages generated, tasks
     generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
     forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
     case of Spark Streaming applications). Note that any RDD that persists in memory for more than
