@@ -21,7 +21,7 @@ import scala.language.existentials
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -204,19 +204,25 @@ private[sql] object ResolvedDataSource {
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
+    def className = clazz.getCanonicalName
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-          sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
+          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+        case _ =>
+          throw new AnalysisException(s"$className is not a RelationProvider.")
       }
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-          sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
+          throw new AnalysisException(
+            s"A schema needs to be specified when using $className.")
+        case _ =>
+          throw new AnalysisException(s"$className is not a RelationProvider.")
       }
     }
     new ResolvedDataSource(clazz, relation)

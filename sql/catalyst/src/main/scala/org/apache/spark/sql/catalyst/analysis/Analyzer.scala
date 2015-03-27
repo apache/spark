@@ -64,9 +64,7 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*),
-    Batch("Remove SubQueries", fixedPoint,
-      EliminateSubQueries)
+      extendedResolutionRules : _*)
   )
 
   /**
@@ -170,12 +168,12 @@ class Analyzer(catalog: Catalog,
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation) = {
+    def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+          u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
@@ -275,7 +273,8 @@ class Analyzer(catalog: Catalog,
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolveChildren(name, resolver).getOrElse(u)
+            val result =
+              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>

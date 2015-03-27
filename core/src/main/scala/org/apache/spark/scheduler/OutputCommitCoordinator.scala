@@ -160,7 +160,7 @@ private[spark] object OutputCommitCoordinator {
   class OutputCommitCoordinatorActor(outputCommitCoordinator: OutputCommitCoordinator)
     extends Actor with ActorLogReceive with Logging {
 
-    override def receiveWithLogging = {
+    override def receiveWithLogging: PartialFunction[Any, Unit] = {
       case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
         sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt)
       case StopCoordinator =>
