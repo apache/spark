@@ -52,7 +52,7 @@ trait SparkHadoopMapRedUtil {
       jobId: Int,
       isMap: Boolean,
       taskId: Int,
-      attemptId: Int) = {
+      attemptId: Int): TaskAttemptID = {
     new TaskAttemptID(jtIdentifier, jobId, isMap, taskId, attemptId)
   }
 
