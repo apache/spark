@@ -19,7 +19,6 @@ package org.apache.spark.network.sasl;
 
 import javax.security.sasl.Sasl;
 
-import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
@@ -29,7 +28,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.NettyUtils;
 
 /**
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.
@@ -83,15 +81,14 @@ class SaslRpcHandler extends RpcHandler {
     // Setup encryption after the SASL response, otherwise the client can't parse the response.
     // It's ok to change the channel pipeline here since we are processing an incoming message,
     // so the pipeline is busy and no new incoming messages will be fed to it before this method
-    // returns.
+    // returns. This assumes that the code ensures, through other means, that no outbound messages
+    // are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
       logger.debug("SASL authentication successful for channel {}", client);
       isComplete = true;
       if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("Enabling encryption for channel {}", client);
-        channel.pipeline()
-          .addFirst("saslEncryption", new SaslEncryptionHandler(saslServer))
-          .addFirst("saslFrameDecoder", NettyUtils.createFrameDecoder());
+        channel.pipeline().addFirst("saslEncryption", new SaslEncryptionHandler(saslServer));
         saslServer = null;
       } else {
         saslServer.dispose();

@@ -100,9 +100,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
       throw new RuntimeException(
         new SaslException("Encryption requests by negotiated non-encrypted connection."));
     }
-    channel.pipeline()
-      .addFirst("saslEncryption", new SaslEncryptionHandler(client))
-      .addFirst("saslFrameDecoder", NettyUtils.createFrameDecoder());
+    channel.pipeline().addFirst("saslEncryption", new SaslEncryptionHandler(client));
   }
 
 }
