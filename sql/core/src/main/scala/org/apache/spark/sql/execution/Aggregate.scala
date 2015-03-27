@@ -407,7 +407,7 @@ case class DistinctAggregate(
             val value = ae.eval(currentRow)
 
             if (ae.distinct) {
-              if (!seens(idx).contains(value)) {
+              if (value != null && !seens(idx).contains(value)) {
                 ae.iterate(value, buffer)
                 seens(idx).add(value)
               }
@@ -434,7 +434,7 @@ case class DistinctAggregate(
                 val value = ae.eval(currentRow)
 
                 if (ae.distinct) {
-                  if (!inputBufferSeens.seens(idx).contains(value)) {
+                  if (value != null && !inputBufferSeens.seens(idx).contains(value)) {
                     ae.iterate(value, inputBufferSeens.buffer)
                     inputBufferSeens.seens(idx).add(value)
                   }
