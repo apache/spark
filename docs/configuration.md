@@ -942,7 +942,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Default timeout for all network interactions. This config will be used in
     place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
-    <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
+    <code>spark.storage.blockManagerSlaveTimeout</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
 </tr>
