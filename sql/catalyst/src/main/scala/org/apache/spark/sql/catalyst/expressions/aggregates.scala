@@ -413,6 +413,8 @@ case class Sum(child: Expression, distinct: Boolean = false)
   @transient var arg: MutableLiteral = _
   @transient var sum: Add = _
 
+  lazy val DEFAULT_VALUE = Cast(Literal(0, IntegerType), dataType).eval()
+
   override def initialBoundReference(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
@@ -430,6 +432,10 @@ case class Sum(child: Expression, distinct: Boolean = false)
       } else {
         arg.value = argument
         buf(aggr) = sum.eval(buf)
+      }
+    } else {
+      if (buf.isNullAt(aggr)) {
+        buf(aggr) = DEFAULT_VALUE
       }
     }
   }

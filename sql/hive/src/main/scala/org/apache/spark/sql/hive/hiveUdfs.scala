@@ -261,7 +261,6 @@ private[hive] case class HiveGenericUdaf(
   // Initialize (reinitialize) the aggregation buffer
   override def reset(buf: MutableRow): Unit = {
     val buffer = evaluator.getNewAggregationBuffer
-      .asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
     evaluator.reset(buffer)
     // This is a hack, we never use the mutable row as buffer, but define our own buffer,
     // which is set as the first element of the buffer
@@ -276,19 +275,19 @@ private[hive] case class HiveGenericUdaf(
     }.toArray
 
     evaluator.iterate(
-      buf.getAs[GenericUDAFEvaluator.AbstractAggregationBuffer](bound.ordinal),
+      buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal),
       args)
   }
 
   // Merge 2 aggregation buffer, and write back to the later one
   override def merge(value: Row, buf: MutableRow): Unit = {
-    val buffer = buf.getAs[GenericUDAFEvaluator.AbstractAggregationBuffer](bound.ordinal)
+    val buffer = buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)
     evaluator.merge(buffer, wrap(value.get(bound.ordinal), bufferObjectInspector))
   }
 
   @deprecated
   override def terminatePartial(buf: MutableRow): Unit = {
-    val buffer = buf.getAs[GenericUDAFEvaluator.AbstractAggregationBuffer](bound.ordinal)
+    val buffer = buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)
     // this is for serialization
     buf(bound) = unwrap(evaluator.terminatePartial(buffer), bufferObjectInspector)
   }
@@ -296,7 +295,7 @@ private[hive] case class HiveGenericUdaf(
   // Output the final result by feeding the aggregation buffer
   override def terminate(input: Row): Any = {
     unwrap(evaluator.terminate(
-      input.getAs[GenericUDAFEvaluator.AbstractAggregationBuffer](bound.ordinal)),
+      input.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)),
       objectInspector)
   }
 }
