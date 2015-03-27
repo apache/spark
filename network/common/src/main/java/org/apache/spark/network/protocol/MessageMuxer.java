@@ -30,7 +30,7 @@ import io.netty.channel.ChannelPromise;
  * processed by the pipeline stages properly, by being passed down as a list of buffers until
  * the very last handler (this one).
  */
-public final class MessageDemux extends ChannelOutboundHandlerAdapter {
+public final class MessageMuxer extends ChannelOutboundHandlerAdapter {
 
   private final Object lock = new Object();
 
