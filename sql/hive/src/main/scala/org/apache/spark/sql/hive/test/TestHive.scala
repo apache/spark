@@ -23,6 +23,7 @@ import java.util.{Set => JavaSet}
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -153,10 +154,15 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
+  val vs = new VariableSubstitution()
+
+  // we should substitute variables in hql to pass the text to parseSql() as a parameter.
+  // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
+  // while we need a logicalPlan so we cannot reuse that.
   protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(hql)) {
-    def hiveExec() = runSqlHive(hql)
-    override def toString = hql + "\n" + super.toString
+    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
+    def hiveExec(): Seq[String] = runSqlHive(hql)
+    override def toString: String = hql + "\n" + super.toString
   }
 
   /**
@@ -186,7 +192,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   case class TestTable(name: String, commands: (()=>Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
-    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    def cmd: () => Unit = {
+      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    }
   }
 
   /**
@@ -194,7 +202,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * demand when a query are run against it.
    */
   lazy val testTables = new mutable.HashMap[String, TestTable]()
-  def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
+
+  def registerTestTable(testTable: TestTable): Unit = {
+    testTables += (testTable.name -> testTable)
+  }
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java

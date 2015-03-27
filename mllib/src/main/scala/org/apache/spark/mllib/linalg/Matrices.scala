@@ -187,6 +187,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def hashCode(): Int = 1994
 
+  override def typeName: String = "matrix"
+
   private[spark] override def asNullable: MatrixUDT = this
 }
 

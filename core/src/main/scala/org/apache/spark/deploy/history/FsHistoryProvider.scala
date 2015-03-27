@@ -93,7 +93,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def getRunner(operateFun: () => Unit): Runnable = {
     new Runnable() {
-      override def run() = Utils.tryOrExit {
+      override def run(): Unit = Utils.tryOrExit {
         operateFun()
       }
     }
@@ -141,7 +141,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getListing() = applications.values
+  override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
@@ -233,7 +233,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       } catch {
         case e: Exception =>
           logError(
-            s"Exception encountered when attempting to load application log ${fileStatus.getPath}")
+            s"Exception encountered when attempting to load application log ${fileStatus.getPath}",
+            e)
           None
       }
     }.toSeq.sortWith(compareAppInfo)
