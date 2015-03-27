@@ -70,7 +70,9 @@ public class TransportConf {
   public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
 
   /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
-  public int saslRTTimeoutMs() { return conf.getInt("spark.shuffle.sasl.timeout", 30) * 1000; }
+  public int saslRTTimeoutMs() {
+    return (int) JavaUtils.timeStringToMs(conf.get("spark.shuffle.sasl.timeout", "30s"));
+  }
 
   /**
    * Max number of times we will try IO exceptions (such as connection timeouts) per request.
@@ -83,7 +85,7 @@ public class TransportConf {
    * Only relevant if maxIORetries &gt; 0.
    */
   public int ioRetryWaitTimeMs() {
-    return (int)JavaUtils.timeStringToMs(conf.get("spark.shuffle.io.retryWait", "5s"));
+    return (int) JavaUtils.timeStringToMs(conf.get("spark.shuffle.io.retryWait", "5s"));
   }
 
   /**
