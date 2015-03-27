@@ -264,7 +264,7 @@ object DecisionTreeRunner {
       test: RDD[LabeledPoint],
       numClasses: Int): Unit = {
     val impurity = if (params.impurity == "auto") "gini" else params.impurity
-    val model: PredictionModel = if (params.numTrees == 1) {
+    if (params.numTrees == 1) {
       val dt = new DecisionTreeClassifier()
         .setImpurity(impurity)
         .setMaxDepth(params.maxDepth)
@@ -282,7 +282,7 @@ object DecisionTreeRunner {
       } else {
         println(model) // Print model summary.
       }
-      model
+      printAccuracy(model, training, test)
     } else {
       val randomSeed = Utils.random.nextInt()
       val rf = new RandomForestClassifier()
@@ -305,14 +305,8 @@ object DecisionTreeRunner {
       } else {
         println(model) // Print model summary.
       }
-      model
+      printAccuracy(model, training, test)
     }
-    val trainAccuracy =
-      new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label))).precision
-    println(s"Train accuracy = $trainAccuracy")
-    val testAccuracy =
-      new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
-    println(s"Test accuracy = $testAccuracy")
   }
 
   private def runRegression(
@@ -320,7 +314,7 @@ object DecisionTreeRunner {
       training: RDD[LabeledPoint],
       test: RDD[LabeledPoint]): Unit = {
     val impurity = if (params.impurity == "auto") "variance" else params.impurity
-    val model: PredictionModel = if (params.numTrees == 1) {
+    if (params.numTrees == 1) {
       val dt = new DecisionTreeRegressor()
         .setImpurity(impurity)
         .setMaxDepth(params.maxDepth)
@@ -338,7 +332,7 @@ object DecisionTreeRunner {
       } else {
         println(model) // Print model summary.
       }
-      model
+      printMSE(model, training, test)
     } else {
       val randomSeed = Utils.random.nextInt()
       val rf = new RandomForestRegressor()
@@ -361,18 +355,36 @@ object DecisionTreeRunner {
       } else {
         println(model) // Print model summary.
       }
-      model
+      printMSE(model, training, test)
     }
+  }
+
+  /** Prints the accuracy for classification. */
+  private[mllib] def printAccuracy(
+      model: { def predict(features: Vector): Double },
+      training: RDD[LabeledPoint],
+      test: RDD[LabeledPoint]): Unit = {
+    val trainAccuracy =
+      new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label))).precision
+    println(s"Train accuracy = $trainAccuracy")
+    val testAccuracy =
+      new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
+    println(s"Test accuracy = $testAccuracy")
+  }
+
+  /** Prints the mean squared error for regression. */
+  private[mllib] def printMSE(
+      model: { def predict(features: Vector): Double },
+      training: RDD[LabeledPoint],
+      test: RDD[LabeledPoint]): Unit = {
     val trainMSE = meanSquaredError(model, training)
     println(s"Train mean squared error = $trainMSE")
     val testMSE = meanSquaredError(model, test)
     println(s"Test mean squared error = $testMSE")
   }
 
-  /**
-   * Calculates the mean squared error for regression.
-   */
-  private[mllib] def meanSquaredError(
+  /** Calculates the mean squared error for regression. */
+  private def meanSquaredError(
       model: { def predict(features: Vector): Double },
       data: RDD[LabeledPoint]): Double = {
     data.map { y =>
