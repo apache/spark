@@ -82,7 +82,9 @@ public class TransportConf {
    * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
    * Only relevant if maxIORetries &gt; 0.
    */
-  public int ioRetryWaitTimeMs() { return conf.getInt("spark.shuffle.io.retryWait", 5) * 1000; }
+  public int ioRetryWaitTimeMs() {
+    return (int)JavaUtils.timeStringToMs(conf.get("spark.shuffle.io.retryWait", "5s"));
+  }
 
   /**
    * Minimum size of a block that we should start using memory map rather than reading in through

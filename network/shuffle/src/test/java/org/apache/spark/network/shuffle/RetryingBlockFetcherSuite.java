@@ -54,7 +54,7 @@ public class RetryingBlockFetcherSuite {
   @Before
   public void beforeEach() {
     System.setProperty("spark.shuffle.io.maxRetries", "2");
-    System.setProperty("spark.shuffle.io.retryWait", "0");
+    System.setProperty("spark.shuffle.io.retryWait", "0s");
   }
 
   @After

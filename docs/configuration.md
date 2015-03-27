@@ -429,10 +429,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.retryWait</code></td>
-  <td>5</td>
+  <td>5s</td>
   <td>
-    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
+    (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 5 seconds.
   </td>
 </tr>
 <tr>
