@@ -50,13 +50,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new mutable.HashMap[String, Long]
 
-  // `spark.network.timeout` use `seconds`,
-  // while `spark.storage.blockManagerSlaveTimeoutMs` use `milliseconds`
+  // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+  // "milliseconds"
   private val executorTimeoutMs = sc.conf.getOption("spark.network.timeout").map(_.toLong * 1000).
     getOrElse(sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120000))
 
-  // `spark.network.timeoutInterval` use `seconds`,
-  // while `spark.storage.blockManagerTimeoutIntervalMs` use `milliseconds`
+  // "spark.network.timeoutInterval" uses "seconds", while
+  // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
   private val checkTimeoutIntervalMs =
     sc.conf.getOption("spark.network.timeoutInterval").map(_.toLong * 1000).
       getOrElse(sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000))
