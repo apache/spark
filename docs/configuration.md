@@ -1024,10 +1024,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
-  <td>30000</td>
+  <td>30000ms</td>
   <td>
-    Maximum amount of time to wait for resources to register before scheduling begins
-    (in milliseconds).
+    Maximum amount of time to wait for resources to register before scheduling begins.
   </td>
 </tr>
 <tr>
