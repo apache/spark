@@ -30,6 +30,7 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
+import org.apache.spark.network.protocol.MessageDemux;
 import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
@@ -103,6 +104,7 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
+        .addLast("demux", new MessageDemux())
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)

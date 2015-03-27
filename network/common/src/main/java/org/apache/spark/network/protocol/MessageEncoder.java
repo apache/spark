@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.protocol;
 
+import java.util.Arrays;
 import java.util.List;
 
 import io.netty.buffer.ByteBuf;
@@ -72,9 +73,12 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     in.encode(header);
     assert header.writableBytes() == 0;
 
-    out.add(header);
+    List<Object> chunks;
     if (body != null && bodyLength > 0) {
-      out.add(body);
+      chunks = Arrays.<Object>asList(header, body);
+    } else {
+      chunks = Arrays.<Object>asList(header);
     }
+    out.add(chunks);
   }
 }

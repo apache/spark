@@ -23,6 +23,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.protocol.MessageDemux;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
@@ -36,7 +37,7 @@ import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {
   private void testServerToClient(Message msg) {
-    EmbeddedChannel serverChannel = new EmbeddedChannel(new MessageEncoder());
+    EmbeddedChannel serverChannel = new EmbeddedChannel(new MessageDemux(), new MessageEncoder());
     serverChannel.writeOutbound(msg);
 
     EmbeddedChannel clientChannel = new EmbeddedChannel(
@@ -51,7 +52,7 @@ public class ProtocolSuite {
   }
 
   private void testClientToServer(Message msg) {
-    EmbeddedChannel clientChannel = new EmbeddedChannel(new MessageEncoder());
+    EmbeddedChannel clientChannel = new EmbeddedChannel(new MessageDemux(), new MessageEncoder());
     clientChannel.writeOutbound(msg);
 
     EmbeddedChannel serverChannel = new EmbeddedChannel(
