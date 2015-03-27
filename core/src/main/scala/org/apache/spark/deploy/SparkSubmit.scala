@@ -383,8 +383,6 @@ object SparkSubmit {
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
-      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES, 
-        sysProp = "spark.executor.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
         sysProp = "spark.driver.supervise"),
 
@@ -408,6 +406,8 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
 
       // Other options
+      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
+        sysProp = "spark.deploy.maxCoresPerExecutor"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,

@@ -483,12 +483,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --total-executor-cores NUM  Total cores for all executors.
         | 
         | Spark standalone and YARN only:
-        |  --executor-cores NUM        Number of cores per executor. Default value: 1 (YARN), 0 (
-        |                              Standalone). In Standalone mode, Spark will try to run more
-        |                              than 1 executors on each worker in standalone mode; 
-        |                              otherwise, only one executor on each executor is allowed 
-        |                              (the executor will take all available cores of the worker at 
-        |                              the moment.
+        |  --executor-cores NUM        Number of cores to use on each executor. In standalone mode,
+        |                              the executor will use all available cores on the worker if
+        |                              this is not specified. (Default: 1 in YARN mode, all
+        |                              available cores in standalone mode).
         |          
         | YARN-only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode

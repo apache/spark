@@ -623,7 +623,7 @@ private[master] class Master(
    * Schedule the currently available resources among waiting apps. This method will be called
    * every time a new app joins or resource availability changes.
    */
-  def schedule() {
+  private def schedule(): Unit = {
     if (state != RecoveryState.ALIVE) { return }
 
     // First schedule drivers, they take strict precedence over applications

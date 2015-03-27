@@ -27,7 +27,8 @@ private[spark] class ApplicationDescription(
     var appUiUrl: String,
     val eventLogDir: Option[URI] = None,
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
-    val eventLogCodec: Option[String] = None)
+    val eventLogCodec: Option[String] = None,
+    val maxCorePerExecutor: Option[Int] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
@@ -42,9 +43,6 @@ private[spark] class ApplicationDescription(
       eventLogCodec: Option[String] = eventLogCodec): ApplicationDescription =
     new ApplicationDescription(
       name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir, eventLogCodec)
-
-  // only valid when spark.executor.multiPerWorker is set to true
-  var maxCorePerExecutor: Option[Int] = None
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }
