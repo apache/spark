@@ -38,6 +38,8 @@ val sc = new SparkContext(conf)
 Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may actually
 require one to prevent any sort of starvation issues.
 
+Properties that specify some time duration must be configured with a unit, e.g. `5s`, `10ms`, or `20us`.
+
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
