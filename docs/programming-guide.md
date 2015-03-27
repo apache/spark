@@ -1113,9 +1113,13 @@ all-to-all operation. It must read from all partitions to find all the values fo
 organize those such that all values for any key lie within the same partition - this is called the
 **shuffle**.
 
-Although the set of elements in each partition of newly shuffled data will be deterministic, the
-ordering of these elements is not. If one desires predictably ordered data following shuffle
-operations, `sortBy` can be used to perform a global sort. 
+Although the set of elements in each partition of newly shuffled data will be deterministic, and so
+is the ordering of partitions themselves, the ordering of these elements is not. If one desires predictably 
+ordered data following shuffle then it's possible to use: 
+
+* `mapPartitions` to sort each partition using, for example, `.sorted`
+* `repartitionAndSortWithinPartitions` to efficiently sort partitions while simultaneously repartitioning
+* `sortBy` to make a globally ordered RDD
 
 Operations which can cause a shuffle include **repartition** operations like
 [`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
