@@ -94,10 +94,6 @@ private[mllib] abstract class TreeEnsembleModel extends PredictionModel with Ser
   // Note: We do not store the trees here since they are specialized to classification/regression,
   // and this class is for both.
 
-  require(numTrees > 0, "TreeEnsembleModel requires at least 1 tree.")
-  require(getTrees.size == getTreeWeights.size, "Ensemble model given trees, treeWeights of" +
-    s" non-matching lengths (${getTrees.size}, ${getTreeWeights.size}, respectively).")
-
   /** Trees in this ensemble */
   def getTrees: Array[DecisionTreeModel]
 

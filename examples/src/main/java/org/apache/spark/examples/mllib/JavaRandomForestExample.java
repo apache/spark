@@ -58,31 +58,31 @@ public final class JavaRandomForestExample {
     Integer seed = 12345;
 
     RandomForestClassifier rf = new RandomForestClassifier()
-        .setNumTrees(numTrees)
-        .setFeaturesPerNode(featuresPerNode)
-        .setImpurity(impurity)
-        .setMaxDepth(maxDepth)
-        .setMaxBins(maxBins)
-        .setSeed(seed);
+      .setNumTrees(numTrees)
+      .setFeaturesPerNode(featuresPerNode)
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins)
+      .setSeed(seed);
 
     final RandomForestClassificationModel model =
-        rf.run(trainingData, categoricalFeatures, numClasses);
+      rf.run(trainingData, categoricalFeatures, numClasses);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
-        testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-          @Override
-          public Tuple2<Double, Double> call(LabeledPoint p) {
-            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-          }
-        });
+      testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+        @Override
+        public Tuple2<Double, Double> call(LabeledPoint p) {
+          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+        }
+      });
     Double testErr =
-        1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-          @Override
-          public Boolean call(Tuple2<Double, Double> pl) {
-            return !pl._1().equals(pl._2());
-          }
-        }).count() / testData.count();
+      1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+        @Override
+        public Boolean call(Tuple2<Double, Double> pl) {
+          return !pl._1().equals(pl._2());
+        }
+      }).count() / testData.count();
     System.out.println("Test Error: " + testErr);
     System.out.println("Learned classification forest model:\n" + model.toDebugString());
   }
@@ -101,35 +101,35 @@ public final class JavaRandomForestExample {
     Integer seed = 12345;
 
     RandomForestRegressor rf = new RandomForestRegressor()
-        .setNumTrees(numTrees)
-        .setFeaturesPerNode(featuresPerNode)
-        .setImpurity(impurity)
-        .setMaxDepth(maxDepth)
-        .setMaxBins(maxBins)
-        .setSeed(seed);
+      .setNumTrees(numTrees)
+      .setFeaturesPerNode(featuresPerNode)
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins)
+      .setSeed(seed);
     final RandomForestRegressionModel model = rf.run(trainingData, categoricalFeatures);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
-        testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-          @Override
-          public Tuple2<Double, Double> call(LabeledPoint p) {
-            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-          }
-        });
+      testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+        @Override
+        public Tuple2<Double, Double> call(LabeledPoint p) {
+          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+        }
+      });
     Double testMSE =
-        predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-          @Override
-          public Double call(Tuple2<Double, Double> pl) {
-            Double diff = pl._1() - pl._2();
-            return diff * diff;
-          }
-        }).reduce(new Function2<Double, Double, Double>() {
-          @Override
-          public Double call(Double a, Double b) {
-            return a + b;
-          }
-        }) / testData.count();
+      predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
+        @Override
+        public Double call(Tuple2<Double, Double> pl) {
+          Double diff = pl._1() - pl._2();
+          return diff * diff;
+        }
+      }).reduce(new Function2<Double, Double, Double>() {
+        @Override
+        public Double call(Double a, Double b) {
+          return a + b;
+        }
+      }) / testData.count();
     System.out.println("Test Mean Squared Error: " + testMSE);
     System.out.println("Learned regression forest model:\n" + model.toDebugString());
   }

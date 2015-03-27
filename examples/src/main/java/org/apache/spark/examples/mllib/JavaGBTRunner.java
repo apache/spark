@@ -44,7 +44,7 @@ public final class JavaGBTRunner {
 
   private static void usage() {
     System.err.println("Usage: JavaGBTRunner <libsvm format data file>" +
-        " <Classification/Regression>");
+      " <Classification/Regression>");
     System.exit(-1);
   }
 
@@ -78,50 +78,50 @@ public final class JavaGBTRunner {
 
       // Train a GradientBoosting model for classification.
       GBTClassifier gbt = new GBTClassifier()
-          .setNumIterations(10)
-          .setMaxDepth(5);
+        .setNumIterations(10)
+        .setMaxDepth(5);
       final GBTClassificationModel model = gbt.run(data, categoricalFeatures, numClasses);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
-          data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-            @Override public Tuple2<Double, Double> call(LabeledPoint p) {
-              return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-            }
-          });
+        data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+          @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          }
+        });
       Double trainErr =
-          1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-            @Override public Boolean call(Tuple2<Double, Double> pl) {
-              return !pl._1().equals(pl._2());
-            }
-          }).count() / data.count();
+        1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+          @Override public Boolean call(Tuple2<Double, Double> pl) {
+            return !pl._1().equals(pl._2());
+          }
+        }).count() / data.count();
       System.out.println("Training error: " + trainErr);
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
       GBTRegressor gbt = new GBTRegressor()
-          .setNumIterations(10)
-          .setMaxDepth(5);
+        .setNumIterations(10)
+        .setMaxDepth(5);
       final GBTRegressionModel model = gbt.run(data);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
-          data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-            @Override public Tuple2<Double, Double> call(LabeledPoint p) {
-              return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-            }
-          });
+        data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+          @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          }
+        });
       Double trainMSE =
-          predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-            @Override public Double call(Tuple2<Double, Double> pl) {
-              Double diff = pl._1() - pl._2();
-              return diff * diff;
-            }
-          }).reduce(new Function2<Double, Double, Double>() {
-            @Override public Double call(Double a, Double b) {
-              return a + b;
-            }
-          }) / data.count();
+        predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
+          @Override public Double call(Tuple2<Double, Double> pl) {
+            Double diff = pl._1() - pl._2();
+            return diff * diff;
+          }
+        }).reduce(new Function2<Double, Double, Double>() {
+          @Override public Double call(Double a, Double b) {
+            return a + b;
+          }
+        }) / data.count();
       System.out.println("Training Mean Squared Error: " + trainMSE);
       System.out.println("Learned regression tree model:\n" + model);
     } else {

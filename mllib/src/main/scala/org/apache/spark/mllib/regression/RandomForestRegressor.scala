@@ -114,6 +114,8 @@ object RandomForestRegressor {
 class RandomForestRegressionModel(val trees: Array[DecisionTreeRegressionModel])
   extends TreeEnsembleModel with Serializable with Saveable {
 
+  require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
+
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)

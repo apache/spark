@@ -70,11 +70,11 @@ public final class JavaDecisionTree {
 
     // Train a DecisionTree model for classification.
     DecisionTreeClassifier dtClassifier = new DecisionTreeClassifier()
-        .setImpurity(impurity)
-        .setMaxDepth(maxDepth)
-        .setMaxBins(maxBins);
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins);
     final DecisionTreeClassificationModel model =
-        dtClassifier.run(data, categoricalFeatures, numClasses);
+      dtClassifier.run(data, categoricalFeatures, numClasses);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> predictionAndLabel =
@@ -95,11 +95,10 @@ public final class JavaDecisionTree {
     // Train a DecisionTree model for regression.
     impurity = "variance";
     DecisionTreeRegressor dtRegressor = new DecisionTreeRegressor()
-        .setImpurity(impurity)
-        .setMaxDepth(maxDepth)
-        .setMaxBins(maxBins);
-    final DecisionTreeRegressionModel regressionModel =
-        dtRegressor.run(data, categoricalFeatures);
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins);
+    final DecisionTreeRegressionModel regressionModel = dtRegressor.run(data, categoricalFeatures);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> regressorPredictionAndLabel =

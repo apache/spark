@@ -181,6 +181,10 @@ class GBTRegressionModel(
     val treeWeights: Array[Double])
   extends TreeEnsembleModel with Serializable with Saveable {
 
+  require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
+  require(trees.size == treeWeights.size, "GBTRegressionModel given trees, treeWeights of" +
+    s" non-matching lengths (${trees.size}, ${treeWeights.size}, respectively).")
+
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def getTreeWeights: Array[Double] = treeWeights
