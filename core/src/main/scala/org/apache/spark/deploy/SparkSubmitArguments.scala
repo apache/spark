@@ -481,13 +481,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone and Mesos only:
         |  --total-executor-cores NUM  Total cores for all executors.
-        | 
+        |
         | Spark standalone and YARN only:
-        |  --executor-cores NUM        Number of cores to use on each executor. In standalone mode,
-        |                              the executor will use all available cores on the worker if
-        |                              this is not specified. (Default: 1 in YARN mode, all
-        |                              available cores in standalone mode).
-        |          
+        |  --executor-cores NUM        Number of cores to use on each executor. Default:
+        |                              1 in YARN mode; in standalone mode, all available cores
+        |                              (non-spreadApp mode) or ranging from 1 to
+        |                              total-executor-cores / availableNumOfWorkers at the moment
+        |                              of scheduling.
+        |
         | YARN-only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
         |                              (Default: 1).
