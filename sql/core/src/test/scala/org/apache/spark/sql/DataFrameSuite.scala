@@ -84,6 +84,11 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("empty data frame") {
+    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(TestSQLContext.emptyDataFrame.count() === 0)
+  }
+
   test("head and take") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
