@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  *
  * Note: This script treats all features as real-valued (not categorical).
- *       To include categorical features, modify categoricalFeaturesInfo.
+ *       To include categorical features, modify categoricalFeatures.
  */
 object GBTRunner {
 

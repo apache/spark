@@ -65,7 +65,7 @@ public final class JavaGBTRunner {
 
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 
-    // Empty categoricalFeaturesInfo indicates all features are continuous.
+    // Empty categoricalFeatures indicates all features are continuous.
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
 
     if (algo.equals("Classification")) {

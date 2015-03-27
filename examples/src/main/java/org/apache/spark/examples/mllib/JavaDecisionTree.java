@@ -62,8 +62,8 @@ public final class JavaDecisionTree {
     }).countByValue().size();
 
     // Set parameters.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    //  Empty categoricalFeatures indicates all features are continuous.
+    HashMap<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     String impurity = "gini";
     Integer maxDepth = 5;
     Integer maxBins = 32;
@@ -74,7 +74,7 @@ public final class JavaDecisionTree {
         .setMaxDepth(maxDepth)
         .setMaxBins(maxBins);
     final DecisionTreeClassificationModel model =
-        dtClassifier.run(data, categoricalFeaturesInfo, numClasses);
+        dtClassifier.run(data, categoricalFeatures, numClasses);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> predictionAndLabel =
@@ -99,7 +99,7 @@ public final class JavaDecisionTree {
         .setMaxDepth(maxDepth)
         .setMaxBins(maxBins);
     final DecisionTreeRegressionModel regressionModel =
-        dtRegressor.run(data, categoricalFeaturesInfo);
+        dtRegressor.run(data, categoricalFeatures);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> regressorPredictionAndLabel =

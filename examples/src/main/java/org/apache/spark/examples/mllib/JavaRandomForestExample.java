@@ -47,9 +47,9 @@ public final class JavaRandomForestExample {
       JavaRDD<LabeledPoint> trainingData,
       JavaRDD<LabeledPoint> testData) {
     // Train a RandomForest model.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
+    //  Empty categoricalFeatures indicates all features are continuous.
     Integer numClasses = 2;
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    HashMap<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     Integer numTrees = 3; // Use more in practice.
     String featuresPerNode = "auto"; // Let the algorithm choose.
     String impurity = "gini";
@@ -66,7 +66,7 @@ public final class JavaRandomForestExample {
         .setSeed(seed);
 
     final RandomForestClassificationModel model =
-        rf.run(trainingData, categoricalFeaturesInfo, numClasses);
+        rf.run(trainingData, categoricalFeatures, numClasses);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
@@ -91,8 +91,8 @@ public final class JavaRandomForestExample {
       JavaRDD<LabeledPoint> trainingData,
       JavaRDD<LabeledPoint> testData) {
     // Train a RandomForest model.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    //  Empty categoricalFeatures indicates all features are continuous.
+    HashMap<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     Integer numTrees = 3; // Use more in practice.
     String featuresPerNode = "auto"; // Let the algorithm choose.
     String impurity = "variance";
@@ -107,7 +107,7 @@ public final class JavaRandomForestExample {
         .setMaxDepth(maxDepth)
         .setMaxBins(maxBins)
         .setSeed(seed);
-    final RandomForestRegressionModel model = rf.run(trainingData, categoricalFeaturesInfo);
+    final RandomForestRegressionModel model = rf.run(trainingData, categoricalFeatures);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
