@@ -634,6 +634,17 @@ class DenseMatrix(Matrix):
         """
         return self.values.reshape((self.numRows, self.numCols), order='F')
 
+    def __getitem__(self, indices):
+        i = indices[0]
+        j = indices[1]
+        if i > self.numRows:
+            raise ValueError("Row index %d should not be greater than numRows %d." %
+                             (i, self.numRows))
+        if j > self.numCols:
+            raise ValueError("Column index %d should not be greater than numCols %d." %
+                             (i, self.numCols))
+        return self.values[i * self.numCols + j]
+
     def __eq__(self, other):
         return (isinstance(other, DenseMatrix) and
                 self.numRows == other.numRows and
