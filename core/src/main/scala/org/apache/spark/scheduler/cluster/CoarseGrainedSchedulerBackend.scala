@@ -241,9 +241,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     driverActor = actorSystem.actorOf(
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
-    // If a principal and keytab have been set, use that to create new credentials for executors
-    // periodically
-    SparkHadoopUtil.get.scheduleLoginFromKeytab()
   }
 
   def stopExecutors() {

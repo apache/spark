@@ -29,7 +29,7 @@ import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{ExecutorDelegationTokenUpdater, SparkHadoopUtil}
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -155,6 +155,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+      // Periodically update the credentials for this user to ensure HDFS tokens get updated.
+      val tokenUpdater = new ExecutorDelegationTokenUpdater(driverConf, SparkHadoopUtil.get.conf)
+      tokenUpdater.updateCredentialsIfRequired()
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -172,6 +175,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
       }
       env.actorSystem.awaitTermination()
+      tokenUpdater.stop()
     }
   }
 

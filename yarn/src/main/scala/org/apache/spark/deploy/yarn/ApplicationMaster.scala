@@ -78,6 +78,8 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
+  private lazy val delegationTokenRenewer = new AMDelegationTokenRenewer(sparkConf, yarnConf)
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -201,6 +203,7 @@ private[spark] class ApplicationMaster(
         logDebug("shutting down user thread")
         userClassThread.interrupt()
       }
+      if (!inShutdown) delegationTokenRenewer.stop()
     }
   }
 
@@ -256,6 +259,9 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
+    // If a principal and keytab have been set, use that to create new credentials for executors
+    // periodically
+    delegationTokenRenewer.scheduleLoginFromKeytab()
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has

@@ -17,12 +17,16 @@
 
 package org.apache.spark.deploy
 
+import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
+import java.util.{Comparator, Arrays}
 
+import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.security.Credentials
@@ -30,7 +34,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{SerializableBuffer, Utils}
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 
@@ -40,7 +44,7 @@ import scala.collection.JavaConversions._
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  protected val sparkConf = new SparkConf() // YarnSparkHadoopUtil requires this
+  val sparkConf = new SparkConf()
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
@@ -55,15 +59,12 @@ class SparkHadoopUtil extends Logging {
   def runAsSparkUser(func: () => Unit) {
     val user = Utils.getCurrentUserName()
     logDebug("running as user: " + user)
-    updateCredentialsIfRequired()
     val ugi = UserGroupInformation.createRemoteUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
-
-  def updateCredentialsIfRequired(): Unit = {}
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     for (token <- source.getTokens()) {
@@ -124,14 +125,6 @@ class SparkHadoopUtil extends Logging {
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
-
-  /**
-   * Schedule a login from the keytab and principal set using the --principal and --keytab
-   * arguments to spark-submit. This login happens only when the credentials of the current user
-   * are about to expire. This method reads SPARK_PRINCIPAL and SPARK_KEYTAB from the environment
-   * to do the login. This method is a no-op in non-YARN mode.
-   */
-  private[spark] def scheduleLoginFromKeytab(): Unit = {}
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
@@ -213,6 +206,49 @@ class SparkHadoopUtil extends Logging {
     val baseStatus = fs.getFileStatus(basePath)
     if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
+
+  /**
+   * Lists all the files in a directory with the specified prefix, and does not end with the
+   * given suffix.
+   * @param remoteFs
+   * @param prefix
+   * @return
+   */
+
+  def listFilesSorted(
+      remoteFs: FileSystem,
+      dir: Path,
+      prefix: String,
+      exclusionSuffix: String): Array[FileStatus] = {
+    val fileStatuses = remoteFs.listStatus(dir,
+      new PathFilter {
+        override def accept(path: Path): Boolean = {
+          val name = path.getName
+          name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
+        }
+      })
+    Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+      override def compare(o1: FileStatus, o2: FileStatus): Int = {
+        Longs.compare(o1.getModificationTime, o2.getModificationTime)
+      }
+    })
+    fileStatuses
+  }
+
+  /**
+   * Get the latest validity of the HDFS token in the Credentials object.
+   * @param credentials
+   * @return
+   */
+  def getLatestTokenValidity(credentials: Credentials): Long = {
+    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+      .map { t =>
+      val identifier = new DelegationTokenIdentifier()
+      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+      identifier.getMaxDate
+    }.foldLeft(0L)(math.max)
+  }
+
 }
 
 object SparkHadoopUtil {
