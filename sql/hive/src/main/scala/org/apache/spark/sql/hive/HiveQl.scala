@@ -479,7 +479,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
-      ExplainCommand(NoRelation)
+      ExplainCommand(OneRowRelation)
     case Token("TOK_EXPLAIN", explainArgs)
       if "TOK_CREATETABLE" == explainArgs.head.getText =>
       val Some(crtTbl) :: _ :: extended :: Nil =
@@ -622,7 +622,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
  
         val relations = fromClause match {
           case Some(f) => nodeToRelation(f)
-          case None => NoRelation
+          case None => OneRowRelation
         }
  
         val withWhere = whereClause.map { whereNode =>
