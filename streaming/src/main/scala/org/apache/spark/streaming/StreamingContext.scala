@@ -489,7 +489,7 @@ class StreamingContext private[streaming] (
     graph.validate()
 
     assert(isCoresEnoughInLocalMode(), "No enough cores, Spark jobs will not get resources to " +
-      "process the received data")
+      "process the received data.")
     assert(
       checkpointDir == null || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
@@ -528,7 +528,7 @@ class StreamingContext private[streaming] (
         threadCount / coresPerTask
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        coresPerSlave / coresPerTask * numSlaves
+        coresPerSlave.toInt / coresPerTask * numSlaves.toInt
 
       case _ => Int.MaxValue
     }
