@@ -107,8 +107,12 @@ public class Statsd implements Closeable {
                 stringBuilder.append(rawName.substring(rawName.indexOf(DRIVER_MATCH)));
             } else if (FENCED_DRIVER.equals(parts[2])) {
                 stringBuilder.append(rawName.substring(rawName.indexOf(FENCED_DRIVER_MATCH)));
-            } else if (EXECUTOR.equals(parts[2])) {
+            } else if (EXECUTOR.equals(parts[3])) {
+                // spark.app-20141212193256-0012.15.executor.filesystem.total.max
                 stringBuilder.append(rawName.substring(rawName.indexOf(EXECUTOR_MATCH)));
+            } else if ("jvm".equals(parts[3])) {
+                // spark.app-20141212193256-0012.15.jvm.total.max
+                stringBuilder.append(rawName.substring(rawName.indexOf(".jvm.")));
             } else if ("".equals(parts[2])) {
                 stringBuilder.append(rawName.substring(rawName.indexOf("..")));
             } else {
