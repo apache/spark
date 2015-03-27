@@ -37,8 +37,10 @@ public class TransportConf {
 
   /** Connect timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
-    int defaultTimeout = conf.getInt("spark.network.timeout", 120);
-    return conf.getInt("spark.shuffle.io.connectionTimeout", defaultTimeout) * 1000;
+    long defaultTimeout = JavaUtils.timeStringToMs(
+            conf.get("spark.shuffle.io.connectionTimeout",
+                    conf.get("spark.network.timeout", "120s")));
+    return (int) defaultTimeout;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */

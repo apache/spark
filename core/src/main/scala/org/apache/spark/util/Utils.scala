@@ -1011,6 +1011,39 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use
+   */
+  def timeStringToUs(str: String): Long = {
+    val lower = str.toLowerCase.trim()
+    if (lower.endsWith("s")) {
+      lower.substring(0, lower.length-1).toLong * 1000 * 1000
+    } else if (lower.endsWith("ms")) {
+      lower.substring(0, lower.length-2).toLong * 1000
+    } else if (lower.endsWith("us")) {
+      lower.substring(0, lower.length-2).toLong
+    } else {// Invalid suffix, force correct formatting
+      throw new IllegalArgumentException("Time must be specified as seconds (s), " +
+          "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.")
+    }
+  }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use.
+   * Note: may round in some cases
+   */
+  def timeStringToMs(str : String) : Long = {
+    timeStringToUs(str)/1000
+  }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use.
+   * Note: may round in some cases
+   */
+  def timeStringToS(str : String) : Long = {
+    timeStringToUs(str)/1000/1000
+  }
+
+  /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
    */
   def memoryStringToMb(str: String): Int = {
@@ -1146,7 +1179,7 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
    * default UncaughtExceptionHandler
-   * 
+   *
    * NOTE: This method is to be called by the spark-started JVM process.
    */
   def tryOrExit(block: => Unit) {
@@ -1159,11 +1192,11 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught 
+   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught
    * exception
-   *  
-   * NOTE: This method is to be called by the driver-side components to avoid stopping the 
-   * user-started JVM process completely; in contrast, tryOrExit is to be called in the 
+   *
+   * NOTE: This method is to be called by the driver-side components to avoid stopping the
+   * user-started JVM process completely; in contrast, tryOrExit is to be called in the
    * spark-started JVM process .
    */
   def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {

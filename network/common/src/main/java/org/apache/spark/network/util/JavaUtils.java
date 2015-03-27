@@ -121,4 +121,38 @@ public class JavaUtils {
     }
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use
+   */
+  public static long timeStringToUs(String str) throws IllegalArgumentException {
+    String lower = str.toLowerCase().trim();
+    if (lower.endsWith("s")) {
+      return Long.parseLong(lower.substring(0, lower.length()-1)) * 1000 * 1000;
+    } else if (lower.endsWith("ms")) {
+      return Long.parseLong(lower.substring(0, lower.length()-2)) * 1000;
+    } else if (lower.endsWith("us")) {
+      return Long.parseLong(lower.substring(0, lower.length()-2));
+    } else {// Invalid suffix, force correct formatting
+      throw new IllegalArgumentException("Time must be specified as seconds (s), " +
+              "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.");
+    }
+  }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use.
+   * Note: may round in some cases
+   */
+  public static long timeStringToMs(String str) throws IllegalArgumentException {
+    return timeStringToUs(str)/1000;
+  }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use.
+   * Note: may round in some cases
+   */
+  public static long timeStringToS(String str) throws IllegalArgumentException {
+    return timeStringToUs(str)/1000/1000;
+  }
+
 }

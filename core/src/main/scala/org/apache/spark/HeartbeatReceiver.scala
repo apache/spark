@@ -25,11 +25,11 @@ import akka.actor.{Actor, Cancellable}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.util.{Utils, ActorLogReceive}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
- * components to convey liveness or execution information for in-progress tasks. It will also 
+ * components to convey liveness or execution information for in-progress tasks. It will also
  * expire the hosts that have not heartbeated for more than spark.network.timeout.
  */
 private[spark] case class Heartbeat(
@@ -37,8 +37,8 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
-private[spark] case object ExpireDeadHosts 
-    
+private[spark] case object ExpireDeadHosts
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -52,24 +52,24 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
-  private val executorTimeoutMs = sc.conf.getOption("spark.network.timeout").map(_.toLong * 1000).
-    getOrElse(sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120000))
+  private val executorTimeoutMs = Utils.timeStringToMs(sc.conf.get("spark.network.timeout",
+      sc.conf.get("spark.storage.blockManagerSlaveTimeoutMs", "120s")))
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
-  private val checkTimeoutIntervalMs =
-    sc.conf.getOption("spark.network.timeoutInterval").map(_.toLong * 1000).
-      getOrElse(sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000))
-  
+  private val checkTimeoutIntervalMs = Utils.timeStringToMs(
+    sc.conf.get("spark.network.timeoutInterval",
+      sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", "60s")))
+
   private var timeoutCheckingTask: Cancellable = null
-  
+
   override def preStart(): Unit = {
     import context.dispatcher
     timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
       checkTimeoutIntervalMs.milliseconds, self, ExpireDeadHosts)
     super.preStart()
   }
-  
+
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val unknownExecutor = !scheduler.executorHeartbeatReceived(
@@ -97,7 +97,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
       }
     }
   }
-  
+
   override def postStop(): Unit = {
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel()
