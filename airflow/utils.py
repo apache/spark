@@ -270,7 +270,7 @@ def ask_yesno(question):
             print("Please respond by yes or no.")
 
 
-def send_email(to, subject, html_content):
+def send_email(to, subject, html_content, mime_msg = None):
     SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
     SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
@@ -284,13 +284,15 @@ def send_email(to, subject, html_content):
             to = to.split(';')
         else:
             to = [to]
-
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = SMTP_MAIL_FROM
-    msg['To'] = ", ".join(to)
-    mime_text = MIMEText(html_content, 'html')
-    msg.attach(mime_text)
+    if mime_msg is None:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = SMTP_MAIL_FROM
+        msg['To'] = ", ".join(to)
+        mime_text = MIMEText(html_content, 'html')
+        msg.attach(mime_text)
+    else:
+        msg = mime_msg
     s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
     s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
