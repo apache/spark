@@ -30,6 +30,12 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
+ * classification.
+ * It supports both binary and multiclass labels, as well as both continuous and categorical
+ * features.
+ */
 class RandomForestClassifier
   extends TreeClassifier[RandomForestClassificationModel]
   with RandomForestParams[RandomForestClassifier]
@@ -108,21 +114,26 @@ object RandomForestClassifier {
   final val supportedFeaturesPerNode: Array[String] = RandomForestParams.supportedFeaturesPerNode
 }
 
-class RandomForestClassificationModel(
-    val trees: Array[DecisionTreeClassificationModel],
-    val treeWeights: Array[Double])
+/**
+ * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
+ * It supports both binary and multiclass labels, as well as both continuous and categorical
+ * features.
+ * @param trees  Decision trees in the ensemble.
+ */
+class RandomForestClassificationModel(val trees: Array[DecisionTreeClassificationModel])
   extends TreeEnsembleModel with Serializable with Saveable {
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
-  override def getTreeWeights: Array[Double] = treeWeights
+  override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def predict(features: Vector): Double = {
-    // Classifies using (weighted) majority votes
+    // Classifies using majority votes.
+    // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
-    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+    trees.view.foreach { tree =>
       val prediction = tree.predict(features).toInt
-      votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
+      votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
     votes.maxBy(_._2)._1
   }
@@ -154,7 +165,6 @@ object RandomForestClassificationModel
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification RandomForestModel (old API) to" +
         s" RandomForestClassificationModel (new API).  Algo is: ${oldModel.algo}")
-    new RandomForestClassificationModel(oldModel.trees.map(DecisionTreeClassificationModel.fromOld),
-      Array.fill(oldModel.trees.size)(1.0))
+    new RandomForestClassificationModel(oldModel.trees.map(DecisionTreeClassificationModel.fromOld))
   }
 }

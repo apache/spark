@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
@@ -28,6 +27,12 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * for classification.
+ * It supports both binary and multiclass labels, as well as both continuous and categorical
+ * features.
+ */
 class DecisionTreeClassifier
   extends TreeClassifier[DecisionTreeClassificationModel]
   with DecisionTreeParams[DecisionTreeClassifier]
@@ -54,8 +59,7 @@ class DecisionTreeClassifier
   override def setCheckpointInterval(checkpointInterval: Int): DecisionTreeClassifier =
     super.setCheckpointInterval(checkpointInterval)
 
-  override def setImpurity(impurity: String): DecisionTreeClassifier =
-    super.setImpurity(impurity)
+  override def setImpurity(impurity: String): DecisionTreeClassifier = super.setImpurity(impurity)
 
   override def run(
       input: RDD[LabeledPoint],
@@ -86,7 +90,13 @@ object DecisionTreeClassifier {
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
-class DecisionTreeClassificationModel private[mllib] (rootNode: Node)
+/**
+ * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
+ * It supports both binary and multiclass labels, as well as both continuous and categorical
+ * features.
+ * @param rootNode  Root of the decision tree
+ */
+class DecisionTreeClassificationModel(rootNode: Node)
   extends DecisionTreeModel(rootNode) with Serializable with Saveable {
 
   override def toString: String = {
@@ -111,6 +121,7 @@ object DecisionTreeClassificationModel extends Loader[DecisionTreeClassification
     DecisionTreeClassificationModel.fromOld(OldDecisionTreeModel.load(sc, path))
   }
 
+  /** Convert a model from the old API */
   private[mllib] def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +

@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.regression
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.impl.tree._
 import org.apache.spark.mllib.linalg.Vector
@@ -29,6 +27,10 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
+ * It supports both continuous and categorical features.
+ */
 class RandomForestRegressor
   extends TreeRegressor[RandomForestRegressionModel]
   with RandomForestParams[RandomForestRegressor]
@@ -104,21 +106,22 @@ object RandomForestRegressor {
   final val supportedFeaturesPerNode: Array[String] = RandomForestParams.supportedFeaturesPerNode
 }
 
-class RandomForestRegressionModel(
-    val trees: Array[DecisionTreeRegressionModel],
-    val treeWeights: Array[Double])
+/**
+ * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
+ * It supports both continuous and categorical features.
+ * @param trees  Decision trees in the ensemble.
+ */
+class RandomForestRegressionModel(val trees: Array[DecisionTreeRegressionModel])
   extends TreeEnsembleModel with Serializable with Saveable {
-
-  private val sumWeights = math.max(treeWeights.sum, 1e-15)
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
-  override def getTreeWeights: Array[Double] = treeWeights
+  override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def predict(features: Vector): Double = {
-    // Predict average of tree predictions
-    val treePredictions = trees.map(_.predict(features))
-    blas.ddot(numTrees, treePredictions, 1, treeWeights, 1) / sumWeights
+    // Predict average of tree predictions.
+    // Ignore the weights since all are 1.0 for now.
+    trees.map(_.predict(features)).sum / numTrees
   }
 
   override def toString: String = {
@@ -133,8 +136,6 @@ class RandomForestRegressionModel(
 
   /** Convert to a model in the old API */
   private[mllib] def toOld: OldRandomForestModel = {
-    assert(treeWeights.forall(_ == 1.0), "Failed to convert RandomForestRegressionModel"
-      + " to old RandomForestModel format since old format does not support weights")
     new OldRandomForestModel(OldAlgo.Regression, trees.map(_.toOld))
   }
 }
@@ -149,7 +150,6 @@ object RandomForestRegressionModel extends Loader[RandomForestRegressionModel] {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression RandomForestModel (old API) to" +
         s" RandomForestRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    new RandomForestRegressionModel(oldModel.trees.map(DecisionTreeRegressionModel.fromOld),
-      Array.fill(oldModel.trees.size)(1.0))
+    new RandomForestRegressionModel(oldModel.trees.map(DecisionTreeRegressionModel.fromOld))
   }
 }

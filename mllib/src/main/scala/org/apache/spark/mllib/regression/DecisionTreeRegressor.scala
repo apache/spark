@@ -27,6 +27,11 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * for regression.
+ * It supports both continuous and categorical features.
+ */
 class DecisionTreeRegressor
   extends TreeRegressor[DecisionTreeRegressionModel]
   with DecisionTreeParams[DecisionTreeRegressor]
@@ -82,6 +87,11 @@ object DecisionTreeRegressor {
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 }
 
+/**
+ * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for regression.
+ * It supports both continuous and categorical features.
+ * @param rootNode  Root of the decision tree
+ */
 class DecisionTreeRegressionModel private[mllib] (rootNode: Node)
   extends DecisionTreeModel(rootNode) with Serializable with Saveable {
 
@@ -107,6 +117,7 @@ object DecisionTreeRegressionModel extends Loader[DecisionTreeRegressionModel] {
     DecisionTreeRegressionModel.fromOld(OldDecisionTreeModel.load(sc, path))
   }
 
+  /** Convert a model from the old API */
   private[mllib] def fromOld(oldModel: OldDecisionTreeModel): DecisionTreeRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-Regression DecisionTreeModel (old API) to" +

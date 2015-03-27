@@ -17,17 +17,12 @@
 
 package org.apache.spark.mllib.impl.tree
 
-import scala.collection.mutable
-
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
-import org.apache.spark.mllib.classification.DecisionTreeClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
-
-abstract class PredictionModel extends Serializable {
+/** Abstraction for prediction models which provides methods for batch prediction. */
+private[mllib] abstract class PredictionModel extends Serializable {
 
   /**
    * Predict the label for a single data point
@@ -51,10 +46,17 @@ abstract class PredictionModel extends Serializable {
   def predict(features: JavaRDD[Vector]): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(predict(features.rdd))
   }
-
 }
 
-abstract class DecisionTreeModel(val rootNode: Node) extends PredictionModel with Serializable {
+/**
+ * Abstraction for Decision Tree models.
+ * @param rootNode  Root of the decision tree
+ */
+private[mllib] abstract class DecisionTreeModel(val rootNode: Node)
+  extends PredictionModel with Serializable {
+
+  require(rootNode != null,
+    "DecisionTreeModel given null rootNode, but it requires a non-null rootNode.")
 
   override def predict(features: Vector): Double = {
     rootNode.predict(features)
@@ -86,11 +88,15 @@ abstract class DecisionTreeModel(val rootNode: Node) extends PredictionModel wit
   }
 }
 
-// Note: We do not store the trees here since they are specialized to classification/regression,
-// and this class is for both.
+/** Abstraction for models which are ensembles of decision trees */
 private[mllib] abstract class TreeEnsembleModel extends PredictionModel with Serializable {
 
+  // Note: We do not store the trees here since they are specialized to classification/regression,
+  // and this class is for both.
+
   require(numTrees > 0, "TreeEnsembleModel requires at least 1 tree.")
+  require(getTrees.size == getTreeWeights.size, "Ensemble model given trees, treeWeights of" +
+    s" non-matching lengths (${getTrees.size}, ${getTreeWeights.size}, respectively).")
 
   /** Trees in this ensemble */
   def getTrees: Array[DecisionTreeModel]
@@ -113,8 +119,8 @@ private[mllib] abstract class TreeEnsembleModel extends PredictionModel with Ser
   }
 
   /** Number of trees in ensemble */
-  def numTrees: Int = getTreeWeights.size
+  val numTrees: Int = getTrees.size
 
   /** Total number of nodes, summed over all trees in the ensemble. */
-  def totalNumNodes: Int = getTrees.map(_.numNodes).sum
+  lazy val totalNumNodes: Int = getTrees.map(_.numNodes).sum
 }

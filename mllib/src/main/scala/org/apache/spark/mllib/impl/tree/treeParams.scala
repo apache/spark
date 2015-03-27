@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * (private trait) Parameters for Decision Trees.
+ * (private trait) Parameters for Decision Tree-based algorithms.
  * @tparam M  Concrete class implementing this parameter trait
  */
 private[mllib] trait DecisionTreeParams[M] {
@@ -52,6 +52,7 @@ private[mllib] trait DecisionTreeParams[M] {
    * @group setParam
    */
   def setMaxDepth(maxDepth: Int): M = {
+    require(maxDepth >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $maxDepth")
     this.maxDepth = maxDepth
     this.asInstanceOf[M]
   }
@@ -131,6 +132,8 @@ private[mllib] trait DecisionTreeParams[M] {
    * @group expert
    */
   def setMaxMemoryInMB(maxMemoryInMB: Int): M = {
+    require(maxMemoryInMB > 0,
+      s"maxMemoryInMB parameter must be > 0.  Given bad value: $maxMemoryInMB")
     this.maxMemoryInMB = maxMemoryInMB
     this.asInstanceOf[M]
   }
@@ -206,9 +209,12 @@ private[mllib] trait DecisionTreeParams[M] {
     strategy.subsamplingRate = 1.0 // default for individual trees
     strategy
   }
-
 }
 
+/**
+ * (private trait) Parameters for Decision Tree-based classification algorithms.
+ * @tparam M  Concrete class implementing this parameter trait
+ */
 private[mllib] trait TreeClassifierParams[M] {
 
   protected var impurityStr: String = "gini"
@@ -255,6 +261,10 @@ private[mllib] object TreeClassifierParams {
   val supportedImpurities: Array[String] = Array("entropy", "gini")
 }
 
+/**
+ * (private trait) Parameters for Decision Tree-based regression algorithms.
+ * @tparam M  Concrete class implementing this parameter trait
+ */
 private[mllib] trait TreeRegressorParams[M] {
 
   protected var impurityStr: String = "variance"
@@ -301,7 +311,7 @@ private[mllib] object TreeRegressorParams {
 }
 
 /**
- * (private trait) Parameters for Decision Trees.
+ * (private trait) Parameters for Decision Tree-based ensemble algorithms.
  * @tparam M  Concrete class implementing this parameter trait
  */
 private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
@@ -316,6 +326,8 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
    * @group setParam
    */
   def setSubsamplingRate(subsamplingRate: Double): M = {
+    require(subsamplingRate > 0.0 && subsamplingRate <= 1.0,
+      s"Subsampling rate must be in range (0,1]. Bad rate: $subsamplingRate")
     this.subsamplingRate = subsamplingRate
     this.asInstanceOf[M]
   }
@@ -328,7 +340,7 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
   def getSubsamplingRate: Double = subsamplingRate
 
   /**
-   * Random seed.
+   * Random seed for bootstrapping and choosing feature subsets.
    * @group setParam
    */
   def setSeed(seed: Long): M = {
@@ -337,7 +349,7 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
   }
 
   /**
-   * Random seed.
+   * Random seed for bootstrapping and choosing feature subsets.
    * @group getParam
    */
   def getSeed: Long = seed
@@ -356,6 +368,10 @@ private[mllib] trait TreeEnsembleParams[M] extends DecisionTreeParams[M] {
   }
 }
 
+/**
+ * (private trait) Parameters for Random Forest algorithms.
+ * @tparam M  Concrete class implementing this parameter trait
+ */
 private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
 
   protected var numTrees: Int = 20
@@ -388,12 +404,25 @@ private[mllib] trait RandomForestParams[M] extends TreeEnsembleParams[M] {
   /**
    * The number of features to consider for splits at each tree node.
    * Supported options:
-   *  - "auto": choose automatically for task
+   *  - "auto": Choose automatically for task:
+   *            If numTrees == 1, set to "all."
+   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *              to "onethird" for regression.
    *  - "all": use all features
    *  - "onethird": use 1/3 of the features
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
    * (default = "auto")
+   *
+   * These various settings are based on the following references:
+   *  - log2: tested in Breiman (2001)
+   *  - sqrt: recommended by Breiman manual for random forests
+   *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
+   *    package.
+   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
+   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
+   *     random forests]]
+   *
    * @group setParam
    */
   def setFeaturesPerNode(featuresPerNode: String): M = {
@@ -424,6 +453,10 @@ private[mllib] object RandomForestParams {
   val supportedFeaturesPerNode: Array[String] = Array("auto", "all", "onethird", "sqrt", "log2")
 }
 
+/**
+ * (private trait) Parameters for Gradient-Boosted Tree algorithms.
+ * @tparam M  Concrete class implementing this parameter trait
+ */
 private[mllib] trait GBTParams[M] extends TreeEnsembleParams[M] {
 
   protected var numIterations: Int = 20

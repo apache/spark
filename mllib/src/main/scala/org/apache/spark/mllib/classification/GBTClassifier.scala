@@ -32,6 +32,12 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * learning algorithm for classification.
+ * It supports binary labels, as well as both continuous and categorical features.
+ * Note: Multiclass labels are not currently supported.
+ */
 class GBTClassifier
   extends TreeClassifierWithValidate[GBTClassificationModel]
   with GBTParams[GBTClassifier]
@@ -169,6 +175,14 @@ object GBTClassifier {
   final val supportedLosses: Array[String] = Array("logloss")
 }
 
+/**
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * model for classification.
+ * It supports binary labels, as well as both continuous and categorical features.
+ * Note: Multiclass labels are not currently supported.
+ * @param trees  Decision trees in the ensemble.
+ * @param treeWeights  Weights for the decision trees in the ensemble.
+ */
 class GBTClassificationModel(
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])

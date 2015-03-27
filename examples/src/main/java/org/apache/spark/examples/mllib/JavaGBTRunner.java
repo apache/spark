@@ -17,10 +17,9 @@
 
 package org.apache.spark.examples.mllib;
 
-import org.apache.spark.mllib.classification.GBTClassificationModel;
-import org.apache.spark.mllib.classification.GBTClassifier;
-import org.apache.spark.mllib.regression.GBTRegressionModel;
-import org.apache.spark.mllib.regression.GBTRegressor;
+import java.util.HashMap;
+import java.util.Map;
+
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
@@ -30,11 +29,12 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.classification.GBTClassificationModel;
+import org.apache.spark.mllib.classification.GBTClassifier;
+import org.apache.spark.mllib.regression.GBTRegressionModel;
+import org.apache.spark.mllib.regression.GBTRegressor;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
-
-import java.util.HashMap;
-import java.util.Map;
 
 
 /**

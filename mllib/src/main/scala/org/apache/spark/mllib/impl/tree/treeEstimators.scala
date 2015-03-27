@@ -33,7 +33,9 @@ private[mllib] abstract class TreeEstimator[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
-   * @param input  Training dataset
+   * @param input  Training dataset.
+   *               For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *               For regression, labels are real numbers.
    * @param categoricalFeatures  Map storing the arity of categorical features.
    *          E.g., an entry (j -> k) indicates that feature j is categorical
    *          with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -73,7 +75,7 @@ private[mllib] abstract class TreeClassifier[M] extends TreeEstimator[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
-   * @param input  Training dataset
+   * @param input  Training dataset. Class labels should take values in {0, 1, ..., numClasses-1}.
    * @param categoricalFeatures  Map storing the arity of categorical features.
    *          E.g., an entry (j -> k) indicates that feature j is categorical
    *          with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -92,7 +94,7 @@ private[mllib] abstract class TreeClassifier[M] extends TreeEstimator[M] {
   /**
    * Run this algorithm to train a new model using the given training data.
    * This variant of [[run()]] is for binary classification (numClasses = 2).
-   * @param input  Training dataset
+   * @param input  Training dataset. Class labels should take values in {0, 1, ..., numClasses-1}.
    * @param categoricalFeatures  Map storing the arity of categorical features.
    *          E.g., an entry (j -> k) indicates that feature j is categorical
    *          with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -131,7 +133,9 @@ private[mllib] trait TreeEstimatorWithValidate[M] {
 
   /**
    * Run this algorithm to train a new model using the given training data.
-   * @param input  Training dataset
+   * @param input  Training dataset.
+   *               For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *               For regression, labels are real numbers.
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
    *                        but it should follow the same distribution.
@@ -174,7 +178,12 @@ private[mllib] abstract class TreeClassifierWithValidate[M]
 
   /**
    * Run this algorithm to train a new model using the given training data.
-   * @param input  Training dataset
+   * @param input  Training dataset. Class labels should take values in {0, 1, ..., numClasses-1}.
+   * @param validationInput Validation dataset.
+   *                        This dataset should be different from the training dataset,
+   *                        but it should follow the same distribution.
+   *                        E.g., these two datasets could be created from an original dataset
+   *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @param categoricalFeatures  Map storing the arity of categorical features.
    *          E.g., an entry (j -> k) indicates that feature j is categorical
    *          with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -194,7 +203,12 @@ private[mllib] abstract class TreeClassifierWithValidate[M]
   /**
    * Run this algorithm to train a new model using the given training data.
    * This variant of [[run()]] is for binary classification (numClasses = 2).
-   * @param input  Training dataset
+   * @param input  Training dataset. Class labels should take values in {0, 1, ..., numClasses-1}.
+   * @param validationInput Validation dataset.
+   *                        This dataset should be different from the training dataset,
+   *                        but it should follow the same distribution.
+   *                        E.g., these two datasets could be created from an original dataset
+   *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @param categoricalFeatures  Map storing the arity of categorical features.
    *          E.g., an entry (j -> k) indicates that feature j is categorical
    *          with k categories indexed from 0: {0, 1, ..., k-1}.

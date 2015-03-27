@@ -24,10 +24,11 @@ import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformation
 
 /**
  * Decision tree node interface.
- * TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
- *       code into the new API and deprecate the old API.
  */
 sealed trait Node extends Serializable {
+
+  // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
+  //       code into the new API and deprecate the old API.
 
   /** Prediction this node makes (or would make, if it is an internal node) */
   def prediction: Double
@@ -141,7 +142,7 @@ class LeafNode private[mllib] (
 }
 
 /**
- * Internal Decision Tree node
+ * Internal Decision Tree node.
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
  * @param gain Information gain value.

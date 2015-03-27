@@ -32,6 +32,11 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 
+/**
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * learning algorithm for regression.
+ * It supports both continuous and categorical features.
+ */
 class GBTRegressor
   extends TreeRegressorWithValidate[GBTRegressionModel]
   with GBTParams[GBTRegressor]
@@ -164,6 +169,13 @@ object GBTRegressor {
   final val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
 }
 
+/**
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * model for regression.
+ * It supports both continuous and categorical features.
+ * @param trees  Decision trees in the ensemble.
+ * @param treeWeights  Weights for the decision trees in the ensemble.
+ */
 class GBTRegressionModel(
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])
