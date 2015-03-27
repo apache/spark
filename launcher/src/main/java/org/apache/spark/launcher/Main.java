@@ -47,7 +47,6 @@ class Main {
    * character. On Windows, the output is a command line suitable for direct execution from the
    * script.
    */
-
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
