@@ -23,8 +23,11 @@ import java.util.{List => JList}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.util.Utils
+import py4j.{Py4JNetworkException, GatewayServer}
+import java.net.BindException
 
 private[spark] object PythonUtils {
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
@@ -52,5 +55,22 @@ private[spark] object PythonUtils {
    */
   def toSeq[T](cols: JList[T]): Seq[T] = {
     cols.toList.toSeq
+  }
+
+  def startGatewayServer(conf: SparkConf): (GatewayServer, Int) = {
+   val port = conf.getInt("spark.python.gateway.port", 0)
+   Utils.startServiceOnPort[GatewayServer](
+    port, doStartGatewayServer, conf, "PythonGatewayServer")
+  }
+
+  private def doStartGatewayServer(startPort: Int): (GatewayServer, Int) = {
+    val server = new GatewayServer(null, startPort)
+    try {
+      server.start()
+    } catch {
+      case e: Py4JNetworkException =>
+        throw new BindException(e.getMessage)
+    }
+    (server, server.getListeningPort)
   }
 }

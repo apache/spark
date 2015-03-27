@@ -22,7 +22,7 @@ import java.net.Socket
 
 import py4j.GatewayServer
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 
 /**
@@ -33,16 +33,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] object PythonGatewayServer extends Logging {
   def main(args: Array[String]): Unit = Utils.tryOrExit {
-    // Start a GatewayServer on an ephemeral port
-    val gatewayServer: GatewayServer = new GatewayServer(null, 0)
-    gatewayServer.start()
-    val boundPort: Int = gatewayServer.getListeningPort
-    if (boundPort == -1) {
-      logError("GatewayServer failed to bind; exiting")
-      System.exit(1)
-    } else {
-      logDebug(s"Started PythonGatewayServer on port $boundPort")
-    }
+    // Start a GatewayServer
+    val (_, boundPort) = PythonUtils.startGatewayServer(new SparkConf())
 
     // Communicate the bound port back to the caller via the caller-specified callback port
     val callbackHost = sys.env("_PYSPARK_DRIVER_CALLBACK_HOST")
