@@ -1222,10 +1222,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.core.connection.auth.wait.timeout</code></td>
-  <td>30</td>
+  <td>30s</td>
   <td>
-    Number of seconds for the connection to wait for authentication to occur before timing
-    out and giving up.
+    How long for the connection for authentication to occur before timing out and giving up.
   </td>
 </tr>
 <tr>
