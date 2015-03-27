@@ -52,10 +52,5 @@ public final class MessageDemux extends ChannelOutboundHandlerAdapter {
     }
   }
 
-  @Override
-  public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-    ctx.close(promise);
-  }
-
 }
 
