@@ -344,6 +344,20 @@ object functions {
    */
   def abs(e: Column): Column = Abs(e.expr)
 
+  /**
+   * Aggregate func:compute the stddev of the specific column.
+   *
+   * @group agg_funcs
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
+   * Aggregate func:compute the stddev of the specific column
+   *
+   * @group agg_funcs
+   */
+  def stddev(e: Column): Column = StdDeviation(e.expr)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
