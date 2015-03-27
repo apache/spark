@@ -23,6 +23,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Matrices}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   test("single cluster") {
@@ -48,13 +49,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   }
   
   test("two clusters") {
-    val data = sc.parallelize(Array(
-      Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
-      Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
-      Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
-      Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
-      Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
-    ))
+    val data = sc.parallelize(GaussianTestData.data)
 
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
@@ -105,14 +100,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("two clusters with sparse data") {
-    val data = sc.parallelize(Array(
-      Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
-      Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
-      Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
-      Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
-      Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
-    ))
-
+    val data = sc.parallelize(GaussianTestData.data)
     val sparseData = data.map(point => Vectors.sparse(1, Array(0), point.toArray))
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
@@ -137,5 +125,39 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     assert(sparseGMM.gaussians(1).mu ~== Emu(1) absTol 1E-3)
     assert(sparseGMM.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
     assert(sparseGMM.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
+  }
+
+  test("model save / load") {
+    val data = sc.parallelize(GaussianTestData.data)
+
+    val gmm = new GaussianMixture().setK(2).setSeed(0).run(data)
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    try {
+      gmm.save(sc, path)
+
+      // TODO: GaussianMixtureModel should implement equals/hashcode directly.
+      val sameModel = GaussianMixtureModel.load(sc, path)
+      assert(sameModel.k === gmm.k)
+      (0 until sameModel.k).foreach { i =>
+        assert(sameModel.gaussians(i).mu === gmm.gaussians(i).mu)
+        assert(sameModel.gaussians(i).sigma === gmm.gaussians(i).sigma)
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  object GaussianTestData {
+
+    val data = Array(
+      Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
+      Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
+      Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
+      Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
+      Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
+    )
+
   }
 }

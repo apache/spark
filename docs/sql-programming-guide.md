@@ -1406,7 +1406,7 @@ DataFrame jdbcDF = sqlContext.load("jdbc", options)
 
 {% highlight python %}
 
-df = sqlContext.load("jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+df = sqlContext.load(source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
 
 {% endhighlight %}
 

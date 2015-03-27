@@ -157,6 +157,7 @@ private[spark] class AppClient(
 
       case StopAppClient =>
         markDead("Application has been stopped.")
+        master ! UnregisterApplication(appId)
         sender ! true
         context.stop(self)
     }
