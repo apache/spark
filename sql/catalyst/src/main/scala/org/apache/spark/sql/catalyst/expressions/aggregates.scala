@@ -617,7 +617,8 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
   }
 }
 
-case class StdDeviation(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression]{
+case class StdDeviation(child: Expression)
+  extends PartialAggregate with trees.UnaryNode[Expression]{
   override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType match {
@@ -658,7 +659,9 @@ case class StdDeviation(child: Expression) extends PartialAggregate with trees.U
     val castedSum = Cast(Sum(partialSum.toAttribute), calcType)
     val castedCount = Cast(Sum(partialCount.toAttribute), calcType)
     val castedAvg = Divide(castedSum, castedCount)
-    val stddev = Sqrt(Divide(Subtract(castedSquredSum, Multiply(castedSum, castedAvg)), castedCount));
+    val stddev = Sqrt(Divide(
+                        Subtract(castedSquredSum, Multiply(castedSum, castedAvg)),
+                        castedCount));
     (seqPartialData, stddev)
   }
 
@@ -669,7 +672,7 @@ case class StdDeviation(child: Expression) extends PartialAggregate with trees.U
 
 case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
-  def this() = this(null, null) // Required for serialization.
+  def this() = this(null, null) // /Required for serialization.
 
   private val calcType =
     expr.dataType match {
@@ -711,7 +714,7 @@ case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
       null
     } else {
       val avg = Divide(Cast(sum, calcType), Cast(Literal(count), calcType))
-      //avg*avg*n
+      // avg*avg*n
       val squareAvgN = Multiply(Cast(sum, calcType),avg)
       val stddev = Sqrt(Divide(
                           Subtract(Cast(squaredSum, calcType), squareAvgN),
