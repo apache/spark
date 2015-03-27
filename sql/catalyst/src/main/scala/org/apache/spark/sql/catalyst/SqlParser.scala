@@ -139,7 +139,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
-          val base = r.getOrElse(NoRelation)
+          val base = r.getOrElse(OneRowRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
             .map(Aggregate(_, assignAliases(p), withFilter))
