@@ -31,7 +31,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 class Main {
 
   /**
-   * Usage: Main [uberJarPath] [class] [class args]
+   * Usage: Main [class] [class args]
    * <p/>
    * This CLI works in two different modes:
    * <ul>

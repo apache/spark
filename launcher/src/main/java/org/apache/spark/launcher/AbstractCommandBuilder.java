@@ -186,59 +186,25 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    final String assembly = AbstractCommandBuilder.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+    final String assembly = AbstractCommandBuilder.class.getProtectionDomain().getCodeSource().
+	getLocation().getPath();
     addToClassPath(cp, assembly);
 
-    // When Hive support is needed, Datanucleus jars must be included on the classpath. Datanucleus
-    // jars do not work if only included in the uber jar as plugin.xml metadata is lost. Both sbt
-    // and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is built
-    // with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
-    // assembly is built for Hive, before actually populating the CLASSPATH with the jars.
-    //
-    // This block also serves as a check for SPARK-1703, when the assembly jar is built with
-    // Java 7 and ends up with too many files, causing issues with other JDK versions.
-    boolean needsDataNucleus = false;
-    JarFile assemblyJar = null;
-    try {
-      assemblyJar = new JarFile(assembly);
-      needsDataNucleus = assemblyJar.getEntry("org/apache/hadoop/hive/ql/exec/") != null;
-    } catch (IOException ioe) {
-      if (ioe.getMessage().indexOf("invalid CEN header") >= 0) {
-        System.err.println(
-          "Loading Spark jar failed.\n" +
-          "This is likely because Spark was compiled with Java 7 and run\n" +
-          "with Java 6 (see SPARK-1703). Please use Java 7 to run Spark\n" +
-          "or build Spark with Java 6.");
-        System.exit(1);
-      } else {
-        throw ioe;
-      }
-    } finally {
-      if (assemblyJar != null) {
-        try {
-          assemblyJar.close();
-        } catch (IOException e) {
-          // Ignore.
-        }
-      }
+    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only 
+    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate 
+    // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
+    File libdir;
+    if (new File(sparkHome, "RELEASE").isFile()) {
+      libdir = new File(sparkHome, "lib");
+    } else {
+      libdir = new File(sparkHome, "lib_managed/jars");
     }
 
-    if (needsDataNucleus) {
-      System.err.println("Spark assembly has been built with Hive, including Datanucleus jars " +
-        "in classpath.");
-      File libdir;
-      if (new File(sparkHome, "RELEASE").isFile()) {
-        libdir = new File(sparkHome, "lib");
-      } else {
-        libdir = new File(sparkHome, "lib_managed/jars");
-      }
-
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
+    checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
+      libdir.getAbsolutePath());
+    for (File jar : libdir.listFiles()) {
+      if (jar.getName().startsWith("datanucleus-")) {
+        addToClassPath(cp, jar.getAbsolutePath());
       }
     }
 
