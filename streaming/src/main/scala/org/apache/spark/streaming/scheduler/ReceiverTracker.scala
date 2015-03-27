@@ -72,7 +72,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private var actor: ActorRef = null
 
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
     if (actor != null) {
       throw new SparkException("ReceiverTracker already started")
     }
@@ -86,7 +86,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop(graceful: Boolean) = synchronized {
+  def stop(graceful: Boolean): Unit = synchronized {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
@@ -201,7 +201,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
-    def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
       case RegisterReceiver(streamId, typ, host, receiverActor) =>
         registerReceiver(streamId, typ, host, receiverActor, sender)
         sender ! true
@@ -244,16 +244,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       if (graceful) {
         val pollTime = 100
-        def done = { receiverInfo.isEmpty && !running }
         logInfo("Waiting for receiver job to terminate gracefully")
-        while(!done) {
+        while (receiverInfo.nonEmpty || running) {
           Thread.sleep(pollTime)
         }
         logInfo("Waited for receiver job to terminate gracefully")
       }
 
       // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
+      if (receiverInfo.nonEmpty) {
         logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")

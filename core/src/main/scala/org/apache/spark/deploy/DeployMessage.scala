@@ -101,6 +101,8 @@ private[deploy] object DeployMessages {
   case class RegisterApplication(appDescription: ApplicationDescription)
     extends DeployMessage
 
+  case class UnregisterApplication(appId: String)
+
   case class MasterChangeAcknowledged(appId: String)
 
   // Master to AppClient
