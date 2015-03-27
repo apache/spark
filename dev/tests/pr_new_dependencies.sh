@@ -26,13 +26,15 @@
 #+ known as `ghprbActualCommit` in `run-tests-jenkins`
 # Arg2: The SHA1 hash
 #+ known as `sha1` in `run-tests-jenkins`
+# Arg3: Current PR Commit Hash
+#+ the PR hash for the current commit
 #
 
 ghprbActualCommit="$1"
 sha1="$2"
 current_pr_head="$3"
 
-MVN_BIN="`pwd`/build/mvn"
+MVN_BIN="build/mvn"
 CURR_CP_FILE="my-classpath.txt"
 MASTER_CP_FILE="master-classpath.txt"
 
@@ -55,8 +57,8 @@ done
 if [ -z "${difference_q}" ]; then
   echo " * This patch does not change any dependencies."
 else
-# Else we need to manually build spark to determine what, if any, dependencies
-# were added into the Spark assembly jar
+  # Else we need to manually build spark to determine what, if any, dependencies
+  # were added into the Spark assembly jar
   ${MVN_BIN} clean package dependency:build-classpath -DskipTests 2>/dev/null | \
     sed -n -e '/Building Spark Project Assembly/,$p' | \
     grep --context=1 -m 2 "Dependencies classpath:" | \

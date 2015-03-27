@@ -147,6 +147,15 @@ function send_archived_logs () {
   fi
 }
 
+# post start message
+{
+  start_message="\
+  [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
+
+  post_message "$start_message"
+}
+
 # Environment variable to capture PR test output
 pr_message=""
 # Ensure we save off the current HEAD to revert to
@@ -169,17 +178,6 @@ for t in "${PR_TESTS[@]}"; do
     echo "Cannot find test ${this_test}."
   fi
 done
-
-# post start message
-{
-  start_message="\
-  [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
-  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
-
-  start_message="${start_message}\n${merge_note}"
-
-  post_message "$start_message"
-}
 
 # run tests
 {
