@@ -214,9 +214,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.cores</code></td>
   <td>1.0</td>
   <td>
-    The setting, which can be a floating point number, controls the number of cores allocated
-    to the executor not for use by tasks. By default, executor will use the amount of cores
-    even though no task is running on an executor. This setting is only used for Mesos fine-grained mode.
+    Set the amount of cores, which can be a floating point number, to request for running a mesos executor.
+    The setting controls the number of cores allocated to the executor not for use by tasks. By default,
+    executor will use the amount of cores even though no task is running on an executor. This setting is
+    only used for Mesos fine-grained mode.
   </td>
 </tr>
 <tr>
