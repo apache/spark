@@ -89,8 +89,6 @@ abstract class Attribute extends NamedExpression {
   def toAttribute: Attribute = this
   def newInstance(): Attribute
 
-  var duplicateJoinKey: Boolean = false
-
 }
 
 /**

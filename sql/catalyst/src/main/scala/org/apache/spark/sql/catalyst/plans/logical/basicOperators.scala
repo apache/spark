@@ -104,20 +104,6 @@ case class Join(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case Inner =>
-        //val exp = condition.get.map(_ => _.name)
-        val rightOutput = right.output
-        condition match  {
-          case Some(EqualTo(leftAttr:Attribute, rightAttr:Attribute)) =>
-            if (leftAttr.name.equals(rightAttr.name)) {
-              val idx = rightOutput.indexWhere(attr => attr.name.equals(leftAttr.name))
-              if (0 <= idx) {
-                rightOutput(idx).duplicateJoinKey = true;
-              }
-            }
-          case _ =>
-        }
-        left.output ++ rightOutput
       case _ =>
         left.output ++ right.output
     }

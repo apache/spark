@@ -317,6 +317,24 @@ class DataFrameSuite extends QueryTest {
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
+  test("stddev") {
+    val testData2ADev = math.sqrt(4/6.0)
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(testData2ADev))
+
+    checkAnswer(
+      testData2.agg(stddev(testData2("a"))),
+      Row(testData2ADev))
+
+    checkAnswer(
+      decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
+      Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
+
+
+
+  }
+
   test("null average") {
     checkAnswer(
       testData3.agg(avg('b)),
