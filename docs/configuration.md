@@ -1068,9 +1068,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.speculation.interval</code></td>
-  <td>100</td>
+  <td>100ms</td>
   <td>
-    How often Spark will check for tasks to speculate, in milliseconds.
+    How often Spark will check for tasks to speculate.
   </td>
 </tr>
 <tr>
