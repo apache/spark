@@ -146,7 +146,7 @@ class DataFrame private[sql](
          _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
-      queryExecution.logical
+      queryExecution.analyzed
   }
 
   /**
