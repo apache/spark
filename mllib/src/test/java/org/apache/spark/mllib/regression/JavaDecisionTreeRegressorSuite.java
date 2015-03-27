@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.classification;
+package org.apache.spark.mllib.regression;
 
 import java.io.File;
 import java.io.Serializable;
@@ -29,19 +29,19 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.impl.TreeTests;
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.util.Utils;
 
 
-public class JavaDecisionTreeClassifierSuite implements Serializable {
+public class JavaDecisionTreeRegressorSuite implements Serializable {
 
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
+    sc = new JavaSparkContext("local", "JavaDecisionTreeRegressorSuite");
   }
 
   @After
@@ -65,7 +65,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       }
     });
 
-    DecisionTreeClassifier dt = new DecisionTreeClassifier()
+    DecisionTreeRegressor dt = new DecisionTreeRegressor()
         .setMaxDepth(2)
         .setMaxBins(10)
         .setMinInstancesPerNode(5)
@@ -74,13 +74,12 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
         .setCacheNodeIds(false)
         .setCheckpointInterval(10)
         .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < DecisionTreeClassifier.supportedImpurities().length; ++i) {
-      dt.setImpurity(DecisionTreeClassifier.supportedImpurities()[i]);
+    for (int i = 0; i < DecisionTreeRegressor.supportedImpurities().length; ++i) {
+      dt.setImpurity(DecisionTreeRegressor.supportedImpurities()[i]);
     }
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DecisionTreeClassificationModel model1 = dt.run(data);
-    DecisionTreeClassificationModel model2 = dt.run(data, categoricalFeatures);
-    DecisionTreeClassificationModel model3 = dt.run(data, categoricalFeatures, 2);
+    DecisionTreeRegressionModel model1 = dt.run(data);
+    DecisionTreeRegressionModel model2 = dt.run(data, categoricalFeatures);
 
     model1.predict(featureRDD);
     model2.predict(featureRDD.take(1).get(0));
@@ -91,10 +90,9 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model3.save(sc.sc(), path);
-      DecisionTreeClassificationModel sameModel =
-          DecisionTreeClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+      model2.save(sc.sc(), path);
+      DecisionTreeRegressionModel sameModel = DecisionTreeRegressionModel.load(sc.sc(), path);
+      TreeTests.checkEqual(model2, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }

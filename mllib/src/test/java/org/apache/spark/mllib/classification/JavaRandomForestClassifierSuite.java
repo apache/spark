@@ -35,13 +35,13 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.util.Utils;
 
 
-public class JavaDecisionTreeClassifierSuite implements Serializable {
+public class JavaRandomForestClassifierSuite implements Serializable {
 
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
+    sc = new JavaSparkContext("local", "JavaRandomForestClassifierSuite");
   }
 
   @After
@@ -65,7 +65,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       }
     });
 
-    DecisionTreeClassifier dt = new DecisionTreeClassifier()
+    RandomForestClassifier rf = new RandomForestClassifier()
         .setMaxDepth(2)
         .setMaxBins(10)
         .setMinInstancesPerNode(5)
@@ -73,27 +73,34 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
         .setMaxMemoryInMB(256)
         .setCacheNodeIds(false)
         .setCheckpointInterval(10)
+        .setSubsamplingRate(1.0)
+        .setSeed(1234)
+        .setNumTrees(3)
         .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < DecisionTreeClassifier.supportedImpurities().length; ++i) {
-      dt.setImpurity(DecisionTreeClassifier.supportedImpurities()[i]);
+    for (int i = 0; i < RandomForestClassifier.supportedImpurities().length; ++i) {
+      rf.setImpurity(RandomForestClassifier.supportedImpurities()[i]);
+    }
+    for (int i = 0; i < RandomForestClassifier.supportedFeaturesPerNode().length; ++i) {
+      rf.setFeaturesPerNode(RandomForestClassifier.supportedFeaturesPerNode()[i]);
     }
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DecisionTreeClassificationModel model1 = dt.run(data);
-    DecisionTreeClassificationModel model2 = dt.run(data, categoricalFeatures);
-    DecisionTreeClassificationModel model3 = dt.run(data, categoricalFeatures, 2);
+    RandomForestClassificationModel model1 = rf.run(data);
+    RandomForestClassificationModel model2 = rf.run(data, categoricalFeatures);
+    RandomForestClassificationModel model3 = rf.run(data, categoricalFeatures, 2);
 
     model1.predict(featureRDD);
     model2.predict(featureRDD.take(1).get(0));
-    model2.numNodes();
-    model2.depth();
+    model2.totalNumNodes();
     model2.toDebugString();
+    model2.getTrees();
+    model2.getTreeWeights();
 
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
       model3.save(sc.sc(), path);
-      DecisionTreeClassificationModel sameModel =
-          DecisionTreeClassificationModel.load(sc.sc(), path);
+      RandomForestClassificationModel sameModel =
+          RandomForestClassificationModel.load(sc.sc(), path);
       TreeTests.checkEqual(model3, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);

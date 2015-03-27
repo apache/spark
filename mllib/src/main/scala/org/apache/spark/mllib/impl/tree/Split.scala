@@ -22,7 +22,7 @@ import org.apache.spark.mllib.tree.configuration.{FeatureType => OldFeatureType}
 import org.apache.spark.mllib.tree.model.{Split => OldSplit}
 
 
-trait Split {
+trait Split extends Serializable {
 
   /** Index of feature which this split tests */
   def feature: Int

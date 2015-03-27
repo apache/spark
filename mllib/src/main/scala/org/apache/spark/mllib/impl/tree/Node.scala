@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformation
  * TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
  *       code into the new API and deprecate the old API.
  */
-sealed trait Node {
+sealed trait Node extends Serializable {
 
   /** Prediction this node makes (or would make, if it is an internal node) */
   def prediction: Double
