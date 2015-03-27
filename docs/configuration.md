@@ -989,9 +989,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.locality.wait</code></td>
-  <td>3000</td>
+  <td>3000ms</td>
   <td>
-    Number of milliseconds to wait to launch a data-local task before giving up and launching it
+    How long to wait to launch a data-local task before giving up and launching it
     on a less-local node. The same wait will be used to step through multiple locality levels
     (process-local, node-local, rack-local and then any). It is also possible to customize the
     waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
