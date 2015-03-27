@@ -80,7 +80,8 @@ private[spark] object AkkaUtils extends Logging {
     val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
     val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 6000)
-    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
+    val akkaHeartBeatIntervalS =
+      Utils.timeStringToS(conf.get("spark.akka.heartbeat.interval", "1000s"))
 
     val secretKey = securityManager.getSecretKey()
     val isAuthOn = securityManager.isAuthenticationEnabled()
@@ -103,7 +104,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.jvm-exit-on-fatal-error = off
       |akka.remote.require-cookie = "$requireCookie"
       |akka.remote.secure-cookie = "$secureCookie"
-      |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
+      |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatIntervalS s
       |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
       |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
