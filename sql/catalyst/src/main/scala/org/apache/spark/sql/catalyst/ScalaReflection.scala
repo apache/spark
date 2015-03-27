@@ -179,6 +179,7 @@ trait ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+      case other => sys.error(s"Schema for type $other is currently not supported")
     }
   }
 
