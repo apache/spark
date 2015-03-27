@@ -420,5 +420,4 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(3, 2) :: Nil)
 
   }
-
 }
