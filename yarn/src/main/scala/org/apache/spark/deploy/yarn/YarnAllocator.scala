@@ -72,6 +72,8 @@ private[yarn] class YarnAllocator(
   val allocatedHostToContainersMap = new HashMap[String, collection.mutable.Set[ContainerId]]
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
 
+  val allContainerRequests = new ArrayBuffer[ContainerRequest]
+
   // Containers that we no longer care about. We've either already told the RM to release them or
   // will on the next heartbeat. Containers get removed from this map after the RM tells us they've
   // completed.
@@ -212,6 +214,7 @@ private[yarn] class YarnAllocator(
 
       for (i <- 0 until missing) {
         val request = new ContainerRequest(resource, null, null, RM_REQUEST_PRIORITY)
+        allContainerRequests += request
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
         val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
@@ -408,6 +411,29 @@ private[yarn] class YarnAllocator(
   private def internalReleaseContainer(container: Container): Unit = {
     releasedContainers.add(container.getId())
     amClient.releaseAssignedContainer(container.getId())
+  }
+
+  /**
+   * Release all the container requests made from the beginning.
+   * There is no way to figure out which container requests are already allocated. Hence making
+   * removeContainerRequests for all containers
+   */
+  def removeContainerRequests(): Unit = {
+    allContainerRequests.foreach(request => {
+      logDebug("removing container request " + request)
+      amClient.removeContainerRequest(request)
+    })
+  }
+
+  /**
+   * Releases all assigned containers
+   */
+  def releaseAssignedContainers(): Unit = {
+    allocatedContainerToHostMap.keySet.foreach(id => {
+      logDebug("releasing assigned containers " + id)
+      amClient.releaseAssignedContainer(id)
+      amClient.allocate(0.1f)
+    })
   }
 
 }
