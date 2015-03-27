@@ -80,9 +80,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
-      val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
+      val reviveIntervalMs = Utils.timeStringToMs(
+        conf.get("spark.scheduler.revive.interval", "1000ms"))
       import context.dispatcher
-      context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
+      context.system.scheduler.schedule(0.millis, reviveIntervalMs.millis, self, ReviveOffers)
     }
 
     def receiveWithLogging: PartialFunction[Any, Unit] = {

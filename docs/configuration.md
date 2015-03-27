@@ -1053,10 +1053,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.revive.interval</code></td>
-  <td>1000</td>
+  <td>1000ms</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks
-    (in milliseconds).
+    The interval length for the scheduler to revive the worker resource offers to run tasks.
   </td>
 </tr>
 <tr>
