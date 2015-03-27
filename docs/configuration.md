@@ -886,9 +886,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.timeout</code></td>
-  <td>100</td>
+  <td>100s</td>
   <td>
-    Communication timeout between Spark nodes, in seconds.
+    Communication timeout between Spark nodes.
   </td>
 </tr>
 <tr>
