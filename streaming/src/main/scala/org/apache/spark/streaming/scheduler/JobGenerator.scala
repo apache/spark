@@ -24,7 +24,7 @@ import akka.actor.{ActorRef, Props, Actor}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.{Utils, Clock, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -104,10 +104,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
-      val stopTimeout = conf.getLong(
-        "spark.streaming.gracefulStopTimeout",
-        10 * ssc.graph.batchDuration.milliseconds
-      )
+      val stopTimeout = Utils.timeStringToMs(conf.get(
+        "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms"))
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
