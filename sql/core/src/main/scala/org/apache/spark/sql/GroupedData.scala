@@ -69,10 +69,10 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
-      case "avg" | "average" | "mean" => Average
+      case "avg" | "average" | "mean" => Average(_, false)
       case "max" => Max
       case "min" => Min
-      case "sum" => Sum
+      case "sum" => Sum(_, false)
       case "count" | "size" =>
         // Turn count(*) into count(1)
         (inputExpr: Expression) => inputExpr match {
@@ -177,7 +177,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames:_*)(Average(_, false))
   }
  
   /**
@@ -197,7 +197,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames:_*)(Average(_, false))
   }
 
   /**
@@ -217,6 +217,6 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Sum)
+    aggregateNumericColumns(colNames:_*)(Sum(_, false))
   }    
 }

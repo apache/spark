@@ -112,55 +112,27 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object HashAggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
-
-      // Cases where all aggregates can be codegened.
       case PartialAggregation(
              namedGroupingAttributes,
              rewrittenAggregateExpressions,
              groupingExpressions,
-             partialComputation,
-             child)
-             if canBeCodeGened(
-                  allAggregates(partialComputation) ++
-                  allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
-          execution.GeneratedAggregate(
-            partial = false,
+             aggregateExpressions,
+             child) =>
+          execution.AggregatePostShuffle(
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
-            execution.GeneratedAggregate(
-              partial = true,
+            execution.AggregatePreShuffle(
               groupingExpressions,
-              partialComputation,
+              aggregateExpressions,
+              namedGroupingAttributes,
               planLater(child))) :: Nil
-
-      // Cases where some aggregate can not be codegened
-      case PartialAggregation(
-             namedGroupingAttributes,
-             rewrittenAggregateExpressions,
-             groupingExpressions,
-             partialComputation,
-             child) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
-
       case _ => Nil
     }
 
-    def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
-      case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
-      // The generated set implementation is pretty limited ATM.
-      case CollectHashSet(exprs) if exprs.size == 1  &&
-           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
-      case _ => true
-    }
+    def containsDistinct(aggregateExpressions: Seq[NamedExpression]) =
+      aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression if ae.distinct => true
+      }).contains(true)
 
     def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression] =
       exprs.flatMap(_.collect { case a: AggregateExpression => a })
@@ -281,7 +253,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Expand(projections, output, child) =>
         execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+        execution.DistinctAggregate(group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>

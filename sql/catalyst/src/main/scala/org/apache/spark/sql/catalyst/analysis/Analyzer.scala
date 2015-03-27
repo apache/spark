@@ -200,7 +200,7 @@ class Analyzer(catalog: Catalog,
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case Alias(f @ UnresolvedFunction(_, args), name) if containsStar(args) =>
+            case Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
@@ -385,8 +385,8 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
-            registry.lookupFunction(name, children)
+          case u @ UnresolvedFunction(name, children, distinct) if u.childrenResolved =>
+            registry.lookupFunction(name, children, distinct)
         }
     }
   }

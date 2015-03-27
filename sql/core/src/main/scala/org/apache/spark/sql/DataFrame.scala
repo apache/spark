@@ -783,7 +783,7 @@ class DataFrame private[sql](
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
-      "mean" -> Average,
+      "mean" -> (Average(_, false)),
       "stddev" -> stddevExpr,
       "min" -> Min,
       "max" -> Max)

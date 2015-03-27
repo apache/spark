@@ -270,10 +270,10 @@ trait HiveTypeCoercion {
       case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
-      case Sum(e) if e.dataType == StringType =>
-        Sum(Cast(e, DoubleType))
-      case Average(e) if e.dataType == StringType =>
-        Average(Cast(e, DoubleType))
+      case Sum(e, distinct) if e.dataType == StringType =>
+        Sum(Cast(e, DoubleType), distinct)
+      case Average(e, distinct) if e.dataType == StringType =>
+        Average(Cast(e, DoubleType), distinct)
       case Sqrt(e) if e.dataType == StringType =>
         Sqrt(Cast(e, DoubleType))
     }
@@ -484,25 +484,21 @@ trait HiveTypeCoercion {
           children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
-      case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
-      case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
-      case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
+      case s @ Sum(e @ DecimalType(), _) => s // Decimal is already the biggest.
+      case Sum(e @ IntegralType(), distinct) if e.dataType != LongType =>
+        Sum(Cast(e, LongType), distinct)
+      case Sum(e @ FractionalType(), distinct) if e.dataType != DoubleType =>
+        Sum(Cast(e, DoubleType), distinct)
 
-      case s @ SumDistinct(e @ DecimalType()) => s // Decimal is already the biggest.
-      case SumDistinct(e @ IntegralType()) if e.dataType != LongType =>
-        SumDistinct(Cast(e, LongType))
-      case SumDistinct(e @ FractionalType()) if e.dataType != DoubleType =>
-        SumDistinct(Cast(e, DoubleType))
-
-      case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
-      case Average(e @ IntegralType()) if e.dataType != LongType =>
-        Average(Cast(e, LongType))
-      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
-        Average(Cast(e, DoubleType))
+      case s @ Average(e @ DecimalType(), _) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType(), distinct) if e.dataType != LongType =>
+        Average(Cast(e, LongType), distinct)
+      case Average(e @ FractionalType(), distinct) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType), distinct)
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+      case Sum(e @ TimestampType(), distinct) => Sum(Cast(e, DoubleType), distinct)
+      case Average(e @ TimestampType(), distinct) => Average(Cast(e, DoubleType), distinct)
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
