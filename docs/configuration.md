@@ -120,7 +120,7 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-memory</code> command line option
@@ -188,7 +188,7 @@ Apart from these, the following properties are also available, and may be useful
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+    Instead, please set this through the <code>--driver-class-path</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -197,10 +197,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -209,10 +209,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
-    
+
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+    Instead, please set this through the <code>--driver-library-path</code> command line option or in
     your default properties file.</td>
   </td>
 </tr>
@@ -223,7 +223,7 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
     classes in the the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
-    
+
     This is used in cluster mode only.
   </td>
 </tr>
@@ -231,8 +231,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily for 
-    backwards-compatibility with older versions of Spark. Users typically should not need to set 
+    Extra classpath entries to append to the classpath of executors. This exists primarily for
+    backwards-compatibility with older versions of Spark. Users typically should not need to set
     this option.
   </td>
 </tr>
@@ -240,9 +240,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings or other logging. 
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark 
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the 
+    A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
+    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
+    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
     spark-submit script. Heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
@@ -732,17 +732,17 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
-    <td>10000</td>
-    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    <td>10s</td>
+    <td>Interval between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
     tasks.</td>
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
-  <td>60</td>
+  <td>60s</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver, in seconds.
+    the driver.
   </td>
 </tr>
 <tr>
@@ -855,14 +855,14 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable the transport failure detector that comes built in to 
-    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger 
-    interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more 
-    informative for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` 
-    if you need to. A likely positive use case for using failure detector would be: a sensistive 
-    failure detector can help evict rogue executors quickly. However this is usually not the case 
-    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling 
-    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network 
+    This is set to a larger value to disable the transport failure detector that comes built in to
+    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger
+    interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more
+    informative for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses`
+    if you need to. A likely positive use case for using failure detector would be: a sensistive
+    failure detector can help evict rogue executors quickly. However this is usually not the case
+    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling
+    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network
     with those.
   </td>
 </tr>
@@ -871,7 +871,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>6000</td>
   <td>
      This is set to a larger value to disable the transport failure detector that comes built in to Akka.
-     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart 
+     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart
      beat pause in seconds for Akka. This can be used to control sensitivity to GC pauses. Tune
      this along with `spark.akka.heartbeat.interval` if you need to.
   </td>
@@ -938,9 +938,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.network.timeout</code></td>
-  <td>120</td>
+  <td>120s</td>
   <td>
-    Default timeout for all network interactions, in seconds. This config will be used in
+    Default timeout for all network interactions. This config will be used in
     place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
@@ -1215,9 +1215,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td>60</td>
+  <td>60s</td>
   <td>
-    Number of seconds for the connection to wait for ack to occur before timing
+    How long for the connection to wait for ack to occur before timing
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
   </td>

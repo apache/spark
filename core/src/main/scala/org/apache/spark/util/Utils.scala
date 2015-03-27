@@ -611,9 +611,9 @@ private[spark] object Utils extends Logging {
         }
         Utils.setupSecureURLConnection(uc, securityMgr)
 
-        val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
-        uc.setConnectTimeout(timeout)
-        uc.setReadTimeout(timeout)
+        val timeoutMs = Utils.timeStringToMs(conf.get("spark.files.fetchTimeout", "60s")).toInt
+        uc.setConnectTimeout(timeoutMs)
+        uc.setReadTimeout(timeoutMs)
         uc.connect()
         val in = uc.getInputStream()
         downloadFile(url, in, targetFile, fileOverwrite)

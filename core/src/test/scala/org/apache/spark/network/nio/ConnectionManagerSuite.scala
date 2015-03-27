@@ -261,7 +261,7 @@ class ConnectionManagerSuite extends FunSuite {
     val clientConf = new SparkConf
     clientConf.set("spark.authenticate", "false")
     val ackTimeout = 30
-    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}")
+    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}s")
 
     val clientSecurityManager = new SecurityManager(clientConf)
     val manager = new ConnectionManager(0, clientConf, clientSecurityManager)
