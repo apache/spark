@@ -282,6 +282,10 @@ def parse_args():
     parser.add_option(
         "--vpc-id", default=None,
         help="VPC to launch instances in")
+    parser.add_option(
+        "--private-ips", action="store_true", default=False,
+        help="Use private IP's for instances rather than public if VPC/subnet " +
+             "requires that.")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -707,7 +711,8 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
-    master = master_nodes[0].public_dns_name
+    master = master_nodes[0].public_dns_name if not opts.private_ips else \
+             master_nodes[0].private_ip_address
     if deploy_ssh_key:
         print "Generating cluster's SSH key on master..."
         key_setup = """
@@ -719,8 +724,10 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         dot_ssh_tar = ssh_read(master, opts, ['tar', 'c', '.ssh'])
         print "Transferring cluster's SSH key to slaves..."
         for slave in slave_nodes:
-            print slave.public_dns_name
-            ssh_write(slave.public_dns_name, opts, ['tar', 'x'], dot_ssh_tar)
+            slave_address = slave.public_dns_name if not opts.private_ips else \
+                      slave.private_ip_address
+            print slave_address
+            ssh_write(slave_address, opts, ['tar', 'x'], dot_ssh_tar)
 
     modules = ['spark', 'ephemeral-hdfs', 'persistent-hdfs',
                'mapreduce', 'spark-standalone', 'tachyon']
@@ -809,7 +816,8 @@ def is_cluster_ssh_available(cluster_instances, opts):
     Check if SSH is available on all the instances in a cluster.
     """
     for i in cluster_instances:
-        if not is_ssh_available(host=i.public_dns_name, opts=opts):
+        dns_name = i.public_dns_name if not opts.private_ips else i.private_ip_address
+        if not is_ssh_available(host=dns_name, opts=opts):
             return False
     else:
         return True
@@ -923,7 +931,8 @@ def get_num_disks(instance_type):
 #
 # root_dir should be an absolute path to the directory with the files we want to deploy.
 def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
-    active_master = master_nodes[0].public_dns_name
+    active_master = master_nodes[0].public_dns_name if not opts.private_ips else \
+                    master_nodes[0].private_ip_address
 
     num_disks = get_num_disks(opts.instance_type)
     hdfs_data_dirs = "/mnt/ephemeral-hdfs/data"
@@ -948,10 +957,14 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         print "Deploying Spark via git hash; Tachyon won't be set up"
         modules = filter(lambda x: x != "tachyon", modules)
 
+    master_addresses = [i.public_dns_name if not opts.private_ips else \
+                        i.private_ip_address for i in master_nodes]
+    slave_addresses = [i.public_dns_name if not opts.private_ips else \
+                       i.private_ip_address for i in slave_nodes]
     template_vars = {
-        "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
+        "master_list": '\n'.join(master_addresses),
         "active_master": active_master,
-        "slave_list": '\n'.join([i.public_dns_name for i in slave_nodes]),
+        "slave_list": '\n'.join(slave_addresses),
         "cluster_url": cluster_url,
         "hdfs_data_dirs": hdfs_data_dirs,
         "mapred_local_dirs": mapred_local_dirs,
@@ -1011,7 +1024,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 #
 # root_dir should be an absolute path.
 def deploy_user_files(root_dir, opts, master_nodes):
-    active_master = master_nodes[0].public_dns_name
+    active_master = master_nodes[0].public_dns_name if not opts.private_ips else \
+                    master_nodes[0].private_ip_address
     command = [
         'rsync', '-rv',
         '-e', stringify_command(ssh_command(opts)),
@@ -1230,7 +1244,8 @@ def real_main():
         if any(master_nodes + slave_nodes):
             print "The following instances will be terminated:"
             for inst in master_nodes + slave_nodes:
-                print "> %s" % inst.public_dns_name
+                print "> %s" % inst.public_dns_name if not opts.private_ips else \
+                    inst.private_ip_address
             print "ALL DATA ON ALL NODES WILL BE LOST!!"
 
         msg = "Are you sure you want to destroy the cluster {c}? (y/N) ".format(c=cluster_name)
@@ -1294,13 +1309,18 @@ def real_main():
 
     elif action == "login":
         (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
-        master = master_nodes[0].public_dns_name
-        print "Logging into master " + master + "..."
-        proxy_opt = []
-        if opts.proxy_port is not None:
-            proxy_opt = ['-D', opts.proxy_port]
-        subprocess.check_call(
-            ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
+        if not master_nodes[0].public_dns_name and not opts.private_ips:
+            print "Master has no public DNS name.  Maybe you meant to specify " \
+                "--private-ips?"
+        else:
+            master = master_nodes[0].public_dns_name if not opts.private_ips else \
+                     master_nodes[0].private_ip_address
+            print "Logging into master " + master + "..."
+            proxy_opt = []
+            if opts.proxy_port is not None:
+                proxy_opt = ['-D', opts.proxy_port]
+            subprocess.check_call(
+                ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
 
     elif action == "reboot-slaves":
         response = raw_input(
@@ -1318,7 +1338,12 @@ def real_main():
 
     elif action == "get-master":
         (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
-        print master_nodes[0].public_dns_name
+        if not master_nodes[0].public_dns_name and not opts.private_ips:
+            print "Master has no public DNS name.  Maybe you meant to specify " \
+                "--private-ips?"
+        else:
+            print master_nodes[0].public_dns_name if not opts.private_ips else \
+                master_nodes[0].private_ip_address
 
     elif action == "stop":
         response = raw_input(
