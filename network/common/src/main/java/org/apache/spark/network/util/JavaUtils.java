@@ -35,6 +35,34 @@ import org.slf4j.LoggerFactory;
 public class JavaUtils {
   private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
 
+  /** Deserialize a byte array using Java serialization. */
+  public static <T> T deserialize(byte[] bytes) {
+    try {
+      ObjectInputStream is = new ObjectInputStream(new ByteArrayInputStream(bytes));
+      Object out = is.readObject();
+      is.close();
+      return (T) out;
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Could not deserialize object", e);
+    } catch (IOException e) {
+      throw new RuntimeException("Could not deserialize object", e);
+    }
+  }
+
+  /** Serialize an object using Java serialization. */
+  // TODO: Make this configurable, do not use Java serialization!
+  public static byte[] serialize(Object object) {
+    try {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      ObjectOutputStream os = new ObjectOutputStream(baos);
+      os.writeObject(object);
+      os.close();
+      return baos.toByteArray();
+    } catch (IOException e) {
+      throw new RuntimeException("Could not serialize object", e);
+    }
+  }
+
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
     try {
