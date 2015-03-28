@@ -149,6 +149,8 @@ class DataFrame private[sql](
       queryExecution.analyzed
   }
 
+  @transient val originalPlan: LogicalPlan = logicalPlan.originalPlan
+
   /**
    * An implicit conversion function internal to this class for us to avoid doing
    * "new DataFrame(...)" everywhere.
