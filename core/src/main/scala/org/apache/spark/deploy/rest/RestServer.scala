@@ -46,24 +46,19 @@ import org.apache.spark.util.Utils
  * fails, the response will consist of an empty body with a response code that indicates internal
  * server error.
  *
- * @param host the address this server should bind to
- * @param requestedPort the port this server will attempt to bind to
  */
-private[spark] abstract class RestServer(
-    host: String,
-    requestedPort: Int,
-    masterConf: SparkConf,
-    submitRequestServlet: SubmitRequestServlet,
-    killRequestServlet: KillRequestServlet,
-    statusRequestServlet: StatusRequestServlet)
-  extends Logging {
-
-  import RestServer._
+private[spark] abstract class RestServer extends Logging {
+  val host: String
+  val requestedPort: Int
+  val masterConf: SparkConf
+  val submitRequestServlet: SubmitRequestServlet
+  val killRequestServlet: KillRequestServlet
+  val statusRequestServlet: StatusRequestServlet
 
   private var _server: Option[Server] = None
 
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
-  protected val baseContext = s"/$PROTOCOL_VERSION/submissions"
+  protected val baseContext = s"/$RestServer.PROTOCOL_VERSION/submissions"
   protected val contextToServlet = Map[String, RestServlet](
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
@@ -110,7 +105,7 @@ private[rest] object RestServer {
 }
 
 /**
- * An abstract servlet for handling requests passed to the [[StandaloneRestServer]].
+ * An abstract servlet for handling requests passed to the [[RestServer]].
  */
 private[rest] abstract class RestServlet extends HttpServlet with Logging {
 

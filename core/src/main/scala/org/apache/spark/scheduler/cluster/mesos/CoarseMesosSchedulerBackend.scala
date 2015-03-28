@@ -49,7 +49,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     master: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with MScheduler
-  with MesosSchedulerHelper {
+  with MesosSchedulerUtils {
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 

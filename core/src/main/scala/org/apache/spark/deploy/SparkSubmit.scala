@@ -22,8 +22,6 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
@@ -36,10 +34,11 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -114,7 +113,9 @@ object SparkSubmit {
     }
   }
 
-  /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
+  /**
+   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
+   */
   private def kill(args: SparkSubmitArguments): Unit = {
     new RestClient()
       .killSubmission(args.master, args.submissionToKill)
@@ -122,7 +123,7 @@ object SparkSubmit {
 
   /**
    * Request the status of an existing submission using the REST protocol.
-   * Standalone cluster mode only.
+   * Standalone and Mesos cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
     new RestClient()
@@ -297,7 +298,7 @@ object SparkSubmit {
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
-          "on Mesos clusters.")
+          "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -381,14 +382,7 @@ object SparkSubmit {
 
       // Standalone cluster only
       // Do not set CL arguments here because there are multiple possibilities for the main class
-      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.driver.cores"),
-      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.driver.supervise"),
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
@@ -417,7 +411,14 @@ object SparkSubmit {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+        sysProp = "spark.files"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.cores"),
+      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.supervise")
     )
 
     // In client mode, launch the application main class directly
@@ -501,7 +502,7 @@ object SparkSubmit {
     }
 
     if (isMesosCluster) {
-      // Mesos cluster dispatcher only supports the REST interface
+      assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
       childMainClass = "org.apache.spark.deploy.rest.RestClient"
       childArgs += (args.primaryResource, args.mainClass)
       if (args.childArgs != null) {

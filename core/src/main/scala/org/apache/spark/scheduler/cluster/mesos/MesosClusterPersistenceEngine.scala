@@ -20,57 +20,79 @@ package org.apache.spark.scheduler.cluster.mesos
 import scala.collection.JavaConversions._
 
 import org.apache.curator.framework.CuratorFramework
-import org.apache.spark.deploy.SparkCuratorUtil
-
-
 import org.apache.zookeeper.CreateMode
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.Utils
 import org.apache.zookeeper.KeeperException.NoNodeException
 
-abstract class ClusterPersistenceEngineFactory(conf: SparkConf) {
-  def createEngine(path: String): ClusterPersistenceEngine
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.spark.util.Utils
+
+/**
+ * Persistence engine factory that is responsible for creating new persistence engines
+ * to store Mesos cluster mode state.
+ */
+private[spark] abstract class MesosClusterPersistenceEngineFactory(conf: SparkConf) {
+  def createEngine(path: String): MesosClusterPersistenceEngine
 }
 
-private[spark] class ZookeeperClusterPersistenceEngineFactory(conf: SparkConf)
-  extends ClusterPersistenceEngineFactory(conf) {
-
-  lazy val zk = SparkCuratorUtil.newClient(conf)
-
-  def createEngine(path: String): ClusterPersistenceEngine = {
-    new ZookeeperClusterPersistenceEngine(path, zk, conf)
-  }
-}
-
-private[spark] class BlackHolePersistenceEngineFactory
-  extends ClusterPersistenceEngineFactory(null) {
-  def createEngine(path: String): ClusterPersistenceEngine = {
-    new BlackHoleClusterPersistenceEngine
-  }
-}
-
-trait ClusterPersistenceEngine {
-  def persist(name: String, obj: Object)
-  def expunge(name: String)
+/**
+ * Mesos cluster persistence engine is responsible for persisting Mesos cluster mode
+ * specific state, so that on failover all the state can be recovered and the scheduler
+ * can resume managing the drivers.
+ */
+private[spark] trait MesosClusterPersistenceEngine {
+  def persist(name: String, obj: Object): Unit
+  def expunge(name: String): Unit
   def fetch[T](name: String): Option[T]
   def fetchAll[T](): Iterable[T]
 }
 
-private[spark] class BlackHoleClusterPersistenceEngine extends ClusterPersistenceEngine {
+/**
+ * Zookeeper backed persistence engine factory.
+ * All Zk engines created from this factory shares the same Zookeeper client, so
+ * all of them reuses the same connection pool.
+ */
+private[spark] class ZookeeperMesosClusterPersistenceEngineFactory(conf: SparkConf)
+  extends MesosClusterPersistenceEngineFactory(conf) {
+
+  lazy val zk = SparkCuratorUtil.newClient(conf)
+
+  def createEngine(path: String): MesosClusterPersistenceEngine = {
+    new ZookeeperMesosClusterPersistenceEngine(path, zk, conf)
+  }
+}
+
+/**
+ * Black hole persistence engine factory that creates black hole
+ * persistence engines, which stores nothing.
+ */
+private[spark] class BlackHoleMesosClusterPersistenceEngineFactory
+  extends MesosClusterPersistenceEngineFactory(null) {
+  def createEngine(path: String): MesosClusterPersistenceEngine = {
+    new BlackHoleMesosClusterPersistenceEngine
+  }
+}
+
+/**
+ * Black hole persistence engine that stores nothing.
+ */
+private[spark] class BlackHoleMesosClusterPersistenceEngine extends MesosClusterPersistenceEngine {
   override def persist(name: String, obj: Object): Unit = {}
-
   override def fetch[T](name: String): Option[T] = None
-
   override def expunge(name: String): Unit = {}
-
   override def fetchAll[T](): Iterable[T] = Iterable.empty[T]
 }
 
-private[spark] class ZookeeperClusterPersistenceEngine(
+/**
+ * Zookeeper based Mesos cluster persistence engine, that stores cluster mode state
+ * into Zookeeper. Each engine object is operating under one folder in Zookeeper, but
+ * reuses a shared Zookeeper client.
+ */
+private[spark] class ZookeeperMesosClusterPersistenceEngine(
     baseDir: String,
     zk: CuratorFramework,
     conf: SparkConf)
-  extends ClusterPersistenceEngine with Logging {
+  extends MesosClusterPersistenceEngine with Logging {
   private val WORKING_DIR =
     conf.get("spark.deploy.zookeeper.dir", "/spark_mesos_dispatcher") + "/" + baseDir
 
@@ -80,11 +102,11 @@ private[spark] class ZookeeperClusterPersistenceEngine(
     WORKING_DIR + "/" + name
   }
 
-  override def expunge(name: String) {
+  override def expunge(name: String): Unit = {
     zk.delete().forPath(path(name))
   }
 
-  override def persist(name: String, obj: Object) {
+  override def persist(name: String, obj: Object): Unit = {
     val serialized = Utils.serialize(obj)
     val zkPath = path(name)
     zk.create().withMode(CreateMode.PERSISTENT).forPath(zkPath, serialized)

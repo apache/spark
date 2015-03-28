@@ -50,18 +50,17 @@ import org.apache.spark.deploy.ClientArguments._
  * @param masterConf the conf used by the Master
  */
 private[deploy] class StandaloneRestServer(
-    host: String,
-    requestedPort: Int,
+    val host: String,
+    val requestedPort: Int,
     masterActor: ActorRef,
     masterUrl: String,
-    masterConf: SparkConf)
-  extends RestServer(
-    host,
-    requestedPort,
-    masterConf,
-    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf),
-    new StandaloneKillRequestServlet(masterActor, masterConf),
-    new StandaloneStatusRequestServlet(masterActor, masterConf)) {}
+    val masterConf: SparkConf)
+  extends RestServer {
+
+  val submitRequestServlet = new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
+  val killRequestServlet = new StandaloneKillRequestServlet(masterActor, masterConf)
+  val statusRequestServlet = new StandaloneStatusRequestServlet(masterActor, masterConf)
+}
 
 /**
  * A servlet for handling kill requests passed to the [[StandaloneRestServer]].

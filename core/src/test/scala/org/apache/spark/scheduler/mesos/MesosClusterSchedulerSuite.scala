@@ -17,13 +17,13 @@
 
 package org.apache.spark.scheduler.mesos
 
-import org.scalatest.FunSuite
-import org.apache.spark.{SparkConf, LocalSparkContext}
-import org.scalatest.mock.MockitoSugar
-import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.deploy.Command
-import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.scheduler.cluster.mesos._
+import org.apache.spark.{LocalSparkContext, SparkConf}
+import org.scalatest.FunSuite
+import org.scalatest.mock.MockitoSugar
+
 import scala.collection.mutable
 
 class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with MockitoSugar {
@@ -36,38 +36,41 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     val conf = new SparkConf()
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
-    val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
+    val scheduler = new MesosClusterSchedulerDriver(
+      new BlackHoleMesosClusterPersistenceEngineFactory, conf)
     scheduler.recoverState
     val response =
       scheduler.submitDriver(
-        new MesosDriverDescription(new DriverDescription("jar", 1000, 1, true, createCommand),
-        new mutable.HashMap[String, String]()))
+        new MesosDriverDescription("jar", 1000, 1, true,
+          createCommand, new mutable.HashMap[String, String]()))
     assert(response.success)
 
     val response2 =
       scheduler.submitDriver(new MesosDriverDescription(
-        new DriverDescription("jar", 1000, 1, true, createCommand),
+        "jar", 1000, 1, true, createCommand,
         new mutable.HashMap[String, String]()))
     assert(response2.success)
 
     val state = scheduler.getState()
-    assert(state.queuedDrivers.exists(d => d.submissionId == response.id))
-    assert(state.queuedDrivers.exists(d => d.submissionId == response2.id))
+    assert(state.queuedDrivers.exists(d => d.submissionId == response.submissionId))
+    assert(state.queuedDrivers.exists(d => d.submissionId == response2.submissionId))
   }
 
   test("can kill queued drivers") {
     val conf = new SparkConf()
     conf.setMaster("mesos://localhost:5050")
     conf.setAppName("spark mesos")
-    val scheduler = new MesosClusterScheduler(new BlackHolePersistenceEngineFactory, conf)
+    val scheduler = new MesosClusterSchedulerDriver(
+      new BlackHoleMesosClusterPersistenceEngineFactory, conf)
     scheduler.recoverState
     val response =
-      scheduler.submitDriver(new MesosDriverDescription(
-        new DriverDescription("jar", 1000, 1, true, createCommand),
-        new mutable.HashMap[String, String]()))
+      scheduler.submitDriver(
+        new MesosDriverDescription(
+          "jar", 1000, 1, true, createCommand,
+          new mutable.HashMap[String, String]()))
     assert(response.success)
 
-    val killResponse = scheduler.killDriver(response.id)
+    val killResponse = scheduler.killDriver(response.submissionId)
     assert(killResponse.success)
 
     val state = scheduler.getState()

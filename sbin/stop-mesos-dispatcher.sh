@@ -16,8 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-# Starts the master on the machine this script is executed on.
+# Stop the Mesos Cluster dispatcher on the machine this script is executed on.
 
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`

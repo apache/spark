@@ -17,10 +17,34 @@
 
 package org.apache.spark.deploy.mesos
 
-import org.apache.spark.deploy.DriverDescription
+import java.util.Date
+
 import scala.collection.mutable
 
+import org.apache.spark.deploy.Command
+
+/**
+ * Describes a Spark driver that is submitted from the
+ * [[org.apache.spark.deploy.rest.mesos.MesosRestServer]], to be launched by
+ * [[org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler]].
+ * @param jarUrl URL to the application jar
+ * @param mem Amount of memory for the driver
+ * @param cores Amount of cores for the driver
+ * @param supervise Supervise the driver for long running app
+ * @param command The command to launch the driver.
+ * @param schedulerProperties Extra properties to pass the Mesos scheduler
+ */
 private[spark] class MesosDriverDescription(
-    val desc: DriverDescription,
-    val schedulerProperties: mutable.HashMap[String, String]) extends Serializable {
+    val jarUrl: String,
+    val mem: Int,
+    val cores: Int,
+    val supervise: Boolean,
+    val command: Command,
+    val schedulerProperties: mutable.HashMap[String, String])
+  extends Serializable {
+
+  var submissionId: Option[String] = None
+  var submissionDate: Option[Date] = None
+
+  override def toString: String = s"MesosDriverDescription (${command.mainClass})"
 }

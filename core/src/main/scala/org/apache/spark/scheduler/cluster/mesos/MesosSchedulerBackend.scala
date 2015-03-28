@@ -47,7 +47,7 @@ private[spark] class MesosSchedulerBackend(
     master: String)
   extends SchedulerBackend
   with MScheduler
-  with MesosSchedulerHelper {
+  with MesosSchedulerUtils {
 
   // Which slave IDs we have executors on
   val slaveIdsWithExecutors = new HashSet[String]

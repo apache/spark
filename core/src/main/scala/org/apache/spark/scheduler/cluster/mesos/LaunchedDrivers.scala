@@ -22,10 +22,10 @@ import org.apache.mesos.Protos.SlaveID
 
 /**
  * Tracks all the launched or running drivers in the Mesos cluster scheduler.
- * @param state Persistence engine to store state.
+ * @param state Persistence engine to store tasks state.
  */
-private[mesos] class LaunchedDrivers(state: ClusterPersistenceEngine) {
-  private val drivers = new mutable.HashMap[String, ClusterTaskState]
+private[mesos] class LaunchedDrivers(state: MesosClusterPersistenceEngine) {
+  private val drivers = new mutable.HashMap[String, MesosClusterTaskState]
 
   // Holds the list of tasks that needs to reconciliation from the master.
   // All states that are loaded after failover are added here.
@@ -33,23 +33,22 @@ private[mesos] class LaunchedDrivers(state: ClusterPersistenceEngine) {
 
   initialize()
 
-  def initialize() {
-    state.fetchAll[ClusterTaskState]().foreach {
-      case state =>
-        drivers(state.taskId.getValue) = state
-        pendingRecover(state.taskId.getValue) = state.slaveId
+  def initialize(): Unit = {
+    state.fetchAll[MesosClusterTaskState]().foreach { case state =>
+      drivers(state.taskId.getValue) = state
+      pendingRecover(state.taskId.getValue) = state.slaveId
     }
   }
 
-  def get(submissionId: String) = drivers(submissionId)
+  def get(submissionId: String): MesosClusterTaskState = drivers(submissionId)
 
-  def states: Iterable[ClusterTaskState] = {
+  def states: Iterable[MesosClusterTaskState] = {
     drivers.values.map(_.copy()).toList
   }
 
   def contains(submissionId: String): Boolean = drivers.contains(submissionId)
 
-  def remove(submissionId: String): Option[ClusterTaskState] = {
+  def remove(submissionId: String): Option[MesosClusterTaskState] = {
     if (pendingRecover.contains(submissionId)) {
       pendingRecover.remove(submissionId)
     }
@@ -59,7 +58,7 @@ private[mesos] class LaunchedDrivers(state: ClusterPersistenceEngine) {
     removedState
   }
 
-  def set(submissionId: String, newState: ClusterTaskState) {
+  def set(submissionId: String, newState: MesosClusterTaskState): Unit = {
     if (pendingRecover.contains(newState.taskId.getValue)) {
       pendingRecover.remove(newState.taskId.getValue)
     }
@@ -67,6 +66,6 @@ private[mesos] class LaunchedDrivers(state: ClusterPersistenceEngine) {
     state.persist(submissionId, newState)
   }
 
-  def isEmpty = drivers.isEmpty
+  def isEmpty: Boolean = drivers.isEmpty
 
 }

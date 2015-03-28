@@ -16,8 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 # Starts the Mesos Cluster Dispatcher on the machine this script is executed on.
+# The Mesos Cluster Dispatcher is responsbile for launching the Mesos framework and
+# Rest server to handle driver requests for Mesos cluster mode.
+# Only one cluster dispatcher is needed per Mesos cluster.
 
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
@@ -27,7 +29,7 @@ sbin="`cd "$sbin"; pwd`"
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ "$SPARK_MESOS_DISPATCHER_PORT" = "" ]; then
-  SPARK_MESOS_DISPATCHER_PORT=8077
+  SPARK_MESOS_DISPATCHER_PORT=7077
 fi
 
 if [ "$SPARK_MESOS_DISPATCHER_HOST" = "" ]; then

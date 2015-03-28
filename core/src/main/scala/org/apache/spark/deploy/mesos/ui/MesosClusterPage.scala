@@ -17,29 +17,30 @@
 
 package org.apache.spark.deploy.mesos.ui
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
 import javax.servlet.http.HttpServletRequest
+
 import scala.xml.Node
-import org.apache.spark.scheduler.cluster.mesos.{RetryState, ClusterTaskState, DriverSubmission}
+
 import org.apache.mesos.Protos.TaskStatus
 
-class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
+import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.scheduler.cluster.mesos.{RetryState, MesosClusterTaskState}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
+private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = parent.scheduler.getState()
-
     val queuedHeaders = Seq("DriverID", "Submit Date", "Description")
     val driverHeaders = queuedHeaders ++
       Seq("Start Date", "Mesos Slave ID", "State")
     val retryHeaders = Seq("DriverID", "Submit Date", "Description") ++
       Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
-
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
     val launchedTable = UIUtils.listingTable(driverHeaders, driverRow, state.launchedDrivers)
     val finishedTable = UIUtils.listingTable(driverHeaders, driverRow, state.finishedDrivers)
     val retryTable = UIUtils.listingTable(retryHeaders, retryRow, state.retryList)
     val content =
-      <p>Mesos Framework ID: {state.appId}</p>
+      <p>Mesos Framework ID: {state.frameworkId}</p>
       <div class="row-fluid">
         <div class="span12">
           <h4>Queued Drivers:</h4>
@@ -55,64 +56,57 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
   }
 
-  def queuedRow(submission: DriverSubmission): Seq[Node] = {
+  private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {
     <tr>
       <td>{submission.submissionId}</td>
-      <td>{submission.submitDate}</td>
-      <td>{submission.desc.desc.command.mainClass}</td>
+      <td>{submission.submissionDate}</td>
+      <td>{submission.command.mainClass}</td>
     </tr>
   }
 
-  def driverRow(state: ClusterTaskState): Seq[Node] = {
+  private def driverRow(state: MesosClusterTaskState): Seq[Node] = {
     <tr>
       <td>{state.submission.submissionId}</td>
-      <td>{state.submission.submitDate}</td>
-      <td>{state.submission.desc.desc.command.mainClass}</td>
+      <td>{state.submission.submissionDate}</td>
+      <td>{state.submission.command.mainClass}</td>
       <td>{state.startDate}</td>
       <td>{state.slaveId.getValue}</td>
       <td>{stateString(state.taskState)}</td>
     </tr>
   }
 
-  def retryRow(state: RetryState): Seq[Node] = {
+  private def retryRow(state: RetryState): Seq[Node] = {
     <tr>
       <td>{state.submission.submissionId}</td>
-      <td>{state.submission.submitDate}</td>
-      <td>{state.submission.desc.desc.command.mainClass}</td>
+      <td>{state.submission.submissionDate}</td>
+      <td>{state.submission.command.mainClass}</td>
       <td>{state.lastFailureStatus}</td>
       <td>{state.nextRetry}</td>
       <td>{state.retries}</td>
     </tr>
   }
 
-  def stateString(status: Option[TaskStatus]): String = {
+  private def stateString(status: Option[TaskStatus]): String = {
     if (status.isEmpty) {
       return ""
     }
-
     val sb = new StringBuilder
     sb.append(s"State: ${status.get.getState}")
-
     if (status.get.hasMessage) {
       sb.append(s", Message: ${status.get.getMessage}")
     }
-
     if (status.get.hasHealthy) {
       sb.append(s", Healthy: ${status.get.getHealthy}")
     }
-
     if (status.get.hasSource) {
       sb.append(s", Source: ${status.get.getSource}")
     }
-
     if (status.get.hasReason) {
       sb.append(s", Reason: ${status.get.getReason}")
     }
-
     if (status.get.hasTimestamp) {
       sb.append(s", Time: ${status.get.getTimestamp}")
     }
-
     sb.toString()
   }
 }

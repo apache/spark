@@ -17,11 +17,10 @@
 
 package org.apache.spark.deploy.mesos.ui
 
-import org.apache.spark.ui.{SparkUI, WebUI}
-import org.apache.spark.SparkConf
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
+import org.apache.spark.ui.{SparkUI, WebUI}
 
 /**
  * UI that displays driver results from the [[org.apache.spark.deploy.mesos.MesosClusterDispatcher]]
@@ -31,7 +30,7 @@ private [spark] class MesosClusterUI(
     port: Int,
     conf: SparkConf,
     dispatcherPublicAddress: String,
-    val scheduler: ClusterScheduler)
+    val scheduler: MesosClusterScheduler)
   extends WebUI(securityManager, port, conf) {
 
   initialize()
@@ -39,7 +38,7 @@ private [spark] class MesosClusterUI(
   def activeWebUiUrl: String = "http://" + dispatcherPublicAddress + ":" + boundPort
 
   override def initialize() {
-    attachPage(new DriverOutputPage(this))
+    attachPage(new MesosClusterPage(this))
     attachHandler(createStaticHandler(MesosClusterUI.STATIC_RESOURCE_DIR, "/static"))
   }
 }

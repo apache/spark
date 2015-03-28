@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import scala.collection.mutable
 
+import org.apache.spark.deploy.mesos.MesosDriverDescription
+
 /**
  * A request queue for launching drivers in Mesos cluster mode.
  * This queue automatically stores the state after each pop/push
@@ -26,14 +28,14 @@ import scala.collection.mutable
  * This queue is also bounded and rejects offers when it's full.
  * @param state Mesos state abstraction to fetch persistent state.
  */
-private[mesos] class DriverQueue(state: ClusterPersistenceEngine, capacity: Int) {
-  var queue: mutable.Queue[DriverSubmission] = new mutable.Queue[DriverSubmission]()
+private[mesos] class DriverQueue(state: MesosClusterPersistenceEngine, capacity: Int) {
+  var queue: mutable.Queue[MesosDriverDescription] = new mutable.Queue[MesosDriverDescription]()
   private var count = 0
 
   initialize()
 
-  def initialize() {
-    state.fetchAll[DriverSubmission]().foreach(d => queue.enqueue(d))
+  def initialize(): Unit = {
+    state.fetchAll[MesosDriverDescription]().foreach(d => queue.enqueue(d))
 
     // This size might be larger than the passed in capacity, but we allow
     // this so we don't lose queued drivers.
@@ -46,42 +48,42 @@ private[mesos] class DriverQueue(state: ClusterPersistenceEngine, capacity: Int)
     queue.exists(s => s.submissionId.equals(submissionId))
   }
 
-  def offer(submission: DriverSubmission): Boolean = {
+  def offer(submission: MesosDriverDescription): Boolean = {
     if (isFull) {
       return false
     }
 
     queue.enqueue(submission)
-    state.persist(submission.submissionId, submission)
+    state.persist(submission.submissionId.get, submission)
     true
   }
 
   def remove(submissionId: String): Boolean = {
     val removed = queue.dequeueFirst(d => d.submissionId.equals(submissionId))
     if (removed.isDefined) {
-      state.expunge(removed.get.submissionId)
+      state.expunge(removed.get.submissionId.get)
     }
 
     removed.isDefined
   }
 
-  def peek(): Option[DriverSubmission] = {
+  def peek(): Option[MesosDriverDescription] = {
     queue.headOption
   }
 
-  def poll(): Option[DriverSubmission] = {
+  def poll(): Option[MesosDriverDescription] = {
     if (queue.isEmpty) {
       None
     } else {
       val item = queue.dequeue()
-      state.expunge(item.submissionId)
+      state.expunge(item.submissionId.get)
       Some(item)
     }
   }
 
   // Returns a copy of the queued drivers.
-  def drivers: Iterable[DriverSubmission] = {
-    val buffer = new Array[DriverSubmission](queue.size)
+  def drivers: Iterable[MesosDriverDescription] = {
+    val buffer = new Array[MesosDriverDescription](queue.size)
     queue.copyToArray(buffer)
     buffer
   }

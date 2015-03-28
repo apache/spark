@@ -15,58 +15,48 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.rest
+package org.apache.spark.deploy.rest.mesos
 
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.deploy.DriverDescription
-import org.apache.spark.deploy.ClientArguments._
-import org.apache.spark.deploy.Command
-import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
 import scala.collection.mutable
+
+import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.rest._
+import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
+import org.apache.spark.util.Utils
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+
 
 /**
  * A server that responds to requests submitted by the [[RestClient]].
- * This is intended to be used in Mesos cluster mode only.
+ * This is intended to be used in Mesos cluster mode only, which forwards all requests to
+ * [[MesosClusterScheduler]].
  *
- * This server responds with different HTTP codes depending on the situation:
- *   200 OK - Request was processed successfully
- *   400 BAD REQUEST - Request was malformed, not successfully validated, or of unexpected type
- *   468 UNKNOWN PROTOCOL VERSION - Request specified a protocol this server does not understand
- *   500 INTERNAL SERVER ERROR - Server throws an exception internally while processing the request
- *
- * The server always includes a JSON representation of the relevant [[SubmitRestProtocolResponse]]
- * in the HTTP body. If an error occurs, however, the server will include an [[ErrorResponse]]
- * instead of the one expected by the client. If the construction of this error response itself
- * fails, the response will consist of an empty body with a response code that indicates internal
- * server error.
- *
- * @param host the address this server should bind to
- * @param requestedPort the port this server will attempt to bind to
- * @param masterConf the conf used by the Master
- * @param scheduler the scheduler that handles driver requests
+ * For more details about the RestServer Spark protocol and status codes please refer to
+ * [[RestServer]] javadocs.
  */
-private [spark] class MesosRestServer(
-    host: String,
-    requestedPort: Int,
-    masterConf: SparkConf,
-    scheduler: ClusterScheduler)
-  extends RestServer(
-    host,
-    requestedPort,
-    masterConf,
-    new MesosSubmitRequestServlet(scheduler, masterConf),
-    new MesosKillRequestServlet(scheduler, masterConf),
-    new MesosStatusRequestServlet(scheduler, masterConf)) {}
+private[spark] class MesosRestServer(
+    val host: String,
+    val requestedPort: Int,
+    val masterConf: SparkConf,
+    scheduler: MesosClusterScheduler)
+  extends RestServer {
+  val submitRequestServlet = new MesosSubmitRequestServlet(scheduler, masterConf)
+  val killRequestServlet = new MesosKillRequestServlet(scheduler, masterConf)
+  val statusRequestServlet = new MesosStatusRequestServlet(scheduler, masterConf)
+}
 
-class MesosSubmitRequestServlet(
-    scheduler: ClusterScheduler,
+private[mesos] class MesosSubmitRequestServlet(
+    scheduler: MesosClusterScheduler,
     conf: SparkConf)
   extends SubmitRequestServlet {
+
+  private val DEFAULT_SUPERVISE = false
+  private val DEFAULT_MEMORY = 512 // mb
+  private val DEFAULT_CORES = 1
 
   /**
    * Build a driver description from the fields specified in the submit request.
@@ -98,26 +88,22 @@ class MesosSubmitRequestServlet(
     // Store Spark submit specific arguments here to pass to the scheduler.
     schedulerProperties("spark.app.name") = sparkProperties.getOrElse("spark.app.name", mainClass)
 
-    sparkProperties.get("spark.executor.memory").foreach {
-      v => schedulerProperties("spark.executor.memory") = v
+    sparkProperties.get("spark.executor.memory").foreach { v =>
+      schedulerProperties("spark.executor.memory") = v
     }
-
-    sparkProperties.get("spark.cores.max").foreach {
-      v => schedulerProperties("spark.cores.max") = v
+    sparkProperties.get("spark.cores.max").foreach { v =>
+      schedulerProperties("spark.cores.max") = v
     }
-
-    sparkProperties.get("spark.executor.uri").foreach {
-      v => schedulerProperties("spark.executor.uri") = v
+    sparkProperties.get("spark.executor.uri").foreach { v =>
+      schedulerProperties("spark.executor.uri") = v
     }
-
-    sparkProperties.get("spark.mesos.executor.home").foreach {
-      v => schedulerProperties("spark.mesos.executor.home") = v
+    sparkProperties.get("spark.mesos.executor.home").foreach { v =>
+      schedulerProperties("spark.mesos.executor.home") = v
     }
 
     // Construct driver description
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
-
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
@@ -129,10 +115,9 @@ class MesosSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
 
-    val desc = new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
-
-    new MesosDriverDescription(desc, schedulerProperties)
+    new MesosDriverDescription(
+      appResource, actualDriverMemory, actualDriverCores,
+      actualSuperviseDriver, command, schedulerProperties)
   }
 
   protected override def handleSubmit(
@@ -142,18 +127,14 @@ class MesosSubmitRequestServlet(
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
         val driverDescription = buildDriverDescription(submitRequest)
-        val response = scheduler.submitDriver(driverDescription)
-        val submitResponse = new CreateSubmissionResponse
-        submitResponse.serverSparkVersion = sparkVersion
-        submitResponse.message = response.message
-        submitResponse.success = response.success
-        submitResponse.submissionId = response.id
+        val s = scheduler.submitDriver(driverDescription)
+        s.serverSparkVersion = sparkVersion
         val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
         if (unknownFields.nonEmpty) {
           // If there are fields that the server does not know about, warn the client
-          submitResponse.unknownFields = unknownFields
+          s.unknownFields = unknownFields
         }
-        submitResponse
+        s
       case unexpected =>
         responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
         handleError(s"Received message of unexpected type ${unexpected.messageType}.")
@@ -161,29 +142,20 @@ class MesosSubmitRequestServlet(
   }
 }
 
-class MesosKillRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
+private[mesos] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends KillRequestServlet {
   protected override def handleKill(submissionId: String): KillSubmissionResponse = {
-    val response = scheduler.killDriver(submissionId)
-    val k = new KillSubmissionResponse
+    val k = scheduler.killDriver(submissionId)
     k.serverSparkVersion = sparkVersion
-    k.message = response.message
-    k.submissionId = submissionId
-    k.success = response.success
     k
   }
 }
 
-class MesosStatusRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
+private[mesos] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val response = scheduler.getStatus(submissionId)
-    val d = new SubmissionStatusResponse
-    d.driverState = response.state
+    val d = scheduler.getStatus(submissionId)
     d.serverSparkVersion = sparkVersion
-    d.submissionId = response.id
-    d.success = response.success
-    d.message = response.status.map { s => s.toString }.getOrElse("")
     d
   }
 }

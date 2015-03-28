@@ -19,10 +19,21 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import org.apache.mesos.Protos.TaskStatus
 import java.util.Date
+import org.apache.spark.deploy.mesos.MesosDriverDescription
+
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * Tracks the retry state of a driver, which includes the next time it should be scheduled
+ * and necessary information to do exponential backoff.
+ * @param submission Driver submission.
+ * @param lastFailureStatus Last Task status when it failed.
+ * @param retries Number of times it has retried.
+ * @param nextRetry Next retry time to be scheduled.
+ * @param waitTime The amount of time driver is scheduled to wait until next retry.
+ */
 private[spark] case class RetryState(
-    submission: DriverSubmission,
+    submission: MesosDriverDescription,
     lastFailureStatus: TaskStatus,
     retries: Int,
     nextRetry: Date,
@@ -35,21 +46,19 @@ private[spark] case class RetryState(
  * and waiting to be scheduled again.
  * @param state Persistence engine to store state.
  */
-private[mesos] class SuperviseRetryList(state: ClusterPersistenceEngine) {
+private[mesos] class SuperviseRetryList(state: MesosClusterPersistenceEngine) {
   val drivers = new ArrayBuffer[RetryState]
 
   initialize()
 
-  def initialize() {
-    state.fetchAll[RetryState]().foreach {
-      s => drivers += s
-    }
+  def initialize(): Unit = {
+    state.fetchAll[RetryState]().foreach(drivers.+=)
   }
 
-  def contains(submissionId: String) =
+  def contains(submissionId: String): Boolean =
     drivers.exists(d => d.submission.submissionId.equals(submissionId))
 
-  def getNextRetry(currentTime: Date): (Option[DriverSubmission], Option[RetryState]) = {
+  def getNextRetry(currentTime: Date): (Option[MesosDriverDescription], Option[RetryState]) = {
     val retry = drivers.find(d => d.nextRetry.before(currentTime))
     if (retry.isDefined) {
       (Some(retry.get.submission), retry)
@@ -63,25 +72,22 @@ private[mesos] class SuperviseRetryList(state: ClusterPersistenceEngine) {
   }
 
   def retries: Iterable[RetryState] = {
-    drivers.collect { case d => d.copy}.toList
+    drivers.map(d => d.copy).toList
   }
 
   def remove(submissionId: String): Boolean = {
-    val index =
-      drivers.indexWhere(
-        s => s.submission.submissionId.equals(submissionId))
+    val index = drivers.indexWhere(s => s.submission.submissionId.equals(submissionId))
 
     if (index != -1) {
       drivers.remove(index)
       state.expunge(submissionId)
-      true
     }
 
     index != -1
   }
 
-  def add(retryState: RetryState) {
+  def add(retryState: RetryState): Unit = {
     drivers += retryState
-    state.persist(retryState.submission.submissionId, retryState)
+    state.persist(retryState.submission.submissionId.get, retryState)
   }
 }

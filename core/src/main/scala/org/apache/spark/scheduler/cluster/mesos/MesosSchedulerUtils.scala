@@ -17,23 +17,39 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.{Scheduler, MesosSchedulerDriver, SchedulerDriver}
-import org.apache.mesos.Protos.{TaskState, Resource, FrameworkInfo}
-import org.apache.spark.Logging
-
-import java.util.concurrent.CountDownLatch
 import java.util.List
+import java.util.concurrent.CountDownLatch
+
+import org.apache.mesos.Protos.{FrameworkInfo, Resource}
+import org.apache.mesos.{MesosSchedulerDriver, Scheduler, SchedulerDriver}
+import org.apache.spark.Logging
 
 import scala.collection.JavaConversions._
 
-private[spark] trait MesosSchedulerHelper extends Logging {
+/**
+ * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
+ * methods and Mesos scheduler will use.
+ */
+private[mesos] trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
   final val registerLatch = new CountDownLatch(1)
 
   // Driver for talking to Mesos
   var driver: SchedulerDriver = null
 
-  def startScheduler(name: String, masterUrl: String, scheduler: Scheduler, fwInfo: FrameworkInfo) {
+  /**
+   * Starts the MesosSchedulerDriver with the provided information. This method returns
+   * until the scheduler has registered with Mesos.
+   * @param name Name of the scheduler
+   * @param masterUrl Mesos master connection URL
+   * @param scheduler Scheduler object
+   * @param fwInfo FrameworkInfo to pass to the Mesos master
+   */
+  def startScheduler(
+      name: String,
+      masterUrl: String,
+      scheduler: Scheduler,
+      fwInfo: FrameworkInfo): Unit = {
     synchronized {
       if (driver != null) {
         waitForRegister()
@@ -58,11 +74,18 @@ private[spark] trait MesosSchedulerHelper extends Logging {
     }
   }
 
-  private def waitForRegister() {
+  /**
+   * Waits for the scheduler to be registered, which the scheduler will signal by calling
+   * markRegistered().
+   */
+  def waitForRegister(): Unit = {
     registerLatch.await()
   }
 
-  def markRegistered() {
+  /**
+   * Signal that the scheduler has registered with Mesos.
+   */
+  def markRegistered(): Unit = {
     registerLatch.countDown()
   }
 
@@ -71,14 +94,5 @@ private[spark] trait MesosSchedulerHelper extends Logging {
       return r.getScalar.getValue
     }
     0.0
-  }
-
-  /** Check whether a Mesos task state represents a finished task */
-  def isFinished(state: TaskState) = {
-    state == TaskState.TASK_FINISHED ||
-      state == TaskState.TASK_FAILED ||
-      state == TaskState.TASK_KILLED ||
-      state == TaskState.TASK_LOST ||
-      state == TaskState.TASK_ERROR
   }
 }
