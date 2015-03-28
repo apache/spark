@@ -319,10 +319,11 @@ class TaskInstance(Base):
         Index('ti_state_lkp', dag_id, task_id, execution_date, state),
     )
 
-    def __init__(self, task, execution_date, job=None):
+    def __init__(self, task, execution_date, state=None, job=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.execution_date = execution_date
+        self.state = state
         self.task = task
         self.try_number = 1
         self.unixname = getpass.getuser()

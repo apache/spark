@@ -100,6 +100,18 @@
             </button>
           </span>
           <hr/>
+          <button id="btn_success" type="button" class="btn btn-primary">
+            Mark Success    
+          </button>
+          <span class="btn-group">
+            <button id="btn_success_upstream"
+              type="button" class="btn" data-toggle="button">Upstream</button>
+            <button id="btn_success_downstream"
+              type="button" class="btn" data-toggle="button">
+              Downstream
+            </button>
+          </span>
+          <hr/>
           <span>
             <button id="btn_graph" type="button" class="btn">
               Graph View
@@ -195,6 +207,19 @@
         "&past=" + $('#btn_past').hasClass('active') +
         "&upstream=" + $('#btn_upstream').hasClass('active') +
         "&downstream=" + $('#btn_downstream').hasClass('active') +
+        "&execution_date=" + execution_date +
+        "&origin=" + encodeURIComponent(window.location);
+      
+      window.location = url;
+    });
+
+    $("#btn_success").click(function(){
+      url = "{{ url_for('airflow.action') }}" +
+        "?action=success" +
+        "&task_id=" + task_id +
+        "&dag_id=" + dag_id +
+        "&upstream=" + $('#btn_success_upstream').hasClass('active') +
+        "&downstream=" + $('#btn_success_downstream').hasClass('active') +
         "&execution_date=" + execution_date +
         "&origin=" + encodeURIComponent(window.location);
       
