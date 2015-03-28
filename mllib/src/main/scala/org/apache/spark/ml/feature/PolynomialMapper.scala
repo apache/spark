@@ -99,13 +99,14 @@ object PolynomialMapper {
         val len = numMonomials(currDegree, nDim)
         var numToRemoveCum = 0
         val allExpansions = lVal.zip(lIdx).flatMap { case (lv, li) =>
+          val numToRemove = numMonomials(currDegree - 1, nDim - li)
           val currExpansions = rVal.zip(rIdx).map { case (rv, ri) =>
-            val realIdx = li * nDim + ri
-            (if(realIdx > numToRemoveCum) lv * rv else 0.0, realIdx - numToRemoveCum)
+            val realIdx = ri - (rLen - numToRemove)
+            (if (realIdx >= 0) lv * rv else 0.0, numToRemoveCum + realIdx)
           }
-          numToRemoveCum += numMonomials(currDegree - 1, nDim - li)
+          numToRemoveCum += numToRemove
           currExpansions
-        }
+        }.filter(_._1 != 0.0)
         Vectors.sparse(len, allExpansions.map(_._2), allExpansions.map(_._1))
 
       case _ => throw new Exception("vector types are not match.")
