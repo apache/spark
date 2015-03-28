@@ -19,6 +19,7 @@ package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
 
+import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
@@ -42,7 +43,27 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(ssc, hostname, port, storageLevel, false)
+    createStream(ssc, hostname, port, storageLevel, getFlumeConf)
+  }
+
+  private def getFlumeConf = {
+    val sparkConf = new SparkConf()
+    val maxThread = sparkConf.getInt("spark.streaming.flume.threads", 0)
+    val enableDecompression = sparkConf.getBoolean("spark.streaming,flume.decompression", false)
+    val enableSSL = sparkConf.getBoolean("spark.streaming.flume.ssl", false)
+    val keyStorePath = sparkConf.get("spark.streaming.flume.keyStore", "")
+    val keyStorePassword = sparkConf.get("spark.streaming.flume.keystore-password", "")
+    val keyStoreType = sparkConf.get("spark.streaming.flume.keystore-type", "JKS")
+    validateFlumeConf(enableSSL, keyStorePath, keyStorePassword)
+    FlumeConf(maxThread, enableDecompression, enableSSL, keyStorePath,
+      keyStorePassword, keyStoreType)
+  }
+
+  private
+  def validateFlumeConf(enableSSL: Boolean, keyStorePath: String, keyStorePassword: String) = {
+    if (enableSSL && (keyStorePath.isEmpty || keyStorePassword.isEmpty)) {
+      throw new SparkException("When enable SSL, keyStore or keyStorePassWord can not be empty.")
+    }
   }
 
   /**
@@ -51,17 +72,17 @@ object FlumeUtils {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
-   * @param enableDecompression  should netty server decompress input stream
+   * @param flumeConf  FlumeConf which
    */
   def createStream (
       ssc: StreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel,
-      enableDecompression: Boolean
+      flumeConf: FlumeConf
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](
-        ssc, hostname, port, storageLevel, enableDecompression)
+        ssc, hostname, port, storageLevel, flumeConf)
 
     inputStream
   }
@@ -92,7 +113,7 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel, false)
+    createStream(jssc.ssc, hostname, port, storageLevel, getFlumeConf)
   }
 
   /**
@@ -109,7 +130,7 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       enableDecompression: Boolean
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression)
+    createStream(jssc.ssc, hostname, port, storageLevel, getFlumeConf)
   }
 
   /**

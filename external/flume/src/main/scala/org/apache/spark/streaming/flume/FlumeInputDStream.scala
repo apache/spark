@@ -18,9 +18,13 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.io.{FileInputStream, ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
+import java.security.{Security, KeyStore}
 import java.util.concurrent.Executors
+import javax.net.ssl.{SSLEngine, KeyManagerFactory, SSLContext}
+
+import org.jboss.netty.handler.ssl.SslHandler
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -30,15 +34,14 @@ import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
 
-import org.jboss.netty.channel.ChannelPipelineFactory
-import org.jboss.netty.channel.Channels
+import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
 
@@ -48,11 +51,11 @@ class FlumeInputDStream[T: ClassTag](
   host: String,
   port: Int,
   storageLevel: StorageLevel,
-  enableDecompression: Boolean
+  flumeConf: FlumeConf
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel, enableDecompression)
+    new FlumeReceiver(host, port, storageLevel, flumeConf)
   }
 }
 
@@ -141,17 +144,22 @@ class FlumeReceiver(
     host: String,
     port: Int,
     storageLevel: StorageLevel,
-    enableDecompression: Boolean
+    flumeConf: FlumeConf
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val responder = new SpecificResponder(
     classOf[AvroSourceProtocol], new FlumeEventServer(this))
   var server: NettyServer = null
+  var enableSsl: Boolean = flumeConf.enableSSL
+  var keyStore: String = flumeConf.keyStore
+  var keyStorePassword: String = flumeConf.keyStorePassword
+  var keyStoreType: String = flumeConf.keyStoreType
+  var enableDecompression: Boolean = flumeConf.enableDecompression
 
   private def initServer() = {
     if (enableDecompression) {
-      val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
-                                                             Executors.newCachedThreadPool())
+      val channelFactory = new NioServerSocketChannelFactory(
+        Executors.newCachedThreadPool(), Executors.newCachedThreadPool())
       val channelPipelineFactory = new CompressionChannelPipelineFactory()
       
       new NettyServer(
@@ -165,10 +173,52 @@ class FlumeReceiver(
     }
   }
 
+  private def initSSLServer() = {
+    initSocketChannelFactory
+    initChannelPipelineFactory
+    new NettyServer(responder, new InetSocketAddress(host, port),
+      initSocketChannelFactory, initChannelPipelineFactory, null)
+  }
+  
+  def initSocketChannelFactory = {
+    val maxThreads = flumeConf.flumeMaxThread
+    if (maxThreads <= 0) {
+      new NioServerSocketChannelFactory(Executors.newCachedThreadPool, 
+        Executors.newCachedThreadPool)
+    } else {
+      new NioServerSocketChannelFactory(Executors.newCachedThreadPool,
+        Executors.newFixedThreadPool(maxThreads))
+    }
+  }
+
+  private def initChannelPipelineFactory: ChannelPipelineFactory = {
+    var pipelineFactory: ChannelPipelineFactory = null
+    if (enableDecompression || enableSsl) {
+      pipelineFactory = new SSLCompressionChannelPipelineFactory(enableDecompression,
+        enableSsl, keyStore, keyStorePassword, keyStoreType)
+    }
+    else {
+      pipelineFactory = new ChannelPipelineFactory {
+        def getPipeline: ChannelPipeline = {
+          Channels.pipeline
+        }
+      }
+    }
+    pipelineFactory
+  }
+
+  private def initSSLConfiguration(): Unit = {
+    if (enableSsl) {
+      val ks: KeyStore = KeyStore.getInstance(keyStoreType)
+      ks.load(new FileInputStream(keyStore), keyStorePassword.toCharArray)
+    }
+  }
+
   def onStart() {
     synchronized {
       if (server == null) {
-        server = initServer()
+        initSSLConfiguration()
+        server = if (enableSsl) initSSLServer() else initServer()
         server.start()
       } else {
         logWarning("Flume receiver being asked to start more then once with out close")
@@ -188,23 +238,74 @@ class FlumeReceiver(
   }
 
   override def preferredLocation = Some(host)
-  
-  /** A Netty Pipeline factory that will decompress incoming data from 
-    * and the Netty client and compress data going back to the client.
-    *
-    * The compression on the return is required because Flume requires
-    * a successful response to indicate it can remove the event/batch 
-    * from the configured channel 
-    */
-  private[streaming]
-  class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
+}
 
-    def getPipeline() = {
-      val pipeline = Channels.pipeline()
-      val encoder = new ZlibEncoder(6)
-      pipeline.addFirst("deflater", encoder)
-      pipeline.addFirst("inflater", new ZlibDecoder())
-      pipeline
+/** A Netty Pipeline factory that will decompress incoming data from
+  * and the Netty client and compress data going back to the client.
+  *
+  * The compression on the return is required because Flume requires
+  * a successful response to indicate it can remove the event/batch
+  * from the configured channel
+  */
+private class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
+
+  def getPipeline = {
+    val pipeline = Channels.pipeline()
+    val encoder = new ZlibEncoder(6)
+    pipeline.addFirst("deflater", encoder)
+    pipeline.addFirst("inflater", new ZlibDecoder())
+    pipeline
   }
 }
+
+/**
+ * A ChannelPipelineFactory which can support ssl and compression.
+ * This code is pick up from AvroSource in flume.
+ */
+private class SSLCompressionChannelPipelineFactory(
+    enableCompression: Boolean,
+    enableSsl: Boolean,
+    keyStore: String,
+    keyStorePassword: String,
+    keyStoreType: String) extends ChannelPipelineFactory {
+
+  private def createServerSSLContext: SSLContext = {
+    try {
+      val ks: KeyStore = KeyStore.getInstance(keyStoreType)
+      ks.load(new FileInputStream(keyStore), keyStorePassword.toCharArray)
+      val kmf: KeyManagerFactory = KeyManagerFactory.getInstance(getAlgorithm)
+      kmf.init(ks, keyStorePassword.toCharArray)
+      val serverContext: SSLContext = SSLContext.getInstance("TLS")
+      serverContext.init(kmf.getKeyManagers, null, null)
+      serverContext
+    }
+    catch {
+      case e: Exception => {
+        throw new Error("Failed to initialize the server-side SSLContext", e)
+      }
+    }
+  }
+
+  private def getAlgorithm: String = {
+    var algorithm: String = Security.getProperty("ssl.KeyManagerFactory.algorithm")
+    if (algorithm == null) {
+      algorithm = "SunX509"
+    }
+    algorithm
+  }
+
+  def getPipeline: ChannelPipeline = {
+    val pipeline: ChannelPipeline = Channels.pipeline
+    if (enableCompression) {
+      val encoder: ZlibEncoder = new ZlibEncoder(6)
+      pipeline.addFirst("deflater", encoder)
+      pipeline.addFirst("inflater", new ZlibDecoder)
+    }
+    if (enableSsl) {
+      val sslEngine: SSLEngine = createServerSSLContext.createSSLEngine
+      sslEngine.setUseClientMode(false)
+      pipeline.addFirst("ssl", new SslHandler(sslEngine))
+    }
+    pipeline
+  }
 }
