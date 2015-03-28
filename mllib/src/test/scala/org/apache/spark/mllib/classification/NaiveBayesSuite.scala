@@ -25,7 +25,6 @@ import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.classification.NaiveBayes.ModelType.{Bernoulli, Multinomial}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -49,7 +48,7 @@ object NaiveBayesSuite {
     theta: Array[Array[Double]],  // CXD
     nPoints: Int,
     seed: Int,
-    modelType: NaiveBayes.ModelType = Multinomial,
+    modelType: String = "Multinomial",
     sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
@@ -59,10 +58,10 @@ object NaiveBayesSuite {
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
       val xi = modelType match {
-        case Bernoulli => Array.tabulate[Double] (D) { j =>
+        case "Bernoulli" => Array.tabulate[Double] (D) { j =>
             if (rnd.nextDouble () < _theta(y)(j) ) 1 else 0
         }
-        case Multinomial =>
+        case "Multinomial" =>
           val mult = BrzMultinomial(BDV(_theta(y)))
           val emptyMap = (0 until D).map(x => (x, 0.0)).toMap
           val counts = emptyMap ++ mult.sample(sample).groupBy(x => x).map {
@@ -81,12 +80,12 @@ object NaiveBayesSuite {
   /** Bernoulli NaiveBayes with binary labels, 3 features */
   private val binaryBernoulliModel = new NaiveBayesModel(labels = Array(0.0, 1.0),
     pi = Array(0.2, 0.8), theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)),
-    Bernoulli)
+    "Bernoulli")
 
   /** Multinomial NaiveBayes with binary labels, 3 features */
   private val binaryMultinomialModel = new NaiveBayesModel(labels = Array(0.0, 1.0),
     pi = Array(0.2, 0.8), theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)),
-    Multinomial)
+    "Multinomial")
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
@@ -136,15 +135,15 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 42, Multinomial)
+      pi, theta, nPoints, 42, "Multinomial")
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, "multinomial")
+    val model = NaiveBayes.train(testRDD, 1.0, "Multinomial")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 17, Multinomial)
+      pi, theta, nPoints, 17, "Multinomial")
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -164,15 +163,15 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 45, Bernoulli)
+      pi, theta, nPoints, 45, "Bernoulli")
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, "bernoulli")
+    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 20, Bernoulli)
+      pi, theta, nPoints, 20, "Bernoulli")
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -243,7 +242,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       assert(model.labels === sameModel.labels)
       assert(model.pi === sameModel.pi)
       assert(model.theta === sameModel.theta)
-      assert(model.modelType === NaiveBayes.ModelType.Multinomial)
+      assert(model.modelType === "Multinomial")
     } finally {
       Utils.deleteRecursively(tempDir)
     }
