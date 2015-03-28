@@ -226,22 +226,54 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
           StructField("UPPERCase", IntegerType, nullable = true))))
     }
 
-    // Conflicting field count
+    // Metastore schema contains additional non-nullable fields.
     assert(intercept[Throwable] {
       ParquetRelation2.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false),
-          StructField("lowerCase", BinaryType))),
+          StructField("lowerCase", BinaryType, nullable = false))),
 
         StructType(Seq(
           StructField("UPPERCase", IntegerType, nullable = true))))
     }.getMessage.contains("detected conflicting schemas"))
 
-    // Conflicting field names
+    // Conflicting non-nullable field names
     intercept[Throwable] {
       ParquetRelation2.mergeMetastoreParquetSchema(
-        StructType(Seq(StructField("lower", StringType))),
+        StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
+  }
+
+  test("merge missing nullable fields from Metastore schema") {
+    // Standard case: Metastore schema contains additional nullable fields not present
+    // in the Parquet file schema.
+    assertResult(
+      StructType(Seq(
+        StructField("firstField", StringType, nullable = true),
+        StructField("secondField", StringType, nullable = true),
+        StructField("thirdfield", StringType, nullable = true)))) {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("firstfield", StringType, nullable = true),
+          StructField("secondfield", StringType, nullable = true),
+          StructField("thirdfield", StringType, nullable = true))),
+        StructType(Seq(
+          StructField("firstField", StringType, nullable = true),
+          StructField("secondField", StringType, nullable = true))))
+    }
+
+    // Merge should fail if the Metastore contains any additional fields that are not
+    // nullable.
+    assert(intercept[Throwable] {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("firstfield", StringType, nullable = true),
+          StructField("secondfield", StringType, nullable = true),
+          StructField("thirdfield", StringType, nullable = false))),
+        StructType(Seq(
+          StructField("firstField", StringType, nullable = true),
+          StructField("secondField", StringType, nullable = true))))
+    }.getMessage.contains("detected conflicting schemas"))
   }
 }
