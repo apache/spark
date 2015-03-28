@@ -61,7 +61,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     }
   }
 
-  override def dependencies = List()
+  override def dependencies: List[DStream[_]] = List()
 
   override def slideDuration: Duration = {
     if (ssc == null) throw new Exception("ssc is null")

@@ -106,12 +106,13 @@ class FileShuffleBlockManager(conf: SparkConf)
    * when the writers are closed successfully
    */
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
-      writeMetrics: ShuffleWriteMetrics) = {
+      writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
       private var fileGroup: ShuffleFileGroup = null
 
+      val openStartTime = System.nanoTime
       val writers: Array[BlockObjectWriter] = if (consolidateShuffleFiles) {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
@@ -135,6 +136,9 @@ class FileShuffleBlockManager(conf: SparkConf)
           blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize, writeMetrics)
         }
       }
+      // Creating the file to write to and creating a disk writer both involve interacting with
+      // the disk, so should be included in the shuffle write time.
+      writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
 
       override def releaseWriters(success: Boolean) {
         if (consolidateShuffleFiles) {
@@ -268,7 +272,7 @@ object FileShuffleBlockManager {
       new PrimitiveVector[Long]()
     }
 
-    def apply(bucketId: Int) = files(bucketId)
+    def apply(bucketId: Int): File = files(bucketId)
 
     def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
       assert(offsets.length == lengths.length)

@@ -17,6 +17,10 @@
 
 package org.apache.spark.mllib.classification
 
+import java.lang.{Iterable => JIterable}
+
+import scala.collection.JavaConverters._
+
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -40,6 +44,13 @@ class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]]) extends ClassificationModel with Serializable with Saveable {
+
+  /** A Java-friendly constructor that takes three Iterable parameters. */
+  private[mllib] def this(
+      labels: JIterable[Double],
+      pi: JIterable[Double],
+      theta: JIterable[JIterable[Double]]) =
+    this(labels.asScala.toArray, pi.asScala.toArray, theta.asScala.toArray.map(_.asScala.toArray))
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
@@ -83,10 +94,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
   private object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Hard-code class name string in case it changes in the future */
-    def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
+    def thisClassName: String = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
     case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]])
@@ -174,7 +185,7 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
    *
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
-  def run(data: RDD[LabeledPoint]) = {
+  def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case SparseVector(size, indices, values) =>

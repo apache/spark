@@ -55,37 +55,8 @@ private[hive] case object NativePlaceholder extends Command
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
   protected val nativeCommands = Seq(
-    "TOK_DESCFUNCTION",
-    "TOK_DESCDATABASE",
-    "TOK_SHOW_CREATETABLE",
-    "TOK_SHOWCOLUMNS",
-    "TOK_SHOW_TABLESTATUS",
-    "TOK_SHOWDATABASES",
-    "TOK_SHOWFUNCTIONS",
-    "TOK_SHOWINDEXES",
-    "TOK_SHOWINDEXES",
-    "TOK_SHOWPARTITIONS",
-    "TOK_SHOW_TBLPROPERTIES",
-
-    "TOK_LOCKTABLE",
-    "TOK_SHOWLOCKS",
-    "TOK_UNLOCKTABLE",
-
-    "TOK_SHOW_ROLES",
-    "TOK_CREATEROLE",
-    "TOK_DROPROLE",
-    "TOK_GRANT",
-    "TOK_GRANT_ROLE",
-    "TOK_REVOKE",
-    "TOK_SHOW_GRANT",
-    "TOK_SHOW_ROLE_GRANT",
-    "TOK_SHOW_SET_ROLE",
-
-    "TOK_CREATEFUNCTION",
-    "TOK_DROPFUNCTION",
-
-    "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERDATABASE_OWNER",
+    "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
     "TOK_ALTERTABLE_ADDCOLS",
@@ -102,28 +73,61 @@ private[hive] object HiveQl {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
-    "TOK_CREATEINDEX",
-    "TOK_DROPDATABASE",
-    "TOK_DROPINDEX",
-    "TOK_DROPTABLE_PROPERTIES",
-    "TOK_MSCK",
-
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
+    
+    "TOK_CREATEDATABASE",
+    "TOK_CREATEFUNCTION",
+    "TOK_CREATEINDEX",
+    "TOK_CREATEROLE",
     "TOK_CREATEVIEW",
-    "TOK_DROPVIEW_PROPERTIES",
+    
+    "TOK_DESCDATABASE",
+    "TOK_DESCFUNCTION",
+    
+    "TOK_DROPDATABASE",
+    "TOK_DROPFUNCTION",
+    "TOK_DROPINDEX",
+    "TOK_DROPROLE",
+    "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
-
+    "TOK_DROPVIEW_PROPERTIES",
+    
     "TOK_EXPORT",
+    
+    "TOK_GRANT",
+    "TOK_GRANT_ROLE",
+    
     "TOK_IMPORT",
+    
     "TOK_LOAD",
-
-    "TOK_SWITCHDATABASE"
+    
+    "TOK_LOCKTABLE",
+    
+    "TOK_MSCK",
+    
+    "TOK_REVOKE",
+    
+    "TOK_SHOW_CREATETABLE",
+    "TOK_SHOW_GRANT",
+    "TOK_SHOW_ROLE_GRANT",
+    "TOK_SHOW_ROLES",
+    "TOK_SHOW_SET_ROLE",
+    "TOK_SHOW_TABLESTATUS",
+    "TOK_SHOW_TBLPROPERTIES",
+    "TOK_SHOWCOLUMNS",
+    "TOK_SHOWDATABASES",
+    "TOK_SHOWFUNCTIONS",
+    "TOK_SHOWINDEXES",
+    "TOK_SHOWLOCKS",
+    "TOK_SHOWPARTITIONS",
+    
+    "TOK_SWITCHDATABASE",
+    
+    "TOK_UNLOCKTABLE"
   )
 
   // Commands that we do not need to explain.
@@ -196,8 +200,8 @@ private[hive] object HiveQl {
      * Right now this function only checks the name, type, text and children of the node
      * for equality.
      */
-    def checkEquals(other: ASTNode) {
-      def check(field: String, f: ASTNode => Any) = if (f(n) != f(other)) {
+    def checkEquals(other: ASTNode): Unit = {
+      def check(field: String, f: ASTNode => Any): Unit = if (f(n) != f(other)) {
         sys.error(s"$field does not match for trees. " +
           s"'${f(n)}' != '${f(other)}' left: ${dumpTree(n)}, right: ${dumpTree(other)}")
       }
@@ -209,7 +213,7 @@ private[hive] object HiveQl {
       val leftChildren = nilIfEmpty(n.getChildren).asInstanceOf[Seq[ASTNode]]
       val rightChildren = nilIfEmpty(other.getChildren).asInstanceOf[Seq[ASTNode]]
       leftChildren zip rightChildren foreach {
-        case (l,r) => l checkEquals r
+        case (l, r) => l checkEquals r
       }
     }
   }
@@ -269,7 +273,7 @@ private[hive] object HiveQl {
   }
 
   /** Creates LogicalPlan for a given VIEW */
-  def createPlanForView(view: Table, alias: Option[String]) = alias match {
+  def createPlanForView(view: Table, alias: Option[String]): Subquery = alias match {
     // because hive use things like `_c0` to build the expanded text
     // currently we cannot support view from "create view v1(c1) as ..."
     case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
@@ -323,7 +327,7 @@ private[hive] object HiveQl {
     clauses
   }
 
-  def getClause(clauseName: String, nodeList: Seq[Node]) =
+  def getClause(clauseName: String, nodeList: Seq[Node]): Node =
     getClauseOption(clauseName, nodeList).getOrElse(sys.error(
       s"Expected clause $clauseName missing from ${nodeList.map(dumpTree(_)).mkString("\n")}"))
 

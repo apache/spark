@@ -899,6 +899,8 @@ class VertexRDD[VD] extends RDD[(VertexID, VD)] {
   // Transform the values without changing the ids (preserves the internal index)
   def mapValues[VD2](map: VD => VD2): VertexRDD[VD2]
   def mapValues[VD2](map: (VertexId, VD) => VD2): VertexRDD[VD2]
+  // Show only vertices unique to this set based on their VertexId's
+  def minus(other: RDD[(VertexId, VD)])
   // Remove vertices from this set that appear in the other set
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
   // Join operators that take advantage of the internal indexing to accelerate joins (substantially)

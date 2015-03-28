@@ -57,7 +57,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       |}
     """.stripMargin)
 
-  testSchema[(Byte, Short, Int, Long)](
+  testSchema[(Byte, Short, Int, Long, java.sql.Date)](
     "logical integral types",
     """
       |message root {
@@ -65,6 +65,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       |  required int32 _2 (INT_16);
       |  required int32 _3 (INT_32);
       |  required int64 _4 (INT_64);
+      |  optional int32 _5 (DATE);
       |}
     """.stripMargin)
 
@@ -211,14 +212,28 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
           StructField("UPPERCase", IntegerType, nullable = true))))
     }
 
-    // Conflicting field count
-    assert(intercept[Throwable] {
+    // MetaStore schema is subset of parquet schema
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = false)))) {
+
       ParquetRelation2.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
         StructType(Seq(
           StructField("lowerCase", BinaryType),
+          StructField("UPPERCase", IntegerType, nullable = true))))
+    }
+
+    // Conflicting field count
+    assert(intercept[Throwable] {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("uppercase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType))),
+
+        StructType(Seq(
           StructField("UPPERCase", IntegerType, nullable = true))))
     }.getMessage.contains("detected conflicting schemas"))
 

@@ -111,9 +111,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regParam: Double,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lrAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -135,8 +137,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lassoAlg = new LassoWithSGD()
+    lassoAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lassoAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -157,8 +163,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val ridgeAlg = new RidgeRegressionWithSGD()
+    ridgeAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     ridgeAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -345,9 +355,13 @@ private[python] class PythonMLLibAPI extends Serializable {
     def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
       predict(SerDe.asTupleRDD(userAndProducts.rdd))
 
-    def getUserFeatures = SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
+    def getUserFeatures: RDD[Array[Any]] = {
+      SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
+    }
 
-    def getProductFeatures = SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
+    def getProductFeatures: RDD[Array[Any]] = {
+      SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
+    }
 
   }
 
@@ -909,7 +923,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseVector
   private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       val bytes = new Array[Byte](8 * vector.size)
       val bb = ByteBuffer.wrap(bytes)
@@ -941,7 +955,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseMatrix
   private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
       val bytes = new Array[Byte](8 * m.values.size)
       val order = ByteOrder.nativeOrder()
@@ -973,7 +987,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for SparseVector
   private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       val n = v.indices.size
       val indiceBytes = new Array[Byte](4 * n)
@@ -1015,7 +1029,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for LabeledPoint
   private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
       saveObjects(out, pickler, point.label, point.features)
     }
@@ -1031,7 +1045,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for Rating
   private[python] class RatingPickler extends BasePickler[Rating] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val rating: Rating = obj.asInstanceOf[Rating]
       saveObjects(out, pickler, rating.user, rating.product, rating.rating)
     }
