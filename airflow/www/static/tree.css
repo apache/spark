@@ -52,7 +52,8 @@ g.parent circle {
 }
 
 g.node.collapsed circle {
-    fill: #3182bd;
+    stroke: #444;
+    stroke-width: 4px;
 }
 circle {
     stroke: blue;
