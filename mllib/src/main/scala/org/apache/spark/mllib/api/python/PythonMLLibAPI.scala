@@ -58,7 +58,6 @@ import org.apache.spark.util.Utils
  */
 private[python] class PythonMLLibAPI extends Serializable {
 
-
   /**
    * Loads and serializes labeled points saved with `RDD#saveAsTextFile`.
    * @param jsc Java SparkContext
@@ -346,24 +345,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       model.predictSoft(data)
   }
 
-  /**
-   * A Wrapper of MatrixFactorizationModel to provide helpfer method for Python
-   */
-  private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
-    extends MatrixFactorizationModel(model.rank, model.userFeatures, model.productFeatures) {
 
-    def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
-      predict(SerDe.asTupleRDD(userAndProducts.rdd))
-
-    def getUserFeatures: RDD[Array[Any]] = {
-      SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
-    }
-
-    def getProductFeatures: RDD[Array[Any]] = {
-      SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
-    }
-
-  }
 
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
