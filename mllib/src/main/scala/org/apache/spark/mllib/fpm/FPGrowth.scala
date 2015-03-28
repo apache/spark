@@ -28,7 +28,7 @@ import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+import org.apache.spark.mllib.fpm.FPGrowth.{AbsoluteMinSupport, FractionMinSupport, MinSupport, FreqItemset}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -61,22 +61,31 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
  */
 @Experimental
 class FPGrowth private (
-    private var minSupport: Double,
+    private var minSupport: MinSupport,
     private var numPartitions: Int) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
    * as the input data}.
    */
-  def this() = this(0.3, -1)
+  def this() = this(new FractionMinSupport(0.3), -1)
 
   /**
    * Sets the minimal support level (default: `0.3`).
    */
   def setMinSupport(minSupport: Double): this.type = {
-    this.minSupport = minSupport
+    this.minSupport = new FractionMinSupport(minSupport)
     this
   }
+
+  /**
+   * Sets the minimal support level as absolute number
+   */
+  def setMinSupportAbsolute(minSupportAbsolute: Long): this.type = {
+    this.minSupport = new AbsoluteMinSupport(minSupportAbsolute)
+    this
+  }
+
 
   /**
    * Sets the number of partitions used by parallel FP-growth (default: same as input data).
@@ -95,8 +104,7 @@ class FPGrowth private (
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
-    val count = data.count()
-    val minCount = math.ceil(minSupport * count).toLong
+    val minCount = minSupport.absoluteMinSupport(data)
     val numParts = if (numPartitions > 0) numPartitions else data.partitions.length
     val partitioner = new HashPartitioner(numParts)
     val freqItems = genFreqItems(data, minCount, partitioner)
@@ -208,5 +216,15 @@ object FPGrowth {
     def javaItems: java.util.List[Item] = {
       items.toList.asJava
     }
+  }
+
+  trait MinSupport extends Serializable {
+    def absoluteMinSupport(rdd: RDD[_]) : Long
+  }
+  class AbsoluteMinSupport(val minSupportCount:Long) extends MinSupport {
+    override def absoluteMinSupport(rdd: RDD[_]) = minSupportCount
+  }
+  class FractionMinSupport(val minSupport:Double) extends MinSupport {
+    override def absoluteMinSupport(rdd: RDD[_]) = math.ceil(minSupport * rdd.count()).toLong
   }
 }
