@@ -1015,13 +1015,13 @@ private[spark] object Utils extends Logging {
    */
   def timeStringToUs(str: String): Long = {
     val lower = str.toLowerCase.trim()
-    if (lower.endsWith("s")) {
-      lower.substring(0, lower.length-1).toLong * 1000 * 1000
-    } else if (lower.endsWith("ms")) {
+    if (lower.endsWith("ms")) {
       lower.substring(0, lower.length-2).toLong * 1000
     } else if (lower.endsWith("us")) {
       lower.substring(0, lower.length-2).toLong
-    } else {// Invalid suffix, force correct formatting
+    } else if (lower.endsWith("s")) {
+      lower.substring(0, lower.length-1).toLong * 1000 * 1000
+    } else { // Invalid suffix, force correct formatting
       throw new IllegalArgumentException("Time must be specified as seconds (s), " +
           "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.")
     }
