@@ -25,13 +25,13 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * :: AlphaComponent ::
- * Normalize a vector to have unit norm using the given p-norm.
+ * Polynomially expand a vector into a larger one.
  */
 @AlphaComponent
 class PolynomialMapper extends UnaryTransformer[Vector, Vector, PolynomialMapper] {
 
   /**
-   * Normalization in L^p^ space, p = 2 by default.
+   * The polynomial degree to expand, which should be larger than or equal to 1.
    * @group param
    */
   val degree = new IntParam(this, "degree", "the polynomial degree to expand", Some(1))
@@ -102,8 +102,11 @@ object PolynomialMapper {
       case f: SparseVector =>
         (2 to degree).foldLeft(Array(feature.copy)) { (vectors, _) =>
           vectors ++ Array(expandVector(feature, vectors.last))
-        }.reduce { case (SparseVector(lLen, lIdx, lVal), SparseVector(rLen, rIdx, rVal)) =>
-            Vectors.sparse(lLen + rLen, lIdx ++ rIdx.map(_ + lLen), lVal ++ rVal)
+        }.reduce { (lhs, rhs) =>
+          (lhs, rhs) match {
+            case (SparseVector(lLen, lIdx, lVal), SparseVector(rLen, rIdx, rVal)) =>
+              Vectors.sparse(lLen + rLen, lIdx ++ rIdx.map(_ + lLen), lVal ++ rVal)
+          }
         }
       case _ => throw new Exception("vector type is invalid.")
     }
