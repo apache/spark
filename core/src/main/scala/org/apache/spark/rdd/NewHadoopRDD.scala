@@ -238,7 +238,7 @@ private[spark] object NewHadoopRDD {
 
     override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-    override def compute(split: Partition, context: TaskContext) = {
+    override def compute(split: Partition, context: TaskContext): Iterator[U] = {
       val partition = split.asInstanceOf[NewHadoopPartition]
       val inputSplit = partition.serializableHadoopSplit.value
       f(inputSplit, firstParent[T].iterator(split, context))

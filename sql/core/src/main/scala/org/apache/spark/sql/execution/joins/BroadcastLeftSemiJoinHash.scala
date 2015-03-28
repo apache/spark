@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{Expression, Row}
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -34,11 +34,11 @@ case class BroadcastLeftSemiJoinHash(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with HashJoin {
 
-  override val buildSide = BuildRight
+  override val buildSide: BuildSide = BuildRight
 
-  override def output = left.output
+  override def output: Seq[Attribute] = left.output
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
     val hashSet = new java.util.HashSet[Row]()
     var currentRow: Row = null

@@ -82,11 +82,13 @@ private[spark] class DiskBlockObjectWriter(
 {
   /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
   private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
-    def write(i: Int): Unit = callWithTiming(out.write(i))
-    override def write(b: Array[Byte]) = callWithTiming(out.write(b))
-    override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
-    override def close() = out.close()
-    override def flush() = out.flush()
+    override def write(i: Int): Unit = callWithTiming(out.write(i))
+    override def write(b: Array[Byte]): Unit = callWithTiming(out.write(b))
+    override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+      callWithTiming(out.write(b, off, len))
+    }
+    override def close(): Unit = out.close()
+    override def flush(): Unit = out.flush()
   }
 
   /** The file channel, used for repositioning / truncating the file. */
@@ -141,8 +143,9 @@ private[spark] class DiskBlockObjectWriter(
       if (syncWrites) {
         // Force outstanding writes to disk and track how long it takes
         objOut.flush()
-        def sync = fos.getFD.sync()
-        callWithTiming(sync)
+        callWithTiming {
+          fos.getFD.sync()
+        }
       }
       objOut.close()
 

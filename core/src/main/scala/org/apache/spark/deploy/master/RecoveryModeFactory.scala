@@ -51,20 +51,27 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serial
  */
 private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
   extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
+
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
 
-  def createPersistenceEngine() = {
+  def createPersistenceEngine(): PersistenceEngine = {
     logInfo("Persisting recovery state to directory: " + RECOVERY_DIR)
     new FileSystemPersistenceEngine(RECOVERY_DIR, serializer)
   }
 
-  def createLeaderElectionAgent(master: LeaderElectable) = new MonarchyLeaderAgent(master)
+  def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {
+    new MonarchyLeaderAgent(master)
+  }
 }
 
 private[master] class ZooKeeperRecoveryModeFactory(conf: SparkConf, serializer: Serialization)
   extends StandaloneRecoveryModeFactory(conf, serializer) {
-  def createPersistenceEngine() = new ZooKeeperPersistenceEngine(conf, serializer)
 
-  def createLeaderElectionAgent(master: LeaderElectable) =
+  def createPersistenceEngine(): PersistenceEngine = {
+    new ZooKeeperPersistenceEngine(conf, serializer)
+  }
+
+  def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {
     new ZooKeeperLeaderElectionAgent(master, conf)
+  }
 }

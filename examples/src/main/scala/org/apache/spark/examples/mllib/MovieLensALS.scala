@@ -64,10 +64,10 @@ object MovieLensALS {
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
       opt[String]("userConstraint")
-        .text(s"user constraint for quadratic minimization, options ${userConstraints} default: SMOOTH")
+        .text(s"user constraint options ${userConstraints} default: SMOOTH")
         .action((x, c) => c.copy(userConstraint = x))
       opt[String]("productConstraint")
-        .text(s"product constraint for quadratic minimization, options ${productConstraints} default: SMOOTH")
+        .text(s"product constraint options ${productConstraints} default: SMOOTH")
         .action((x, c) => c.copy(productConstraint = x))
       opt[Double]("lambdaUser")
         .text(s"lambda for user regularization, default: ${defaultParams.userLambda}")
@@ -100,7 +100,8 @@ object MovieLensALS {
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --userConstraint SMOOTH --productConstraint SPARSE --userLambda 0.01 --productLambda 1.0 --kryo\
+          |  --rank 5 --numIterations 20 --userConstraint SMOOTH --productConstraint SPARSE
+          |  --userLambda 0.01 --productLambda 1.0 --kryo\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -190,7 +191,7 @@ object MovieLensALS {
       .setUserBlocks(params.numUserBlocks)
       .setProductBlocks(params.numProductBlocks)
 
-    println(s"Quadratic minimization userConstraint ${userConstraint} productConstraint ${productConstraint}")
+    println(s"ALS with userConstraint ${userConstraint} productConstraint ${productConstraint}")
 
     val model = als.run(training)
 
@@ -202,17 +203,15 @@ object MovieLensALS {
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
+  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean)
+    : Double = {
+
+    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
     val predictionsAndRatings = predictions.map { x =>
-      ((x.user, x.product), mapPredictedRating(x.rating, implicitPrefs))
+      ((x.user, x.product), mapPredictedRating(x.rating))
     }.join(data.map(x => ((x.user, x.product), x.rating))).values
 
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
-  }
-
-  def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
-    if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
-    else r
   }
 }

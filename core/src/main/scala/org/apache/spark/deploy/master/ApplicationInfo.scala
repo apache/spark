@@ -91,7 +91,7 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  private[master] val requestedCores = desc.maxCores.getOrElse(defaultCores)
+  private val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
@@ -109,6 +109,10 @@ private[deploy] class ApplicationInfo(
   private[master] def markFinished(endState: ApplicationState.Value) {
     state = endState
     endTime = System.currentTimeMillis()
+  }
+
+  private[master] def isFinished: Boolean = {
+    state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
 
   def duration: Long = {

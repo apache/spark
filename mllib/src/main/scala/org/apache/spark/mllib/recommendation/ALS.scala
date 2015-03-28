@@ -77,10 +77,13 @@ class ALS private (
    */
 
   def this() = this(-1, -1, 10, 10, SMOOTH, SMOOTH, 0.01, 0.01, false, 1.0)
-		  
+
   /** storage level for user/product in/out links */
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
   private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+
+  /** checkpoint interval */
+  private var checkpointInterval: Int = 10
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
@@ -192,6 +195,19 @@ class ALS private (
   }
 
   /**
+   * Set period (in iterations) between checkpoints (default = 10). Checkpointing helps with
+   * recovery (when nodes fail) and StackOverflow exceptions caused by long lineage. It also helps
+   * with eliminating temporary shuffle files on disk, which can be important when there are many
+   * ALS iterations. If the checkpoint directory is not set in [[org.apache.spark.SparkContext]],
+   * this setting is ignored.
+   */
+  @DeveloperApi
+  def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    this.checkpointInterval = checkpointInterval
+    this
+  }
+
+  /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
@@ -223,6 +239,7 @@ class ALS private (
       itemConstraint = productConstraint,
       intermediateRDDStorageLevel = intermediateRDDStorageLevel,
       finalRDDStorageLevel = StorageLevel.NONE,
+      checkpointInterval = checkpointInterval,
       seed = seed)
 
     val userFactors = floatUserFactors
@@ -298,7 +315,9 @@ object ALS {
     constraint: Constraint,
     lambda: Double,
     blocks: Int): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, constraint, constraint, lambda, lambda, false, 1.0).run(ratings)
+    new ALS(blocks, blocks, rank, iterations,
+      constraint, constraint, lambda, lambda,
+      false, 1.0).run(ratings)
   }
 
   /**
@@ -313,7 +332,11 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def train(ratings: RDD[Rating], rank: Int, iterations: Int, constraint: Constraint, lambda: Double): MatrixFactorizationModel = {
+  def train(ratings: RDD[Rating],
+            rank: Int,
+            iterations: Int,
+            constraint: Constraint,
+            lambda: Double): MatrixFactorizationModel = {
     train(ratings, rank, iterations, constraint, lambda, -1)
   }
 
@@ -354,7 +377,9 @@ object ALS {
                     blocks: Int,
                     alpha: Double,
                     seed: Long): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, SMOOTH, SMOOTH, lambda, lambda, true, alpha, seed).run(ratings)
+    new ALS(blocks, blocks, rank, iterations,
+            SMOOTH, SMOOTH, lambda, lambda,
+            true, alpha, seed).run(ratings)
   }
 
   /**
@@ -377,7 +402,8 @@ object ALS {
                     lambda: Double,
                     blocks: Int,
                     alpha: Double): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, SMOOTH, SMOOTH, lambda, lambda, true, alpha).run(ratings)
+    new ALS(blocks, blocks, rank, iterations, SMOOTH, SMOOTH,
+            lambda, lambda, true, alpha).run(ratings)
   }
 
   /**

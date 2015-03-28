@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
-package breeze.optimize.proximal
+package org.apache.spark.mllib.rdd
 
-/**
- * Supported constraints by QuadraticMinimizer object
- * @author debasish83
- */
-object Constraint extends Enumeration {
-  type Constraint = Value
-  val IDENTITY, SMOOTH, POSITIVE, BOX, SPARSE, EQUALITY, PROBABILITYSIMPLEX = Value
+import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+
+class MLPairRDDFunctionsSuite extends FunSuite with MLlibTestSparkContext {
+  test("topByKey") {
+    val topMap = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
+      .topByKey(2)
+      .collectAsMap()
+
+    assert(topMap.size === 3)
+    assert(topMap(1) === Array(2, 1))
+    assert(topMap(3) === Array(7, 5))
+    assert(topMap(5) === Array(3, 1))
+  }
 }

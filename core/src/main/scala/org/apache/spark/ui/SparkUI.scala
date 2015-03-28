@@ -60,7 +60,7 @@ private[spark] class SparkUI private (
   }
   initialize()
 
-  def getAppName = appName
+  def getAppName: String = appName
 
   /** Set the app name for this UI. */
   def setAppName(name: String) {
