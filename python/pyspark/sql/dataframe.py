@@ -50,13 +50,6 @@ class DataFrame(object):
 
         ageCol = people.age
 
-    Note that the :class:`Column` type can also be manipulated
-    through its various functions::
-
-        # The following creates a new column that increases everybody's age by 10.
-        people.age + 10
-
-
     A more concrete example::
 
         # To create DataFrame using SQLContext
@@ -77,7 +70,7 @@ class DataFrame(object):
     @property
     def rdd(self):
         """
-        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        Return the content of the :class:`DataFrame` as an :class:`pyspark.RDD`
         of :class:`Row` s.
         """
         if not hasattr(self, '_lazy_rdd'):
