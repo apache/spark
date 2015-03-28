@@ -64,12 +64,9 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
 private[execution] class KryoResourcePool(size: Int)
     extends ResourcePool[SerializerInstance](size) {
 
-  val ser: KryoSerializer = {
+  val ser: SparkSqlSerializer = {
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
-    // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization
-    // related error.
-    new KryoSerializer(sparkConf)
+    new SparkSqlSerializer(sparkConf)
   }
 
   def newInstance(): SerializerInstance = ser.newInstance()

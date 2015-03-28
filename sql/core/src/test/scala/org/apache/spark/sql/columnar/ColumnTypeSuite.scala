@@ -20,9 +20,12 @@ package org.apache.spark.sql.columnar
 import java.nio.ByteBuffer
 import java.sql.Timestamp
 
+import com.esotericsoftware.kryo.{Serializer, Kryo}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.apache.spark.serializer.KryoRegistrator
 import org.scalatest.FunSuite
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -73,7 +76,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(BINARY,  binary, 4 + 4)
 
     val generic = Map(1 -> "a")
-    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 11)
+    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
   }
 
   testNativeColumnType[BooleanType.type](
@@ -158,6 +161,41 @@ class ColumnTypeSuite extends FunSuite with Logging {
     }
   }
 
+  test("CUSTOM") {
+    val conf = new SparkConf()
+    conf.set("spark.kryo.registrator", "org.apache.spark.sql.columnar.Registrator")
+    val serializer = new SparkSqlSerializer(conf).newInstance()
+
+    val buffer = ByteBuffer.allocate(512)
+    val obj = CustomClass(Int.MaxValue,Long.MaxValue)
+    val serializedObj = serializer.serialize(obj).array()
+
+    GENERIC.append(serializer.serialize(obj).array(), buffer)
+    buffer.rewind()
+
+    val length = buffer.getInt
+    assert(length === serializedObj.length)
+    assert(13 == length) // id (1) + int (4) + long (8)
+
+    val genericSerializedObj = SparkSqlSerializer.serialize(obj)
+    assert(length != genericSerializedObj.length)
+    assert(length < genericSerializedObj.length)
+
+    assertResult(obj, "Custom deserialized object didn't equal the original object") {
+      val bytes = new Array[Byte](length)
+      buffer.get(bytes, 0, length)
+      serializer.deserialize(ByteBuffer.wrap(bytes))
+    }
+
+    buffer.rewind()
+    buffer.putInt(serializedObj.length).put(serializedObj)
+
+    assertResult(obj, "Custom deserialized object didn't equal the original object") {
+      buffer.rewind()
+      serializer.deserialize(ByteBuffer.wrap(GENERIC.extract(buffer)))
+    }
+  }
+
   def testNativeColumnType[T <: NativeType](
       columnType: NativeColumnType[T],
       putter: (ByteBuffer, T#JvmType) => Unit,
@@ -227,5 +265,25 @@ class ColumnTypeSuite extends FunSuite with Logging {
     assertResult(GENERIC) {
       ColumnType(DecimalType(19, 0))
     }
+  }
+}
+
+private[columnar] final case class CustomClass(a: Int, b: Long)
+
+private[columnar] object CustomerSerializer extends Serializer[CustomClass] {
+  override def write(kryo: Kryo, output: Output, t: CustomClass) {
+    output.writeInt(t.a)
+    output.writeLong(t.b)
+  }
+  override def read(kryo: Kryo, input: Input, aClass: Class[CustomClass]): CustomClass = {
+    val a = input.readInt()
+    val b = input.readLong()
+    CustomClass(a,b)
+  }
+}
+
+private[columnar] final class Registrator extends KryoRegistrator {
+  override def registerClasses(kryo: Kryo) {
+    kryo.register(classOf[CustomClass], CustomerSerializer)
   }
 }
