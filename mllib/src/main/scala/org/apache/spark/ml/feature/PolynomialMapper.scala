@@ -74,17 +74,40 @@ object PolynomialMapper {
   }
 
   /**
-   * Multiply two polynomials.
+   * Multiply two polynomials, the first is the original vector, i.e. the expanded vector with
+   * degree 1, while the second is the expanded vector with degree `currDegree - 1`. A new expanded
+   * vector with degree `currDegree` will be generated after the function call.
+   *
+   * @param lhs original vector with degree 1
+   * @param rhs expanded vector with degree `currDegree - 1`
+   * @param nDim the dimension of original vector
+   * @param currDegree the polynomial degree that need to be achieved
    */
-  private def expandVector(lhs: Vector, rhs: Vector): Vector = {
+  private def expandVector(lhs: Vector, rhs: Vector, nDim: Int, currDegree: Int): Vector = {
     (lhs, rhs) match {
       case (l: DenseVector, r: DenseVector) =>
-        Vectors.dense(l.toArray.flatMap(lx => r.toArray.map(rx => lx * rx)))
+        var rightVectorView = rhs.toArray
+        val allExpansions = l.toArray.zipWithIndex.flatMap { case (lVal, lIdx) =>
+          val currExpansions = rightVectorView.map(rVal => lVal * rVal)
+          val numToRemove = numMonomials(currDegree - 1, nDim - lIdx)
+          rightVectorView = rightVectorView.drop(numToRemove)
+          currExpansions
+        }
+        Vectors.dense(allExpansions)
+
       case (SparseVector(lLen, lIdx, lVal), SparseVector(rLen, rIdx, rVal)) =>
-        val len = lLen * rLen
-        val idx = lIdx.flatMap(li => rIdx.map(ri => li * lLen + ri))
-        val value = lVal.flatMap(lv => rVal.map(rv => lv * rv))
-        Vectors.sparse(len, idx, value)
+        val len = numMonomials(currDegree, nDim)
+        var numToRemoveCum = 0
+        val allExpansions = lVal.zip(lIdx).flatMap { case (lv, li) =>
+          val currExpansions = rVal.zip(rIdx).map { case (rv, ri) =>
+            val realIdx = li * nDim + ri
+            (if(realIdx > numToRemoveCum) lv * rv else 0.0, realIdx - numToRemoveCum)
+          }
+          numToRemoveCum += numMonomials(currDegree - 1, nDim - li)
+          currExpansions
+        }
+        Vectors.sparse(len, allExpansions.map(_._2), allExpansions.map(_._1))
+
       case _ => throw new Exception("vector types are not match.")
     }
   }
@@ -94,14 +117,15 @@ object PolynomialMapper {
    * degree 1 to degree `degree`.
    */
   private def transform(degree: Int)(feature: Vector): Vector = {
+    val nDim = feature.size
     feature match {
       case f: DenseVector =>
-        (2 to degree).foldLeft(Array(feature.copy)) { (vectors, _) =>
-          vectors ++ Array(expandVector(feature, vectors.last))
+        (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
+          vectors ++ Array(expandVector(feature, vectors.last, nDim, currDegree))
         }.reduce((lhs, rhs) => Vectors.dense(lhs.toArray ++ rhs.toArray))
       case f: SparseVector =>
-        (2 to degree).foldLeft(Array(feature.copy)) { (vectors, _) =>
-          vectors ++ Array(expandVector(feature, vectors.last))
+        (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
+          vectors ++ Array(expandVector(feature, vectors.last, nDim, currDegree))
         }.reduce { (lhs, rhs) =>
           (lhs, rhs) match {
             case (SparseVector(lLen, lIdx, lVal), SparseVector(rLen, rIdx, rVal)) =>

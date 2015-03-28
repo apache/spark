@@ -79,7 +79,7 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("fake") {
-    val result = collectResult(polynomialMapper.setDegree(3).transform(dataFrame))
+    val result = collectResult(polynomialMapper.setDegree(2).transform(dataFrame))
     for(r <- result) {
       println(r)
     }
