@@ -48,15 +48,16 @@ class LinearClassificationModel(LinearModel):
         Sets the threshold that separates positive predictions from negative
         predictions. An example with prediction score greater than or equal
         to this threshold is identified as an positive, and negative otherwise.
+        It was used for binary classification only.
         """
         self._threshold = value
 
-    def getThreshold(self):
+    def threshold(self):
         """
         .. note:: Experimental
 
         Returns the threshold (if any) used for converting raw prediction scores
-        into 0/1 predictions.
+        into 0/1 predictions. It was used for binary classification only.
         """
         return self._threshold
 
@@ -65,6 +66,7 @@ class LinearClassificationModel(LinearModel):
         .. note:: Experimental
 
         Clears the threshold so that `predict` will output raw prediction scores.
+        It was used for binary classification only.
         """
         self._threshold = None
 
@@ -140,6 +142,9 @@ class LogisticRegressionModel(LinearClassificationModel):
         self._numFeatures = int(numFeatures)
         self._numClasses = int(numClasses)
         self._threshold = 0.5
+        self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+        self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
+                                                            self._dataWithBiasSize)
 
     @property
     def numFeatures(self):
@@ -148,20 +153,6 @@ class LogisticRegressionModel(LinearClassificationModel):
     @property
     def numClasses(self):
         return self._numClasses
-
-    @property
-    def dataWithBiasSize(self):
-        return self.weights.size / (self.numClasses - 1)
-
-    @property
-    def weightsMatrix(self):
-        if self.numClasses == 2:
-            return None
-        else:
-            if not isinstance(self.weights, DenseVector):
-                raise ValueError("weights only supports dense vector but got type "
-                                 + type(self.weights))
-            return self.weights.toArray().reshape(self.numClasses - 1, self.dataWithBiasSize)
 
     def predict(self, x):
         """
@@ -186,14 +177,19 @@ class LogisticRegressionModel(LinearClassificationModel):
         else:
             best_class = 0
             max_margin = 0.0
-            for i in range(0, self.numClasses - 1):
-                if x.size + 1 == self.dataWithBiasSize:
-                    margin = x.dot(self.weightsMatrix[i][0:x.size]) + self.weightsMatrix[i][x.size]
-                else:
-                    margin = x.dot(self.weightsMatrix[i])
-                if margin > max_margin:
-                    max_margin = margin
-                    best_class = i + 1
+            if x.size + 1 == self._dataWithBiasSize:
+                for i in range(0, self._numClasses - 1):
+                    margin = x.dot(self._weightsMatrix[i][0:x.size]) + \
+                        self._weightsMatrix[i][x.size]
+                    if margin > max_margin:
+                        max_margin = margin
+                        best_class = i + 1
+            else:
+                for i in range(0, self._numClasses - 1):
+                    margin = x.dot(self._weightsMatrix[i])
+                    if margin > max_margin:
+                        max_margin = margin
+                        best_class = i + 1
             return best_class
 
     def save(self, sc, path):
