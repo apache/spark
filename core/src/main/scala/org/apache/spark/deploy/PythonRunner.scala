@@ -24,6 +24,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.SparkConf
 
 /**
  * A main class used to launch Python applications. It executes python as a
@@ -43,8 +44,7 @@ object PythonRunner {
 
     // Launch a Py4J gateway server for the process to connect to; this will let it see our
     // Java system properties and such
-    val gatewayServer = new py4j.GatewayServer(null, 0)
-    gatewayServer.start()
+    val (_, boundPort) = PythonUtils.startGatewayServer(new SparkConf())
 
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
@@ -60,7 +60,7 @@ object PythonRunner {
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
-    env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
+    env.put("PYSPARK_GATEWAY_PORT", "" + boundPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()
 
