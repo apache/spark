@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -266,11 +265,24 @@ class Analyzer(catalog: Catalog,
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        q transformExpressionsUp {
           case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
+          case u @ UnresolvedAttribute(name) if q.isInstanceOf[Sort] =>
+            val s = q.asInstanceOf[Sort]
+            val newChild = s.child match {
+              case Project(list, c) =>
+                val newList = list.filter {
+                  case Alias(g: GetField, _) => false
+                  case Alias(g: GetItem, _) => false
+                  case _ => true
+                }
+                Project(newList, c)
+              case other => other
+            }
+            Sort(s.order, s.global, newChild).resolveChildren(name, resolver).getOrElse(u)
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -342,8 +354,7 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes =
-          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
+        val requiredAttributes = AttributeSet(resolved)
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
