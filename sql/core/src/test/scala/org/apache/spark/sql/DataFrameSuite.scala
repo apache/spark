@@ -453,13 +453,13 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("describe") {
-    val describeTestData = Seq(
+    val input = Seq(
       ("Bob",   16, 176),
       ("Alice", 32, 164),
       ("David", 60, 192),
       ("Amy",   24, 180)).toDF("name", "age", "height")
 
-    val describeResult = Seq(
+    val output = Seq(
       Row("count",   4,               4),
       Row("mean",    33.0,            178.0),
       Row("stddev",  16.583123951777, 10.0),
@@ -475,25 +475,56 @@ class DataFrameSuite extends QueryTest {
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("age", "height")
+    val describeTwoCols = input.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
-    checkAnswer(describeTwoCols, describeResult)
+    checkAnswer(describeTwoCols, output)
 
-    val describeAllCols = describeTestData.describe()
+    val describeAllCols = input.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
-    checkAnswer(describeAllCols, describeResult)
+    checkAnswer(describeAllCols, output)
 
-    val describeOneCol = describeTestData.describe("age")
+    val describeOneCol = input.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+    checkAnswer(describeOneCol, output.map { case Row(s, d, _) => Row(s, d)} )
 
-    val describeNoCol = describeTestData.select("name").describe()
+    val describeNoCol = input.select("name").describe()
     assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+    checkAnswer(describeNoCol, output.map { case Row(s, _, _) => Row(s)} )
 
-    val emptyDescription = describeTestData.limit(0).describe()
+    val emptyDescription = input.limit(0).describe()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
+  test("dropna") {
+    val input = Seq[(String, java.lang.Integer, java.lang.Integer)](
+      ("Bob", 16, 176),
+      ("Alice", null, 164),
+      ("David", 60, null),
+      ("Amy", null, null),
+      (null, null, null)).toDF("name", "age", "height")
+
+    val rows = input.collect()
+
+    checkAnswer(
+      input.dropna("name"),
+      rows(0) :: rows(1) :: rows(2) :: rows(3) :: Nil)
+
+    checkAnswer(
+      input.dropna("age"),
+      rows(0) :: rows(2) :: Nil)
+
+    checkAnswer(
+      input.dropna("age", "height"),
+      rows(0) :: Nil)
+
+    checkAnswer(
+      input.dropna(),
+      rows(0))
+
+    // dropna on an a dataframe with no column should return an empty data frame.
+    val empty = input.sqlContext.emptyDataFrame.select()
+    assert(empty.dropna().count() === empty.count())
   }
 
   test("apply on query results (SPARK-5462)") {

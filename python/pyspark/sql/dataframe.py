@@ -697,6 +697,22 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    def dropna(self, *cols):
+        """ Return a new :class:`DataFrame` that omits rows with null values.
+
+        If cols is specified, then only omit rows with null values in
+        those columns.
+
+        >>> df4.dropna().collect()
+        [Row(age=5, height=80, name=u'Tom')]
+        >>> df4.dropna('age').collect()
+        [Row(age=5, height=None, name=u'Bob'), Row(age=5, height=80, name=u'Tom')]
+        """
+        cols = ListConverter().convert(cols,
+                                       self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.dropna(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
@@ -1076,6 +1092,9 @@ def _test():
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                   Row(name='Bob', age=5, height=85)]).toDF()
+    globs['df4'] = sc.parallelize([Row(name='Alice', age=None, height=80),
+                                  Row(name='Bob', age=5, height=None),
+                                  Row(name='Tom', age=5, height=80)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)

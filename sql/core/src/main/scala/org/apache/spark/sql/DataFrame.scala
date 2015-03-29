@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
@@ -728,6 +729,23 @@ class DataFrame private[sql](
     val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
 
     Generate(generator, join = true, outer = false, None, logicalPlan)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] that omits rows with `NULL` values in the specified columns.
+   * If no columns are specified, a row is omitted if any column contains `NULL`.
+   *
+   * @group dfops
+   */
+  @scala.annotation.varargs
+  def dropna(cols: String*): DataFrame = {
+    // If cols is empty, use all columns.
+    val colsToDrop: Seq[String] = if (cols.isEmpty) columns.toSeq else cols
+    // Filtering condition.
+    val cond = colsToDrop.map(name => col(name).isNotNull).reduceLeftOption((c1, c2) => c1 && c2)
+
+    // If there is no column, return an empty data frame. Otherwise, drop the null values.
+    cond.map { c => this.filter(c) }.getOrElse(sqlContext.emptyDataFrame)
   }
 
   /////////////////////////////////////////////////////////////////////////////
