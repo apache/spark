@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.AtLeastNNonNulls
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 
 /**
  * Functionality for working with missing data in [[DataFrame]]s.
@@ -50,7 +51,37 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(threshold: Int, cols: Seq[String]): DataFrame = {
     // Filtering condition -- drop rows that have less than `threshold` non-null,
     // i.e. at most (cols.size - threshold) null values.
-    val predicate = AtLeastNNonNulls(threshold, cols.map(name => df.col(name).expr))
+    val predicate = AtLeastNNonNulls(threshold, cols.map(name => df.resolve(name)))
     df.filter(Column(predicate))
+  }
+
+  /**
+   * Replace null values in numeric columns with `value`.
+   */
+  def fill(value: Double): DataFrame = {
+    val projections: Array[Expression] = df.schema.fields.map { f =>
+      f.dataType match {
+        case _: DoubleType =>
+          Alias(Coalesce(df.resolve(f.name) :: Literal(value) :: Nil), f.name)()
+        case typ: NumericType =>
+          Alias(Coalesce(df.resolve(f.name) :: Cast(Literal(value), typ) :: Nil), f.name)()
+        case _ => df.resolve(f.name)
+      }
+    }
+    df.select(projections.map(expr => new Column(expr)) : _*)
+  }
+
+  /**
+   * Replace null values in string columns with `value`.
+   */
+  def fill(value: String): DataFrame = {
+    val projections: Array[Expression] = df.schema.fields.map { f =>
+      f.dataType match {
+        case _: StringType =>
+          Alias(Coalesce(df.resolve(f.name) :: Literal(value) :: Nil), f.name)()
+        case _ => df.resolve(f.name)
+      }
+    }
+    df.select(projections.map(expr => new Column(expr)) : _*)
   }
 }

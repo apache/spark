@@ -23,9 +23,9 @@ import org.apache.spark.sql.test.TestSQLContext.implicits._
 class DataFrameNaFunctionsSuite extends QueryTest {
 
   def createDF(): DataFrame = {
-    Seq[(String, java.lang.Integer, java.lang.Integer)](
-      ("Bob", 16, 176),
-      ("Alice", null, 164),
+    Seq[(String, java.lang.Integer, java.lang.Double)](
+      ("Bob", 16, 176.5),
+      ("Alice", null, 164.3),
       ("David", 60, null),
       ("Amy", null, null),
       (null, null, null)).toDF("name", "age", "height")
@@ -54,6 +54,9 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     // dropna on an a dataframe with no column should return an empty data frame.
     val empty = input.sqlContext.emptyDataFrame.select()
     assert(empty.na.drop().count() === 0L)
+
+    // Make sure the columns are properly named.
+    assert(input.na.drop().columns.toSeq === input.columns.toSeq)
   }
 
   test("drop with threshold") {
@@ -67,5 +70,31 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     checkAnswer(
       input.na.drop(3, Seq("name", "age", "height")),
       rows(0))
+
+    // Make sure the columns are properly named.
+    assert(input.na.drop(2, Seq("age", "height")).columns.toSeq === input.columns.toSeq)
+  }
+
+  test("fill") {
+    val input = createDF()
+    val rows = input.collect()
+
+    val fillNumeric = input.na.fill(50.6)
+    checkAnswer(
+      fillNumeric,
+      Row("Bob", 16, 176.5) ::
+        Row("Alice", 50, 164.3) ::
+        Row("David", 60, 50.6) ::
+        Row("Amy", 50, 50.6) ::
+        Row(null, 50, 50.6) :: Nil)
+
+    // Make sure the columns are properly named.
+    assert(fillNumeric.columns.toSeq === input.columns.toSeq)
+
+    checkAnswer(
+      input.na.fill("unknown").select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Amy") :: Row("unknown") :: Nil)
+
+    assert(input.na.fill("unknown").columns.toSeq === input.columns.toSeq)
   }
 }

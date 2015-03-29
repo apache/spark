@@ -709,14 +709,8 @@ class DataFrame(object):
         :param subset: list of column names to consider.
 
         >>> df4.dropna().collect()
-        [Row(age=10, height=80, name=u'Alice')]
-
-        >>> df4.dropna(how='all').collect()
-        [Row(age=10, height=80, name=u'Alice'), Row(age=5, height=None, name=u'Bob'), \
-        Row(age=None, height=None, name=u'Tom')]
-
-        >>> df4.dropna(thresh=2, subset=['age', 'height', 'name']).collect()
-        [Row(age=10, height=80, name=u'Alice'), Row(age=5, height=None, name=u'Bob')]
+        age height name
+        10  80     Alice
         """
         if subset is None:
             subset = self.columns
@@ -731,6 +725,24 @@ class DataFrame(object):
         cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
         cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
         return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
+
+    def fillna(self, value):
+        """Fill null values.
+
+        >>> df4.fillna(50).show()
+        age height name
+        10  80     Alice
+        5   50     Bob
+        50  50     Tom
+        50  50     null
+        """
+        if not isinstance(value, (float, int, long, basestring)):
+            raise ValueError("value should be a float, int, long, or string")
+
+        if isinstance(value, (int, long)):
+            value = float(value)
+
+        return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
 
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
