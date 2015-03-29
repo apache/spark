@@ -320,6 +320,12 @@ class DataFrame private[sql](
   def show(): Unit = show(20)
 
   /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * @group dfops
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
+
+  /**
    * Cartesian join with another [[DataFrame]].
    *
    * Note that cartesian joins are very expensive without an extra filter that can be pushed down.

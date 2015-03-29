@@ -697,6 +697,41 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    def dropna(self, how='any', thresh=None, subset=None):
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+
+        :param how: 'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        :param thresh: int, default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        :param subset: list of column names to consider.
+
+        >>> df4.dropna().collect()
+        [Row(age=10, height=80, name=u'Alice')]
+
+        >>> df4.dropna(how='all').collect()
+        [Row(age=10, height=80, name=u'Alice'), Row(age=5, height=None, name=u'Bob'), \
+        Row(age=None, height=None, name=u'Tom')]
+
+        >>> df4.dropna(thresh=2, subset=['age', 'height', 'name']).collect()
+        [Row(age=10, height=80, name=u'Alice'), Row(age=5, height=None, name=u'Bob')]
+        """
+        if subset is None:
+            subset = self.columns
+        elif isinstance(subset, basestring):
+            subset = [subset]
+        elif not isinstance(subset, (list, tuple)):
+            raise ValueError("subset should be a list or tuple of column names")
+
+        if thresh is None:
+            thresh = len(subset) if how == 'any' else 1
+
+        cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
+        cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
+        return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
+
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
@@ -1076,6 +1111,12 @@ def _test():
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                   Row(name='Bob', age=5, height=85)]).toDF()
+
+    globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
+                                  Row(name='Bob', age=5, height=None),
+                                  Row(name='Tom', age=None, height=None),
+                                  Row(name=None, age=None, height=None)]).toDF()
+
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
