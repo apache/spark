@@ -83,7 +83,7 @@ class LogisticRegressionModel (
    * Sets the threshold that separates positive predictions from negative predictions
    * in Binary Logistic Regression. An example with prediction score greater than or equal to
    * this threshold is identified as an positive, and negative otherwise. The default value is 0.5.
-   * It was used for binary classification only.
+   * It was only used for binary classification.
    */
   @Experimental
   def setThreshold(threshold: Double): this.type = {
@@ -94,7 +94,7 @@ class LogisticRegressionModel (
   /**
    * :: Experimental ::
    * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
-   * It was used for binary classification only.
+   * It was only used for binary classification.
    */
   @Experimental
   def getThreshold: Option[Double] = threshold
@@ -102,7 +102,7 @@ class LogisticRegressionModel (
   /**
    * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
-   * It was used for binary classification only.
+   * It was only used for binary classification.
    */
   @Experimental
   def clearThreshold(): this.type = {
