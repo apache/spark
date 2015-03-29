@@ -135,6 +135,9 @@ class HadoopRDD[K, V](
 
   private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
 
+  private val ignoreInputErrors = sc.conf.getBoolean("spark.hadoop.ignoreInputErrors",
+    defaultValue=false)
+
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -246,6 +249,15 @@ class HadoopRDD[K, V](
         } catch {
           case eof: EOFException =>
             finished = true
+          case e: Exception =>
+            if (ignoreInputErrors) {
+              val splitDesc = split.inputSplit.toString
+              logWarning(s"Error reading split $splitDesc : ${e.getLocalizedMessage} "
+                + " - skipping entire split")
+              finished = true
+            } else {
+              throw e
+            }
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)
