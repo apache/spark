@@ -19,17 +19,19 @@
 public classes of Spark SQL:
 
     - L{SQLContext}
-      Main entry point for SQL functionality.
+      Main entry point for :class:`DataFrame` and SQL functionality.
     - L{DataFrame}
-      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, DataFrames also support SQL.
+      A distributed collection of data grouped into named columns.
     - L{GroupedData}
+      Aggregation methods, returned by :func:`DataFrame.groupBy`.
     - L{Column}
-      Column is a DataFrame with a single column.
+      A column expression in a :class:`DataFrame`.
     - L{Row}
-      A Row of data returned by a Spark SQL query.
+      A row of data in a :class:`DataFrame`.
     - L{HiveContext}
-      Main entry point for accessing data stored in Apache Hive..
+      Main entry point for accessing data stored in Apache Hive.
+    - L{functions}
+      List of built-in functions available for :class:`DataFrame`.
 """
 
 from pyspark.sql.context import SQLContext, HiveContext
