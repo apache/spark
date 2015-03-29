@@ -285,7 +285,7 @@ class SQLContext(object):
                 raise ValueError("cannot create an RDD from type: %s" % type(data))
 
         if schema is None:
-            return self.inferSchema(data, samplingRatio)
+            return self._inferSchema(data, samplingRatio)
 
         if isinstance(schema, (list, tuple)):
             first = data.first()
