@@ -54,8 +54,8 @@ class FPGrowthModel(JavaModelWrapper):
 class FPGrowth(object):
 
     @classmethod
-    def train(cls, data, minSupport=0.3, numPartition=-1):
-        model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartition))
+    def train(cls, data, minSupport=0.3, numPartitions=-1):
+        model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
 
 

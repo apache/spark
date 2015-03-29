@@ -345,9 +345,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data)
   }
-
-
-
+  
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
@@ -408,10 +406,11 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * A Wrapper of FPGrowthModel to provide helpfer method for Python
+   * A Wrapper of FPGrowthModel to provide helper method for Python
    */
   private[python] class FPGrowthModelWrapper(model: FPGrowthModel[Any])
     extends FPGrowthModel(model.freqItemsets) {
+
     def getFreqItemsets: RDD[Array[Any]] = {
       SerDe.fromTuple2RDD(model.freqItemsets.map(x => (x.javaItems, x.freq)))
     }
@@ -423,12 +422,13 @@ private[python] class PythonMLLibAPI extends Serializable {
    * needs to be taken in the Python code to ensure it gets freed on exit; see
    * the Py4J documentation.
    */
-  def trainFPGrowthModel(data: JavaRDD[java.lang.Iterable[Any]],
+  def trainFPGrowthModel(
+      data: JavaRDD[java.lang.Iterable[Any]],
       minSupport: Double,
-      numPartition: Int): FPGrowthModel[Any] = {
+      numPartitions: Int): FPGrowthModel[Any] = {
     val fpm = new FPGrowth()
       .setMinSupport(minSupport)
-      .setNumPartitions(numPartition)
+      .setNumPartitions(numPartitions)
 
     val model = fpm.run(data.rdd.map(_.asScala.toArray))
     new FPGrowthModelWrapper(model)
