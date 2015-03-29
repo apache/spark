@@ -173,8 +173,31 @@ class SQLContext(object):
         return schema
 
     def inferSchema(self, rdd, samplingRatio=None):
-        """DEPRECATED: use :func:`createDataFrame` instead"""
-        warnings.warn("Use createDataFrame instead of inferSchema.", DeprecationWarning)
+        """Infer and apply a schema to an RDD of L{Row}.
+
+        ::note:
+            Deprecated in 1.3, use :func:`createDataFrame` instead
+
+        When samplingRatio is specified, the schema is inferred by looking
+        at the types of each row in the sampled dataset. Otherwise, the
+        first 100 rows of the RDD are inspected. Nested collections are
+        supported, which can include array, dict, list, Row, tuple,
+        namedtuple, or object.
+
+        Each row could be L{pyspark.sql.Row} object or namedtuple or objects.
+        Using top level dicts is deprecated, as dict is used to represent Maps.
+
+        If a single column has multiple distinct inferred types, it may cause
+        runtime exceptions.
+
+        >>> rdd = sc.parallelize(
+        ...     [Row(field1=1, field2="row1"),
+        ...      Row(field1=2, field2="row2"),
+        ...      Row(field1=3, field2="row3")])
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> df.collect()[0]
+        Row(field1=1, field2=u'row1')
+        """
 
         if isinstance(rdd, DataFrame):
             raise TypeError("Cannot apply schema to DataFrame")
@@ -185,8 +208,28 @@ class SQLContext(object):
         return self.applySchema(rdd, schema)
 
     def applySchema(self, rdd, schema):
-        """DEPRECATED: use :func:`createDataFrame` instead"""
-        warnings.warn("Use createDataFrame instead of applySchema.", DeprecationWarning)
+        """
+        Applies the given schema to the given RDD of L{tuple} or L{list}.
+
+        ::note:
+            Deprecated in 1.3, use :func:`createDataFrame` instead
+
+        These tuples or lists can contain complex nested structures like
+        lists, maps or nested rows.
+
+        The schema should be a StructType.
+
+        It is important that the schema matches the types of the objects
+        in each row or exceptions could be thrown at runtime.
+
+        >>> from pyspark.sql.types import *
+        >>> rdd2 = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
+        >>> schema = StructType([StructField("field1", IntegerType(), False),
+        ...     StructField("field2", StringType(), False)])
+        >>> df = sqlCtx.applySchema(rdd2, schema)
+        >>> df.collect()
+        [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
+        """
 
         if isinstance(rdd, DataFrame):
             raise TypeError("Cannot apply schema to DataFrame")
@@ -285,7 +328,7 @@ class SQLContext(object):
                 raise ValueError("cannot create an RDD from type: %s" % type(data))
 
         if schema is None:
-            return self._inferSchema(data, samplingRatio)
+            return self.inferSchema(data, samplingRatio)
 
         if isinstance(schema, (list, tuple)):
             first = data.first()
