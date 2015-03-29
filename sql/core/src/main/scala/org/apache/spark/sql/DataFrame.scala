@@ -321,6 +321,11 @@ class DataFrame private[sql](
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   df.na.drop()
+   * }}}
+   *
    * @group dfops
    */
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
