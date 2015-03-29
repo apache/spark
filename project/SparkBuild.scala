@@ -366,7 +366,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("executor")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
   }
