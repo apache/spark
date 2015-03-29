@@ -706,9 +706,9 @@ class DataFrame(object):
         :param thresh: int, default None
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
-        :param subset: list of column names to consider.
+        :param subset: optional list of column names to consider.
 
-        >>> df4.dropna().collect()
+        >>> df4.dropna().show()
         age height name
         10  80     Alice
         """
@@ -726,8 +726,14 @@ class DataFrame(object):
         cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
         return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
 
-    def fillna(self, value):
+    def fillna(self, value, subset=None):
         """Fill null values.
+
+        :param value: int, long, float, or string. Value to replace null values with.
+        :param subset: optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and subset contains a non-string column,
+            then the non-string column is simply ignored.
 
         >>> df4.fillna(50).show()
         age height name
@@ -742,7 +748,17 @@ class DataFrame(object):
         if isinstance(value, (int, long)):
             value = float(value)
 
-        return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        if subset is None:
+            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        else:
+            if isinstance(subset, basestring):
+                subset = [subset]
+            elif not isinstance(subset, (list, tuple)):
+                raise ValueError("subset should be a list or tuple of column names")
+
+            cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
+            cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
+            return DataFrame(self._jdf.na().fill(value, cols), self.sql_ctx)
 
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.

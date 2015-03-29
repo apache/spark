@@ -497,6 +497,20 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.name, u"hello")
         self.assertEqual(row.age, None)
 
+        # fillna with subset specified for numeric cols
+        row = self.sqlCtx.createDataFrame(
+            [(None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
+        self.assertEqual(row.name, None)
+        self.assertEqual(row.age, 50)
+        self.assertEqual(row.height, None)
+
+        # fillna with subset specified for numeric cols
+        row = self.sqlCtx.createDataFrame(
+            [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
+        self.assertEqual(row.name, "haha")
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 

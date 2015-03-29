@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.sql.types._
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
-   * Dropping rows that contain any null values.
+   * Returns a new [[DataFrame ]] that drops rows containing any null values.
    */
   @scala.annotation.varargs
   def drop(cols: String*): DataFrame = {
@@ -36,17 +37,19 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Dropping rows that contain less than `threshold` non-null values.
+   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null values.
    */
   def drop(threshold: Int): DataFrame = drop(threshold, df.columns)
 
   /**
-   * Dropping rows that contain less than `threshold` non-null values in the specified columns.
+   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null
+   * values in the specified columns.
    */
   def drop(threshold: Int, cols: Array[String]): DataFrame = drop(threshold, cols.toSeq)
 
   /**
-   * Dropping rows that contain less than `threshold` non-null values in the specified columns.
+   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null
+   * values in the specified columns.
    */
   def drop(threshold: Int, cols: Seq[String]): DataFrame = {
     // Filtering condition -- drop rows that have less than `threshold` non-null,
@@ -56,32 +59,70 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Replace null values in numeric columns with `value`.
+   * Returns a new [[DataFrame ]] that replaces null values in numeric columns with `value`.
    */
-  def fill(value: Double): DataFrame = {
-    val projections: Array[Expression] = df.schema.fields.map { f =>
-      f.dataType match {
-        case _: DoubleType =>
-          Alias(Coalesce(df.resolve(f.name) :: Literal(value) :: Nil), f.name)()
-        case typ: NumericType =>
-          Alias(Coalesce(df.resolve(f.name) :: Cast(Literal(value), typ) :: Nil), f.name)()
-        case _ => df.resolve(f.name)
+  def fill(value: Double): DataFrame = fill(value, df.columns)
+
+  /**
+   * Returns a new [[DataFrame ]] that replaces null values in string columns with `value`.
+   */
+  def fill(value: String): DataFrame = fill(value, df.columns)
+
+  /**
+   * Returns a new [[DataFrame ]] that replaces null values in specified numeric columns.
+   * If a specified column is not a numeric column, it is ignored.
+   */
+  def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
+  /**
+   * Returns a new [[DataFrame ]] that replaces null values in specified numeric columns.
+   * If a specified column is not a numeric column, it is ignored.
+   */
+  def fill(value: Double, cols: Seq[String]): DataFrame = {
+    val columnEquals = df.sqlContext.analyzer.resolver
+    val projections = df.schema.fields.map { f =>
+      // Only fill if the column is part of the cols list.
+      if (cols.exists(col => columnEquals(f.name, col))) {
+        f.dataType match {
+          case _: DoubleType =>
+            coalesce(df.col(f.name), lit(value)).as(f.name)
+          case typ: NumericType =>
+            coalesce(df.col(f.name), lit(value).cast(typ)).as(f.name)
+          case _ =>
+            df.col(f.name)
+        }
+      } else {
+        df.col(f.name)
       }
     }
-    df.select(projections.map(expr => new Column(expr)) : _*)
+    df.select(projections : _*)
   }
 
   /**
-   * Replace null values in string columns with `value`.
+   * Returns a new [[DataFrame ]] that replaces null values in specified string columns.
+   * If a specified column is not a string column, it is ignored.
    */
-  def fill(value: String): DataFrame = {
-    val projections: Array[Expression] = df.schema.fields.map { f =>
-      f.dataType match {
-        case _: StringType =>
-          Alias(Coalesce(df.resolve(f.name) :: Literal(value) :: Nil), f.name)()
-        case _ => df.resolve(f.name)
+  def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
+  /**
+   * Returns a new [[DataFrame ]] that replaces null values in specified string columns.
+   * If a specified column is not a string column, it is ignored.
+   */
+  def fill(value: String, cols: Seq[String]): DataFrame = {
+    val columnEquals = df.sqlContext.analyzer.resolver
+    val projections = df.schema.fields.map { f =>
+      // Only fill if the column is part of the cols list.
+      if (cols.exists(col => columnEquals(f.name, col))) {
+        f.dataType match {
+          case _: StringType =>
+            coalesce(df.col(f.name), lit(value)).as(f.name)
+          case _ =>
+            df.col(f.name)
+        }
+      } else {
+        df.col(f.name)
       }
     }
-    df.select(projections.map(expr => new Column(expr)) : _*)
+    df.select(projections : _*)
   }
 }

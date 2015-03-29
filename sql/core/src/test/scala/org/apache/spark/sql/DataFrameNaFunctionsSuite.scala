@@ -91,10 +91,24 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     // Make sure the columns are properly named.
     assert(fillNumeric.columns.toSeq === input.columns.toSeq)
 
+    // string
     checkAnswer(
       input.na.fill("unknown").select("name"),
       Row("Bob") :: Row("Alice") :: Row("David") :: Row("Amy") :: Row("unknown") :: Nil)
-
     assert(input.na.fill("unknown").columns.toSeq === input.columns.toSeq)
+
+    // fill double with subset columns
+    checkAnswer(
+      input.na.fill(50.6, "age" :: Nil),
+      Row("Bob", 16, 176.5) ::
+        Row("Alice", 50, 164.3) ::
+        Row("David", 60, null) ::
+        Row("Amy", 50, null) ::
+        Row(null, 50, null) :: Nil)
+
+    // fill string with subset columns
+    checkAnswer(
+      Seq[(String, String)]((null, null)).toDF("col1", "col2").na.fill("test", "col1" :: Nil),
+      Row("test", null))
   }
 }
