@@ -2055,7 +2055,7 @@ private[spark] object Utils extends Logging {
    */
   def getCurrentUserName(): String = {
     Option(System.getenv("SPARK_USER"))
-      .getOrElse(UserGroupInformation.getCurrentUser().getUserName())
+      .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
 }
