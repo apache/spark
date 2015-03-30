@@ -31,7 +31,6 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
-import org.apache.spark.network.protocol.MessageMuxer;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
@@ -104,7 +103,6 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
-        .addLast("muxer", new MessageMuxer())
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
