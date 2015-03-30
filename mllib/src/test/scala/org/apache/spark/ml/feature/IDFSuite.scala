@@ -19,19 +19,15 @@ package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-private case class DataSet(features: Vector)
-
 class IDFSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var data: Array[Vector] = _
   @transient var dataFrame: DataFrame = _
   @transient var idf: IDF = _
-  @transient var expectedModel: Vector = _
   @transient var resultWithDefaultParam: Array[Vector] = _
   @transient var resultWithSetParam: Array[Vector] = _
 
@@ -39,24 +35,40 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
     super.beforeAll()
 
     val n = 4
-    data = Array(
+    val data = Array(
       Vectors.sparse(n, Array(1, 3), Array(1.0, 2.0)),
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
       Vectors.sparse(n, Array(1), Array(1.0))
     )
     val m = data.size
-    expectedModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
+
+    val expectedDefaultModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       math.log((m + 1.0) / (x + 1.0))
     })
 
-    resultWithDefaultParam = Array(
-      Vectors.dense(1.0 * expectedModel(1), 2.0 * expectedModel(3)),
-      Vectors.dense(0.0, 1.0 * expectedModel(1), 2.0 * expectedModel(2), 3.0 * expectedModel(3)),
-      Vectors.dense(1.0 * expectedModel(1), 0.0, 0.0)
-    )
+    val expectedSetModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
+      if (x > 0) {
+        math.log((m + 1.0) / (x + 1.0))
+      } else {
+        0
+      }
+    })
+
+    val result: (Vector) => Array[Vector] = { model: Vector =>
+      Array(
+        Vectors.sparse(n, Array(1, 3), Array(1.0 * model(1), 2.0 * model(3))),
+        Vectors.dense(0.0, 1.0 * model(1), 2.0 * model(2), 3.0 * model(3)),
+        Vectors.sparse(n, Array(1), Array(1.0 * model(1)))
+      )
+    }
+
+    resultWithDefaultParam = result(expectedDefaultModel)
+
+    resultWithSetParam = result(expectedSetModel)
 
     val sqlContext = new SQLContext(sc)
-    val dataFrame = sc.parallelize(data, 2)
+    import sqlContext.implicits._
+    dataFrame = sc.parallelize(data, 2).map(Tuple1.apply).toDF("features")
     idf = new IDF()
       .setInputCol("features")
       .setOutputCol("idf_value")
@@ -71,20 +83,20 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
   def assertValues(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
     assert((lhs, rhs).zipped.forall { (vector1, vector2) =>
       vector1 ~== vector2 absTol 1E-5
-    }, "The vector value is not correct after normalization.")
+    }, "The vector value is not correct after IDF.")
   }
 
   test("Normalization with default parameter") {
     val idfModel = idf.fit(dataFrame)
     val tfIdf = collectResult(idfModel.transform(dataFrame))
 
-    assertValues(tfIdf, result)
+    assertValues(tfIdf, resultWithDefaultParam)
   }
 
   test("Normalization with setter") {
     val idfModel = idf.setMinDocFreq(1).fit(dataFrame)
     val tfIdf = collectResult(idfModel.transform(dataFrame))
 
-    assertValues(tfIdf, result)
+    assertValues(tfIdf, resultWithSetParam)
   }
 }
