@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.TimeUnit
+
 import scala.language.implicitConversions
 
 import java.io._
@@ -24,6 +26,7 @@ import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.{ReentrantLock, Condition, Lock}
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
@@ -1394,28 +1397,37 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Shut down the SparkContext. */
   def stop() {
-    SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      if (!stopped) {
-        stopped = true
-        postApplicationEnd()
-        ui.foreach(_.stop())
-        env.metricsSystem.report()
-        metadataCleaner.cancel()
-        cleaner.foreach(_.stop())
-        dagScheduler.stop()
-        dagScheduler = null
-        listenerBus.stop()
-        eventLogger.foreach(_.stop())
-        env.actorSystem.stop(heartbeatReceiver)
-        progressBar.foreach(_.stop())
-        taskScheduler = null
-        // TODO: Cache.stop()?
-        env.stop()
-        SparkEnv.set(null)
-        logInfo("Successfully stopped SparkContext")
-        SparkContext.clearActiveContext()
-      } else {
-        logInfo("SparkContext already stopped")
+    // The shutdown logic can create a deadlock scenario when an external thread triggers an
+    // error in the handling of which it shuts down the SparkContext. Meanwhile, this thread
+    // will wait for the external thread to join during the "dagScheduler.stop()" while that
+    // thread waits on the SPARK_CONTEXT_CONSTRUCTOR_LOCK. We avoid this by surrounding this
+    // logic in a try catch.
+    while (!stopped) {
+      if (SparkContext.shutdownLock.tryLock(10, TimeUnit.SECONDS)) {
+        SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+          if (!stopped) {
+            stopped = true
+            postApplicationEnd()
+            ui.foreach(_.stop())
+            env.metricsSystem.report()
+            metadataCleaner.cancel()
+            cleaner.foreach(_.stop())
+            dagScheduler.stop()
+            dagScheduler = null
+            listenerBus.stop()
+            eventLogger.foreach(_.stop())
+            env.actorSystem.stop(heartbeatReceiver)
+            progressBar.foreach(_.stop())
+            taskScheduler = null
+            // TODO: Cache.stop()?
+            env.stop()
+            SparkEnv.set(null)
+            logInfo("Successfully stopped SparkContext")
+            SparkContext.clearActiveContext()
+          } else {
+            logInfo("SparkContext already stopped")
+          }
+        }
       }
     }
   }
@@ -1790,6 +1802,7 @@ object SparkContext extends Logging {
    */
   private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
 
+  private val shutdownLock = new ReentrantLock()
   /**
    * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `None`.
    *
