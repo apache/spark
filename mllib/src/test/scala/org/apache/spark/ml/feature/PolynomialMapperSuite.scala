@@ -24,8 +24,6 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-private case class DataSet2(features: Vector)
-
 class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Vector] = _
@@ -56,7 +54,8 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val sqlContext = new SQLContext(sc)
-    dataFrame = sqlContext.createDataFrame(sc.parallelize(data, 2).map(DataSet2))
+    dataFrame = sqlContext
+      .createDataFrame(sc.parallelize(data, 2).map(Tuple1.apply)).toDF("features")
     polynomialMapper = new PolynomialMapper()
       .setInputCol("features")
       .setOutputCol("poly_features")
