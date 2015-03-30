@@ -34,7 +34,7 @@ try:
 except ImportError:
     has_pandas = False
 
-__all__ = ["SQLContext", "HiveContext", "UDFWrapper"]
+__all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 
 
 def _monkey_patch_RDD(sqlCtx):
@@ -56,7 +56,7 @@ def _monkey_patch_RDD(sqlCtx):
     RDD.toDF = toDF
 
 
-class UDFWrapper(object):
+class UDFRegistration(object):
     """Wrapper for register UDF"""
 
     def __init__(self, sqlCtx):
@@ -145,8 +145,8 @@ class SQLContext(object):
 
     @property
     def udf(self):
-        """Wrapper for register python function as UDF """
-        return UDFWrapper(self)
+        """Wrapper for register Python function as UDF """
+        return UDFRegistration(self)
 
     def registerFunction(self, name, f, returnType=StringType()):
         """Registers a lambda function as a UDF so it can be used in SQL statements.
