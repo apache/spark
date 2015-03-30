@@ -31,39 +31,77 @@ import org.apache.spark.sql.types._
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
-   * Returns a new [[DataFrame ]] that drops rows containing any null values.
+   * Returns a new [[DataFrame]] that drops rows containing any null values.
    */
-  @scala.annotation.varargs
-  def drop(cols: String*): DataFrame = {
-    // If cols is empty, use all columns.
-    val subset = if (cols.isEmpty) df.columns.toSeq else cols
-    drop(subset.size, subset)
+  def drop(): DataFrame = drop("any", df.columns)
+
+  /**
+   * Returns a new [[DataFrame]] that drops rows containing null values.
+   *
+   * If `how` is "any", then drop rows containing any null values.
+   * If `how` is "all", then drop rows only if every column is null for that row.
+   */
+  def drop(how: String): DataFrame = drop(how, df.columns)
+
+  /**
+   * Returns a new [[DataFrame]] that drops rows containing any null values
+   * in the specified columns.
+   */
+  def drop(cols: Array[String]): DataFrame = drop(cols.toSeq)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame ]] that drops rows containing any null values
+   * in the specified columns.
+   */
+  def drop(cols: Seq[String]): DataFrame = drop(cols.size, cols)
+
+  /**
+   * Returns a new [[DataFrame]] that drops rows containing null values
+   * in the specified columns.
+   *
+   * If `how` is "any", then drop rows containing any null values in the specified columns.
+   * If `how` is "all", then drop rows only if every specified column is null for that row.
+   */
+  def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toSeq)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing null values
+   * in the specified columns.
+   *
+   * If `how` is "any", then drop rows containing any null values in the specified columns.
+   * If `how` is "all", then drop rows only if every specified column is null for that row.
+   */
+  def drop(how: String, cols: Seq[String]): DataFrame = {
+    how.toLowerCase match {
+      case "any" => drop(cols.size, cols)
+      case "all" => drop(1, cols)
+      case _ => throw new IllegalArgumentException("how must be 'any' or 'all'")
+    }
   }
 
   /**
-   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null values.
+   * Returns a new [[DataFrame]] that drops rows containing less than `minNonNulls` non-null values.
    */
-  def drop(threshold: Int): DataFrame = drop(threshold, df.columns)
+  def drop(minNonNulls: Int): DataFrame = drop(minNonNulls, df.columns)
 
   /**
-   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null
+   * Returns a new [[DataFrame]] that drops rows containing less than `minNonNulls` non-null
    * values in the specified columns.
    */
-  def drop(threshold: Int, cols: Array[String]): DataFrame = drop(threshold, cols.toSeq)
+  def drop(minNonNulls: Int, cols: Array[String]): DataFrame = drop(minNonNulls, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame ]] that drops rows containing less than
-   * `threshold` non-null values in the specified columns.
+   * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing less than
+   * `minNonNulls` non-null values in the specified columns.
    */
-  def drop(threshold: Int, cols: Seq[String]): DataFrame = {
-    // Filtering condition -- drop rows that have less than `threshold` non-null,
-    // i.e. at most (cols.size - threshold) null values.
-    val predicate = AtLeastNNonNulls(threshold, cols.map(name => df.resolve(name)))
+  def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
+    // Filtering condition -- only keep the row if it has at least `minNonNulls` non-null values.
+    val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
     df.filter(Column(predicate))
   }
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in numeric columns with `value`.
+   * Returns a new [[DataFrame]] that replaces null values in numeric columns with `value`.
    */
   def fill(value: Double): DataFrame = fill(value, df.columns)
 
@@ -73,13 +111,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String): DataFrame = fill(value, df.columns)
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in specified numeric columns.
+   * Returns a new [[DataFrame]] that replaces null values in specified numeric columns.
    * If a specified column is not a numeric column, it is ignored.
    */
   def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values in specified
+   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values in specified
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
@@ -96,13 +134,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in specified string columns.
+   * Returns a new [[DataFrame]] that replaces null values in specified string columns.
    * If a specified column is not a string column, it is ignored.
    */
   def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values in
+   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values in
    * specified string columns. If a specified column is not a string column, it is ignored.
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
@@ -119,7 +157,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values.
+   * Returns a new [[DataFrame]] that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
    * The value must be of the following type: `Integer`, `Long`, `Float`, `Double`, `String`.
@@ -134,10 +172,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *     .build());
    * }}}
    */
-  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill(valueMap.toSeq)
+  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values.
+   * (Scala-specific) Returns a new [[DataFrame]] that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
    * The value must be of the following type: `Int`, `Long`, `Float`, `Double`, `String`.
@@ -151,11 +189,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   ))
    * }}}
    */
-  def fill(valueMap: Map[String, Any]): DataFrame = fill(valueMap.toSeq)
+  def fill(valueMap: Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
 
-  private def fill(valueMap: Seq[(String, Any)]): DataFrame = {
+  private def fill0(values: Seq[(String, Any)]): DataFrame = {
     // Error handling
-    valueMap.foreach { case (colName, replaceValue) =>
+    values.foreach { case (colName, replaceValue) =>
       // Check column name exists
       df.resolve(colName)
 
@@ -169,10 +207,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     val columnEquals = df.sqlContext.analyzer.resolver
-    val pairs = valueMap.toSeq
-
     val projections = df.schema.fields.map { f =>
-      pairs.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
+      values.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
         v match {
           case v: jl.Float => fillDouble(f, v.toDouble)
           case v: jl.Double => fillDouble(f, v)
