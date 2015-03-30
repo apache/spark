@@ -119,31 +119,36 @@ case class SortMergeJoin(
           currentlMatches = null
           var stop: Boolean = false
           while (!stop && leftElement != null && rightElement != null) {
-            if (ordering.compare(leftKey, rightKey) > 0)
+            if (ordering.compare(leftKey, rightKey) > 0) {
               fetchRight()
-            else if (ordering.compare(leftKey, rightKey) < 0)
+            } else if (ordering.compare(leftKey, rightKey) < 0) {
               fetchLeft()
-            else
+            } else {
               stop = true
+            }
           }
           currentrMatches = new CompactBuffer[Row]()
           while (stop && rightElement != null) {
-            if (!rightKey.anyNull)
+            if (!rightKey.anyNull) {
               currentrMatches += rightElement
+            }
             fetchRight()
-            if (ordering.compare(leftKey, rightKey) != 0)
+            if (ordering.compare(leftKey, rightKey) != 0) {
               stop = false
+            }
           }
           if (currentrMatches.size > 0) {
             stop = false
             currentlMatches = new CompactBuffer[Row]()
             val leftMatch = leftKey.copy()
             while (!stop && leftElement != null) {
-              if (!leftKey.anyNull)
+              if (!leftKey.anyNull) {
                 currentlMatches += leftElement
+              }
               fetchLeft()
-              if (ordering.compare(leftKey, leftMatch) != 0)
+              if (ordering.compare(leftKey, leftMatch) != 0) {
                 stop = true
+              }
             }
           }
 
