@@ -167,10 +167,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * null values in column "B" with numeric value 1.0.
    * {{{
    *   import com.google.common.collect.ImmutableMap;
-   *   df.na.fill(ImmutableMap.<String, Object>builder()
-   *     .put("A", "unknown")
-   *     .put("B", 1.0)
-   *     .build());
+   *   df.na.fill(ImmutableMap.of("A", "unknown", "B", 1.0));
    * }}}
    */
   def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
@@ -192,9 +189,83 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    */
   def fill(valueMap: Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
 
-  def replace[T](col: String, replacement: Map[T, T]): DataFrame = replace(Seq(col), replacement)
+  /**
+   * Replaces values matching keys in `replacement` map with the corresponding values.
+   * Key and value of `replacement` map must have the same type, and can only be doubles or strings.
+   *
+   * {{{
+   *   import com.google.common.collect.ImmutableMap;
+   *
+   *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
+   *   df.replace("height", ImmutableMap.of(1.0, 2.0));
+   *
+   *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
+   *   df.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
+   * }}}
+   *
+   * @param col name of the column to apply the value replacement
+   * @param replacement value replacement map, as explained above
+   */
+  def replace[T](col: String, replacement: java.util.Map[T, T]): DataFrame = {
+    replace0(Seq(col), replacement.toMap)
+  }
 
-  def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
+  /**
+   * Replaces values matching keys in `replacement` map with the corresponding values.
+   * Key and value of `replacement` map must have the same type, and can only be doubles or strings.
+   *
+   * {{{
+   *   import com.google.common.collect.ImmutableMap;
+   *
+   *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
+   *   df.replace({"height", "weight"}, ImmutableMap.of(1.0, 2.0));
+   *
+   *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
+   *   df.replace({"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
+   * }}}
+   *
+   * @param col list of columns to apply the value replacement
+   * @param replacement value replacement map, as explained above
+   */
+  def replace[T](col: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
+    replace0(col.toSeq, replacement.toMap)
+  }
+
+  /**
+   * (Scala-specific) Replaces values matching keys in `replacement` map.
+   * Key and value of `replacement` map must have the same type, and can only be doubles or strings.
+   *
+   * {{{
+   *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
+   *   df.replace("height", Map(1.0 -> 2.0));
+   *
+   *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
+   *   df.replace("name", Map("UNKNOWN" -> "unnamed");
+   * }}}
+   *
+   * @param col name of the column to apply the value replacement
+   * @param replacement value replacement map, as explained above
+   */
+  def replace[T](col: String, replacement: Map[T, T]): DataFrame = replace0(Seq(col), replacement)
+
+  /**
+   * (Scala-specific) Replaces values matching keys in `replacement` map.
+   * Key and value of `replacement` map must have the same type, and can only be doubles or strings.
+   *
+   * {{{
+   *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
+   *   df.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
+   *
+   *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
+   *   df.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed");
+   * }}}
+   *
+   * @param col list of columns to apply the value replacement
+   * @param replacement value replacement map, as explained above
+   */
+  def replace[T](col: Seq[String], replacement: Map[T, T]): DataFrame = replace0(col, replacement)
+
+  private def replace0[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
     if (replacement.isEmpty || cols.isEmpty) {
       return df
     }
