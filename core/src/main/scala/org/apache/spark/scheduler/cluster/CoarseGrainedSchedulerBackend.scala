@@ -58,7 +58,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
   val maxRegisteredWaitingTimeMs =
-    Utils.timeStringAsMs(conf.get("spark.scheduler.maxRegisteredResourcesWaitingTime", "30000ms"))
+    Utils.timeStringAsMs(conf.get("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s"))
   val createTime = System.currentTimeMillis()
 
   private val executorDataMap = new HashMap[String, ExecutorData]

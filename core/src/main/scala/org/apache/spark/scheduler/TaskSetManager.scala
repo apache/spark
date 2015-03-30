@@ -848,7 +848,7 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3000ms")
+    val defaultWait = conf.get("spark.locality.wait", "3s")
     level match {
       case TaskLocality.PROCESS_LOCAL =>
         Utils.timeStringAsMs(conf.get("spark.locality.wait.process", defaultWait))
