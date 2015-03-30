@@ -162,7 +162,7 @@ class FileShuffleBlockManager(conf: SparkConf)
         val fileId = shuffleState.nextFileId.getAndIncrement()
         val files = Array.tabulate[File](numBuckets) { bucketId =>
           val filename = physicalFileName(shuffleId, bucketId, fileId)
-          blockManager.diskBlockManager.getFile(filename)
+          blockManager.diskBlockManager.getFile(filename, blockManager.blockManagerId)
         }
         val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
         shuffleState.allFileGroups.add(fileGroup)
@@ -180,7 +180,8 @@ class FileShuffleBlockManager(conf: SparkConf)
     Some(segment.nioByteBuffer())
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  override def getBlockData(blockId: ShuffleBlockId,
+      blockManagerId: BlockManagerId = blockManager.blockManagerId): ManagedBuffer = {
     if (consolidateShuffleFiles) {
       // Search all file groups associated with this shuffle.
       val shuffleState = shuffleStates(blockId.shuffleId)

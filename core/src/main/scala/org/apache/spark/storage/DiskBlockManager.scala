@@ -24,6 +24,8 @@ import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
 
+import scala.collection.mutable
+
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
  * locations. By default, one block is mapped to one file with a name given by its BlockId.
@@ -51,40 +53,74 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
-  private val shutdownHook = addShutdownHook()
+  private val localDirsByBlkMgr = new mutable.HashMap[BlockManagerId, Array[String]]
 
-  /** Looks up a file by hashing it into one of our local subdirectories. */
-  // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getFile().
-  def getFile(filename: String): File = {
-    // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
-
-    // Create the subdirectory if it doesn't already exist
-    val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
-      } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
-        }
-        subDirs(dirId)(subDirId) = newDir
-        newDir
-      }
-    }
-
-    new File(subDir, filename)
+  def getLocalDirsPath(): Array[String] = {
+    localDirs.map(file => file.getAbsolutePath)
   }
 
-  def getFile(blockId: BlockId): File = getFile(blockId.name)
+  private val shutdownHook = addShutdownHook()
+
+  def getFile(
+       fileName: String,
+       blockManagerId: BlockManagerId): File = {
+    val hash = Utils.nonNegativeHash(fileName)
+    val createDirIfAbsent =
+      blockManagerId.executorId == blockManager.blockManagerId.executorId
+
+    if (createDirIfAbsent) {
+      val dirId = hash % localDirs.length
+      val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+
+      // Create the subdirectory if it doesn't already exist
+      var subDir = subDirs(dirId)(subDirId)
+      if (subDir == null) {
+        subDir = subDirs(dirId).synchronized {
+          val old = subDirs(dirId)(subDirId)
+          if (old != null) {
+            old
+          } else {
+            val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+            if (!newDir.exists() && !newDir.mkdir()) {
+              throw new IOException(s"Failed to create local dir in $newDir.")
+            }
+            subDirs(dirId)(subDirId) = newDir
+            newDir
+          }
+        }
+      }
+      new File(subDir, fileName)
+    } else {
+      var tmpLocalDirs = localDirsByBlkMgr.get(blockManagerId)
+      if (!tmpLocalDirs.isDefined) {
+        tmpLocalDirs = localDirsByBlkMgr.synchronized {
+          val old = localDirsByBlkMgr.get(blockManagerId)
+          if(old.isDefined) {
+            old
+          } else {
+            localDirsByBlkMgr ++= blockManager.master.getLocalDirsPath(blockManager.blockManagerId)
+            localDirsByBlkMgr.get(blockManagerId)
+          }
+        }
+      }
+
+      val dirId = hash % tmpLocalDirs.get.length
+      val subDirId = (hash / tmpLocalDirs.get.length) % subDirsPerLocalDir
+      new File(tmpLocalDirs.get(dirId) + "/" + "%02x".format(subDirId), fileName)
+    }
+  }
+
+  def getFile(
+       blockId: BlockId,
+       blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
+//    val getFromThisExecutor = blockManagerId == blockManager.blockManagerId
+//    val dirs = if (getFromThisExecutor) getLocalDirsPath else localDirsByBlkMgr(blockManagerId)
+    getFile(blockId.name, blockManagerId)
+  }
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getFile(blockId.name).exists()
+    getFile(blockId).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */

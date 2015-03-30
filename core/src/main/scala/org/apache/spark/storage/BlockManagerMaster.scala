@@ -46,9 +46,12 @@ class BlockManagerMaster(
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  def registerBlockManager(blockManagerId: BlockManagerId,
+      maxMemSize: Long,
+      slaveActor: ActorRef,
+      localDirs: Array[String]) {
     logInfo("Trying to register BlockManager")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
+    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor, localDirs))
     logInfo("Registered BlockManager")
   }
 
@@ -73,6 +76,11 @@ class BlockManagerMaster(
   /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
+  }
+
+  /** Return other blockmanager's local dirs on the same machine as blockManagerId */
+  def getLocalDirsPath(blockManagerId: BlockManagerId): Map[BlockManagerId, Array[String]]  = {
+    askDriverWithReply[Map[BlockManagerId, Array[String]]](GetLocalDirsPath(blockManagerId))
   }
 
   /**

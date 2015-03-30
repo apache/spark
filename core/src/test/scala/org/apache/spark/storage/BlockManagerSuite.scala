@@ -31,7 +31,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
 
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, when, doReturn}
 
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
@@ -788,6 +788,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
       new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
       0)
+    store.initialize("app-id")
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -817,6 +818,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     // be nice to refactor classes involved in disk storage in a way that
     // allows for easier testing.
     val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
     val diskBlockManager = new DiskBlockManager(blockManager, conf)
 

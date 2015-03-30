@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io.{InputStream, IOException}
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{Logging, TaskContext}
@@ -78,7 +78,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val startTime = System.currentTimeMillis
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
-  private[this] val localBlocks = new ArrayBuffer[BlockId]()
+  private[this] val localBlocksbyBlockMgr = new HashMap[BlockManagerId, ArrayBuffer[BlockId]]
 
   /** Remote blocks to fetch, excluding zero-sized blocks. */
   private[this] val remoteBlocks = new HashSet[BlockId]()
@@ -181,44 +181,72 @@ final class ShuffleBlockFetcherIterator(
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[FetchRequest]
 
+    val shuffleMgrName = blockManager.conf.get("spark.shuffle.manager", "sort")
+    val externalShuffleServiceEnabled =
+      blockManager.conf.getBoolean("spark.shuffle.service.enabled", false)
+
     // Tracks total number of blocks (including zero sized blocks)
     var totalBlocks = 0
-    for ((address, blockInfos) <- blocksByAddress) {
-      totalBlocks += blockInfos.size
-      if (address.executorId == blockManager.blockManagerId.executorId) {
-        // Filter out zero-sized blocks
-        localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
-        numBlocksToFetch += localBlocks.size
-      } else {
-        val iterator = blockInfos.iterator
-        var curRequestSize = 0L
-        var curBlocks = new ArrayBuffer[(BlockId, Long)]
-        while (iterator.hasNext) {
-          val (blockId, size) = iterator.next()
-          // Skip empty blocks
-          if (size > 0) {
-            curBlocks += ((blockId, size))
-            remoteBlocks += blockId
-            numBlocksToFetch += 1
-            curRequestSize += size
-          } else if (size < 0) {
-            throw new BlockException(blockId, "Negative block size " + size)
-          }
-          if (curRequestSize >= targetRequestSize) {
-            // Add this FetchRequest
-            remoteRequests += new FetchRequest(address, curBlocks)
-            curBlocks = new ArrayBuffer[(BlockId, Long)]
-            logDebug(s"Creating fetch request of $curRequestSize at $address")
-            curRequestSize = 0
-          }
+    if (shuffleMgrName.toLowerCase == "hash" || externalShuffleServiceEnabled) {
+      for ((address, blockInfos) <- blocksByAddress) {
+        totalBlocks += blockInfos.size
+        if (address.executorId == blockManager.blockManagerId.executorId) {
+          val tmpBlocks = blockInfos.filter(_._2 != 0).map(_._1)
+          localBlocksbyBlockMgr.getOrElseUpdate(address, ArrayBuffer()) ++= tmpBlocks
+          numBlocksToFetch += tmpBlocks.size
+        } else {
+          remoteRequests ++= getRemote(address, blockInfos, targetRequestSize)
         }
-        // Add in the final request
-        if (curBlocks.nonEmpty) {
-          remoteRequests += new FetchRequest(address, curBlocks)
+      }
+    } else {
+      for ((address, blockInfos) <- blocksByAddress) {
+        totalBlocks += blockInfos.size
+        if (address.host == blockManager.blockManagerId.host) {
+          val tmpBlocks = blockInfos.filter(_._2 != 0).map(_._1)
+          localBlocksbyBlockMgr.getOrElseUpdate(address, ArrayBuffer()) ++= tmpBlocks
+          numBlocksToFetch += tmpBlocks.size
+        } else {
+          remoteRequests ++= getRemote(address, blockInfos, targetRequestSize)
         }
       }
     }
+
     logInfo(s"Getting $numBlocksToFetch non-empty blocks out of $totalBlocks blocks")
+    remoteRequests
+  }
+
+  private[this] def getRemote(address: BlockManagerId,
+                               blockInfos: Seq[(BlockId, Long)],
+                               targetRequestSize: Long):  ArrayBuffer[FetchRequest] = {
+    val remoteRequests = new ArrayBuffer[FetchRequest]
+
+    val iterator = blockInfos.iterator
+    var curRequestSize = 0L
+    var curBlocks = new ArrayBuffer[(BlockId, Long)]
+    while (iterator.hasNext) {
+      val (blockId, size) = iterator.next()
+      // Skip empty blocks
+      if (size > 0) {
+        curBlocks += ((blockId, size))
+        remoteBlocks += blockId
+        numBlocksToFetch += 1
+        curRequestSize += size
+      } else if (size < 0) {
+        throw new BlockException(blockId, "Negative block size " + size)
+      }
+      if (curRequestSize >= targetRequestSize) {
+        // Add this FetchRequest
+        remoteRequests += new FetchRequest(address, curBlocks)
+        curBlocks = new ArrayBuffer[(BlockId, Long)]
+        logDebug(s"Creating fetch request of $curRequestSize at $address")
+        curRequestSize = 0
+      }
+    }
+    // Add in the final request
+    if (curBlocks.nonEmpty) {
+      remoteRequests += new FetchRequest(address, curBlocks)
+    }
+
     remoteRequests
   }
 
@@ -228,21 +256,27 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks() {
-    val iter = localBlocks.iterator
+    val iter = localBlocksbyBlockMgr.iterator
     while (iter.hasNext) {
-      val blockId = iter.next()
-      try {
-        val buf = blockManager.getBlockData(blockId)
-        shuffleMetrics.incLocalBlocksFetched(1)
-        shuffleMetrics.incLocalBytesRead(buf.size)
-        buf.retain()
-        results.put(new SuccessFetchResult(blockId, 0, buf))
-      } catch {
-        case e: Exception =>
-          // If we see an exception, stop immediately.
-          logError(s"Error occurred while fetching local blocks", e)
-          results.put(new FailureFetchResult(blockId, e))
-          return
+      val localBlocksByBlkMgrId = iter.next()
+      val blockManagerId = localBlocksByBlkMgrId._1
+      val blockIter = localBlocksByBlkMgrId._2.iterator
+
+      while (blockIter.hasNext) {
+        val blockId = blockIter.next()
+        try {
+          val buf = blockManager.getBlockData(blockId, blockManagerId)
+          shuffleMetrics.incLocalBlocksFetched(1)
+          shuffleMetrics.incLocalBytesRead(buf.size)
+          buf.retain()
+          results.put(new SuccessFetchResult(blockId, 0, buf))
+        } catch {
+          case e: Exception =>
+            // If we see an exception, stop immediately.
+            logError(s"Error occurred while fetching local blocks", e)
+            results.put(new FailureFetchResult(blockId, e))
+            return
+        }
       }
     }
   }

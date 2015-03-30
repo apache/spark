@@ -53,8 +53,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
-      register(blockManagerId, maxMemSize, slaveActor)
+    case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor, localDirsPath) =>
+      register(blockManagerId, maxMemSize, slaveActor, localDirsPath)
       sender ! true
 
     case UpdateBlockInfo(
@@ -76,6 +76,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case GetMemoryStatus =>
       sender ! memoryStatus
+
+    case GetLocalDirsPath(blockManagerId) =>
+      sender ! getLocalDirsPath(blockManagerId)
 
     case GetStorageStatus =>
       sender ! storageStatus
@@ -223,6 +226,15 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }
   }
 
+  // Return local dirs of other blockmanager on the same machine as blockManagerId
+  private def getLocalDirsPath(
+                blockManagerId: BlockManagerId): Map[BlockManagerId, Array[String]] = {
+    blockManagerInfo
+      .filter { case(id, _) => (id != blockManagerId && id.host == blockManagerId.host)}
+      .mapValues { info => info.localDirsPath }
+      .toMap
+  }
+
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
     blockManagerInfo.map { case(blockManagerId, info) =>
@@ -291,7 +303,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  private def register(
+                id: BlockManagerId,
+                maxMemSize: Long,
+                slaveActor: ActorRef, localDirsPath: Array[String]) {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -308,7 +323,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockManagerIdByExecutor(id.executorId) = id
       
       blockManagerInfo(id) = new BlockManagerInfo(
-        id, System.currentTimeMillis(), maxMemSize, slaveActor)
+        id, System.currentTimeMillis(), maxMemSize, slaveActor, localDirsPath)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
@@ -320,7 +335,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       memSize: Long,
       diskSize: Long,
       tachyonSize: Long): Boolean = {
-
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
@@ -412,7 +426,8 @@ private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
     val maxMem: Long,
-    val slaveActor: ActorRef)
+    val slaveActor: ActorRef,
+    val localDirsPath: Array[String])
   extends Logging {
 
   private var _lastSeenMs: Long = timeMs

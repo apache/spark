@@ -52,12 +52,16 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
     ShuffleBlockId(shuffleId, mapId, 0)
   }
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, 0))
+  def getDataFile(shuffleId: Int,
+                   mapId: Int,
+                   blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
+    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, 0), blockManagerId)
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, 0))
+  private def getIndexFile(shuffleId: Int,
+                             mapId: Int,
+                             blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
+    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, 0), blockManagerId)
   }
 
   /**
@@ -101,10 +105,11 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
     Some(getBlockData(blockId).nioByteBuffer())
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  override def getBlockData(blockId: ShuffleBlockId,
+      blockManagerId: BlockManagerId = blockManager.blockManagerId): ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId, blockManagerId)
 
     val in = new DataInputStream(new FileInputStream(indexFile))
     try {
@@ -113,7 +118,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
       val nextOffset = in.readLong()
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
+        getDataFile(blockId.shuffleId, blockId.mapId, blockManagerId),
         offset,
         nextOffset - offset)
     } finally {

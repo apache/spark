@@ -21,7 +21,7 @@ import java.io.{File, FileWriter}
 
 import scala.language.reflectiveCalls
 
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, when, doReturn}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
 import org.apache.spark.SparkConf
@@ -35,6 +35,8 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
 
   val blockManager = mock(classOf[BlockManager])
   when(blockManager.conf).thenReturn(testConf)
+  val localBmId = BlockManagerId("test-client", "test-client", 1)
+  doReturn(localBmId).when(blockManager).blockManagerId
   var diskBlockManager: DiskBlockManager = _
 
   override def beforeAll() {
