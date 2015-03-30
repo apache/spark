@@ -76,7 +76,7 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
 }
 
 /**
- * A predicate that is evaluated to be true if there are at least `n` null values in the children.
+ * A predicate that is evaluated to be true if there are at least `n` non-null values.
  */
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
