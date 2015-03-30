@@ -237,8 +237,8 @@ class DataFrame private[sql](
   def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
-        "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
-        "New column names: " + colNames.mkString(", "))
+        s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
+        s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
       apply(oldName).as(newName)
@@ -318,6 +318,17 @@ class DataFrame private[sql](
    * @group action
    */
   def show(): Unit = show(20)
+
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   df.na.drop()
+   * }}}
+   *
+   * @group dfops
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
 
   /**
    * Cartesian join with another [[DataFrame]].
