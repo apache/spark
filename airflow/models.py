@@ -183,33 +183,18 @@ class DagBag(object):
         return dag_ids
 
 
-class User(Base):
-    """
-    Eventually should be used for security purposes
-    """
+class BaseUser(Base):
     __tablename__ = "user"
+
     id = Column(Integer, primary_key=True)
     username = Column(String(ID_LEN), unique=True)
     email = Column(String(500))
-
-    def __init__(self, username=None, email=None):
-        self.username = username
-        self.email = email
 
     def __repr__(self):
         return self.username
 
     def get_id(self):
         return unicode(self.id)
-
-    def is_active(self):
-        return True
-
-    def is_authenticated(self):
-        return True
-
-    def is_anonymous(self):
-        return False
 
 
 class Connection(Base):
@@ -1507,6 +1492,9 @@ class Chart(Base):
     iteration_no = Column(Integer, default=0)
     last_modified = Column(DateTime, default=datetime.now())
 
+    def __repr__(self):
+        return self.label
+
 
 class KnownEventType(Base):
     __tablename__ = "known_event_type"
@@ -1534,3 +1522,6 @@ class KnownEvent(Base):
         cascade=False,
         cascade_backrefs=False, backref='known_events')
     description = Column(Text)
+
+    def __repr__(self):
+        return self.label
