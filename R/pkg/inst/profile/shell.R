@@ -20,8 +20,8 @@
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
   Sys.setenv(NOAWT=1)
 
-  require(utils)
-  require(SparkR)
+  library(utils)
+  library(SparkR)
   sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
   assign("sc", sc, envir=.GlobalEnv)
   sqlCtx <- sparkRSQL.init(sc)
