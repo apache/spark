@@ -19,7 +19,7 @@
 
 # Starts a slave on the machine this script is executed on.
 
-usage="Usage: start-slave.sh <worker#> <spark-master-URL> where <spark-master-URL> is like "spark://localhost:7077"
+usage="Usage: start-slave.sh <worker#> <spark-master-URL> where <spark-master-URL> is like spark://localhost:7077"
 
 if [ $# -lt 2 ]; then
   echo $usage
