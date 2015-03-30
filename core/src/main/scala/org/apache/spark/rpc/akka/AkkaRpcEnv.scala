@@ -220,9 +220,9 @@ private[spark] class AkkaRpcEnv private[akka] (
       address.port.getOrElse(defaultAddress.port))
   }
 
-  override def asyncSetupEndpointRefByUrl(url: String): Future[RpcEndpointRef] = {
+  override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    actorSystem.actorSelection(url).resolveOne(defaultLookupTimeout).
+    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout).
       map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
   }
 

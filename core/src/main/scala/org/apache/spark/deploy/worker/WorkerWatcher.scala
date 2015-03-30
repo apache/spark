@@ -31,7 +31,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   override def onStart() {
     logInfo(s"Connecting to worker $workerUrl")
     if (!isTesting) {
-      rpcEnv.asyncSetupEndpointRefByUrl(workerUrl)
+      rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
     }
   }
 
@@ -45,10 +45,8 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   private var isTesting = false
 
   // Lets us filter events only from the worker's actor system
-  private val expectedHostPort = new java.net.URI(workerUrl)
-  private def isWorker(address: RpcAddress) = {
-    expectedHostPort.getHost == address.host && expectedHostPort.getPort == address.port
-  }
+  private val expectedAddress = RpcAddress.fromURIString(workerUrl)
+  private def isWorker(address: RpcAddress) = expectedAddress == address
 
   private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 

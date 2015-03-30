@@ -70,15 +70,15 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `url` asynchronously.
+   * Retrieve the [[RpcEndpointRef]] represented by `uri` asynchronously.
    */
-  def asyncSetupEndpointRefByUrl(url: String): Future[RpcEndpointRef]
+  def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef]
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `url`. This is a blocking action.
+   * Retrieve the [[RpcEndpointRef]] represented by `uri`. This is a blocking action.
    */
-  def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
-    Await.result(asyncSetupEndpointRefByUrl(url), defaultLookupTimeout)
+  def setupEndpointRefByURI(uri: String): RpcEndpointRef = {
+    Await.result(asyncSetupEndpointRefByURI(uri), defaultLookupTimeout)
   }
 
   /**
@@ -87,7 +87,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    */
   def asyncSetupEndpointRef(
       systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
-    asyncSetupEndpointRefByUrl(uriOf(systemName, address, endpointName))
+    asyncSetupEndpointRefByURI(uriOf(systemName, address, endpointName))
   }
 
   /**
@@ -96,7 +96,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    */
   def setupEndpointRef(
       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByUrl(uriOf(systemName, address, endpointName))
+    setupEndpointRefByURI(uriOf(systemName, address, endpointName))
   }
 
   /**
@@ -384,9 +384,15 @@ private[spark] object RpcAddress {
   /**
    * Return the [[RpcAddress]] represented by `uri`.
    */
+  def fromURI(uri: URI): RpcAddress = {
+    RpcAddress(uri.getHost, uri.getPort)
+  }
+
+  /**
+   * Return the [[RpcAddress]] represented by `uri`.
+   */
   def fromURIString(uri: String): RpcAddress = {
-    val u = new java.net.URI(uri)
-    RpcAddress(u.getHost, u.getPort)
+    fromURI(new java.net.URI(uri))
   }
 
   def fromSparkURL(sparkUrl: String): RpcAddress = {
