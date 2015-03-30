@@ -313,7 +313,12 @@ trait HiveTypeCoercion {
    * - SHORT gets turned into DECIMAL(5, 0)
    * - INT gets turned into DECIMAL(10, 0)
    * - LONG gets turned into DECIMAL(20, 0)
-   * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
+   * - FLOAT and DOUBLE
+   *   1. Union operation:
+   *      FLOAT gets turned into DECIMAL(7, 7), DOUBLE gets turned into DECIMAL(15, 15) (this is the
+   *      same as Hive)
+   *   2. Other operation:
+   *      FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
    *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
    */
   // scalastyle:on
@@ -330,6 +335,12 @@ trait HiveTypeCoercion {
 
     def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
+    // Conversion rules for float and double into fixed-precision decimals
+    val floatTypeToFixed: Map[DataType, DecimalType] = Map(
+      FloatType -> DecimalType(7, 7),
+      DoubleType -> DecimalType(15, 15)
+    )
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // fix decimal precision for union
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
@@ -345,10 +356,10 @@ trait HiveTypeCoercion {
                 (Alias(Cast(l, intTypeToFixed(t)), l.name)(), r)
               case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
                 (l, Alias(Cast(r, intTypeToFixed(t)), r.name)())
-              case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-                (l, Alias(Cast(r, DoubleType), r.name)())
-              case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-                (Alias(Cast(l, DoubleType), l.name)(), r)
+              case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
+                (Alias(Cast(l, floatTypeToFixed(t)), l.name)(), r)
+              case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
+                (l, Alias(Cast(r, floatTypeToFixed(t)), r.name)())
               case _ => (l, r)
             }
           case other => other

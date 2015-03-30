@@ -31,7 +31,8 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
     AttributeReference("u", DecimalType.Unlimited)(),
-    AttributeReference("f", FloatType)()
+    AttributeReference("f", FloatType)(),
+    AttributeReference("b", DoubleType)()
   )
 
   val i: Expression = UnresolvedAttribute("i")
@@ -39,6 +40,7 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   val d2: Expression = UnresolvedAttribute("d2")
   val u: Expression = UnresolvedAttribute("u")
   val f: Expression = UnresolvedAttribute("f")
+  val b: Expression = UnresolvedAttribute("b")
 
   before {
     catalog.registerTable(Seq("table"), relation)
@@ -98,8 +100,10 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     checkUnion(i, d2, DecimalType(12, 2))
     checkUnion(d1, d2, DecimalType(5, 2))
     checkUnion(d2, d1, DecimalType(5, 2))
-    checkUnion(d1, f, DoubleType)
-    checkUnion(f, d2, DoubleType)
+    checkUnion(d1, f, DecimalType(8, 7))
+    checkUnion(f, d2, DecimalType(10, 7))
+    checkUnion(d1, b, DecimalType(16, 15))
+    checkUnion(b, d2, DecimalType(18, 15))
     checkUnion(d1, u, DecimalType.Unlimited)
     checkUnion(u, d2, DecimalType.Unlimited)
   }
