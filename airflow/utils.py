@@ -303,6 +303,3 @@ def send_MIME_email(e_from, e_to, mime_msg):
     logging.info("Sent an altert email to " + str(to))
     s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
-
-
-
