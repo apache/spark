@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.{lang => jl}
+
+import scala.collection.JavaConversions._
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -48,8 +52,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(threshold: Int, cols: Array[String]): DataFrame = drop(threshold, cols.toSeq)
 
   /**
-   * Returns a new [[DataFrame ]] that drops rows containing less than `threshold` non-null
-   * values in the specified columns.
+   * (Scala-specific) Returns a new [[DataFrame ]] that drops rows containing less than
+   * `threshold` non-null values in the specified columns.
    */
   def drop(threshold: Int, cols: Seq[String]): DataFrame = {
     // Filtering condition -- drop rows that have less than `threshold` non-null,
@@ -75,22 +79,15 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in specified numeric columns.
-   * If a specified column is not a numeric column, it is ignored.
+   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values in specified
+   * numeric columns. If a specified column is not a numeric column, it is ignored.
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
     val columnEquals = df.sqlContext.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       // Only fill if the column is part of the cols list.
-      if (cols.exists(col => columnEquals(f.name, col))) {
-        f.dataType match {
-          case _: DoubleType =>
-            coalesce(df.col(f.name), lit(value)).as(f.name)
-          case typ: NumericType =>
-            coalesce(df.col(f.name), lit(value).cast(typ)).as(f.name)
-          case _ =>
-            df.col(f.name)
-        }
+      if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) {
+        fillDouble(f, value)
       } else {
         df.col(f.name)
       }
@@ -105,24 +102,100 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * Returns a new [[DataFrame ]] that replaces null values in specified string columns.
-   * If a specified column is not a string column, it is ignored.
+   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values in
+   * specified string columns. If a specified column is not a string column, it is ignored.
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
     val columnEquals = df.sqlContext.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       // Only fill if the column is part of the cols list.
-      if (cols.exists(col => columnEquals(f.name, col))) {
-        f.dataType match {
-          case _: StringType =>
-            coalesce(df.col(f.name), lit(value)).as(f.name)
-          case _ =>
-            df.col(f.name)
-        }
+      if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) {
+        fillString(f, value)
       } else {
         df.col(f.name)
       }
     }
     df.select(projections : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame ]] that replaces null values.
+   *
+   * The key of the map is the column name, and the value of the map is the replacement value.
+   * The value must be of the following type: `Integer`, `Long`, `Float`, `Double`, `String`.
+   *
+   * For example, the following replaces null values in column "A" with string "unknown", and
+   * null values in column "B" with numeric value 1.0.
+   * {{{
+   *   import com.google.common.collect.ImmutableMap;
+   *   df.na.fill(ImmutableMap.<String, Object>builder()
+   *     .put("A", "unknown")
+   *     .put("B", 1.0)
+   *     .build());
+   * }}}
+   */
+  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill(valueMap.toSeq)
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame ]] that replaces null values.
+   *
+   * The key of the map is the column name, and the value of the map is the replacement value.
+   * The value must be of the following type: `Int`, `Long`, `Float`, `Double`, `String`.
+   *
+   * For example, the following replaces null values in column "A" with string "unknown", and
+   * null values in column "B" with numeric value 1.0.
+   * {{{
+   *   df.na.fill(Map(
+   *     "A" -> "unknown",
+   *     "B" -> 1.0
+   *   ))
+   * }}}
+   */
+  def fill(valueMap: Map[String, Any]): DataFrame = fill(valueMap.toSeq)
+
+  private def fill(valueMap: Seq[(String, Any)]): DataFrame = {
+    // Error handling
+    valueMap.foreach { case (colName, replaceValue) =>
+      // Check column name exists
+      df.resolve(colName)
+
+      // Check data type
+      replaceValue match {
+        case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: String =>
+          // This is good
+        case _ => throw new IllegalArgumentException(
+          s"Does not support value type ${replaceValue.getClass.getName} ($replaceValue).")
+      }
+    }
+
+    val columnEquals = df.sqlContext.analyzer.resolver
+    val pairs = valueMap.toSeq
+
+    val projections = df.schema.fields.map { f =>
+      pairs.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
+        v match {
+          case v: jl.Float => fillDouble(f, v.toDouble)
+          case v: jl.Double => fillDouble(f, v)
+          case v: jl.Long => fillDouble(f, v.toDouble)
+          case v: jl.Integer => fillDouble(f, v.toDouble)
+          case v: String => fillString(f, v)
+        }
+      }.getOrElse(df.col(f.name))
+    }
+    df.select(projections : _*)
+  }
+
+  /**
+   * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
+   */
+  private def fillDouble(col: StructField, replacement: Double): Column = {
+    coalesce(df.col(col.name), lit(replacement).cast(col.dataType)).as(col.name)
+  }
+
+  /**
+   * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
+   */
+  private def fillString(col: StructField, replacement: String): Column = {
+    coalesce(df.col(col.name), lit(replacement).cast(col.dataType)).as(col.name)
   }
 }

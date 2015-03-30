@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 
@@ -110,5 +112,26 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     checkAnswer(
       Seq[(String, String)]((null, null)).toDF("col1", "col2").na.fill("test", "col1" :: Nil),
       Row("test", null))
+  }
+
+  test("fill with map") {
+    val df = Seq[(String, String, java.lang.Long, java.lang.Double)](
+      (null, null, null, null)).toDF("a", "b", "c", "d")
+    checkAnswer(
+      df.na.fill(Map(
+        "a" -> "test",
+        "c" -> 1,
+        "d" -> 2.2
+      )),
+      Row("test", null, 1, 2.2))
+
+    // Test Java version
+    checkAnswer(
+      df.na.fill(mapAsJavaMap(Map(
+        "a" -> "test",
+        "c" -> 1,
+        "d" -> 2.2
+      ))),
+      Row("test", null, 1, 2.2))
   }
 }
