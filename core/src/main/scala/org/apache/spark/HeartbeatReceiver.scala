@@ -25,7 +25,7 @@ import akka.actor.{Actor, Cancellable}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.{Utils, ActorLogReceive}
+import org.apache.spark.util.{ActorLogReceive, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -38,7 +38,6 @@ private[spark] case class Heartbeat(
     blockManagerId: BlockManagerId)
 
 private[spark] case object ExpireDeadHosts
-
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -58,9 +57,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   private val checkTimeoutIntervalMs = Utils.timeStringAsMs(
     sc.conf.get("spark.network.timeoutInterval",
       sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", "60s")))
-
+  
   private var timeoutCheckingTask: Cancellable = null
-
   override def preStart(): Unit = {
     import context.dispatcher
     timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
