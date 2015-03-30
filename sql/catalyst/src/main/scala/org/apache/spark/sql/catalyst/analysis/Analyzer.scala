@@ -64,8 +64,16 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*)
+      extendedResolutionRules : _*),
+    Batch("SetAnalyzed", Once, SetLogicalPlanAnalyzed)
   )
+
+  object SetLogicalPlanAnalyzed extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.analyzed = true
+      plan
+    }
+  }
 
   /**
    * Removes no-op Alias expressions from the plan.

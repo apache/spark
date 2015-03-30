@@ -29,6 +29,15 @@ import org.apache.spark.sql.catalyst.trees
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
+  protected[sql] var analyzed: Boolean = false
+
+  def originalPlan: LogicalPlan = this transform {
+    case p if p.analyzed =>
+      p._origPlan.getOrElse(p)
+  }
+
+  protected[sql] var _origPlan: Option[LogicalPlan] = None
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case

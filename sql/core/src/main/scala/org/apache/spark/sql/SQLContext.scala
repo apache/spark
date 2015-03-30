@@ -1107,7 +1107,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
     def assertAnalyzed(): Unit = checkAnalysis(analyzed)
 
-    lazy val analyzed: LogicalPlan = analyzer(logical)
+    lazy val analyzed: LogicalPlan = if (!logical.analyzed) {
+      val plan = analyzer(logical)
+      plan._origPlan = Some(logical)
+      plan
+    } else {
+      logical
+    }
+
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
