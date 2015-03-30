@@ -517,6 +517,23 @@ createExternalTable <- function(sqlCtx, tableName, path = NULL, source = NULL, .
   dataFrame(sdf)
 }
 
+#' Create a Schema object
+#'
+#' Create an object of type "struct" that contains the metadata for a DataFrame. Intended for 
+#' use with createDataFrame and toDF.
+#'
+#' @param field a Field object (created with the field() function)
+#' @param ... additional Field objects
+#' @return a Schema object
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
+#' schema <- buildSchema(field("a", "integer"), field("b", "string"))
+#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' }
 buildSchema <- function(field, ...) {
   fields <- list(field, ...)
   if (!all(sapply(fields, inherits, "field"))) {
@@ -526,6 +543,7 @@ buildSchema <- function(field, ...) {
   structure(fields, class = "struct")
 }
 
+# print method for "struct" object
 print.struct <- function(x, ...) {
   cat(sapply(x, function(field) { paste("|-", "name = \"", field$name,
                                         "\", type = \"", field$type,
@@ -534,6 +552,25 @@ print.struct <- function(x, ...) {
       , sep = "")
 }
 
+#' Create a Field object
+#'
+#' Create a Field object that contains the metadata for a single field in a schema.
+#'
+#' @param name The name of the field
+#' @param type The data type of the field
+#' @param nullable A logical vector indicating whether or not the field is nullable
+#' @return a Field object
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
+#' field1 <- field("a", "integer", TRUE)
+#' field2 <- field("b", "string", TRUE)
+#' schema <- buildSchema(field1, field2)
+#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' }
 field <- function(name, type, nullable = TRUE) {
   if (class(name) != "character") {
     stop("Field name must be a string.")
@@ -547,6 +584,7 @@ field <- function(name, type, nullable = TRUE) {
   structure(list("name" = name, "type" = type, "nullable" = nullable), class = "field")
 }
 
+# print method for Field objects
 print.field <- function(x, ...) {
   cat("name = \"", x$name, "\", type = \"", x$type, "\", nullable = ", x$nullable, sep = "")
 }
