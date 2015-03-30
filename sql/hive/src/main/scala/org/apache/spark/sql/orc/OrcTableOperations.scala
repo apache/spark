@@ -95,7 +95,6 @@ case class InsertIntoOrcTable(relation: OrcRelation,
   }
 
   def saveAsHadoopFile(rdd: RDD[Writable], conf: Configuration) {
-    //val job = new Job(conf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = sqlContext.sparkContext.newRddId()
