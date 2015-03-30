@@ -41,6 +41,9 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
    * [[RpcEndpoint.self]].
+   *
+   * Note: This method won't return null. `IllegalArgumentException` will be thrown if calling this
+   * on a non-existent endpoint.
    */
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
@@ -203,14 +206,16 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]
+   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]. If receiving a
+   * unmatched message, [[SparkException]] will be thrown and sent to `onError`.
    */
   def receive: PartialFunction[Any, Unit] = {
     case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.sendWithReply]]
+   * Process messages from [[RpcEndpointRef.sendWithReply]]. If receiving a unmatched message,
+   * [[SparkException]] will be thrown and sent to `onError`.
    */
   def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
@@ -314,7 +319,8 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint]] and get its result within a default
    * timeout, or throw a SparkException if this fails even after the default number of retries.
-   * Because this method retries, the message handling in the receiver side should be idempotent.
+   * The default `timeout` will be used in every trial of calling `sendWithReply`. Because this
+   * method retries, the message handling in the receiver side should be idempotent.
    *
    * Note: this is a blocking action which may cost a lot of time,  so don't call it in an message
    * loop of [[RpcEndpoint]].
@@ -328,8 +334,8 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
    * specified timeout, throw a SparkException if this fails even after the specified number of
-   * retries. Because this method retries, the message handling in the receiver side should be
-   * idempotent.
+   * retries. `timeout` will be used in every trial of calling `sendWithReply`. Because this method
+   * retries, the message handling in the receiver side should be idempotent.
    *
    * Note: this is a blocking action which may cost a lot of time, so don't call it in an message
    * loop of [[RpcEndpoint]].

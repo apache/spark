@@ -98,7 +98,7 @@ private[spark] class AkkaRpcEnv private[akka] (
     // So `actorRef` should be created after assigning `endpointRef`.
     lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
-      require(endpointRef != null)
+      assert(endpointRef != null)
       registerEndpoint(endpoint, endpointRef)
 
       override def preStart(): Unit = {
@@ -135,10 +135,8 @@ private[spark] class AkkaRpcEnv private[akka] (
           }
 
         case AkkaFailure(e) =>
-          try {
-            endpoint.onError(e)
-          } catch {
-            case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
+          safelyCall(endpoint) {
+            throw e
           }
 
         case message: Any => {
@@ -164,7 +162,7 @@ private[spark] class AkkaRpcEnv private[akka] (
   private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
     val message = m.message
     val needReply = m.needReply
-    val pf =
+    val pf: PartialFunction[Any, Unit] =
       if (needReply) {
         endpoint.receiveAndReply(new RpcCallContext {
           override def sendFailure(e: Throwable): Unit = {
@@ -183,9 +181,9 @@ private[spark] class AkkaRpcEnv private[akka] (
         endpoint.receive
       }
     try {
-      if (pf.isDefinedAt(message)) {
-        pf.apply(message)
-      }
+      pf.applyOrElse[Any, Unit](message, { message =>
+        throw new SparkException(s"Unmatched message $message from ${_sender}")
+      })
     } catch {
       case NonFatal(e) =>
         if (needReply) {
