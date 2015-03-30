@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.ui.SparkUI
 
-private[spark] case class ApplicationHistoryInfo(
+private[history] case class ApplicationHistoryInfo(
     id: String,
     name: String,
     startTime: Long,
@@ -28,7 +28,7 @@ private[spark] case class ApplicationHistoryInfo(
     sparkUser: String,
     completed: Boolean = false)
 
-private[spark] abstract class ApplicationHistoryProvider {
+private[history] abstract class ApplicationHistoryProvider {
 
   /**
    * Returns a list of applications available for the history server to show.

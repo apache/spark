@@ -19,13 +19,11 @@ import sys
 import itertools
 import warnings
 import random
-import os
-from tempfile import NamedTemporaryFile
 
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -52,13 +50,6 @@ class DataFrame(object):
 
         ageCol = people.age
 
-    Note that the :class:`Column` type can also be manipulated
-    through its various functions::
-
-        # The following creates a new column that increases everybody's age by 10.
-        people.age + 10
-
-
     A more concrete example::
 
         # To create DataFrame using SQLContext
@@ -79,7 +70,7 @@ class DataFrame(object):
     @property
     def rdd(self):
         """
-        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        Return the content of the :class:`DataFrame` as an :class:`pyspark.RDD`
         of :class:`Row` s.
         """
         if not hasattr(self, '_lazy_rdd'):
@@ -164,7 +155,7 @@ class DataFrame(object):
                 "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
         return jmode
 
-    def saveAsTable(self, tableName, source=None, mode="append", **options):
+    def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source as a table.
 
         The data source is specified by the `source` and a set of `options`.
@@ -190,7 +181,7 @@ class DataFrame(object):
                                           self.sql_ctx._sc._gateway._gateway_client)
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
 
-    def save(self, path=None, source=None, mode="append", **options):
+    def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the `source` and a set of `options`.
@@ -272,9 +263,9 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
-    def show(self):
+    def show(self, n=20):
         """
-        Print the first 20 rows.
+        Print the first n rows.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -283,7 +274,7 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print self._jdf.showString().encode('utf8', 'ignore')
+        print self._jdf.showString(n).encode('utf8', 'ignore')
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -310,14 +301,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            bytesInJava = self._jdf.javaToPython().collect().iterator()
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
-        tempFile.close()
-        self._sc._writeToFile(bytesInJava, tempFile.name)
-        # Read the data into Python and deserialize it:
-        with open(tempFile.name, 'rb') as tempFile:
-            rs = list(BatchedSerializer(PickleSerializer()).load_stream(tempFile))
-        os.unlink(tempFile.name)
+            port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
+        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
         cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
@@ -528,6 +513,25 @@ class DataFrame(object):
 
     orderBy = sort
 
+    def describe(self, *cols):
+        """Computes statistics for numeric columns.
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical columns.
+
+        >>> df.describe().show()
+        summary age
+        count   2
+        mean    3.5
+        stddev  1.5
+        min     2
+        max     5
+        """
+        cols = ListConverter().convert(cols,
+                                       self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
 
@@ -639,11 +643,11 @@ class DataFrame(object):
         for all the available aggregate functions.
 
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age)=5.0), Row(name=u'Alice', AVG(age)=2.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age)=5.0), Row(name=u'Alice', AVG(age)=2.0)]
         """
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
@@ -655,10 +659,10 @@ class DataFrame(object):
         (shorthand for df.groupBy.agg()).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age#0)=5)]
+        [Row(MAX(age)=5)]
         >>> from pyspark.sql import functions as F
         >>> df.agg(F.min(df.age)).collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MIN(age)=2)]
         """
         return self.groupBy().agg(*exprs)
 
@@ -774,7 +778,7 @@ class GroupedData(object):
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
-        [Row(MIN(age#0)=5), Row(MIN(age#0)=2)]
+        [Row(MIN(age)=5), Row(MIN(age)=2)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -803,9 +807,9 @@ class GroupedData(object):
         for each group. This is an alias for `avg`.
 
         >>> df.groupBy().mean('age').collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
         """
 
     @df_varargs_api
@@ -814,9 +818,9 @@ class GroupedData(object):
         for each group.
 
         >>> df.groupBy().avg('age').collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
         """
 
     @df_varargs_api
@@ -825,9 +829,9 @@ class GroupedData(object):
         each group.
 
         >>> df.groupBy().max('age').collect()
-        [Row(MAX(age#0)=5)]
+        [Row(MAX(age)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age#4L)=5, MAX(height#5L)=85)]
+        [Row(MAX(age)=5, MAX(height)=85)]
         """
 
     @df_varargs_api
@@ -836,9 +840,9 @@ class GroupedData(object):
         each group.
 
         >>> df.groupBy().min('age').collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MIN(age)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age#4L)=2, MIN(height#5L)=80)]
+        [Row(MIN(age)=2, MIN(height)=80)]
         """
 
     @df_varargs_api
@@ -847,9 +851,9 @@ class GroupedData(object):
         group.
 
         >>> df.groupBy().sum('age').collect()
-        [Row(SUM(age#0)=7)]
+        [Row(SUM(age)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age#4L)=7, SUM(height#5L)=165)]
+        [Row(SUM(age)=7, SUM(height)=165)]
         """
 
 
@@ -993,6 +997,23 @@ class Column(object):
 
     __getslice__ = substr
 
+    def inSet(self, *cols):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.inSet("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.inSet([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cols[0]
+        cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
+
     # order
     asc = _unary_op("asc", "Returns a sort expression based on the"
                            " ascending order of the given column name.")
@@ -1025,10 +1046,12 @@ class Column(object):
             ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
             jdt = ssql_ctx.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
     def __repr__(self):
-        return 'Column<%s>' % self._jdf.toString().encode('utf8')
+        return 'Column<%s>' % self._jc.toString().encode('utf8')
 
 
 def _test():

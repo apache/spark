@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+# Starts a slave instance on each machine specified in the conf/slaves file.
+
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
@@ -64,6 +66,6 @@ else
     SPARK_WORKER_WEBUI_PORT=8081
   fi
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 ))  "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT" --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i ))
+    "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 )) --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i )) "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
   done
 fi

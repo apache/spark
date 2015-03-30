@@ -116,6 +116,11 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
+/**
+ * An internal class that describes the metadata of an event log.
+ * This event is not meant to be posted to listeners downstream.
+ */
+private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
  * :: DeveloperApi ::
@@ -295,7 +300,7 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
-    def f(d: Double) = format.format(d)
+    def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
 
@@ -341,7 +346,7 @@ private[spark] object StatsReportListener extends Logging {
   /**
    * Reformat a time interval in milliseconds to a prettier format for output
    */
-  def millisToString(ms: Long) = {
+  def millisToString(ms: Long): String = {
     val (size, units) =
       if (ms > hours) {
         (ms.toDouble / hours, "hours")

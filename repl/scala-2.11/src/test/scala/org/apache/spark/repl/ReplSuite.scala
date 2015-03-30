@@ -21,11 +21,9 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.tools.nsc.interpreter.SparkILoop
 
-import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.SparkContext
@@ -128,9 +126,9 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local",
       """
         |var v = 7
-        |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => v).collect().reduceLeft(_+_)
         |v = 10
-        |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => v).collect().reduceLeft(_+_)
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -144,7 +142,7 @@ class ReplSuite extends FunSuite {
         |class C {
         |def foo = 5
         |}
-        |sc.parallelize(1 to 10).map(x => (new C).foo).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => (new C).foo).collect().reduceLeft(_+_)
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -155,7 +153,7 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local",
       """
         |def double(x: Int) = x + x
-        |sc.parallelize(1 to 10).map(x => double(x)).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => double(x)).collect().reduceLeft(_+_)
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -167,9 +165,9 @@ class ReplSuite extends FunSuite {
       """
         |var v = 7
         |def getV() = v
-        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
         |v = 10
-        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -185,9 +183,9 @@ class ReplSuite extends FunSuite {
       """
         |var array = new Array[Int](5)
         |val broadcastArray = sc.broadcast(array)
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
         |array(0) = 5
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -196,8 +194,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("interacting with files") {
-    val tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
@@ -224,14 +221,14 @@ class ReplSuite extends FunSuite {
       """
         |var v = 7
         |def getV() = v
-        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
         |v = 10
-        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
         |var array = new Array[Int](5)
         |val broadcastArray = sc.broadcast(array)
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
         |array(0) = 5
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -263,14 +260,14 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2576 importing SQLContext.createSchemaRDD.") {
+  test("SPARK-2576 importing SQLContext.createDataFrame.") {
     // We need to use local-cluster to test this case.
     val output = runInterpreter("local-cluster[1,1,512]",
       """
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-        |import sqlContext.createSchemaRDD
+        |import sqlContext.implicits._
         |case class TestCaseClass(value: Int)
-        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toSchemaRDD.collect
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -283,26 +280,26 @@ class ReplSuite extends FunSuite {
       |val t = new TestClass
       |import t.testMethod
       |case class TestCaseClass(value: Int)
-      |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect
+      |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect()
     """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
 
-  if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
+  if (System.getenv("MESOS_NATIVE_JAVA_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
         """
           |var v = 7
           |def getV() = v
-          |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
           |v = 10
-          |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
           |var array = new Array[Int](5)
           |val broadcastArray = sc.broadcast(array)
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
           |array(0) = 5
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
         """.stripMargin)
       assertDoesNotContain("error:", output)
       assertDoesNotContain("Exception", output)
@@ -317,10 +314,22 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local[2]",
       """
         |case class Foo(i: Int)
-        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
+  }
+  
+  test("collecting objects of class defined in repl - shuffling") {
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |case class Foo(i: Int)
+        |val list = List((1, Foo(1)), (1, Foo(2)))
+        |val ret = sc.parallelize(list).groupByKey().collect()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
   }
 }

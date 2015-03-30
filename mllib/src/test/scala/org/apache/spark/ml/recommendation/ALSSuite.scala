@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.recommendation
 
+import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
@@ -25,21 +26,30 @@ import scala.collection.mutable.ArrayBuffer
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.scalatest.FunSuite
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.util.Utils
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   private var sqlContext: SQLContext = _
+  private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    tempDir = Utils.createTempDir()
+    sc.setCheckpointDir(tempDir.getAbsolutePath)
     sqlContext = new SQLContext(sc)
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tempDir)
+    super.afterAll()
   }
 
   test("LocalIndexEncoder") {
@@ -454,5 +464,42 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     assert(isNonnegative(userFactors))
     assert(isNonnegative(itemFactors))
     // TODO: Validate the solution.
+  }
+
+  test("als partitioner is a projection") {
+    for (p <- Seq(1, 10, 100, 1000)) {
+      val part = new ALSPartitioner(p)
+      var k = 0
+      while (k < p) {
+        assert(k === part.getPartition(k))
+        assert(k === part.getPartition(k.toLong))
+        k += 1
+      }
+    }
+  }
+
+  test("partitioner in returned factors") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+    val (userFactors, itemFactors) = ALS.train(
+      ratings, rank = 2, maxIter = 4, numUserBlocks = 3, numItemBlocks = 4)
+    for ((tpe, factors) <- Seq(("User", userFactors), ("Item", itemFactors))) {
+      assert(userFactors.partitioner.isDefined, s"$tpe factors should have partitioner.")
+      val part = userFactors.partitioner.get
+      userFactors.mapPartitionsWithIndex { (idx, items) =>
+        items.foreach { case (id, _) =>
+          if (part.getPartition(id) != idx) {
+            throw new SparkException(s"$tpe with ID $id should not be in partition $idx.")
+          }
+        }
+        Iterator.empty
+      }.count()
+    }
+  }
+
+  test("als with large number of iterations") {
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2)
+    ALS.train(
+      ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, implicitPrefs = true)
   }
 }

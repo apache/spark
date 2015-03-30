@@ -37,8 +37,8 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.util.Utils
 
 object TestData {
   def getTestDataFilePath(name: String) = {
@@ -194,6 +194,146 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
     }
   }
+
+  test("test multiple session") {
+    import org.apache.spark.sql.SQLConf
+    var defaultV1: String = null
+    var defaultV2: String = null
+
+    withMultipleConnectionJdbcStatement(
+      // create table
+      { statement =>
+
+        val queries = Seq(
+            "DROP TABLE IF EXISTS test_map",
+            "CREATE TABLE test_map(key INT, value STRING)",
+            s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map",
+            "CACHE TABLE test_table AS SELECT key FROM test_map ORDER BY key DESC")
+
+        queries.foreach(statement.execute)
+
+        val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+        val buf1 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs1.next()) {
+          buf1 += rs1.getInt(1)
+        }
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+        val buf2 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs2.next()) {
+          buf2 += rs2.getInt(1)
+        }
+        rs2.close()
+
+        assert(buf1 === buf2)
+      },
+
+      // first session, we get the default value of the session status
+      { statement =>
+
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        rs1.next()
+        defaultV1 = rs1.getString(1)
+        assert(defaultV1 != "200")
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SET hive.cli.print.header")
+        rs2.next()
+
+        defaultV2 = rs2.getString(1)
+        assert(defaultV1 != "true")
+        rs2.close()
+      },
+
+      // second session, we update the session status
+      { statement =>
+
+        val queries = Seq(
+            s"SET ${SQLConf.SHUFFLE_PARTITIONS}=291",
+            "SET hive.cli.print.header=true"
+            )
+
+        queries.map(statement.execute)
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        rs1.next()
+        assert("spark.sql.shuffle.partitions=291" === rs1.getString(1))
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SET hive.cli.print.header")
+        rs2.next()
+        assert("hive.cli.print.header=true" === rs2.getString(1))
+        rs2.close()
+      },
+
+      // third session, we get the latest session status, supposed to be the
+      // default value
+      { statement =>
+
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        rs1.next()
+        assert(defaultV1 === rs1.getString(1))
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SET hive.cli.print.header")
+        rs2.next()
+        assert(defaultV2 === rs2.getString(1))
+        rs2.close()
+      },
+
+      // accessing the cached data in another session
+      { statement =>
+
+        val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+        val buf1 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs1.next()) {
+          buf1 += rs1.getInt(1)
+        }
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+        val buf2 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs2.next()) {
+          buf2 += rs2.getInt(1)
+        }
+        rs2.close()
+
+        assert(buf1 === buf2)
+        statement.executeQuery("UNCACHE TABLE test_table")
+
+        // TODO need to figure out how to determine if the data loaded from cache
+        val rs3 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+        val buf3 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs3.next()) {
+          buf3 += rs3.getInt(1)
+        }
+        rs3.close()
+
+        assert(buf1 === buf3)
+      },
+
+      // accessing the uncached table
+      { statement =>
+
+        // TODO need to figure out how to determine if the data loaded from cache
+        val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+        val buf1 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs1.next()) {
+          buf1 += rs1.getInt(1)
+        }
+        rs1.close()
+
+        val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+        val buf2 = new collection.mutable.ArrayBuffer[Int]()
+        while (rs2.next()) {
+          buf2 += rs2.getInt(1)
+        }
+        rs2.close()
+
+        assert(buf1 === buf2)
+      }
+    )
+  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
@@ -244,14 +384,21 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"jdbc:hive2://localhost:$serverPort/"
   }
 
-  protected def withJdbcStatement(f: Statement => Unit): Unit = {
-    val connection = DriverManager.getConnection(jdbcUri, user, "")
-    val statement = connection.createStatement()
+  def withMultipleConnectionJdbcStatement(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
 
-    try f(statement) finally {
-      statement.close()
-      connection.close()
+    try {
+      statements.zip(fs).map { case (s, f) => f(s) }
+    } finally {
+      statements.map(_.close())
+      connections.map(_.close())
     }
+  }
+
+  def withJdbcStatement(f: Statement => Unit) {
+    withMultipleConnectionJdbcStatement(f)
   }
 }
 
@@ -273,6 +420,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
   private var metastorePath: File = _
   private def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
+  private val pidDir: File = Utils.createTempDir("thriftserver-pid")
   private var logPath: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
@@ -298,8 +446,10 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
   }
 
   private def startThriftServer(port: Int, attempt: Int) = {
-    warehousePath = util.getTempFilePath("warehouse")
-    metastorePath = util.getTempFilePath("metastore")
+    warehousePath = Utils.createTempDir()
+    warehousePath.delete()
+    metastorePath = Utils.createTempDir()
+    metastorePath.delete()
     logPath = null
     logTailingProcess = null
 
@@ -315,7 +465,14 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
 
     logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
 
-    logPath = Process(command, None, "SPARK_TESTING" -> "0").lines.collectFirst {
+    val env = Seq(
+      // Disables SPARK_TESTING to exclude log4j.properties in test directories.
+      "SPARK_TESTING" -> "0",
+      // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be started
+      // at a time, which is not Jenkins friendly.
+      "SPARK_PID_DIR" -> pidDir.getCanonicalPath)
+
+    logPath = Process(command, None, env: _*).lines.collectFirst {
       case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
     }.getOrElse {
       throw new RuntimeException("Failed to find HiveThriftServer2 log file.")
@@ -346,7 +503,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
 
   private def stopThriftServer(): Unit = {
     // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Process(stopScript, None).run().exitValue()
+    Process(stopScript, None, "SPARK_PID_DIR" -> pidDir.getCanonicalPath).run().exitValue()
     Thread.sleep(3.seconds.toMillis)
 
     warehousePath.delete()

@@ -51,6 +51,11 @@ private[spark] object SQLConf {
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
+  // This is used to control the when we will split a schema's JSON string to multiple pieces
+  // in order to fit the JSON string in metastore's table property (by default, the value has
+  // a length restriction of 4000 characters). We will split the JSON string of a schema
+  // to its length exceeds the threshold.
+  val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
 
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
@@ -176,6 +181,11 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
+
+  // Do not use a value larger than 4000 as the default value of this property.
+  // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
+  private[spark] def schemaStringLengthThreshold: Int =
+    getConf(SCHEMA_STRING_LENGTH_THRESHOLD, "4000").toInt
 
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean

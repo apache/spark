@@ -22,7 +22,6 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
@@ -32,7 +31,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   var path: File = null
 
   override def beforeAll: Unit = {
-    path = util.getTempFilePath("jsonCTAS").getCanonicalFile
+    path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     jsonRDD(rdd).registerTempTable("jt")
     sql(
@@ -48,7 +47,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   override def afterAll: Unit = {
     dropTempTable("jsonTable")
     dropTempTable("jt")
-    if (path.exists()) Utils.deleteRecursively(path)
+    Utils.deleteRecursively(path)
   }
 
   test("Simple INSERT OVERWRITE a JSONRelation") {
