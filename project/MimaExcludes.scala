@@ -53,6 +53,9 @@ object MimaExcludes {
               "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
+          ) ++ Seq(
+          // SPARK-6510 Add a Graph#minus method acting as Set#difference
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
           )
 
         case v if v.startsWith("1.3") =>

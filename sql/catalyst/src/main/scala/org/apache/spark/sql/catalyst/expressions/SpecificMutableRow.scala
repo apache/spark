@@ -62,126 +62,126 @@ abstract class MutableValue extends Serializable {
   var isNull: Boolean = true
   def boxed: Any
   def update(v: Any)
-  def copy(): this.type
+  def copy(): MutableValue
 }
 
 final class MutableInt extends MutableValue {
   var value: Int = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
     isNull = false
-    v.asInstanceOf[Int]
+    value = v.asInstanceOf[Int]
   }
-  def copy() = {
+  override def copy(): MutableInt = {
     val newCopy = new MutableInt
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableInt]
   }
 }
 
 final class MutableFloat extends MutableValue {
   var value: Float = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
     isNull = false
-    v.asInstanceOf[Float]
+    value = v.asInstanceOf[Float]
   }
-  def copy() = {
+  override def copy(): MutableFloat = {
     val newCopy = new MutableFloat
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableFloat]
   }
 }
 
 final class MutableBoolean extends MutableValue {
   var value: Boolean = false
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
     isNull = false
-    v.asInstanceOf[Boolean]
+    value = v.asInstanceOf[Boolean]
   }
-  def copy() = {
+  override def copy(): MutableBoolean = {
     val newCopy = new MutableBoolean
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableBoolean]
   }
 }
 
 final class MutableDouble extends MutableValue {
   var value: Double = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
     isNull = false
-    v.asInstanceOf[Double]
+    value = v.asInstanceOf[Double]
   }
-  def copy() = {
+  override def copy(): MutableDouble = {
     val newCopy = new MutableDouble
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableDouble]
   }
 }
 
 final class MutableShort extends MutableValue {
   var value: Short = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = value = {
     isNull = false
     v.asInstanceOf[Short]
   }
-  def copy() = {
+  override def copy(): MutableShort = {
     val newCopy = new MutableShort
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableShort]
   }
 }
 
 final class MutableLong extends MutableValue {
   var value: Long = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = value = {
     isNull = false
     v.asInstanceOf[Long]
   }
-  def copy() = {
+  override def copy(): MutableLong = {
     val newCopy = new MutableLong
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableLong]
   }
 }
 
 final class MutableByte extends MutableValue {
   var value: Byte = 0
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = value = {
     isNull = false
     v.asInstanceOf[Byte]
   }
-  def copy() = {
+  override def copy(): MutableByte = {
     val newCopy = new MutableByte
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableByte]
   }
 }
 
 final class MutableAny extends MutableValue {
   var value: Any = _
-  def boxed = if (isNull) null else value
-  def update(v: Any) = value = {
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
     isNull = false
-    v.asInstanceOf[Any]
+    value = v.asInstanceOf[Any]
   }
-  def copy() = {
+  override def copy(): MutableAny = {
     val newCopy = new MutableAny
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[this.type]
+    newCopy.asInstanceOf[MutableAny]
   }
 }
 
@@ -234,9 +234,9 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
   }
 
-  override def setString(ordinal: Int, value: String) = update(ordinal, value)
+  override def setString(ordinal: Int, value: String): Unit = update(ordinal, value)
 
-  override def getString(ordinal: Int) = apply(ordinal).asInstanceOf[String]
+  override def getString(ordinal: Int): String = apply(ordinal).asInstanceOf[String]
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

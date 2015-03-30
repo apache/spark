@@ -35,7 +35,7 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
 
   val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
 
-  def registerFunction(name: String, builder: FunctionBuilder) = {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
@@ -47,7 +47,7 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
 class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistry {
   val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
 
-  def registerFunction(name: String, builder: FunctionBuilder) = {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
@@ -61,13 +61,15 @@ class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistr
  * functions are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
-  def registerFunction(name: String, builder: FunctionBuilder) = ???
-
-  def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     throw new UnsupportedOperationException
   }
 
-  def caseSensitive: Boolean = ???
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    throw new UnsupportedOperationException
+  }
+
+  override def caseSensitive: Boolean = throw new UnsupportedOperationException
 }
 
 /**
@@ -76,7 +78,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
  * TODO move this into util folder?
  */
 object StringKeyHashMap {
-  def apply[T](caseSensitive: Boolean) = caseSensitive match {
+  def apply[T](caseSensitive: Boolean): StringKeyHashMap[T] = caseSensitive match {
     case false => new StringKeyHashMap[T](_.toLowerCase)
     case true => new StringKeyHashMap[T](identity)
   }

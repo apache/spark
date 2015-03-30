@@ -33,7 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{expressions, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
 
@@ -146,7 +146,7 @@ class DataFrame private[sql](
          _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
-      queryExecution.logical
+      queryExecution.analyzed
   }
 
   /**
@@ -749,6 +749,67 @@ class DataFrame private[sql](
       if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
+  }
+
+  /**
+   * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
+   * If no columns are given, this function computes statistics for all numerical columns.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]]. If you want to
+   * programmatically compute summary statistics, use the `agg` function instead.
+   *
+   * {{{
+   *   df.describe("age", "height").show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * @group action
+   */
+  @scala.annotation.varargs
+  def describe(cols: String*): DataFrame = {
+
+    // TODO: Add stddev as an expression, and remove it from here.
+    def stddevExpr(expr: Expression): Expression =
+      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
+
+    // The list of summary statistics to compute, in the form of expressions.
+    val statistics = List[(String, Expression => Expression)](
+      "count" -> Count,
+      "mean" -> Average,
+      "stddev" -> stddevExpr,
+      "min" -> Min,
+      "max" -> Max)
+
+    val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+
+    val ret: Seq[Row] = if (outputCols.nonEmpty) {
+      val aggExprs = statistics.flatMap { case (_, colToAgg) =>
+        outputCols.map(c => Column(colToAgg(Column(c).expr)).as(c))
+      }
+
+      val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+
+      // Pivot the data so each summary is one row
+      row.grouped(outputCols.size).toSeq.zip(statistics).map {
+        case (aggregation, (statistic, _)) => Row(statistic :: aggregation.toList: _*)
+      }
+    } else {
+      // If there are no output columns, just output a single column that contains the stats.
+      statistics.map { case (name, _) => Row(name) }
+    }
+
+    // The first column is string type, and the rest are double type.
+    val schema = StructType(
+      StructField("summary", StringType) :: outputCols.map(StructField(_, DoubleType))).toAttributes
+    LocalRelation(schema, ret)
   }
 
   /**

@@ -32,9 +32,13 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseInsensitiveCatalog = new SimpleCatalog(false)
 
   val caseSensitiveAnalyzer =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
+    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
   val caseInsensitiveAnalyzer =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
 
   val checkAnalysis = new CheckAnalysis
 
@@ -198,5 +202,23 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DecimalType.Unlimited)
     assert(pl(4).dataType == DoubleType)
+  }
+
+  test("SPARK-6452 regression test") {
+    // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
+    val plan =
+      Aggregate(
+        Nil,
+        Alias(Sum(AttributeReference("a", StringType)(exprId = ExprId(1))), "b")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", StringType)(exprId = ExprId(2))))
+
+    assert(plan.resolved)
+
+    val message = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan)
+    }.getMessage
+
+    assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
   }
 }
