@@ -24,7 +24,7 @@ import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.locks.{ReentrantLock}
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.TimeUnit
 import java.util.UUID.randomUUID
 
@@ -1405,6 +1405,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (SparkContext.shutdownLock.tryLock(10, TimeUnit.SECONDS)) {
         SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
           if (!stopped) {
+            stopped = true
             postApplicationEnd()
             ui.foreach(_.stop())
             env.metricsSystem.report()
@@ -1427,7 +1428,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
             SparkEnv.set(null)
             logInfo("Successfully stopped SparkContext")
             SparkContext.clearActiveContext()
-            stopped = true
           } else {
             logInfo("SparkContext already stopped")
           }
