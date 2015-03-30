@@ -148,10 +148,10 @@ class WebUiTests(unittest.TestCase):
         assert "example_bash_operator" in response.data
 
     def test_query(self):
-        response = self.app.get('/admin/airflow/query')
+        response = self.app.get('/admin/queryview/')
         assert "Ad Hoc Query" in response.data
         response = self.app.get(
-            "/admin/airflow/query?"
+            "/admin/queryview/?"
             "conn_id=presto_default&"
             "sql=SELECT+COUNT%281%29+FROM+airflow.static_babynames")
         assert "Ad Hoc Query" in response.data
@@ -169,19 +169,19 @@ class WebUiTests(unittest.TestCase):
         assert "runme_0" in response.data
         response = self.app.get(
             '/admin/airflow/duration?days=30&dag_id=example_bash_operator')
-        assert "DAG: example_bash_operator" in response.data
+        assert "example_bash_operator" in response.data
         response = self.app.get(
             '/admin/airflow/landing_times?'
             'days=30&dag_id=example_bash_operator')
-        assert "DAG: example_bash_operator" in response.data
+        assert "example_bash_operator" in response.data
         response = self.app.get(
             '/admin/airflow/gantt?dag_id=example_bash_operator')
-        assert "DAG: example_bash_operator" in response.data
+        assert "example_bash_operator" in response.data
         response = self.app.get(
             '/admin/airflow/code?dag_id=example_bash_operator')
-        assert "DAG: example_bash_operator" in response.data
+        assert "example_bash_operator" in response.data
         response = self.app.get(
-            '/admin/airflow/conf')
+            '/admin/configurationview/')
         assert "Airflow Configuration" in response.data
         response = self.app.get(
             '/admin/airflow/rendered?'
@@ -191,7 +191,7 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/log?task_id=run_this_last&'
             'dag_id=example_bash_operator&execution_date=2015-01-01T00:00:00')
-        assert "Logs for run_this_last on 2015-01-01T00:00:00" in response.data
+        assert "run_this_last" in response.data
         response = self.app.get(
             '/admin/airflow/task?task_id=runme_0&dag_id=example_bash_operator')
         assert "Attributes" in response.data

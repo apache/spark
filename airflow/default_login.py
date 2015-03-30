@@ -43,6 +43,7 @@ class User(models.BaseUser):
         return True
 
 models.User = User  # hack!
+del User
 
 
 @login_manager.user_loader
