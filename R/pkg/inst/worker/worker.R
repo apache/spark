@@ -37,7 +37,7 @@ serializer <- SparkR:::readString(inputCon)
 # Include packages as required
 packageNames <- unserialize(SparkR:::readRaw(inputCon))
 for (pkg in packageNames) {
-  suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
+  suppressPackageStartupMessages(library(as.character(pkg), character.only=TRUE))
 }
 
 # read function dependencies
