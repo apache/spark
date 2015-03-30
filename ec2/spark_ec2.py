@@ -502,7 +502,11 @@ def launch_cluster(conn, opts, cluster_name):
                                 if opts.additional_security_group in (sg.name, sg.id)]
     print "Launching instances..."
 
-    if conn.get_image(image_id=opts.ami) is None:
+    # Check if the AMI exists
+    try:
+        if conn.get_image(image_id=opts.ami) is None:
+            raise Exception()
+    except:
         print >> stderr, "Could not find AMI " + opts.ami
         sys.exit(1)
 
