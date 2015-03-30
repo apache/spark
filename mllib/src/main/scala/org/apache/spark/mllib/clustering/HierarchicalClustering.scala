@@ -352,7 +352,7 @@ class HierarchicalClustering(
    * @param treeMap divided clusters as a Map class
    * @param rootIndex index you want to start
    * @param numClusters the number of clusters you want
-   * @return
+   * @return a built cluster tree
    */
   private[clustering]
   def buildTree(treeMap: Map[Long, ClusterTree],
@@ -513,9 +513,10 @@ class HierarchicalClustering(
  * @param center the center of the cluster
  * @param records the number of rows in the cluster
  * @param variances variance vectors
+ * @param variancesNorm the norm of variance vector
+ * @param localHeight the maximal distance between this node and its children
  * @param parent the parent cluster of the cluster
  * @param children the children nodes of the cluster
- * @param variancesNorm the sum of squares of variances
  */
 class ClusterTree(
   val center: Vector,
@@ -555,7 +556,7 @@ class ClusterTree(
    * Converts the tree into Array class
    * the sub nodes are recursively expanded
    *
-   * @return Seq class which the cluster tree is expanded
+   * @return an Array class which the cluster tree is expanded
    */
   def toArray(): Array[ClusterTree] = {
     val array = this.children.size match {
@@ -570,7 +571,7 @@ class ClusterTree(
   /**
    * Gets the depth of the cluster in the tree
    *
-   * @return the depth
+   * @return the depth from the root
    */
   def getDepth(): Int = {
     this.parent match {
