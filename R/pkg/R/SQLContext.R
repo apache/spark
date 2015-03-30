@@ -588,3 +588,4 @@ field <- function(name, type, nullable = TRUE) {
 print.field <- function(x, ...) {
   cat("name = \"", x$name, "\", type = \"", x$type, "\", nullable = ", x$nullable, sep = "")
 }
+
