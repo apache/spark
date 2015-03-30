@@ -63,10 +63,10 @@ private[spark] class TaskSchedulerImpl(
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS =
-    Utils.timeStringToMs(conf.get("spark.speculation.interval", "100ms"))
+    Utils.timeStringAsMs(conf.get("spark.speculation.interval", "100ms"))
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT_MS = Utils.timeStringToMs(conf.get("spark.starvation.timeout", "15000ms"))
+  val STARVATION_TIMEOUT_MS = Utils.timeStringAsMs(conf.get("spark.starvation.timeout", "15000ms"))
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)

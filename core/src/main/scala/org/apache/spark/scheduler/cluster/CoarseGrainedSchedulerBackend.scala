@@ -58,7 +58,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
   val maxRegisteredWaitingTimeMs =
-    Utils.timeStringToMs(conf.get("spark.scheduler.maxRegisteredResourcesWaitingTime", "30000ms"))
+    Utils.timeStringAsMs(conf.get("spark.scheduler.maxRegisteredResourcesWaitingTime", "30000ms"))
   val createTime = System.currentTimeMillis()
 
   private val executorDataMap = new HashMap[String, ExecutorData]
@@ -80,7 +80,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
-      val reviveIntervalMs = Utils.timeStringToMs(
+      val reviveIntervalMs = Utils.timeStringAsMs(
         conf.get("spark.scheduler.revive.interval", "1000ms"))
       import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveIntervalMs.millis, self, ReviveOffers)

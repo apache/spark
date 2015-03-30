@@ -78,15 +78,15 @@ private[spark] class ExecutorAllocationManager(
     Integer.MAX_VALUE)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
-  private val schedulerBacklogTimeoutS = Utils.timeStringToS(conf.get(
+  private val schedulerBacklogTimeoutS = Utils.timeStringAsS(conf.get(
     "spark.dynamicAllocation.schedulerBacklogTimeoutS", "5s"))
 
   // Same as above, but used only after `schedulerBacklogTimeoutS` is exceeded
-  private val sustainedSchedulerBacklogTimeoutS = Utils.timeStringToS(conf.get(
+  private val sustainedSchedulerBacklogTimeoutS = Utils.timeStringAsS(conf.get(
     "spark.dynamicAllocation.sustainedSchedulerBacklogTimeoutS", s"${schedulerBacklogTimeoutS}s"))
 
   // How long an executor must be idle for before it is removed (seconds)
-  private val executorIdleTimeoutS = Utils.timeStringToS(conf.get(
+  private val executorIdleTimeoutS = Utils.timeStringAsS(conf.get(
     "spark.dynamicAllocation.executorIdleTimeoutS", "600s"))
 
   // During testing, the methods to actually kill and add executors are mocked out

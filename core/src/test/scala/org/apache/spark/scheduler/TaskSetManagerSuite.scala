@@ -152,7 +152,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
   private val conf = new SparkConf
 
-  val LOCALITY_WAIT = Utils.timeStringToMs(conf.get("spark.locality.wait", "3000ms"))
+  val LOCALITY_WAIT = Utils.timeStringAsMs(conf.get("spark.locality.wait", "3000ms"))
   val MAX_TASK_FAILURES = 4
 
   override def beforeEach() {

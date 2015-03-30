@@ -851,11 +851,11 @@ private[spark] class TaskSetManager(
     val defaultWait = conf.get("spark.locality.wait", "3000ms")
     level match {
       case TaskLocality.PROCESS_LOCAL =>
-        Utils.timeStringToMs(conf.get("spark.locality.wait.process", defaultWait))
+        Utils.timeStringAsMs(conf.get("spark.locality.wait.process", defaultWait))
       case TaskLocality.NODE_LOCAL =>
-        Utils.timeStringToMs(conf.get("spark.locality.wait.node", defaultWait))
+        Utils.timeStringAsMs(conf.get("spark.locality.wait.node", defaultWait))
       case TaskLocality.RACK_LOCAL =>
-        Utils.timeStringToMs(conf.get("spark.locality.wait.rack", defaultWait))
+        Utils.timeStringAsMs(conf.get("spark.locality.wait.rack", defaultWait))
       case _ => 0L
     }
   }

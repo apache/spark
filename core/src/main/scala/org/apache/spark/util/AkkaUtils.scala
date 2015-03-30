@@ -66,7 +66,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-    val akkaTimeoutS = Utils.timeStringToS(conf.get("spark.akka.timeout",
+    val akkaTimeoutS = Utils.timeStringAsS(conf.get("spark.akka.timeout",
       conf.get("spark.network.timeout", "120s")))
     val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
@@ -81,7 +81,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 6000)
     val akkaHeartBeatIntervalS =
-      Utils.timeStringToS(conf.get("spark.akka.heartbeat.interval", "1000s"))
+      Utils.timeStringAsS(conf.get("spark.akka.heartbeat.interval", "1000s"))
 
     val secretKey = securityManager.getSecretKey()
     val isAuthOn = securityManager.isAuthenticationEnabled()

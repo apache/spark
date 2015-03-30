@@ -104,7 +104,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
-      val stopTimeout = Utils.timeStringToMs(conf.get(
+      val stopTimeout = Utils.timeStringAsMs(conf.get(
         "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms"))
       val pollTime = 100
 

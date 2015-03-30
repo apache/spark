@@ -75,7 +75,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
     myConf.set("spark.cleaner.ttl", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
+    assert(Utils.timeStringAsS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("from existing SparkContext") {
@@ -87,7 +87,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
     myConf.set("spark.cleaner.ttl", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
+    assert(Utils.timeStringAsS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("from checkpoint") {
@@ -98,12 +98,12 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc1.start()
     val cp = new Checkpoint(ssc1, Time(1000))
     assert(
-      Utils.timeStringToS(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1s")) === 10)
+      Utils.timeStringAsS(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1s")) === 10)
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(Utils.timeStringToS(newCp.createSparkConf().get("spark.cleaner.ttl", "-1s")) === 10)
+    assert(Utils.timeStringAsS(newCp.createSparkConf().get("spark.cleaner.ttl", "-1s")) === 10)
     ssc = new StreamingContext(null, newCp, null)
-    assert(Utils.timeStringToS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
+    assert(Utils.timeStringAsS(ssc.conf.get("spark.cleaner.ttl", "-1s")) === 10)
   }
 
   test("start and stop state check") {
