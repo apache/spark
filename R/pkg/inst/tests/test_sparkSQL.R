@@ -44,14 +44,25 @@ test_that("infer types", {
   expect_equal(infer_type(list(1L, 2L)),
                list(type = 'array', elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(a = 1L, b = "2")),
-               list(type = "struct",
-                    fields = list(list(name = "a", type = "integer", nullable = TRUE),
-                                  list(name = "b", type = "string", nullable = TRUE))))
+               buildSchema(field(name = "a", type = "integer", nullable = TRUE),
+                           field(name = "b", type = "string", nullable = TRUE)))
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e),
                list(type = "map", keyType = "string", valueType = "integer",
                     valueContainsNull = TRUE))
+})
+
+test_that("buildSchema and field", {
+  testField <- field("a", "string")
+  expect_true(inherits(testField, "field"))
+  expect_true(testField$name == "a")
+  expect_true(testField$nullable)
+  
+  testSchema <- buildSchema(testField, field("b", "integer"))
+  expect_true(inherits(testSchema, "struct"))
+  expect_true(inherits(testSchema[[2]], "field"))
+  expect_true(testSchema[[1]]$type == "string")
 })
 
 test_that("create DataFrame from RDD", {
@@ -66,9 +77,8 @@ test_that("create DataFrame from RDD", {
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("_1", "_2"))
 
-  fields <- list(list(name = "a", type = "integer", nullable = TRUE),
-                 list(name = "b", type = "string", nullable = TRUE))
-  schema <- list(type = "struct", fields = fields)
+  schema <- buildSchema(field(name = "a", type = "integer", nullable = TRUE),
+                        field(name = "b", type = "string", nullable = TRUE))
   df <- createDataFrame(sqlCtx, rdd, schema)
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("a", "b"))
@@ -94,9 +104,8 @@ test_that("toDF", {
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("_1", "_2"))
 
-  fields <- list(list(name = "a", type = "integer", nullable = TRUE),
-                 list(name = "b", type = "string", nullable = TRUE))
-  schema <- list(type = "struct", fields = fields)
+  schema <- buildSchema(field(name = "a", type = "integer", nullable = TRUE),
+                        field(name = "b", type = "string", nullable = TRUE))
   df <- toDF(rdd, schema)
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("a", "b"))

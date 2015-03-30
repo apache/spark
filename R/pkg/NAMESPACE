@@ -171,6 +171,8 @@ export("cacheTable",
        "jsonRDD",
        "loadDF",
        "parquetFile",
+       "buildSchema",
+       "field",
        "sql",
        "table",
        "tableNames",
@@ -179,4 +181,6 @@ export("cacheTable",
        "uncacheTable")
 
 export("print.structType",
-       "print.structField")
+       "print.structField",
+       "print.struct",
+       "print.field")
