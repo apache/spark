@@ -402,6 +402,29 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib HierarchicalClustering.run()
+   */
+  def trainHierarchicalClusteringModel(
+    data: JavaRDD[Vector],
+    k: Int,
+    maxIterations: Int,
+    maxRetries: Int,
+    seed: java.lang.Long): HierarchicalClusteringModel = {
+    val algo = new HierarchicalClustering()
+        .setNumClusters(k)
+        .setMaxIterations(maxIterations)
+        .setMaxRetries(maxRetries)
+
+    if (seed != null)  algo.setSeed(seed)
+
+    try {
+      algo.run(data)
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * Java stub for Python mllib GaussianMixtureModel.predictSoft()
    */
   def predictSoftGMM(
