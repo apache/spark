@@ -76,14 +76,15 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   }
 
   /**
+   * :: DeveloperApi ::
    * Set the gradient function (of the loss function of one single data example)
    * to be used for SGD.
    */
+  @DeveloperApi
   def setGradient(gradient: Gradient): this.type = {
     this.gradient = gradient
     this
   }
-
 
   /**
    * Set the updater function to actually perform a gradient step in a given direction.
@@ -98,8 +99,8 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   /**
    * :: DeveloperApi ::
    * Runs gradient descent on the given training data.
-   * @param data training data
-   * @param initialWeights initial weights
+   * @param data  Training dataset of (label, feature vector) tuples
+   * @param initialWeights  Initial point from which to start optimization
    * @return solution vector
    */
   @DeveloperApi
