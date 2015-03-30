@@ -79,7 +79,7 @@ object SparkHadoopMapRedUtil extends Logging {
    * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
    * details).
    *
-   * Commit output coordinator is only contacted when the following two configurations are both set
+   * Output commit coordinator is only contacted when the following two configurations are both set
    * to `true`:
    *
    *  - `spark.speculation`
