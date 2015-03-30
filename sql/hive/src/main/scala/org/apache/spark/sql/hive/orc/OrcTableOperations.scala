@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode => LogicalUnaryNod
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{LeafNode, UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive.orc._
-import org.apache.spark.sql.hive.{HadoopTypeConverter, HiveShim, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.{HiveShim, HiveMetastoreTypes}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, TaskContext, SerializableWritable}
 import scala.collection.JavaConversions._

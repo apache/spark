@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.orc
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.common.`type`.HiveVarchar
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.spark.sql.catalyst.expressions.{Row, MutableRow}
