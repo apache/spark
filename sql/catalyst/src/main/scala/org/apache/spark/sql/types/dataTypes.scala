@@ -670,6 +670,10 @@ case class PrecisionInfo(precision: Int, scale: Int)
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = Decimal.DecimalIsFractional
@@ -819,6 +823,10 @@ object ArrayType {
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
       s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
@@ -856,6 +864,9 @@ case class StructField(
     dataType: DataType,
     nullable: Boolean = true,
     metadata: Metadata = Metadata.empty) {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, null)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
@@ -1003,6 +1014,9 @@ object StructType {
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
@@ -1121,6 +1135,10 @@ case class MapType(
     keyType: DataType,
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  def this() = this(null, null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
     builder.append(s"$prefix-- value: ${valueType.typeName} " +

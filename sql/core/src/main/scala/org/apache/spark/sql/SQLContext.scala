@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
@@ -177,7 +177,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   @transient
-  lazy val emptyDataFrame = DataFrame(this, NoRelation)
+  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
 
   /**
    * A collection of methods for registering user-defined functions (UDF).

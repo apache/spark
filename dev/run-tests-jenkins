@@ -55,13 +55,14 @@ TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 # To write a PR test:
 #+  * the file must reside within the dev/tests directory
 #+  * be an executable bash script
-#+  * accept two arguments on the command line, the first being the Github PR long commit
-#+    hash and the second the Github SHA1 hash
+#+  * accept three arguments on the command line, the first being the Github PR long commit
+#+    hash, the second the Github SHA1 hash, and the final the current PR hash
 #+  * and, lastly, return string output to be included in the pr message output that will
 #+    be posted to Github
 PR_TESTS=(
   "pr_merge_ability"
   "pr_public_classes"
+  "pr_new_dependencies"
 )
 
 function post_message () {
@@ -146,33 +147,37 @@ function send_archived_logs () {
   fi
 }
 
-# Environment variable to capture PR test output
-pr_message=""
-
-# Run pull request tests
-for t in "${PR_TESTS[@]}"; do
-  this_test="${FWDIR}/dev/tests/${t}.sh"
-  # Ensure the test is a file and is executable
-  if [ -x "$this_test" ]; then
-    echo "ghprb: $ghprbActualCommit sha1: $sha1"
-    this_mssg="`bash \"${this_test}\" \"${ghprbActualCommit}\" \"${sha1}\" 2>/dev/null`"
-    # Check if this is the merge test as we submit that note *before* and *after*
-    # the tests run
-    [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
-    pr_message="${pr_message}\n${this_mssg}"
-  fi
-done
-
 # post start message
 {
   start_message="\
   [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
-  start_message="${start_message}\n${merge_note}"
-
   post_message "$start_message"
 }
+
+# Environment variable to capture PR test output
+pr_message=""
+# Ensure we save off the current HEAD to revert to
+current_pr_head="`git rev-parse HEAD`"
+
+# Run pull request tests
+for t in "${PR_TESTS[@]}"; do
+  this_test="${FWDIR}/dev/tests/${t}.sh"
+  # Ensure the test can be found and is a file
+  if [ -f "${this_test}" ]; then
+    echo "Running test: $t"
+    this_mssg="$(bash "${this_test}" "${ghprbActualCommit}" "${sha1}" "${current_pr_head}")"
+    # Check if this is the merge test as we submit that note *before* and *after*
+    # the tests run
+    [ "$t" == "pr_merge_ability" ] && merge_note="${this_mssg}"
+    pr_message="${pr_message}\n${this_mssg}"
+    # Ensure, after each test, that we're back on the current PR
+    git checkout -f "${current_pr_head}" &>/dev/null
+  else
+    echo "Cannot find test ${this_test}."
+  fi
+done
 
 # run tests
 {
@@ -222,7 +227,7 @@ done
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"
-  result_message="${result_message}\n${pr_message}"
+  result_message="${result_message}${pr_message}"
 
   post_message "$result_message"
 }

@@ -546,7 +546,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select * from q1 union all select * from q2
     """.stripMargin)
 
-  createQueryTest("CTE feature #1",
+  createQueryTest("CTE feature #3",
     """with q1 as (select key from src)
       |from q1
       |select * where key = 4

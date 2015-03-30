@@ -17,8 +17,14 @@
 # limitations under the License.
 #
 
-# Usage: start-slave.sh <worker#> <master-spark-URL>
-#   where <master-spark-URL> is like "spark://localhost:7077"
+# Starts a slave on the machine this script is executed on.
+
+usage="Usage: start-slave.sh <worker#> <spark-master-URL> where <spark-master-URL> is like "spark://localhost:7077"
+
+if [ $# -lt 2 ]; then
+  echo $usage
+  exit 1
+fi
 
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
