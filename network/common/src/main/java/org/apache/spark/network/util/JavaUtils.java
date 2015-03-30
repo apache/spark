@@ -127,12 +127,12 @@ public class JavaUtils {
    */
   public static long timeStringToUs(String str) throws IllegalArgumentException {
     String lower = str.toLowerCase().trim();
-    if (lower.endsWith("s")) {
-      return Long.parseLong(lower.substring(0, lower.length()-1)) * 1000 * 1000;
-    } else if (lower.endsWith("ms")) {
+    if (lower.endsWith("ms")) {
       return Long.parseLong(lower.substring(0, lower.length()-2)) * 1000;
     } else if (lower.endsWith("us")) {
       return Long.parseLong(lower.substring(0, lower.length()-2));
+    } else if (lower.endsWith("s")) {
+      return Long.parseLong(lower.substring(0, lower.length()-1)) * 1000 * 1000;
     } else {// Invalid suffix, force correct formatting
       throw new IllegalArgumentException("Time must be specified as seconds (s), " +
               "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.");
