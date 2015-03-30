@@ -42,6 +42,7 @@ import parquet.hadoop.{ParquetInputFormat, _}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions
@@ -669,7 +670,8 @@ private[sql] case class ParquetRelation2(
       } finally {
         writer.close(hadoopContext)
       }
-      committer.commitTask(hadoopContext)
+
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
