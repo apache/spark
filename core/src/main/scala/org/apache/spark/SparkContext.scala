@@ -1802,7 +1802,11 @@ object SparkContext extends Logging {
    */
   private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
 
+  /**
+   * Lock to guard against deadlock when shutting down SparkContext.
+   */
   private val shutdownLock = new ReentrantLock()
+
   /**
    * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `None`.
    *
