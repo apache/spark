@@ -303,7 +303,6 @@ private[akka] class AkkaRpcEndpointRef(
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
-  override def toURI: URI = new URI(actorRef.path.toString)
 }
 
 /**

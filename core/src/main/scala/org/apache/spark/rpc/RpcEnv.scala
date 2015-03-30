@@ -371,7 +371,6 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
       s"Error sending message [message = $message]", lastException)
   }
 
-  def toURI: URI
 }
 
 /**
