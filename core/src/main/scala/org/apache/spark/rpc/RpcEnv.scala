@@ -291,6 +291,27 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   def name: String
 
   /**
+   * Sends a one-way asynchronous message. Fire-and-forget semantics.
+   */
+  def send(message: Any): Unit
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
+   * receive the reply within a default timeout.
+   *
+   * This method only sends the message once and never retries.
+   */
+  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
+   * receive the reply within the specified timeout.
+   *
+   * This method only sends the message once and never retries.
+   */
+  def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
+
+  /**
    * Send a message to the corresponding [[RpcEndpoint]] and get its result within a default
    * timeout, or throw a SparkException if this fails even after the default number of retries.
    * Because this method retries, the message handling in the receiver side should be idempotent.
@@ -343,27 +364,6 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
     throw new SparkException(
       s"Error sending message [message = $message]", lastException)
   }
-
-  /**
-   * Sends a one-way asynchronous message. Fire-and-forget semantics.
-   */
-  def send(message: Any): Unit
-
-  /**
-   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
-   * receive the reply within a default timeout.
-   *
-   * This method only sends the message once and never retries.
-   */
-  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
-
-  /**
-   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
-   * receive the reply within the specified timeout.
-   *
-   * This method only sends the message once and never retries.
-   */
-  def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
 
   def toURI: URI
 }
