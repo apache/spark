@@ -290,6 +290,7 @@ def send_email(to, subject, html_content):
 
     send_MIME_email(SMTP_MAIL_FROM, to, msg)
 
+
 def send_MIME_email(e_from, e_to, mime_msg):
     SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
     SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
@@ -300,6 +301,6 @@ def send_MIME_email(e_from, e_to, mime_msg):
     s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
         s.login(SMTP_USER, SMTP_PASSWORD)
-    logging.info("Sent an altert email to " + str(to))
+    logging.info("Sent an altert email to " + str(e_to))
     s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
