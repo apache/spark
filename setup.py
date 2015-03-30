@@ -1,13 +1,15 @@
 from setuptools import setup, find_packages
 
 # Kept manually in sync with airflow.__version__
-version = '0.4.4'
+version = '0.4.5'
 
 
-doc = ['sphinx>=1.2.3',
-        'sphinx-argparse>=0.1.13',
-        'sphinx-rtd-theme>=0.1.6',
-        'Sphinx-PyPI-upload>=0.2.1']
+doc = [
+    'sphinx>=1.2.3',
+    'sphinx-argparse>=0.1.13',
+    'sphinx-rtd-theme>=0.1.6',
+    'Sphinx-PyPI-upload>=0.2.1'
+]
 postgres = ['psycopg2>=2.6']
 mysql = ['mysql-python>=1.2.5']
 samba = ['pysmbclient>=0.1.3']
