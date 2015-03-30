@@ -24,7 +24,7 @@ import akka.actor.{ActorRef, Props, Actor}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Utils, Clock, ManualClock}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent

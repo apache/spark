@@ -123,35 +123,49 @@ public class JavaUtils {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use
+   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
+   * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  public static long timeStringToUs(String str) throws IllegalArgumentException {
+  private static long timeStringToUs(String str) throws NumberFormatException {
     String lower = str.toLowerCase().trim();
-    if (lower.endsWith("ms")) {
-      return Long.parseLong(lower.substring(0, lower.length()-2)) * 1000;
-    } else if (lower.endsWith("us")) {
-      return Long.parseLong(lower.substring(0, lower.length()-2));
-    } else if (lower.endsWith("s")) {
-      return Long.parseLong(lower.substring(0, lower.length()-1)) * 1000 * 1000;
-    } else {// Invalid suffix, force correct formatting
-      throw new IllegalArgumentException("Time must be specified as seconds (s), " +
+    try {
+      if (lower.endsWith("ms")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 2)) * 1000;
+      } else if (lower.endsWith("us")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 2));
+      } else if (lower.endsWith("s")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000;
+      } else {// Invalid suffix, force correct formatting
+        return Long.parseLong(lower);
+      }
+    } catch(NumberFormatException e) {
+      throw new NumberFormatException("Time must be specified as seconds (s), " +
               "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.");
     }
+
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use.
-   * Note: may round in some cases
+   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * no suffix is provided, the passed number is assumed to be in us.
    */
-  public static long timeStringToMs(String str) throws IllegalArgumentException {
+  public static long timeStringAsUs(String str) throws NumberFormatException {
+    return timeStringToUs(str);
+  }
+
+  /**
+   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * no suffix is provided, the passed number is assumed to be in ms.
+   */
+  public static long timeStringAsMs(String str) throws NumberFormatException {
     return timeStringToUs(str)/1000;
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use.
-   * Note: may round in some cases
+   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * no suffix is provided, the passed number is assumed to be in seconds.
    */
-  public static long timeStringToS(String str) throws IllegalArgumentException {
+  public static long timeStringAsS(String str) throws NumberFormatException {
     return timeStringToUs(str)/1000/1000;
   }
 

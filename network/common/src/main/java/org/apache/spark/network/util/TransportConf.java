@@ -37,10 +37,11 @@ public class TransportConf {
 
   /** Connect timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
-    long defaultTimeout = JavaUtils.timeStringToMs(
-            conf.get("spark.shuffle.io.connectionTimeout",
-                    conf.get("spark.network.timeout", "120s")));
-    return (int) defaultTimeout;
+    long defaultNetworkTimeoutS = JavaUtils.timeStringAsS(
+            conf.get("spark.network.timeout","120s"));
+    long defaultTimeoutS = JavaUtils.timeStringAsS(
+            conf.get("spark.shuffle.io.connectionTimeout", defaultNetworkTimeoutS + "s"));
+    return (int) defaultTimeoutS * 1000;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */
@@ -71,7 +72,7 @@ public class TransportConf {
 
   /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
   public int saslRTTimeoutMs() {
-    return (int) JavaUtils.timeStringToMs(conf.get("spark.shuffle.sasl.timeout", "30s"));
+    return (int) JavaUtils.timeStringAsS(conf.get("spark.shuffle.sasl.timeout", "30s")) * 1000;
   }
 
   /**
@@ -85,7 +86,7 @@ public class TransportConf {
    * Only relevant if maxIORetries &gt; 0.
    */
   public int ioRetryWaitTimeMs() {
-    return (int) JavaUtils.timeStringToMs(conf.get("spark.shuffle.io.retryWait", "5s"));
+    return (int) JavaUtils.timeStringAsS(conf.get("spark.shuffle.io.retryWait", "5s")) * 1000;
   }
 
   /**

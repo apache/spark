@@ -1023,6 +1023,7 @@ private[spark] object Utils extends Logging {
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
+  @throws(classOf[NumberFormatException])
   private def timeStringToUs(str: String) : Long = {
     try {
       val lower = str.toLowerCase.trim()
@@ -1045,6 +1046,7 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in us.
    */
+  @throws(classOf[NumberFormatException])
   def timeStringAsUs(str: String): Long = {
       timeStringToUs(str)
   }
@@ -1053,6 +1055,7 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
+  @throws(classOf[NumberFormatException])
   def timeStringAsMs(str : String) : Long = {
       timeStringToUs(str)/1000
   }
@@ -1061,6 +1064,7 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
+  @throws(classOf[NumberFormatException])
   def timeStringAsS(str : String) : Long = {
     timeStringToUs(str)/1000/1000
   }
