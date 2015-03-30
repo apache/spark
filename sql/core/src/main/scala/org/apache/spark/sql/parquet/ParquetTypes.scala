@@ -390,10 +390,11 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   def convertFromAttributes(attributes: Seq[Attribute],
                             toThriftSchemaNames: Boolean = false): MessageType = {
-    val fields = attributes.map(
-      attribute =>
+    val fields = attributes.map { old_attribute =>
+        val attribute = old_attribute.withName(old_attribute.name.replaceAll("\\((.*)\\)", "[$1]"))
         fromDataType(attribute.dataType, attribute.name, attribute.nullable,
-                     toThriftSchemaNames = toThriftSchemaNames))
+                     toThriftSchemaNames = toThriftSchemaNames)
+    }
     new MessageType("root", fields)
   }
 
@@ -405,7 +406,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    StructType.fromAttributes(schema).json
+    val replaced_schema = schema.map { attribute =>
+         attribute.withName(attribute.name.replaceAll("\\((.*)\\)", "[$1]"))
+    }
+    StructType.fromAttributes(replaced_schema).json
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
