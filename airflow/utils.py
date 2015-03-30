@@ -271,11 +271,7 @@ def ask_yesno(question):
 
 
 def send_email(to, subject, html_content):
-    SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
-    SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
-    SMTP_USER = conf.get('smtp', 'SMTP_USER')
-    SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
 
     if isinstance(to, unicode) or isinstance(to, str):
         if ',' in to:
@@ -291,10 +287,19 @@ def send_email(to, subject, html_content):
     msg['To'] = ", ".join(to)
     mime_text = MIMEText(html_content, 'html')
     msg.attach(mime_text)
+
+    send_MIME_email(SMTP_MAIL_FROM, to, msg)
+
+def send_MIME_email(e_from, e_to, mime_msg):
+    SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
+    SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
+    SMTP_USER = conf.get('smtp', 'SMTP_USER')
+    SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
+
     s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
     s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
         s.login(SMTP_USER, SMTP_PASSWORD)
     logging.info("Sent an altert email to " + str(to))
-    s.sendmail(SMTP_MAIL_FROM, to, msg.as_string())
+    s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
