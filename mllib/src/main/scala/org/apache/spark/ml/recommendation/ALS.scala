@@ -16,25 +16,20 @@
  */
 
 package org.apache.spark.ml.recommendation
-
 import java.{util => ju}
 import java.io.IOException
-
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
 import scala.util.hashing.byteswap64
-
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.netlib.util.intW
-
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
@@ -43,6 +38,10 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
+import breeze.optimize.linear.{NNLS=>BrzNNLS}
+import org.apache.spark.mllib.optimization.NNLS
+import breeze.linalg.{DenseMatrix => BrzMatrix}
+import breeze.linalg.{DenseVector => BrzVector}
 
 /**
  * Common params for ALS.
@@ -324,6 +323,49 @@ object ALS extends Logging {
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
 
+  /** Breeze NNLS solver. */
+  private[recommendation] class BrzNNLSSolver(rank: Int) extends LeastSquaresNESolver {
+    private val nnls: BrzNNLS = new BrzNNLS()
+    private val init = nnls.initialize(rank)
+    private val ata = new Array[Double](rank * rank)
+    private val brzata = new BrzMatrix[Double](rank, rank, ata)
+
+    /**
+     * Solves a nonnegative least squares problem with L2 regularizatin:
+     *
+     * min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     * subject to x >= 0
+     */
+    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      fillAtA(ne.ata, lambda * ne.n)
+      val x = nnls.minimize(brzata, BrzVector(ne.atb), init)
+      ne.reset()
+      x.data.map(x => x.toFloat)
+    }
+
+    /**
+     * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
+     * matrix that it represents, storing it into destMatrix.
+     */
+    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+      var i = 0
+      var pos = 0
+      var a = 0.0
+      while (i < rank) {
+        var j = 0
+        while (j <= i) {
+          a = triAtA(pos)
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
+          pos += 1
+          j += 1
+        }
+        ata(i * rank + i) += lambda
+        i += 1
+      }
+    }
+  }
+
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
 
@@ -363,7 +405,7 @@ object ALS extends Logging {
       x
     }
   }
-
+  
   /** NNLS solver. */
   private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
@@ -419,7 +461,7 @@ object ALS extends Logging {
       }
     }
   }
-
+  
   /** Representing a normal equation (ALS' subproblem). */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
@@ -512,7 +554,15 @@ object ALS extends Logging {
     val itemPart = new ALSPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
-    val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
+
+    val solver = if (nonnegative) {
+      if (System.getenv("solver") == "mllib") new NNLSSolver()
+      else {
+        println("Running Breeze NNLSSolver")
+        new BrzNNLSSolver(rank)
+      }
+    } else new CholeskySolver()
+
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
       .persist(intermediateRDDStorageLevel)
     val (userInBlocks, userOutBlocks) =
@@ -1102,6 +1152,7 @@ object ALS extends Logging {
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
+        var solveTime = 0.0
         srcFactors.foreach { case (srcBlockId, factors) =>
           sortedSrcFactors(srcBlockId) = factors
         }
@@ -1127,9 +1178,12 @@ object ALS extends Logging {
             }
             i += 1
           }
+          val startTime = System.nanoTime()
           dstFactors(j) = solver.solve(ls, regParam)
+          solveTime += System.nanoTime() - startTime
           j += 1
         }
+        logInfo(s"solveTime ${solveTime/1e6} ms")
         dstFactors
     }
   }
