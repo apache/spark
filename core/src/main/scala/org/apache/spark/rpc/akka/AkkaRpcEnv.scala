@@ -99,7 +99,6 @@ private[spark] class AkkaRpcEnv private[akka] (
     lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
       assert(endpointRef != null)
-      registerEndpoint(endpoint, endpointRef)
 
       override def preStart(): Unit = {
         // Listen for remote client network events
@@ -154,6 +153,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
       }), name = name)
     endpointRef = new AkkaRpcEndpointRef(defaultAddress, actorRef, conf, initInConstructor = false)
+    registerEndpoint(endpoint, endpointRef)
     // Now actorRef can be created safely
     endpointRef.init()
     endpointRef
@@ -219,7 +219,7 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 
   override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
-    import scala.concurrent.ExecutionContext.Implicits.global
+    import actorSystem.dispatcher
     actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout).
       map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
   }
