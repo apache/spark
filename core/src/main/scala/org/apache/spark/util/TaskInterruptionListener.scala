@@ -29,5 +29,5 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 trait TaskInterruptionListener extends EventListener {
-  def onTaskInterrupted(context: TaskContext)
+  def onTaskInterruption(context: TaskContext)
 }

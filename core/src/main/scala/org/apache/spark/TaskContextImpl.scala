@@ -37,7 +37,7 @@ private[spark] class TaskContextImpl(
   override def attemptId(): Long = taskAttemptId
 
   // List of callback functions to execute when interrupt the task.
-  @transient private val onInterruptedCallbacks = new ArrayBuffer[TaskInterruptionListener]
+  @transient private val onInterruptionCallbacks = new ArrayBuffer[TaskInterruptionListener]
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -68,13 +68,13 @@ private[spark] class TaskContextImpl(
   }
 
   override def addTaskInterruptionListener(listener: TaskInterruptionListener): this.type = {
-    onInterruptedCallbacks += listener
+    onInterruptionCallbacks += listener
     this
   }
 
   override def addTaskInterruptionListener(f: TaskContext => Unit): this.type = {
-    onInterruptedCallbacks += new TaskInterruptionListener {
-      override def onTaskInterrupted(context: TaskContext): Unit = f(context)
+    onInterruptionCallbacks += new TaskInterruptionListener {
+      override def onTaskInterruption(context: TaskContext): Unit = f(context)
     }
     this
   }
@@ -103,9 +103,9 @@ private[spark] class TaskContextImpl(
     interrupted = true
     val errorMsgs = new ArrayBuffer[String](2)
     // Process interruption callbacks in the reverse order of registration
-    onInterruptedCallbacks.reverse.foreach { listener =>
+    onInterruptionCallbacks.reverse.foreach { listener =>
       try {
-        listener.onTaskInterrupted(this)
+        listener.onTaskInterruption(this)
       } catch {
         case NonFatal(e) =>
           errorMsgs += e.getMessage
