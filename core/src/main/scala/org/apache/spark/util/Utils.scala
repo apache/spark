@@ -1022,7 +1022,7 @@ private[spark] object Utils extends Logging {
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  private def parseTimeString(str: String) : (Option[TimeUnit], Long) = {
+   def parseTimeString(str: String) : (Option[TimeUnit], Long) = {
     val timeError = "Time must be specified as seconds (s), " +
         "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
         "E.g. 50s, 100ms, or 250us."
@@ -1059,7 +1059,7 @@ private[spark] object Utils extends Logging {
    */
   def timeStringAsMs(str : String) : Long = {
     val parsed = parseTimeString(str)
-    parsed._1.getOrElse(TimeUnit.MILLISECONDS).toMicros(parsed._2)
+    parsed._1.getOrElse(TimeUnit.MILLISECONDS).toMillis(parsed._2)
   }
 
   /**
@@ -1068,7 +1068,7 @@ private[spark] object Utils extends Logging {
    */
   def timeStringAsS(str : String) : Long = {
     val parsed = parseTimeString(str)
-    parsed._1.getOrElse(TimeUnit.SECONDS).toMicros(parsed._2)
+    parsed._1.getOrElse(TimeUnit.SECONDS).toSeconds(parsed._2)
   }
 
   /**

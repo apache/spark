@@ -37,8 +37,8 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
-private[spark] case object ExpireDeadHosts
-
+private[spark] case object ExpireDeadHosts 
+    
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -54,14 +54,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   // "milliseconds"
   private val networkTimeoutS = Utils.timeStringAsS(sc.conf.get("spark.network.timeout","120s"))
   private val executorTimeoutMs = Utils.timeStringAsMs(
-    sc.conf.get("spark.storage.blockManagerSlaveTimeout", s"${networkTimeoutS}s"))
+    sc.conf.get("spark.storage.blockManagerSlaveTimeoutMs", s"${networkTimeoutS}us"))
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
   private val networkTimeoutIntervalS =
     Utils.timeStringAsS(sc.conf.get("spark.network.timeoutInterval","60s"))
   private val checkTimeoutIntervalMs = Utils.timeStringAsMs(
-    sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", s"${networkTimeoutIntervalS}s"))
+    sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", s"${networkTimeoutIntervalS}us"))
   
   private var timeoutCheckingTask: Cancellable = null
   override def preStart(): Unit = {

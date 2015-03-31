@@ -136,7 +136,7 @@ public class JavaUtils {
       } else if (lower.endsWith("s")) {
         return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000;
       } else if (lower.endsWith("min")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60;
+        return Long.parseLong(lower.substring(0, lower.length() - 3)) * 1000 * 1000 * 60;
       } else if (lower.endsWith("h")) {
         return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60 * 60;
       } else if (lower.endsWith("d")) {
