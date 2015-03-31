@@ -579,16 +579,20 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
     sql("DROP TABLE alwaysNullable")
   }
 
-  test("Aggregation attribute names including special chars '(' and ')' should be replaced") {
+  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
     val tempDir = Utils.createTempDir()
     val filePath = new File(tempDir, "testParquet").getCanonicalPath
+    val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
 
     val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-    df2.saveAsParquetFile(filePath)
-    val df3 = parquetFile(filePath)
-    checkAnswer(df3, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
-    assert(df3.columns === Array("str", "MAX[int]"))
+    intercept[RuntimeException](df2.saveAsParquetFile(filePath))
+
+    val df3 = df2.toDF("str", "max_int")
+    df3.saveAsParquetFile(filePath2)
+    val df4 = parquetFile(filePath2)
+    checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
+    assert(df4.columns === Array("str", "max_int"))
   }
 }
 
