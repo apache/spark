@@ -58,6 +58,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet.mergeSchema", "false") == "true"
+
+  /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
    * converted to a data source table, using the data source set by spark.sql.sources.default.
    * The table in CTAS statement will be converted when it meets any of the following conditions:
