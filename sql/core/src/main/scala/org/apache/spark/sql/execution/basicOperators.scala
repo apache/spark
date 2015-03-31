@@ -139,8 +139,6 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
   private def collectData(): Array[Row] = child.execute().map(_.copy()).takeOrdered(limit)(ord)
 
-  // TODO: Is this copying for no reason?
-
   override def executeCollect(): Array[Row] = {
     val converters = ScalaReflection.createConvertersForStruct(this.schema)
     collectData().map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))

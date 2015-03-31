@@ -82,10 +82,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
 
   def executeCollect(): Array[Row] = {
-    execute().mapPartitions(iter => {
+    execute().mapPartitions { iter =>
       val converters = ScalaReflection.createConvertersForStruct(schema)
       iter.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
-    }).collect()
+    }.collect()
   }
 
   /**

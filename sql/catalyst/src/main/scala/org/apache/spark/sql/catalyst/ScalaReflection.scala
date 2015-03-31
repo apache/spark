@@ -83,19 +83,20 @@ trait ScalaReflection {
   /**
    * Creates a converter function that will convert Scala objects to the specified catalyst type.
    */
-  private[sql] def createCatalystConverter(dataType: DataType): (Any) => Any = {
-    def extractOption(item: Any) = item match {
+  private[sql] def createCatalystConverter(dataType: DataType): Any => Any = {
+    def extractOption(item: Any): Any = item match {
       case o: Some[_] => o.get
       case other => other
     }
 
     dataType match {
       // Check UDT first since UDTs can override other types
-      case udt: UserDefinedType[_] => (item) => {
-        if (item == None) null else udt.serialize(extractOption(item))
-      }
+      case udt: UserDefinedType[_] =>
+        (item) => {
+          if (item == None) null else udt.serialize(extractOption(item))
+        }
 
-      case arrayType: ArrayType => {
+      case arrayType: ArrayType =>
         val elementConverter = createCatalystConverter(arrayType.elementType)
         (item: Any) => {
           if (item == None) {
@@ -107,9 +108,8 @@ trait ScalaReflection {
             }
           }
         }
-      }
 
-      case mapType: MapType => {
+      case mapType: MapType =>
         val keyConverter = createCatalystConverter(mapType.keyType)
         val valueConverter = createCatalystConverter(mapType.valueType)
         (item: Any) => {
@@ -117,16 +117,16 @@ trait ScalaReflection {
             null
           } else {
             extractOption(item) match {
-              case m: Map[_, _] => m.map{ case (k, v) =>
-                keyConverter(k) -> valueConverter(v) }
+              case m: Map[_, _] => m.map { case (k, v) =>
+                keyConverter(k) -> valueConverter(v)
+              }
               case other => other
             }
           }
         }
-      }
 
-      case structType: StructType => {
-        val converters = new Array[(Any) => Any](structType.length)
+      case structType: StructType =>
+        val converters = new Array[Any => Any](structType.length)
         val iter = structType.fields.iterator
         var idx = 0
         while (iter.hasNext) {
@@ -138,7 +138,7 @@ trait ScalaReflection {
             null
           } else {
             extractOption(item) match {
-              case p: Product => {
+              case p: Product =>
                 val ar = new Array[Any](structType.size)
                 val iter = p.productIterator
                 var idx = 0
@@ -147,20 +147,20 @@ trait ScalaReflection {
                   idx += 1
                 }
                 new GenericRowWithSchema(ar, structType)
-              }
+
               case other => other
             }
           }
         }
-      }
 
-      case _ => (item: Any) => extractOption(item) match {
-        case None => null
-        case d: BigDecimal => Decimal(d)
-        case d: java.math.BigDecimal => Decimal(d)
-        case d: java.sql.Date => DateUtils.fromJavaDate(d)
-        case other => other
-      }
+      case _ =>
+        (item: Any) => extractOption(item) match {
+          case None => null
+          case d: BigDecimal => Decimal(d)
+          case d: java.math.BigDecimal => Decimal(d)
+          case d: java.sql.Date => DateUtils.fromJavaDate(d)
+          case other => other
+        }
     }
   }
 
@@ -181,48 +181,51 @@ trait ScalaReflection {
   /**
    * Creates a converter function that will convert Catalyst types to Scala type.
    */
-  private[sql] def createScalaConverter(dataType: DataType): (Any) => Any = dataType match {
+  private[sql] def createScalaConverter(dataType: DataType): Any => Any = dataType match {
     // Check UDT first since UDTs can override other types
-    case udt: UserDefinedType[_] => (item: Any) => udt.deserialize(item)
+    case udt: UserDefinedType[_] =>
+      (item: Any) => udt.deserialize(item)
 
-    case arrayType: ArrayType => {
+    case arrayType: ArrayType =>
       val elementConverter = createScalaConverter(arrayType.elementType)
       (item: Any) => item match {
         case s: Seq[_] => s.map(elementConverter)
         case other => other
       }
-    }
 
-    case mapType: MapType => {
+    case mapType: MapType =>
       val keyConverter = createScalaConverter(mapType.keyType)
       val valueConverter = createScalaConverter(mapType.valueType)
-      (item: Any) => item match {
-        case m: Map[_, _] => m.map { case (k, v) =>
-          keyConverter(k) -> valueConverter(v)
+      (item: Any) =>
+        item match {
+          case m: Map[_, _] => m.map { case (k, v) =>
+            keyConverter(k) -> valueConverter(v)
+          }
+          case other => other
         }
-        case other => other
-      }
-    }
 
-    case s: StructType => {
+    case s: StructType =>
       val converters = createConvertersForStruct(s)
+      (item: Any) =>
+        item match {
+          case r: Row => convertRowToScalaWithConverters(r, s, converters)
+          case other => other
+        }
+
+    case _: DecimalType =>
       (item: Any) => item match {
-        case r: Row => convertRowToScalaWithConverters(r, s, converters)
+        case d: Decimal => d.toJavaBigDecimal
         case other => other
       }
-    }
 
-    case _: DecimalType => (item: Any) => item match {
-      case d: Decimal => d.toJavaBigDecimal
-      case other => other
-    }
+    case DateType =>
+      (item: Any) => item match {
+        case i: Int => DateUtils.toJavaDate(i)
+        case other => other
+      }
 
-    case DateType => (item: Any) => item match {
-      case i: Int => DateUtils.toJavaDate(i)
-      case other => other
-    }
-
-    case other => (item: Any) => item
+    case other =>
+      (item: Any) => item
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
@@ -238,8 +241,8 @@ trait ScalaReflection {
   /**
    * Creates Catalyst->Scala converter functions for each field of the given StructType.
    */
-  private[sql] def createConvertersForStruct(s: StructType): Array[(Any) => Any] = {
-    val converters = new Array[(Any) => Any](s.length)
+  private[sql] def createConvertersForStruct(s: StructType): Array[Any => Any] = {
+    val converters = new Array[Any => Any](s.length)
     val iter = s.fields.iterator
     var idx = 0
     while (iter.hasNext) {
@@ -256,7 +259,7 @@ trait ScalaReflection {
   private[sql] def convertRowToScalaWithConverters(
       row: Row,
       schema: StructType,
-      converters: Array[(Any) => Any]): Row = {
+      converters: Array[Any => Any]): Row = {
     val ar = new Array[Any](row.size)
     var idx = 0
     while (idx < row.size) {
