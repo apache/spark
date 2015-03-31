@@ -802,7 +802,7 @@ def is_cluster_ssh_available(cluster_instances, opts):
     Check if SSH is available on all the instances in a cluster.
     """
     for i in cluster_instances:
-        if not is_ssh_available(host=i.ip_address, opts=opts):
+        if not is_ssh_available(host=i.public_dns_name, opts=opts):
             return False
     else:
         return True
