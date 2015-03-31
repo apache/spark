@@ -193,7 +193,9 @@ class WebUiTests(unittest.TestCase):
             'dag_id=example_bash_operator&execution_date=2015-01-01T00:00:00')
         assert "run_this_last" in response.data
         response = self.app.get(
-            '/admin/airflow/task?task_id=runme_0&dag_id=example_bash_operator')
+            '/admin/airflow/task?'
+            'task_id=runme_0&dag_id=example_bash_operator&'
+            'execution_date=2015-01-01')
         assert "Attributes" in response.data
         response = self.app.get(
             '/admin/airflow/dag_stats')

@@ -3,20 +3,25 @@ from setuptools import setup, find_packages
 # Kept manually in sync with airflow.__version__
 version = '0.4.5'
 
-
 doc = [
     'sphinx>=1.2.3',
     'sphinx-argparse>=0.1.13',
     'sphinx-rtd-theme>=0.1.6',
     'Sphinx-PyPI-upload>=0.2.1'
 ]
-postgres = ['psycopg2>=2.6']
+hive = [
+    'hive-thrift-py>=0.0.1',
+    'pyhive>=0.1.3',
+    'pyhs2>=0.6.0',
+]
 mysql = ['mysql-python>=1.2.5']
+postgres = ['psycopg2>=2.6']
+optional = ['librabbitmq>=1.6.1']
 samba = ['pysmbclient>=0.1.3']
 s3 = ['boto>=2.36.0']
-all_dbs = postgres + mysql
-devel = all_dbs + doc + samba + s3
 
+all_dbs = postgres + mysql + hive
+devel = all_dbs + doc + samba + s3
 
 setup(
     name='airflow',
@@ -36,14 +41,10 @@ setup(
         'flask-cache>=0.13.1',
         'flask-login>=0.2.11',
         'flower>=0.7.3',
-        'hive-thrift-py>=0.0.1',
         'jinja2>=2.7.3',
-        'librabbitmq>=1.6.1',
         'markdown>=2.5.2',
         'pandas>=0.15.2',
         'pygments>=2.0.1',
-        'pyhive>=0.1.3',
-        'pyhs2>=0.6.0',
         'python-dateutil>=2.3',
         'requests>=2.5.1',
         'setproctitle>=1.1.8',
@@ -54,15 +55,16 @@ setup(
         'tornado>=4.0.2',
     ],
     extras_require={
-        "postgres": postgres,
-        "mysql": mysql,
-        "all_dbs": all_dbs,
-        "samba": samba,
-        "s3": s3,
-        "doc": doc,
-        "devel": devel,
-        "all": devel
-        },
+        'all': devel + optional,
+        'all_dbs': all_dbs,
+        'doc': doc,
+        'devel': devel,
+        'hive': hive,
+        'mysql': mysql,
+        'postgres': postgres,
+        's3': s3,
+        'samba': samba,
+    },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
     url='https://github.com/mistercrunch/Airflow',
