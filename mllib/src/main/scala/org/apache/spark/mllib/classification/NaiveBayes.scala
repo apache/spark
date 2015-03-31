@@ -266,12 +266,10 @@ class NaiveBayes private (
    * (default: Multinomial)
    */
   def setModelType(modelType:String): NaiveBayes = {
-    if (NaiveBayes.supportedModelTypes.contains(modelType)) {
-      this.modelType = modelType
-      this
-    } else {
-      throw new UnknownError(s"NaiveBayesModel does not support ModelType: $modelType")
-    }
+    require(NaiveBayes.supportedModelTypes.contains(modelType),
+      s"NaiveBayes was created with an unknown ModelType: $modelType")
+    this.modelType = modelType
+    this
   }
 
   /** Get the model type. */
@@ -404,11 +402,9 @@ object NaiveBayes {
    *              multinomial or bernoulli
    */
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
-    if (supportedModelTypes.contains(modelType)) {
-      new NaiveBayes(lambda, modelType).run(input)
-    } else {
-      throw new UnknownError(s"NaiveBayes was created with an unknown ModelType: $modelType")
-    }
+    require(supportedModelTypes.contains(modelType),
+      s"NaiveBayes was created with an unknown ModelType: $modelType")
+    new NaiveBayes(lambda, modelType).run(input)
   }
 
 }
