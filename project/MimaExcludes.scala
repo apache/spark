@@ -209,7 +209,7 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-5205
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.TaskContext.addTaskInterruptedListener")
+              "org.apache.spark.TaskContext.addTaskInterruptionListener")
           ) ++ Seq(
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
