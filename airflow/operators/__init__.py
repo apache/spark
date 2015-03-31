@@ -1,44 +1,47 @@
-import logging
+'''
+Imports operators dynamically while keeping the package API clean,
+abstracting the underlying modules
+'''
 
-from bash_operator import BashOperator
-from python_operator import PythonOperator
+import imp as _imp
+import os as _os
 
-try:
-    from mysql_operator import MySqlOperator
-except:
-    logging.info("Couldn't import MySqlOperator")
-    pass
+_operators = {
+    'bash_operator': ['BashOperator'],
+    'python_operator': ['PythonOperator'],
+    'hive_operator': ['HiveOperator'],
+    'presto_check_operator': [
+        'PrestoCheckOperator',
+        'PrestoValueCheckOperator',
+        'PrestoIntervalCheckOperator',
+    ],
+    'dummy_operator': ['DummyOperator'],
+    'email_operator': ['EmailOperator'],
+    'hive2samba_operator': ['Hive2SambaOperator'],
+    'mysql_operator': ['MySqlOperator'],
+    'postgres_operator': ['PostgresOperator'],
+    'sensors': [
+        'SqlSensor',
+        'ExternalTaskSensor',
+        'HivePartitionSensor',
+        'S3KeySensor',
+        'S3PrefixSensor',
+        'HdfsSensor',
+        'TimeSensor',
+    ],
+    'subdag_operator': ['SubDagOperator'],
+    }
 
-try:
-    from postgres_operator import PostgresOperator
-except:
-    logging.info("Couldn't import PostgresOperator")
-    pass
-
-from hive_operator import HiveOperator
-from presto_check_operator import PrestoCheckOperator
-from presto_check_operator import PrestoIntervalCheckOperator
-from presto_check_operator import PrestoValueCheckOperator
-from sensors import SqlSensor
-from sensors import ExternalTaskSensor
-from sensors import HivePartitionSensor
-from sensors import HdfsSensor
-
-try:
-    from sensors import S3KeySensor
-    from sensors import S3PrefixSensor
-except:
-    logging.info("Couldn't import S3KeySensor, S3PrefixSensor")
-    pass
-
-from sensors import TimeSensor
-from email_operator import EmailOperator
-from dummy_operator import DummyOperator
-
-try:
-    from hive2samba_operator import Hive2SambaOperator
-except:
-    logging.info("Couldn't import Hive2SambaOperator")
-    pass
-
-from subdag_operator import SubDagOperator
+def f():
+    __all__ = []
+    for mod, ops in _operators.items():
+        try:
+            f, filename, description = _imp.find_module(mod, [_os.path.dirname(__file__)])
+            module = _imp.load_module(mod, f, filename, description)
+            for op in ops:
+                globals()[op] = getattr(module, op)
+                __all__ += [op]
+        except:
+            pass
+f()
+del f

@@ -1,30 +1,33 @@
-import logging
+'''
+Imports the hooks dynamically while keeping the package API clean,
+abstracting the underlying modules
+'''
 
-try:
-    from airflow.hooks.mysql_hook import MySqlHook
-except:
-    logging.info("Couldn't load MySQLHook")
-    pass
+import imp as _imp
+import os as _os
+_hooks = {
+    'hive_hooks': [
+        'HiveCliHook',
+        'HiveMetastoreHook',
+        'HiveServer2Hook',
+    ],
+    'presto_hook': ['PrestoHook'],
+    'mysql_hook': ['MySqlHook'],
+    'postgres_hook': ['PostgresHook'],
+    'samba_hook': ['SambaHook'],
+    'S3_hook': ['S3Hook'],
+}
 
-try:
-    from airflow.hooks.postgres_hook import PostgresHook
-except:
-    logging.info("Couldn't import PostgreHook")
-    pass
-
-from airflow.hooks.hive_hooks import HiveCliHook
-from airflow.hooks.hive_hooks import HiveMetastoreHook
-from airflow.hooks.hive_hooks import HiveServer2Hook
-from airflow.hooks.presto_hook import PrestoHook
-
-try:
-    from airflow.hooks.samba_hook import SambaHook
-except:
-    logging.info("Couldn't import SambaHook")
-    pass
-
-try:
-    from airflow.hooks.S3_hook import S3Hook
-except:
-    logging.info("Couldn't import S3Hook")
-    pass
+def f():
+    __all__ = []
+    for mod, hks in _hooks.items():
+        #try:
+        f, filename, description = _imp.find_module(mod, [_os.path.dirname(__file__)])
+        module = _imp.load_module(mod, f, filename, description)
+        for hk in hks:
+            globals()[hk] = getattr(module, hk)
+            __all__ += [hk]
+        #except:
+        #    pass
+f()
+del f
