@@ -16,7 +16,7 @@
 #
 
 """
-public classes of Spark SQL:
+Important classes of Spark SQL and DataFrames:
 
     - L{SQLContext}
       Main entry point for :class:`DataFrame` and SQL functionality.
@@ -34,6 +34,8 @@ public classes of Spark SQL:
       Methods for handling missing data (null values).
     - L{functions}
       List of built-in functions available for :class:`DataFrame`.
+    - L{types}
+      List of data types available.
 """
 
 from pyspark.sql.context import SQLContext, HiveContext
