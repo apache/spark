@@ -97,8 +97,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   val startTime = System.currentTimeMillis()
 
-  @volatile private var stopped: AtomicBoolean = new AtomicBoolean(false)
-  @volatile private var stopping: AtomicBoolean = new AtomicBoolean(false)
+  private val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
@@ -1399,15 +1398,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def stop() {
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
-    if (!stopped.get()) {
-      if(!stopping.get()) {
-        stopping.set(true)
-      } else {
-        logInfo("SparkContext already stopping.")
-        return
-      }
-    }
-    else {
+    if (!stopped.compareAndSet(false, true)) {
       logInfo("SparkContext already stopped.")
       return
     }
@@ -1427,10 +1418,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // TODO: Cache.stop()?
     env.stop()
     SparkEnv.set(null)
-    logInfo("Successfully stopped SparkContext")
     SparkContext.clearActiveContext()
-    stopping.set(false)
-    stopped.set(true)
+    logInfo("Successfully stopped SparkContext")
   }
 
 
@@ -1802,11 +1791,6 @@ object SparkContext extends Logging {
    * Lock that guards access to global variables that track SparkContext construction.
    */
   private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
-
-  /**
-   * Lock to guard against deadlock when shutting down SparkContext.
-   */
-  private val shutdownLock = new ReentrantLock()
 
   /**
    * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `None`.
