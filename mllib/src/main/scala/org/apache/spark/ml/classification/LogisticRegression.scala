@@ -31,7 +31,7 @@ import org.apache.spark.storage.StorageLevel
  * Params for logistic regression.
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
-  with HasRegParam with HasMaxIter with HasThreshold
+  with HasRegParam with HasMaxIter with HasFitIntercept with HasThreshold
 
 
 /**
@@ -46,6 +46,7 @@ class LogisticRegression
   with LogisticRegressionParams {
 
   setRegParam(0.1)
+  setFitIntercept(true)
   setMaxIter(100)
   setThreshold(0.5)
 
@@ -54,6 +55,9 @@ class LogisticRegression
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
@@ -71,6 +75,7 @@ class LogisticRegression
     lr.optimizer
       .setRegParam(paramMap(regParam))
       .setNumIterations(paramMap(maxIter))
+      .addIntercept(paramMap(fitIntercept))
     val oldModel = lr.run(oldDataset)
     val lrm = new LogisticRegressionModel(this, paramMap, oldModel.weights, oldModel.intercept)
 
