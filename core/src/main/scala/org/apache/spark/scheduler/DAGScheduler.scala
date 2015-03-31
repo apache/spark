@@ -31,6 +31,8 @@ import scala.util.control.NonFatal
 import akka.pattern.ask
 import akka.util.Timeout
 
+import org.apache.commons.lang3.SerializationUtils
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
@@ -493,7 +495,8 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties))
+      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      SerializationUtils.clone(properties)))
     waiter
   }
 
@@ -534,7 +537,8 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
+      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener,
+      SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 

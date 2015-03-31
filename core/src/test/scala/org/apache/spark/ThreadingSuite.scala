@@ -191,7 +191,7 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
     assert(sc.getLocalProperty("Foo") === null)
   }
 
-  test("mutations to local properties should not affect submitted jobs") {
+  test("mutations to local properties should not affect submitted jobs (SPARK-6629)") {
     val jobStarted = new Semaphore(0)
     val jobEnded = new Semaphore(0)
     @volatile var jobResult: JobResult = null

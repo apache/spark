@@ -141,7 +141,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(jobB.get() === 100)
   }
 
-  test("inherited job group") {
+  test("inherited job group (SPARK-6629)") {
     sc = new SparkContext("local[2]", "test")
 
     // Add a listener to release the semaphore once any tasks are launched.
