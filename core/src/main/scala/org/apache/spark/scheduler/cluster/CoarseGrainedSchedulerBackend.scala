@@ -79,7 +79,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Periodically revive offers to allow delay scheduling to work
       val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
       reviveThread.scheduleAtFixedRate(new Runnable {
-        override def run(): Unit = self.send(ReviveOffers)
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          Option(self).foreach(_.send(ReviveOffers))
+        }
       }, 0, reviveInterval, TimeUnit.MILLISECONDS)
     }
 
@@ -167,7 +169,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_,
-        "remote Akka client disassociated"))
+        "remote Rpc client disassociated"))
     }
 
     // Make fake resource offers on just one executor

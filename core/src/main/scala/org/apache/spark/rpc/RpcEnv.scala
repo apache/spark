@@ -40,10 +40,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
-   * [[RpcEndpoint.self]].
-   *
-   * Note: This method won't return null. `IllegalArgumentException` will be thrown if calling this
-   * on a non-existent endpoint.
+   * [[RpcEndpoint.self]]. Return `null` if the corresponding [[RpcEndpointRef]] does not exist.
    */
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
@@ -195,7 +192,7 @@ private[spark] trait RpcEndpoint {
 
   /**
    * The [[RpcEndpointRef]] of this [[RpcEndpoint]]. `self` will become valid when `onStart` is
-   * called.
+   * called. And `self` will become `null` when `onStop` is called.
    *
    * Note: Because before `onStart`, [[RpcEndpoint]] has not yet been registered and there is not
    * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called.
@@ -407,7 +404,8 @@ private[spark] object RpcAddress {
 }
 
 /**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure.
+ * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
+ * and can be called in any thread.
  */
 private[spark] trait RpcCallContext {
 

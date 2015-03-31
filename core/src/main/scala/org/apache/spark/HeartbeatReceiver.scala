@@ -73,8 +73,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
 
   override def onStart(): Unit = {
     timeoutCheckingTask = timeoutCheckingThread.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = {
-        self.send(ExpireDeadHosts)
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        Option(self).foreach(_.send(ExpireDeadHosts))
       }
     }, 0, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
   }

@@ -55,8 +55,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       ref.sendWithReply[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     } onComplete {
-      case Success(msg) => self.send(msg)
-      case Failure(e) => logError(s"Cannot register to driver: $driverUrl", e)
+      case Success(msg) => Utils.tryLogNonFatalError {
+        Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
+      }
+      case Failure(e) => logError(s"Cannot register with driver: $driverUrl", e)
     }
   }
 
@@ -108,7 +110,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logError(s"Driver $remoteAddress disassociated! Shutting down.")
       System.exit(1)
     } else {
-      logWarning(s"Received irrelevant DisassociatedEvent $remoteAddress")
+      logWarning(s"An unknown ($remoteAddress) driver disconnected.")
     }
   }
 

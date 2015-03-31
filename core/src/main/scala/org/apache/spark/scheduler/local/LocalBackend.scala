@@ -87,7 +87,9 @@ private[spark] class LocalEndpoint(
     if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
       reviveThread.schedule(new Runnable {
-        override def run(): Unit = self.send(ReviveOffers)
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          Option(self).foreach(_.send(ReviveOffers))
+        }
       }, 1000, TimeUnit.MILLISECONDS)
     }
   }

@@ -311,7 +311,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("self: call in onStop") {
-    @volatile var e: Throwable = null
+    @volatile var selfOption: Option[RpcEndpointRef] = null
 
     val endpointRef = env.setupEndpoint("self-onStop", new RpcEndpoint {
       override val rpcEnv = env
@@ -321,20 +321,18 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
 
       override def onStop(): Unit = {
-        self
+        selfOption = Option(self)
       }
 
       override def onError(cause: Throwable): Unit = {
-        e = cause
       }
     })
 
     env.stop(endpointRef)
 
     eventually(timeout(5 seconds), interval(10 millis)) {
-      // Calling `self` in `onStop` is invalid
-      assert(e != null)
-      assert(e.getMessage.contains("Cannot find RpcEndpointRef"))
+      // Calling `self` in `onStop` will return null, so selfOption will be None
+      assert(selfOption == None)
     }
   }
 
