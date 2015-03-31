@@ -29,7 +29,7 @@ import org.apache.spark.util.{ActorLogReceive, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
- * components to convey liveness or execution information for in-progress tasks. It will also
+ * components to convey liveness or execution information for in-progress tasks. It will also 
  * expire the hosts that have not heartbeated for more than spark.network.timeout.
  */
 private[spark] case class Heartbeat(
@@ -38,6 +38,7 @@ private[spark] case class Heartbeat(
     blockManagerId: BlockManagerId)
 
 private[spark] case object ExpireDeadHosts
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -61,7 +62,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     Utils.timeStringAsS(sc.conf.get("spark.network.timeoutInterval","60s"))
   private val checkTimeoutIntervalMs = Utils.timeStringAsMs(
     sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", s"${networkTimeoutIntervalS}s"))
-
+  
   private var timeoutCheckingTask: Cancellable = null
   override def preStart(): Unit = {
     import context.dispatcher
@@ -69,7 +70,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
       checkTimeoutIntervalMs.milliseconds, self, ExpireDeadHosts)
     super.preStart()
   }
-
+  
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val unknownExecutor = !scheduler.executorHeartbeatReceived(
@@ -97,7 +98,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
       }
     }
   }
-
+  
   override def postStop(): Unit = {
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel()
