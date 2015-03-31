@@ -30,7 +30,34 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
 
-class ExpressionEvaluationSuite extends FunSuite {
+class ExpressionEvaluationBaseSuite extends FunSuite {
+
+  def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
+    expression.eval(inputRow)
+  }
+
+  def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    if(actual != expected) {
+      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
+    }
+  }
+
+  def checkDoubleEvaluation(
+      expression: Expression,
+      expected: Spread[Double],
+      inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    actual.asInstanceOf[Double] shouldBe expected
+  }
+}
+
+class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   test("literals") {
     checkEvaluation(Literal(1), 1)
@@ -132,27 +159,6 @@ class ExpressionEvaluationSuite extends FunSuite {
           checkEvaluation(expr, answer)
       }
     }
-  }
-
-  def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
-    expression.eval(inputRow)
-  }
-
-  def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
-    val actual = try evaluate(expression, inputRow) catch {
-      case e: Exception => fail(s"Exception evaluating $expression", e)
-    }
-    if(actual != expected) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
-    }
-  }
-
-  def checkDoubleEvaluation(expression: Expression, expected: Spread[Double], inputRow: Row = EmptyRow): Unit = {
-    val actual = try evaluate(expression, inputRow) catch {
-      case e: Exception => fail(s"Exception evaluating $expression", e)
-    }
-    actual.asInstanceOf[Double] shouldBe expected
   }
 
   test("IN") {
@@ -1080,6 +1086,10 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
   }
+}
+
+// TODO: Make the tests work with codegen.
+class ExpressionEvaluationWithoutCodeGenSuite extends ExpressionEvaluationBaseSuite {
 
   test("CreateStruct") {
     val row = Row(1, 2, 3)

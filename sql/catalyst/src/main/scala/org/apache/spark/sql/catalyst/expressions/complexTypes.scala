@@ -145,6 +145,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
 /**
  * Returns a Row containing the evaluation of all children expressions.
+ * TODO: [[CreateStruct]] does not support codegen.
  */
 case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
   override type EvaluatedType = Row
