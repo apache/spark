@@ -241,7 +241,7 @@ private[deploy] class StandaloneRestClient extends Logging {
       }
     } else {
       val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError("Application submission failed" + failMessage)
+      logError(s"Application submission failed$failMessage")
     }
   }
 
