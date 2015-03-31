@@ -118,6 +118,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
 private[spark] object IndexShuffleBlockManager {
   // No-op reduce ID used in interactions with disk store and BlockObjectWriter.
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
-  // shuffle outputs from a map for several
+  // shuffle outputs for several reduces are glommed into a single file.
+  // TODO: Avoid this entirely by having the DiskBlockObjectWriter not require a BlockId.
   val NOOP_REDUCE_ID = 0
 }
