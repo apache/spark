@@ -30,30 +30,17 @@ object FlumeUtils {
   private val DEFAULT_POLLING_PARALLELISM = 5
   private val DEFAULT_POLLING_BATCH_SIZE = 1000
 
-  /**
-   * Create a input stream from a Flume source.
-   * @param ssc      StreamingContext object
-   * @param hostname Hostname of the slave machine to which the flume data will be sent
-   * @param port     Port of the slave machine to which the flume data will be sent
-   * @param storageLevel  Storage level to use for storing the received objects
-   */
-  def createStream (
-      ssc: StreamingContext,
-      hostname: String,
-      port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(ssc, hostname, port, storageLevel, getFlumeConf)
-  }
-
-  private def getFlumeConf = {
+  // Build a flume conf which is used to pass conf to Execitpr.
+  private def getFlumeConf(decompression: Boolean = false) = {
     val sparkConf = new SparkConf()
     val maxThread = sparkConf.getInt("spark.streaming.flume.threads", 0)
-    val enableDecompression = sparkConf.getBoolean("spark.streaming,flume.decompression", false)
+    val enableDecompression = sparkConf.getBoolean("spark.streaming,flume.decompression",
+      decompression)
     val enableSSL = sparkConf.getBoolean("spark.streaming.flume.ssl", false)
     val keyStorePath = sparkConf.get("spark.streaming.flume.keyStore", "")
     val keyStorePassword = sparkConf.get("spark.streaming.flume.keystore-password", "")
     val keyStoreType = sparkConf.get("spark.streaming.flume.keystore-type", "JKS")
+
     validateFlumeConf(enableSSL, keyStorePath, keyStorePassword)
     FlumeConf(maxThread, enableDecompression, enableSSL, keyStorePath,
       keyStorePassword, keyStoreType)
@@ -72,17 +59,33 @@ object FlumeUtils {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
-   * @param flumeConf  FlumeConf which
+   */
+  def createStream (
+      ssc: StreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    createStream(ssc, hostname, port, storageLevel, false)
+  }
+
+  /**
+   * Create a input stream from a Flume source.
+   * @param ssc      StreamingContext object
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableDecompression  should netty server decompress input stream
    */
   def createStream (
       ssc: StreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel,
-      flumeConf: FlumeConf
+      enableDecompression: Boolean
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](
-        ssc, hostname, port, storageLevel, flumeConf)
+        ssc, hostname, port, storageLevel, getFlumeConf(enableDecompression))
 
     inputStream
   }
@@ -113,7 +116,7 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel, getFlumeConf)
+    createStream(jssc.ssc, hostname, port, storageLevel, false)
   }
 
   /**
@@ -130,7 +133,7 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       enableDecompression: Boolean
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel, getFlumeConf)
+    createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression)
   }
 
   /**

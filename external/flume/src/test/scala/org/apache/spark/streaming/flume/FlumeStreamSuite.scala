@@ -87,10 +87,9 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
   /** Setup and start the streaming context */
   private def startContext(
       testPort: Int, testCompression: Boolean): (ArrayBuffer[Seq[SparkFlumeEvent]]) = {
-    System.setProperty("spark.streaming,flume.decompression", testCompression.toString)
     ssc = new StreamingContext(conf, Milliseconds(200))
     val flumeStream = FlumeUtils.createStream(
-      ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK)
+      ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, testCompression)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)

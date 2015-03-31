@@ -17,7 +17,5 @@
 
 package org.apache.spark.streaming.flume
 
-
-case class FlumeConf(flumeMaxThread: Int, enableDecompression: Boolean,
-    enableSSL: Boolean, keyStore: String, keyStorePassword: String,
-    keyStoreType: String)
+private[flume] case class FlumeConf(flumeMaxThread: Int, enableDecompression: Boolean,
+    enableSSL: Boolean, keyStore: String, keyStorePassword: String, keyStoreType: String)

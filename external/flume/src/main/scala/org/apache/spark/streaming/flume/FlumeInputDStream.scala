@@ -162,25 +162,19 @@ class FlumeReceiver(
         Executors.newCachedThreadPool(), Executors.newCachedThreadPool())
       val channelPipelineFactory = new CompressionChannelPipelineFactory()
       
-      new NettyServer(
-        responder, 
-        new InetSocketAddress(host, port),
-        channelFactory,
-        channelPipelineFactory,
-        null)
+      new NettyServer(responder, new InetSocketAddress(host, port),
+        channelFactory,  channelPipelineFactory, null)
     } else {
       new NettyServer(responder, new InetSocketAddress(host, port))
     }
   }
 
   private def initSSLServer() = {
-    initSocketChannelFactory
-    initChannelPipelineFactory
     new NettyServer(responder, new InetSocketAddress(host, port),
       initSocketChannelFactory, initChannelPipelineFactory, null)
   }
-  
-  def initSocketChannelFactory = {
+
+  private def initSocketChannelFactory = {
     val maxThreads = flumeConf.flumeMaxThread
     if (maxThreads <= 0) {
       new NioServerSocketChannelFactory(Executors.newCachedThreadPool, 
@@ -196,8 +190,7 @@ class FlumeReceiver(
     if (enableDecompression || enableSsl) {
       pipelineFactory = new SSLCompressionChannelPipelineFactory(enableDecompression,
         enableSsl, keyStore, keyStorePassword, keyStoreType)
-    }
-    else {
+    } else {
       pipelineFactory = new ChannelPipelineFactory {
         def getPipeline: ChannelPipeline = {
           Channels.pipeline
