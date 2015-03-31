@@ -135,8 +135,8 @@ class LogisticRegressionModel (
        */
       var bestClass = 0
       var maxMargin = 0.0
-      val withBias = if (dataMatrix.size + 1 == dataWithBiasSize) true else false
-      (0 until numClasses - 1).map { i =>
+      val withBias = dataMatrix.size + 1 == dataWithBiasSize
+      (0 until numClasses - 1).foreach { i =>
         var margin = 0.0
         dataMatrix.foreachActive { (index, value) =>
           if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
