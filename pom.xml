@@ -1477,19 +1477,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <configuration>
-          <!-- Configuration of the archiver -->
-          <archive>
-            <manifestEntries>
-              <mode>development</mode>
-              <url>${project.url}</url>
-            </manifestEntries>
-            <manifest>
-              <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-            </manifest>
-          </archive>
-        </configuration>
         <executions>
           <execution>
             <id>prepare-test-jar</id>
