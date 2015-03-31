@@ -15,22 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.mllib.api.python
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.recommendation.{MatrixFactorizationModel, Rating}
+import org.apache.spark.rdd.RDD
 
 /**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
+ * A Wrapper of MatrixFactorizationModel to provide helper method for Python.
  */
-class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
+private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
+  extends MatrixFactorizationModel(model.rank, model.userFeatures, model.productFeatures) {
+
+  def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
+    predict(SerDe.asTupleRDD(userAndProducts.rdd))
+
+  def getUserFeatures: RDD[Array[Any]] = {
+    SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
+  }
+
+  def getProductFeatures: RDD[Array[Any]] = {
+    SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
   }
 }

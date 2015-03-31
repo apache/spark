@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
 /**
@@ -165,6 +166,15 @@ private[sql] object DataSourceStrategy extends Strategy {
 
       case expressions.Not(child) =>
         translate(child).map(sources.Not)
+
+      case expressions.StartsWith(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringStartsWith(a.name, v))
+
+      case expressions.EndsWith(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringEndsWith(a.name, v))
+
+      case expressions.EndsWith(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringContains(a.name, v))
 
       case _ => None
     }

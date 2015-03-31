@@ -84,6 +84,11 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("empty data frame") {
+    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(TestSQLContext.emptyDataFrame.count() === 0)
+  }
+
   test("head and take") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
@@ -112,6 +117,10 @@ class DataFrameSuite extends QueryTest {
     val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
       df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 

@@ -152,6 +152,9 @@ trait PrunedScan {
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
+ * The actual filter should be the conjunction of all `filters`,
+ * i.e. they should be "and" together.
+ *
  * The pushed down filters are currently purely an optimization as they will all be evaluated
  * again.  This means it is safe to use them with methods that produce false positives such
  * as filtering partitions based on a bloom filter.

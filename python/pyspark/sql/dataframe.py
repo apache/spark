@@ -31,7 +31,7 @@ from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD"]
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions"]
 
 
 class DataFrame(object):
@@ -49,13 +49,6 @@ class DataFrame(object):
     To select a column from the data frame, use the apply method::
 
         ageCol = people.age
-
-    Note that the :class:`Column` type can also be manipulated
-    through its various functions::
-
-        # The following creates a new column that increases everybody's age by 10.
-        people.age + 10
-
 
     A more concrete example::
 
@@ -77,7 +70,7 @@ class DataFrame(object):
     @property
     def rdd(self):
         """
-        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        Return the content of the :class:`DataFrame` as an :class:`pyspark.RDD`
         of :class:`Row` s.
         """
         if not hasattr(self, '_lazy_rdd'):
@@ -92,6 +85,12 @@ class DataFrame(object):
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
         return self._lazy_rdd
+
+    @property
+    def na(self):
+        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+        """
+        return DataFrameNaFunctions(self)
 
     def toJSON(self, use_unicode=False):
         """Convert a :class:`DataFrame` into a MappedRDD of JSON documents; one document per row.
@@ -697,6 +696,99 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    def dropna(self, how='any', thresh=None, subset=None):
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+
+        This is an alias for `na.drop`.
+
+        :param how: 'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        :param thresh: int, default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        :param subset: optional list of column names to consider.
+
+        >>> df4.dropna().show()
+        age height name
+        10  80     Alice
+
+        >>> df4.na.drop().show()
+        age height name
+        10  80     Alice
+        """
+        if how is not None and how not in ['any', 'all']:
+            raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if subset is None:
+            subset = self.columns
+        elif isinstance(subset, basestring):
+            subset = [subset]
+        elif not isinstance(subset, (list, tuple)):
+            raise ValueError("subset should be a list or tuple of column names")
+
+        if thresh is None:
+            thresh = len(subset) if how == 'any' else 1
+
+        cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
+        cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
+        return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
+
+    def fillna(self, value, subset=None):
+        """Replace null values, alias for `na.fill`.
+
+        :param value: int, long, float, string, or dict.
+            Value to replace null values with.
+            If the value is a dict, then `subset` is ignored and `value` must be a mapping
+            from column name (string) to replacement value. The replacement value must be
+            an int, long, float, or string.
+        :param subset: optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and subset contains a non-string column,
+            then the non-string column is simply ignored.
+
+        >>> df4.fillna(50).show()
+        age height name
+        10  80     Alice
+        5   50     Bob
+        50  50     Tom
+        50  50     null
+
+        >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
+        age height name
+        10  80     Alice
+        5   null   Bob
+        50  null   Tom
+        50  null   unknown
+
+        >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
+        age height name
+        10  80     Alice
+        5   null   Bob
+        50  null   Tom
+        50  null   unknown
+        """
+        if not isinstance(value, (float, int, long, basestring, dict)):
+            raise ValueError("value should be a float, int, long, string, or dict")
+
+        if isinstance(value, (int, long)):
+            value = float(value)
+
+        if isinstance(value, dict):
+            value = MapConverter().convert(value, self.sql_ctx._sc._gateway._gateway_client)
+            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        elif subset is None:
+            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        else:
+            if isinstance(subset, basestring):
+                subset = [subset]
+            elif not isinstance(subset, (list, tuple)):
+                raise ValueError("subset should be a list or tuple of column names")
+
+            cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
+            cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
+            return DataFrame(self._jdf.na().fill(value, cols), self.sql_ctx)
+
     def withColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
@@ -1061,6 +1153,24 @@ class Column(object):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
 
 
+class DataFrameNaFunctions(object):
+    """Functionality for working with missing data in :class:`DataFrame`.
+    """
+
+    def __init__(self, df):
+        self.df = df
+
+    def drop(self, how='any', thresh=None, subset=None):
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
+
+    def fill(self, value, subset=None):
+        return self.df.fillna(value=value, subset=subset)
+
+    fill.__doc__ = DataFrame.fillna.__doc__
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext
@@ -1076,6 +1186,12 @@ def _test():
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                   Row(name='Bob', age=5, height=85)]).toDF()
+
+    globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
+                                  Row(name='Bob', age=5, height=None),
+                                  Row(name='Tom', age=None, height=None),
+                                  Row(name=None, age=None, height=None)]).toDF()
+
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)

@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.util
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.{SparkEnv, SparkConf}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 
-/**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
- */
-class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
+object RpcUtils {
+
+  /**
+   * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
+   */
+  def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
+    val driverActorSystemName = SparkEnv.driverActorSystemName
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
   }
 }

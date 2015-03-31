@@ -50,7 +50,9 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
-              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
           ) ++ Seq(
           // SPARK-6510 Add a Graph#minus method acting as Set#difference
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")

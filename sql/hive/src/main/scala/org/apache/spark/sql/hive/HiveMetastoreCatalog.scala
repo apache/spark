@@ -32,7 +32,7 @@ import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{SaveMode, AnalysisException, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Catalog, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NoSuchTableException, Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -172,12 +172,16 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   def lookupRelation(
       tableIdentifier: Seq[String],
-      alias: Option[String]): LogicalPlan = synchronized {
+      alias: Option[String]): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = try client.getTable(databaseName, tblName) catch {
+    val table = try {
+      synchronized {
+        client.getTable(databaseName, tblName)
+      }
+    } catch {
       case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
         throw new NoSuchTableException
     }
@@ -199,7 +203,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
-          HiveShim.getAllPartitionsOf(client, table).toSeq
+          synchronized {
+            HiveShim.getAllPartitionsOf(client, table).toSeq
+          }
         } else {
           Nil
         }
@@ -697,7 +703,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
     (@transient sqlContext: SQLContext)
-  extends LeafNode {
+  extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
 
@@ -778,6 +784,13 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+
+  override def newInstance() = {
+    val newCopy = MetastoreRelation(databaseName, tableName, alias)(table, partitions)(sqlContext)
+    // The project here is an ugly hack to work around the fact that MetastoreRelation's
+    // equals method is broken.  Please remove this when SPARK-6555 is fixed.
+    Project(newCopy.output, newCopy)
+  }
 }
 
 

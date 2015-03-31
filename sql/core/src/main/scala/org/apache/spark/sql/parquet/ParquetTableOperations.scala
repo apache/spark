@@ -19,10 +19,9 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 import java.lang.{Long => JLong}
-import java.text.SimpleDateFormat
-import java.text.NumberFormat
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.concurrent.{Callable, TimeUnit}
-import java.util.{ArrayList, Collections, Date, List => JList}
+import java.util.{Date, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -43,12 +42,13 @@ import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
@@ -356,7 +356,7 @@ private[sql] case class InsertIntoParquetTable(
       } finally {
         writer.close(hadoopContext)
       }
-      committer.commitTask(hadoopContext)
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
       1
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
@@ -512,6 +512,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
     import parquet.filter2.compat.FilterCompat.Filter
     import parquet.filter2.compat.RowGroupFilter
+
     import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
 
     val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)

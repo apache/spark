@@ -212,6 +212,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(c.copy(children = expandedArgs), name)() :: Nil
+            case Alias(c @ CreateStruct(args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(c.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
@@ -252,7 +258,15 @@ class Analyzer(catalog: Catalog,
           case oldVersion @ Aggregate(_, aggregateExpressions, _)
               if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
             (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
-        }.head // Only handle first case found, others will be fixed on the next pass.
+        }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
+          sys.error(
+            s"""
+              |Failure when resolving conflicting references in Join:
+              |$plan
+              |
+              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+              """.stripMargin)
+        }
 
         val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
         val newRight = right transformUp {
