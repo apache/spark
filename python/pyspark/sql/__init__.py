@@ -22,14 +22,16 @@ public classes of Spark SQL:
       Main entry point for :class:`DataFrame` and SQL functionality.
     - L{DataFrame}
       A distributed collection of data grouped into named columns.
-    - L{GroupedData}
-      Aggregation methods, returned by :func:`DataFrame.groupBy`.
     - L{Column}
       A column expression in a :class:`DataFrame`.
     - L{Row}
       A row of data in a :class:`DataFrame`.
     - L{HiveContext}
       Main entry point for accessing data stored in Apache Hive.
+    - L{GroupedData}
+      Aggregation methods, returned by :func:`DataFrame.groupBy`.
+    - L{DataFrameNaFunctions}
+      Methods for handling missing data (null values).
     - L{functions}
       List of built-in functions available for :class:`DataFrame`.
 """
@@ -39,5 +41,5 @@ from pyspark.sql.types import Row
 from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'DataFrameNaFunctions'
 ]
