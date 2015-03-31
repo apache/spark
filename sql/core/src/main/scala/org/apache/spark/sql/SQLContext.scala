@@ -1207,6 +1207,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case FloatType => true
       case DateType => true
       case TimestampType => true
+      case StringType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
       case StructType(_) => true
