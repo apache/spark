@@ -712,6 +712,9 @@ class DataFrame(object):
         age height name
         10  80     Alice
         """
+        if how is not None and how not in ['any', 'all']:
+            raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
         if subset is None:
             subset = self.columns
         elif isinstance(subset, basestring):
