@@ -33,9 +33,8 @@ __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegr
 
 class LinearClassificationModel(LinearModel):
     """
-    A private abstract class represents a classification model that predicts to
-    which of a set of categories an example belongs. The categories are represented by
-    int values: 0, 1, 2, etc.
+    A private abstract class representing a multiclass classification model.
+    The categories are represented by int values: 0, 1, 2, etc.
     """
     def __init__(self, weights, intercept):
         super(LinearClassificationModel, self).__init__(weights, intercept)
@@ -48,16 +47,17 @@ class LinearClassificationModel(LinearModel):
         Sets the threshold that separates positive predictions from negative
         predictions. An example with prediction score greater than or equal
         to this threshold is identified as an positive, and negative otherwise.
-        It was used for binary classification only.
+        It is used for binary classification only.
         """
         self._threshold = value
 
+    @property
     def threshold(self):
         """
         .. note:: Experimental
 
         Returns the threshold (if any) used for converting raw prediction scores
-        into 0/1 predictions. It was used for binary classification only.
+        into 0/1 predictions. It is used for binary classification only.
         """
         return self._threshold
 
@@ -66,7 +66,7 @@ class LinearClassificationModel(LinearModel):
         .. note:: Experimental
 
         Clears the threshold so that `predict` will output raw prediction scores.
-        It was used for binary classification only.
+        It is used for binary classification only.
         """
         self._threshold = None
 
@@ -142,9 +142,13 @@ class LogisticRegressionModel(LinearClassificationModel):
         self._numFeatures = int(numFeatures)
         self._numClasses = int(numClasses)
         self._threshold = 0.5
-        self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
-        self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
-                                                            self._dataWithBiasSize)
+        if self._numClasses == 2:
+            self._dataWithBiasSize = None
+            self._weightsMatrix = None
+        else:
+            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
+                                                                self._dataWithBiasSize)
 
     @property
     def numFeatures(self):
@@ -287,9 +291,8 @@ class LogisticRegressionWithLBFGS(object):
         :param validateData:   Boolean parameter which indicates if the
                                algorithm should validate data before training.
                                (default: True)
-        :param numClasses:     The number of possible outcomes for k classes
-                               classification problem in Multinomial Logistic
-                               Regression (default: 2).
+        :param numClasses:     The number of classes (i.e., outcomes) a label can take
+                               in Multinomial Logistic Regression (default: 2).
 
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
