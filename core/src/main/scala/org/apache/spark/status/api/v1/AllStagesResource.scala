@@ -24,6 +24,7 @@ import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMe
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
+import org.apache.spark.util.Distribution
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllStagesResource(uiRoot: UIRoot) {
@@ -142,6 +143,84 @@ private[v1] object AllStagesResource {
       accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
       errorMessage = uiData.errorMessage,
       taskMetrics = uiData.taskMetrics.map { convertUiTaskMetrics }
+    )
+  }
+
+  def taskMetricDistributions(allTaskData: Seq[TaskUIData], quantiles: Array[Double]): TaskMetricDistributions = {
+
+    val rawMetrics = allTaskData.flatMap{_.taskMetrics}
+
+    def getMetric[T](data: Seq[T], f: T => Double): IndexedSeq[Double] =
+      Distribution(data.map{d=> f(d)}).get.getQuantiles(quantiles)
+
+    abstract class MetricHelper[I,O](f: InternalTaskMetrics => Option[I]) {
+      val data: Seq[I] = rawMetrics.flatMap{x => f(x)}
+      def build: O
+      def m(f: I => Double): IndexedSeq[Double] = getMetric(data, f)
+      def metricOption: Option[O] = {
+        if (data.isEmpty) {
+          None
+        } else {
+          Some(build)
+        }
+      }
+    }
+
+    def m(f: InternalTaskMetrics => Double): IndexedSeq[Double] =
+      getMetric(rawMetrics, f)
+
+    val inputMetrics =
+      new MetricHelper[InternalInputMetrics, InputMetricDistributions](_.inputMetrics) {
+        def build: InputMetricDistributions = new InputMetricDistributions(
+          bytesRead = m(_.bytesRead),
+          recordsRead = m(_.recordsRead)
+        )
+      }.metricOption
+
+    val outputMetrics =
+      new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](_.outputMetrics) {
+        def build: OutputMetricDistributions = new OutputMetricDistributions(
+          bytesWritten = m(_.bytesWritten),
+          recordsWritten = m(_.recordsWritten)
+        )
+      }.metricOption
+
+    val shuffleReadMetrics =
+      new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](_.shuffleReadMetrics) {
+        def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
+          readBytes = m(_.totalBytesRead),
+          readRecords = m(_.recordsRead),
+          remoteBytesRead = m(_.remoteBytesRead),
+          remoteBlocksFetched = m(_.remoteBlocksFetched),
+          localBlocksFetched = m(_.localBlocksFetched),
+          totalBlocksFetched = m(_.totalBlocksFetched),
+          fetchWaitTime = m(_.fetchWaitTime)
+        )
+      }.metricOption
+
+    val shuffleWriteMetrics =
+      new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](_.shuffleWriteMetrics) {
+        def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
+          writeBytes = m(_.shuffleBytesWritten),
+          writeRecords = m(_.shuffleRecordsWritten),
+          writeTime = m(_.shuffleWriteTime)
+        )
+      }.metricOption
+
+
+    new TaskMetricDistributions(
+      quantiles = quantiles,
+      executorDeserializeTime = m(_.executorDeserializeTime),
+      executorRunTime = m(_.executorRunTime),
+      resultSize = m(_.resultSize),
+      jvmGcTime = m(_.jvmGCTime),
+      resultSerializationTime = m(_.resultSerializationTime),
+      memoryBytesSpilled = m(_.memoryBytesSpilled),
+      diskBytesSpilled = m(_.diskBytesSpilled),
+      inputMetrics = inputMetrics,
+      outputMetrics = outputMetrics,
+      shuffleReadMetrics = shuffleReadMetrics,
+      shuffleWriteMetrics = shuffleWriteMetrics
     )
   }
 

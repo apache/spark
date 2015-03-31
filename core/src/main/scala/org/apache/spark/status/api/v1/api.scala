@@ -194,6 +194,50 @@ class ShuffleWriteMetrics(
   val recordsWritten: Long
 )
 
+class TaskMetricDistributions(
+  val quantiles: IndexedSeq[Double],
+
+  val executorDeserializeTime: IndexedSeq[Double],
+  val executorRunTime: IndexedSeq[Double],
+  val resultSize: IndexedSeq[Double],
+  val jvmGcTime: IndexedSeq[Double],
+  val resultSerializationTime: IndexedSeq[Double],
+  val memoryBytesSpilled: IndexedSeq[Double],
+  val diskBytesSpilled: IndexedSeq[Double],
+
+  val inputMetrics: Option[InputMetricDistributions],
+  val outputMetrics: Option[OutputMetricDistributions],
+  val shuffleReadMetrics: Option[ShuffleReadMetricDistributions],
+  val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions]
+)
+
+class InputMetricDistributions(
+  val bytesRead: IndexedSeq[Double],
+  val recordsRead: IndexedSeq[Double]
+)
+
+class OutputMetricDistributions(
+  val bytesWritten: IndexedSeq[Double],
+  val recordsWritten: IndexedSeq[Double]
+)
+
+
+class ShuffleReadMetricDistributions(
+  val readBytes: IndexedSeq[Double],
+  val readRecords: IndexedSeq[Double],
+  val remoteBlocksFetched: IndexedSeq[Double],
+  val localBlocksFetched: IndexedSeq[Double],
+  val fetchWaitTime: IndexedSeq[Double],
+  val remoteBytesRead: IndexedSeq[Double],
+  val totalBlocksFetched: IndexedSeq[Double]
+)
+
+class ShuffleWriteMetricDistributions(
+  val writeBytes: IndexedSeq[Double],
+  val writeRecords: IndexedSeq[Double],
+  val writeTime: IndexedSeq[Double]
+)
+
 class AccumulableInfo (
   val id: Long,
   val name: String,
