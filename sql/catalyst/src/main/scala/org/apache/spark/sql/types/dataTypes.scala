@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -35,15 +36,6 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
-import scala.math._
-import org.apache.spark.sql.types.StructField
-import org.apache.spark.sql.types.PrecisionInfo
-import scala.Some
-import scala.Fractional
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import scala.Numeric
-import scala.Ordering
-import scala.Integral
 
 
 object DataType {
