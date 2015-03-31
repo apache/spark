@@ -316,8 +316,7 @@ class SQLContext(object):
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         """
         if (rdd.__class__ is DataFrame):
-            df = rdd._jdf
-            self._ssql_ctx.registerDataFrameAsTable(df, tableName)
+            self._ssql_ctx.registerDataFrameAsTable(df._jdf, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
 
