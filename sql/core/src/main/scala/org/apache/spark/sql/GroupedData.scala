@@ -179,6 +179,16 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   def mean(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Average)
   }
+
+  /**
+   * Compute the standard derivations for each numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the average values for them.
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(StdDeviation)
+  }
  
   /**
    * Compute the max value for each numeric columns for each group.

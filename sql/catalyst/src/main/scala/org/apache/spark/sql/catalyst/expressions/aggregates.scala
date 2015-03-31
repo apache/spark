@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import org.apache.spark.sql.catalyst.expressions.{Divide, Cast}
+
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
@@ -614,6 +616,114 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
     }
   }
 }
+
+case class StdDeviation(child: Expression)
+  extends PartialAggregate with trees.UnaryNode[Expression]{
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      DoubleType
+  }
+
+  override def asPartial: SplitEvaluation = {
+    val (seqPartialData, castStddev) = child.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        // Turn the child to unlimited decimals for calculation, before going back to fixed
+        val (seqPartialData, stddev) = calcPartialStddev(DecimalType.Unlimited)
+        (seqPartialData, Cast(stddev, dataType))
+      case _ =>
+        calcPartialStddev(dataType)
+    }
+
+    SplitEvaluation(castStddev, seqPartialData)
+  }
+
+  /**
+   *
+   * @param calcType data type during calcuation
+   * @return seqPartialData is data for partialEvaluations
+   */
+  protected def calcPartialStddev(calcType: DataType): (List[Alias], Expression) = {
+    val castedChild = Cast(child, calcType)
+    val partialSquredSum = Alias(Sum(Multiply(castedChild, castedChild)), "PartialSquredSum")()
+    val partialSum = Alias(Sum(castedChild), "PartialSum")()
+    val partialCount = Alias(Count(child), "PartialCount")()
+    val seqPartialData = partialCount :: partialSum :: partialSquredSum :: Nil
+
+    val castedSquredSum = Cast(Sum(partialSquredSum.toAttribute), calcType)
+    val castedSum = Cast(Sum(partialSum.toAttribute), calcType)
+    val castedCount = Cast(Sum(partialCount.toAttribute), calcType)
+    val castedAvg = Divide(castedSum, castedCount)
+    val stddev = Sqrt(Divide(
+                        Subtract(castedSquredSum, Multiply(castedSum, castedAvg)),
+                        castedCount));
+    (seqPartialData, stddev)
+  }
+
+  override def toString: String = s"STDDEV($child)"
+
+  override def newInstance(): StdDeviationFunction = new StdDeviationFunction(child, this)
+}
+
+case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+  def this() = this(null, null) // /Required for serialization.
+
+  private val calcType =
+    expr.dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+      case DecimalType.Unlimited =>
+        DecimalType.Unlimited
+      case _ =>
+        DoubleType
+    }
+
+  private val zero = Cast(Literal(0), calcType)
+
+  private var count: Long = _
+
+
+  private val squaredSum = MutableLiteral(zero.eval(null), calcType)
+
+  private val sum = MutableLiteral(zero.eval(null), calcType)
+
+  private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
+
+  private def squaredAddFunction(value: Any) =  {
+    val castValue = Cast(Literal(value, expr.dataType), calcType)
+    Add(squaredSum, Multiply(castValue,castValue))
+  }
+
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    if(evaluatedExpr != null) {
+      count += 1
+      sum.update(addFunction(evaluatedExpr), input)
+      squaredSum.update(squaredAddFunction(evaluatedExpr), input)
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    if (count == 0L) {
+      null
+    } else {
+      val avg = Divide(Cast(sum, calcType), Cast(Literal(count), calcType))
+      // avg*avg*n
+      val squareAvgN = Multiply(Cast(sum, calcType),avg)
+      val stddev = Sqrt(Divide(
+                          Subtract(Cast(squaredSum, calcType), squareAvgN),
+                          Cast(Literal(count), calcType)))
+      stddev.eval(null)
+    }
+  }
+}
+
 
 case class CombineSumFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
