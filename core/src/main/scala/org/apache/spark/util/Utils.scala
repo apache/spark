@@ -22,7 +22,7 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConversions._
@@ -1010,35 +1010,36 @@ private[spark] object Utils extends Logging {
     )
   }
 
-  /** Check whether a time-suffix was provided for the time string. */
-  private def hasTimeSuffix(str: String) : Boolean = {
-    val lower = str.toLowerCase.trim()
-    lower.endsWith("ms") || lower.endsWith("us") || lower.endsWith("s")
-  }
-
-  val timeError = "Time must be specified as seconds (s), " +
-      "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us."
-
+  val timeSuffixes = Map (
+    "us" -> TimeUnit.MICROSECONDS,
+    "ms" -> TimeUnit.MILLISECONDS,
+    "s" -> TimeUnit.SECONDS,
+    "min" -> TimeUnit.MINUTES,
+    "h" -> TimeUnit.HOURS,
+    "d" -> TimeUnit.DAYS
+  )
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
   @throws(classOf[NumberFormatException])
-  private def timeStringToUs(str: String) : Long = {
+  private def parseTimeString(str: String) : (Option[TimeUnit], Long) = {
+    val timeError = "Time must be specified as seconds (s), " +
+        "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us."
+
     try {
       val lower = str.toLowerCase.trim()
-      if (lower.endsWith("ms")) {
-        lower.substring(0, lower.length - 2).toLong * 1000
-      } else if (lower.endsWith("us")) {
-        lower.substring(0, lower.length - 2).toLong
-      } else if (lower.endsWith("s")) {
-        lower.substring(0, lower.length - 1).toLong * 1000 * 1000
-      } else {
-        // Invalid suffix, force correct formatting
-        lower.toLong
-      }
+      var suffix: String = ""
+      timeSuffixes.foreach(s => {
+        if(lower.endsWith(s._1))
+          suffix = s._1
+      })
+
+      (timeSuffixes.get(suffix), str.substring(0, str.length - suffix.length).toLong)
     } catch {
-      case e: NumberFormatException => throw new NumberFormatException(timeError)
+
+      case e: NumberFormatException => throw new NumberFormatException(timeError + "\n" +
+          e.toString)
     }
   }
 
@@ -1046,27 +1047,27 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in us.
    */
-  @throws(classOf[NumberFormatException])
   def timeStringAsUs(str: String): Long = {
-      timeStringToUs(str)
+    val parsed = parseTimeString(str)
+    parsed._1.getOrElse(TimeUnit.MICROSECONDS).toMicros(parsed._2)
   }
 
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
-  @throws(classOf[NumberFormatException])
   def timeStringAsMs(str : String) : Long = {
-      timeStringToUs(str)/1000
+    val parsed = parseTimeString(str)
+    parsed._1.getOrElse(TimeUnit.MILLISECONDS).toMicros(parsed._2)
   }
 
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
-  @throws(classOf[NumberFormatException])
   def timeStringAsS(str : String) : Long = {
-    timeStringToUs(str)/1000/1000
+    val parsed = parseTimeString(str)
+    parsed._1.getOrElse(TimeUnit.SECONDS).toMicros(parsed._2)
   }
 
   /**
