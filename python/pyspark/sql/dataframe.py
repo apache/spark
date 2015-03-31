@@ -31,7 +31,7 @@ from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD"]
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions"]
 
 
 class DataFrame(object):
@@ -85,6 +85,12 @@ class DataFrame(object):
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
         return self._lazy_rdd
+
+    @property
+    def na(self):
+        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+        """
+        return DataFrameNaFunctions(self)
 
     def toJSON(self, use_unicode=False):
         """Convert a :class:`DataFrame` into a MappedRDD of JSON documents; one document per row.
@@ -693,6 +699,8 @@ class DataFrame(object):
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
 
+        This is an alias for `na.drop`.
+
         :param how: 'any' or 'all'.
             If 'any', drop a row if it contains any nulls.
             If 'all', drop a row only if all its values are null.
@@ -702,6 +710,10 @@ class DataFrame(object):
         :param subset: optional list of column names to consider.
 
         >>> df4.dropna().show()
+        age height name
+        10  80     Alice
+
+        >>> df4.na.drop().show()
         age height name
         10  80     Alice
         """
@@ -723,7 +735,7 @@ class DataFrame(object):
         return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
 
     def fillna(self, value, subset=None):
-        """Replace null values.
+        """Replace null values, alias for `na.fill`.
 
         :param value: int, long, float, string, or dict.
             Value to replace null values with.
@@ -743,6 +755,13 @@ class DataFrame(object):
         50  50     null
 
         >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
+        age height name
+        10  80     Alice
+        5   null   Bob
+        50  null   Tom
+        50  null   unknown
+
+        >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         age height name
         10  80     Alice
         5   null   Bob
@@ -1132,6 +1151,24 @@ class Column(object):
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')
+
+
+class DataFrameNaFunctions(object):
+    """Functionality for working with missing data in :class:`DataFrame`.
+    """
+
+    def __init__(self, df):
+        self.df = df
+
+    def drop(self, how='any', thresh=None, subset=None):
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
+
+    def fill(self, value, subset=None):
+        return self.df.fillna(value=value, subset=subset)
+
+    fill.__doc__ = DataFrame.fillna.__doc__
 
 
 def _test():
