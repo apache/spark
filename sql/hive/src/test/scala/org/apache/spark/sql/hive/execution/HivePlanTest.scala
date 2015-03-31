@@ -18,14 +18,18 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.hive.test.TestHive
 
 class HivePlanTest extends QueryTest {
   import TestHive._
+  import TestHive.implicits._
 
   test("udf constant folding") {
-    val optimized = sql("SELECT cos(null) FROM src").queryExecution.optimizedPlan
-    val correctAnswer = sql("SELECT cast(null as double) FROM src").queryExecution.optimizedPlan
+    Seq.empty[Tuple1[Int]].toDF("a").registerTempTable("t")
+    val optimized = sql("SELECT cos(null) FROM t").queryExecution.optimizedPlan
+    val correctAnswer = sql("SELECT cast(null as double) FROM t").queryExecution.optimizedPlan
 
     comparePlans(optimized, correctAnswer)
   }
