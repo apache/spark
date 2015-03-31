@@ -41,6 +41,7 @@ from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.feature import Word2Vec
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -619,6 +620,42 @@ class ChiSqTestTests(PySparkTestCase):
         chi = Statistics.chiSqTest(self.sc.parallelize(sparse_data))
         self.assertEqual(len(chi), num_cols)
         self.assertIsNotNone(chi[1000])
+
+
+class Word2VecTests(PySparkTestCase):
+    def test_word2vec_setters(self):
+        data = [
+            ["I", "have", "a", "pen"],
+            ["I", "like", "soccer", "very", "much"],
+            ["I", "live", "in", "Tokyo"]
+        ]
+        model = None
+        try:
+            model = Word2Vec()\
+                .setVectorSize(2)\
+                .setLearningRate(0.01)\
+                .setNumPartitions(2)\
+                .setNumIterations(10)\
+                .setSeed(1024)\
+                .setMinCount(3)
+        except:
+            self.fail()
+        self.assertEquals(model.vectorSize, 2)
+        self.assertTrue(model.learningRate < 0.02)
+        self.assertEquals(model.numPartitions, 2)
+        self.assertEquals(model.numIterations, 10)
+        self.assertEquals(model.seed, 1024)
+        self.assertEquals(model.minCount, 3)
+
+    def test_word2vec_get_vectors(self):
+        data = [
+            ["I", "have", "a", "pen"],
+            ["I", "like", "soccer", "very", "much"],
+            ["I", "live", "in", "Tokyo"]
+        ]
+        model = Word2Vec().fit(self.sc.parallelize(data))
+        self.assertEquals(len(model.getVectors()), 0)
+
 
 if __name__ == "__main__":
     if not _have_scipy:
