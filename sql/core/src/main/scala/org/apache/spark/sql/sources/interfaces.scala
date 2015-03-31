@@ -149,7 +149,7 @@ trait PrunedScan {
 
 /**
  * ::DeveloperApi::
- * A BaseRelation that can eliminate unneeded columns and filters using selected
+ * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
  * The actual filter should be the conjunction of all `filters`,
