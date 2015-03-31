@@ -76,9 +76,21 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def stop(): Unit = {
     if (stopped.compareAndSet(false, true)) {
       eventThread.interrupt()
-      eventThread.join()
-      // Call onStop after the event thread exits to make sure onReceive happens before onStop
-      onStop()
+      var onStopCalled = false
+      try {
+        eventThread.join()
+        // Call onStop after the event thread exits to make sure onReceive happens before onStop
+        onStopCalled = true
+        onStop()
+      } catch {
+        case ie: InterruptedException =>
+          Thread.currentThread().interrupt()
+          if (!onStopCalled) {
+            // ie is thrown from `eventThread.join()`. Otherwise, we should not call `onStop` since
+            // it's already called.
+            onStop()
+          }
+      }
     } else {
       // Keep quiet to allow calling `stop` multiple times.
     }
