@@ -1,14 +1,31 @@
+/*
+* Licensed to the Apache Software Foundation (ASF) under one or more
+* contributor license agreements.  See the NOTICE file distributed with
+* this work for additional information regarding copyright ownership.
+* The ASF licenses this file to You under the Apache License, Version 2.0
+* (the "License"); you may not use this file except in compliance with
+* the License.  You may obtain a copy of the License at
+*
+*    http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
 package org.apache.spark.sql.types
 
 /**
- *  A mutable UTF-8 String
+ *  A UTF-8 String used only in SparkSQL
  */
 
-final class UTF8String extends Ordered[UTF8String] with Serializable {
+private[sql] final class UTF8String extends Ordered[UTF8String] with Serializable {
   private var bytes: Array[Byte] = _
 
   def set(str: String): UTF8String = {
-    this.bytes = str.getBytes("utf-8")
+    bytes = str.getBytes("utf-8")
     this
   }
 
@@ -36,7 +53,30 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
   }
 
   def slice(start: Int, end: Int): UTF8String = {
-    UTF8String(toString().slice(start, end))
+    if (end <= start || start >= bytes.length || bytes == null) {
+      new UTF8String
+    }
+
+    var c = 0
+    var i: Int = 0
+    while (c < start && i < bytes.length) {
+      val b = bytes(i)
+      i += 1
+      if (b >= 196) {
+        i += UTF8String.bytesFromUTF8(b - 196)
+      }
+      c += 1
+    }
+    val bstart = i
+    while (c < end && i < bytes.length) {
+      val b = bytes(i)
+      i += 1
+      if (b >= 196) {
+        i += UTF8String.bytesFromUTF8(b - 196)
+      }
+      c += 1
+    }
+    UTF8String(java.util.Arrays.copyOfRange(bytes, bstart, i))
   }
 
   def contains(sub: UTF8String): Boolean = {
@@ -81,30 +121,44 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   override def equals(other: Any): Boolean = other match {
     case s: UTF8String =>
-      bytes.length == s.bytes.length && compare(s) == 0
+      java.util.Arrays.equals(bytes, s.bytes)
     case s: String =>
-      toString() == s
+      bytes.length >= s.length && length() == s.length && toString() == s
     case _ =>
       false
   }
 
   override def hashCode(): Int = {
-    var h: Int = 1
-    var i: Int = 0
-    while (i < bytes.length) {
-      h = h * 31 + bytes(i)
-      i += 1
-    }
-    h
+    java.util.Arrays.hashCode(bytes)
   }
 }
 
-object UTF8String {
-  val bytesFromUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
+private[sql] object UTF8String {
+  // number of tailing bytes in a UTF8 sequence for a code point
+  private[types] val bytesFromUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
     3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5)
 
-  def apply(s: String): UTF8String  = new UTF8String().set(s)
-  def apply(bytes: Array[Byte]): UTF8String = new UTF8String().set(bytes)
+  /**
+   * Create a UTF-8 String from String
+   */
+  def apply(s: String): UTF8String = {
+    if (s != null) {
+      new UTF8String().set(s)
+    } else{
+      null
+    }
+  }
+
+  /**
+   * Create a UTF-8 String from Array[Byte], which should be encoded in UTF-8
+   */
+  def apply(bytes: Array[Byte]): UTF8String = {
+    if (bytes != null) {
+      new UTF8String().set(bytes)
+    } else {
+      null
+    }
+  }
 }

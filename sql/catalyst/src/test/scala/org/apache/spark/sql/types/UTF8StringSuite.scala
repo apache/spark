@@ -54,6 +54,8 @@ class UTF8StringSuite extends FunSuite {
     assert(!UTF8String("大千世界").endsWith(UTF8String("世")))
 
     assert(UTF8String("hello").slice(1, 3) == UTF8String("ell"))
-    assert(UTF8String("大千世界").slice(1, 2) == UTF8String("千世"))
+    assert(UTF8String("大千世界").slice(0, 1) == UTF8String("大"))
+    assert(UTF8String("大千世界").slice(1, 3) == UTF8String("千世"))
+    assert(UTF8String("大千世界").slice(3, 5) == UTF8String("界"))
   }
 }

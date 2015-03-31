@@ -228,7 +228,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   @inline
   def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
       (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
-    val len = str.length
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
     // negative indices for start positions. If a start index i is greater than 0, it 
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
@@ -237,7 +236,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
 
     val start = startPos match {
       case pos if pos > 0 => pos - 1
-      case neg if neg < 0 => len + neg
+      case neg if neg < 0 => str.length + neg
       case _ => 0
     }
 
