@@ -25,6 +25,8 @@ import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
+import org.apache.spark.network.util.JavaUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -1010,47 +1012,12 @@ private[spark] object Utils extends Logging {
     )
   }
 
-  private val timeSuffixes = Map(
-    "us" -> TimeUnit.MICROSECONDS,
-    "ms" -> TimeUnit.MILLISECONDS,
-    "s" -> TimeUnit.SECONDS,
-    "min" -> TimeUnit.MINUTES,
-    "h" -> TimeUnit.HOURS,
-    "d" -> TimeUnit.DAYS
-  )
-
-  /**
-   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
-   * internal use. If no suffix is provided a direct conversion is attempted.
-   */
-  private def parseTimeString(str: String, unit:TimeUnit) : Long = {
-    val timeError = "Time must be specified as seconds (s), " +
-        "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
-        "E.g. 50s, 100ms, or 250us."
-
-    try {
-      val lower = str.toLowerCase.trim()
-      var suffix: String = ""
-      timeSuffixes.foreach(s => {
-        if (lower.endsWith(s._1)) {
-          suffix = s._1
-        }
-      })
-
-      unit.convert(str.substring(0, str.length - suffix.length).toLong, 
-        timeSuffixes.getOrElse(suffix, unit))
-    } catch {
-      case e: NumberFormatException => throw new NumberFormatException(timeError + "\n" +
-          e.toString)
-    }
-  }
-
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in us.
    */
   def timeStringAsUs(str: String): Long = {
-    parseTimeString(str, TimeUnit.MICROSECONDS)
+    JavaUtils.parseTimeString(str, TimeUnit.MICROSECONDS)
   }
 
   /**
@@ -1058,7 +1025,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   def timeStringAsMs(str : String) : Long = {
-    parseTimeString(str, TimeUnit.MILLISECONDS)
+    JavaUtils.parseTimeString(str, TimeUnit.MILLISECONDS)
   }
 
   /**
@@ -1066,7 +1033,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsS(str : String) : Long = {
-    parseTimeString(str, TimeUnit.SECONDS)
+    JavaUtils.parseTimeString(str, TimeUnit.SECONDS)
   }
 
   /**

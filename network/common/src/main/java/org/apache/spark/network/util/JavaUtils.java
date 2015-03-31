@@ -125,23 +125,23 @@ public class JavaUtils {
   }
 
   private static ImmutableMap<String, TimeUnit> timeSuffixes = 
-          new ImmutableMap.Builder<String, TimeUnit>()
-          .put("us",TimeUnit.MICROSECONDS)
-          .put("ms",TimeUnit.MILLISECONDS)
-          .put("s", TimeUnit.SECONDS)
-          .put("min", TimeUnit.MINUTES)
-          .put("h", TimeUnit.HOURS)
-          .put("d", TimeUnit.DAYS)
-          .build();
-  
+    ImmutableMap.<String, TimeUnit>builder()
+      .put("us",TimeUnit.MICROSECONDS)
+      .put("ms",TimeUnit.MILLISECONDS)
+      .put("s", TimeUnit.SECONDS)
+      .put("min", TimeUnit.MINUTES)
+      .put("h", TimeUnit.HOURS)
+      .put("d", TimeUnit.DAYS)
+      .build();
+
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  private static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
+  public static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
     String timeError = "Time must be specified as seconds (s), " +
-            "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
-            "E.g. 50s, 100ms, or 250us.";
+      "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
+      "E.g. 50s, 100ms, or 250us.";
     String lower = str.toLowerCase().trim();
     
     try {
@@ -153,8 +153,8 @@ public class JavaUtils {
       }
       
       return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
-              timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
-    } catch(NumberFormatException e) {
+        timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
+    } catch (NumberFormatException e) {
       throw new NumberFormatException(timeError + "\n" + e.toString());
     }
   }
