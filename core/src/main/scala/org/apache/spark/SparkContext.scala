@@ -23,7 +23,7 @@ import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.TimeUnit
 import java.util.UUID.randomUUID
@@ -97,10 +97,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   val startTime = System.currentTimeMillis()
 
-  @volatile private var stopped: Boolean = false
+  @volatile private var stopped: AtomicBoolean = new AtomicBoolean(false)
+  @volatile private var stopping: AtomicBoolean = new AtomicBoolean(false)
 
   private def assertNotStopped(): Unit = {
-    if (stopped) {
+    if (stopped.get()) {
       throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
     }
   }
@@ -1396,39 +1397,40 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Shut down the SparkContext. */
   def stop() {
-    // The shutdown logic can create a deadlock scenario when an external thread triggers an
-    // error in the handling of which it shuts down the SparkContext. Meanwhile, this thread
-    // will wait for the external thread to join during the "dagScheduler.stop()" while that
-    // thread waits on the SPARK_CONTEXT_CONSTRUCTOR_LOCK. We avoid this by surrounding this
-    // logic in a try catch.
-    while (!stopped) {
-      if (SparkContext.shutdownLock.tryLock(10, TimeUnit.SECONDS)) {
-        SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-          if (!stopped) {
-            stopped = true
-            postApplicationEnd()
-            ui.foreach(_.stop())
-            env.metricsSystem.report()
-            metadataCleaner.cancel()
-            cleaner.foreach(_.stop())
-            dagScheduler.stop() 
-            dagScheduler = null
-            listenerBus.stop()
-            eventLogger.foreach(_.stop())
-            env.actorSystem.stop(heartbeatReceiver)
-            progressBar.foreach(_.stop())
-            taskScheduler = null
-            // TODO: Cache.stop()?
-            env.stop()
-            SparkEnv.set(null)
-            logInfo("Successfully stopped SparkContext")
-            SparkContext.clearActiveContext()
-          } else {
-            logInfo("SparkContext already stopped")
-          }
-        }
+    // Use the stopping variable to ensure no contention for the stop scenario.
+    // Still track the stopped variable for use elsewhere in the code.
+    if (!stopped.get()) {
+      if(!stopping.get()) {
+        stopping.set(true)
+      } else {
+        logInfo("SparkContext already stopping.")
+        return
       }
     }
+    else {
+      logInfo("SparkContext already stopped.")
+      return
+    }
+
+    postApplicationEnd()
+    ui.foreach(_.stop())
+    env.metricsSystem.report()
+    metadataCleaner.cancel()
+    cleaner.foreach(_.stop())
+    dagScheduler.stop()
+    dagScheduler = null
+    listenerBus.stop()
+    eventLogger.foreach(_.stop())
+    env.actorSystem.stop(heartbeatReceiver)
+    progressBar.foreach(_.stop())
+    taskScheduler = null
+    // TODO: Cache.stop()?
+    env.stop()
+    SparkEnv.set(null)
+    logInfo("Successfully stopped SparkContext")
+    SparkContext.clearActiveContext()
+    stopping.set(false)
+    stopped.set(true)
   }
 
 
@@ -1490,7 +1492,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    if (stopped) {
+    if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
