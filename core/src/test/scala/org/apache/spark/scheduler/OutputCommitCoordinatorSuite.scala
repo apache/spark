@@ -161,6 +161,31 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
     }
     assert(tempDir.list().size === 0)
   }
+
+  test("Only authorized committer failures can clear the authorized committer lock (SPARK-6614)") {
+    val stage: Int = 1
+    val partition: Long = 2
+    val authorizedCommitter: Long = 3
+    val nonAuthorizedCommitter: Long = 100
+    outputCommitCoordinator.stageStart(stage)
+    assert(outputCommitCoordinator.canCommit(stage, partition, attempt = authorizedCommitter))
+    assert(!outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter))
+    // The non-authorized committer fails
+    outputCommitCoordinator.taskCompleted(
+      stage, partition, attempt = nonAuthorizedCommitter, reason = TaskKilled)
+    // New tasks should still not be able to commit because the authorized committer has not failed
+    assert(
+      !outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 1))
+    // The authorized committer now fails, clearing the lock
+    outputCommitCoordinator.taskCompleted(
+      stage, partition, attempt = authorizedCommitter, reason = TaskKilled)
+    // A new task should now be allowed to become the authorized committer
+    assert(
+      outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 2))
+    // There can only be one authorized committer
+    assert(
+      !outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 3))
+  }
 }
 
 /**
