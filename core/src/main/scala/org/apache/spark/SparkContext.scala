@@ -34,6 +34,8 @@ import scala.reflect.{ClassTag, classTag}
 
 import akka.actor.Props
 
+import org.apache.commons.lang3.SerializationUtils
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -1489,7 +1491,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
-      resultHandler, localProperties.get)
+      resultHandler, SerializationUtils.clone(localProperties.get))
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
   }
@@ -1575,7 +1577,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
-      localProperties.get)
+      SerializationUtils.clone(localProperties.get))
     logInfo(
       "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
@@ -1603,7 +1605,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       callSite,
       allowLocal = false,
       resultHandler,
-      localProperties.get)
+      SerializationUtils.clone(localProperties.get))
     new SimpleFutureAction(waiter, resultFunc)
   }
 
