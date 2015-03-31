@@ -22,15 +22,19 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.ShuffleBlockId
 
 private[spark]
-trait ShuffleBlockManager {
+/**
+ * Implementers of this trait understand how to retrieve block data for a logical shuffle block
+ * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
+ * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
+ * implementations when shuffle data is retrieved.
+ */
+trait ShuffleBlockResolver {
   type ShuffleId = Int
 
   /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
+   * Retrieve the data for the specified block. If the data for that block is not available,
+   * throws an unspecified exception.
    */
-  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
-
   def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 
   def stop(): Unit

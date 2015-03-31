@@ -67,7 +67,7 @@ private[spark] trait ShuffleWriterGroup {
 // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getHashBasedShuffleBlockData().
 private[spark]
 class FileShuffleBlockManager(conf: SparkConf)
-  extends ShuffleBlockManager with Logging {
+  extends ShuffleBlockResolver with Logging {
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
@@ -173,11 +173,6 @@ class FileShuffleBlockManager(conf: SparkConf)
         shuffleState.unusedFileGroups.add(group)
       }
     }
-  }
-
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    val segment = getBlockData(blockId)
-    Some(segment.nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

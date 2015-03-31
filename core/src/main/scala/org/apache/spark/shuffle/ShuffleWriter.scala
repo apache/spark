@@ -23,7 +23,7 @@ import org.apache.spark.scheduler.MapStatus
  * Obtained inside a map task to write out records to the shuffle system.
  */
 private[spark] trait ShuffleWriter[K, V] {
-  /** Write a bunch of records to this task's output */
+  /** Write a sequence of records to this task's output */
   def write(records: Iterator[_ <: Product2[K, V]]): Unit
 
   /** Close this writer, passing along whether the map completed */
