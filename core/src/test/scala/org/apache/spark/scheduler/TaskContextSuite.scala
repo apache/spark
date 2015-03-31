@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
+import org.apache.spark.util.{TaskInterruptionListenerException, TaskInterruptionListener, TaskCompletionListenerException, TaskCompletionListener}
 
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
@@ -64,6 +64,52 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     verify(listener, times(1)).onTaskCompletion(any())
   }
 
+  test("calls TaskInterruptionListener when task killed") {
+    TaskContextSuite.interupted = false
+    sc = new SparkContext("local", "test")
+    val rdd = new RDD[String](sc, List()) {
+      override def getPartitions = Array[Partition](StubPartition(0))
+      override def compute(split: Partition, context: TaskContext) = {
+        context.addTaskInterruptionListener(context => TaskContextSuite.interupted = true)
+        Thread.sleep(1000)
+        Iterator("test")
+      }
+    }
+    val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val func = (c: TaskContext, i: Iterator[String]) => i.next()
+    val task = new ResultTask[String, String](
+      0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
+
+    task.kill(false)
+    assert(TaskContextSuite.interupted === false)
+
+    val taskThread = new Thread("Task") {
+      override def run(): Unit = {
+        task.run(0, 0)
+      }
+    }
+    taskThread.start()
+
+    task.kill(false)
+    assert(TaskContextSuite.interupted === true)
+
+    taskThread.join()
+  }
+
+  test("all TaskInterruptionListeners should be called even if some fail") {
+    val context = new TaskContextImpl(0, 0, 0, 0)
+    val listener = mock(classOf[TaskInterruptionListener])
+    context.addTaskInterruptionListener(_ => throw new Exception("blah"))
+    context.addTaskInterruptionListener(listener)
+    context.addTaskInterruptionListener(_ => throw new Exception("blah"))
+
+    intercept[TaskInterruptionListenerException] {
+      context.markInterrupted()
+    }
+
+    verify(listener, times(1)).onTaskInterruption(any())
+  }
+
   test("TaskContext.attemptNumber should return attempt number, not task id (SPARK-4014)") {
     sc = new SparkContext("local[1,2]", "test")  // use maxRetries = 2 because we test failed tasks
     // Check that attemptIds are 0 for all tasks' initial attempts
@@ -94,6 +140,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
 
 private object TaskContextSuite {
   @volatile var completed = false
+  @volatile var interupted = false
 }
 
 private case class StubPartition(index: Int) extends Partition

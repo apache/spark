@@ -130,7 +130,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
   }
 
-  test("kill receiver") {
+  test("check the state of `Receiver` and `ReceiverSupervisor` when receivers are killed") {
     val sparkConf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(framework)
