@@ -125,6 +125,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def asyncMonitorApplication(): Unit = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
+    val interval = conf.getLong("spark.yarn.client.progress.pollinterval", 1000)
     val t = new Thread {
       override def run() {
         while (!stopping) {
@@ -143,7 +144,7 @@ private[spark] class YarnClientSchedulerBackend(
             sc.stop()
             stopping = true
           }
-          Thread.sleep(1000L)
+          Thread.sleep(interval)
         }
         Thread.currentThread().interrupt()
       }
