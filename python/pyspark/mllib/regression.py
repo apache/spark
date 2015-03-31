@@ -167,13 +167,19 @@ class LinearRegressionModel(LinearRegressionModelBase):
 # return the result of a call to the appropriate JVM stub.
 # _regression_train_wrapper is responsible for setup and error checking.
 def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
+    from pyspark.mllib.classification import LogisticRegressionModel
     first = data.first()
     if not isinstance(first, LabeledPoint):
         raise ValueError("data should be an RDD of LabeledPoint, but got %s" % first)
     if initial_weights is None:
         initial_weights = [0.0] * len(data.first().features)
-    weights, intercept = train_func(data, _convert_to_vector(initial_weights))
-    return modelClass(weights, intercept)
+    if (modelClass == LogisticRegressionModel):
+        weights, intercept, numFeatures, numClasses = train_func(
+            data, _convert_to_vector(initial_weights))
+        return modelClass(weights, intercept, numFeatures, numClasses)
+    else:
+        weights, intercept = train_func(data, _convert_to_vector(initial_weights))
+        return modelClass(weights, intercept)
 
 
 class LinearRegressionWithSGD(object):
