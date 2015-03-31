@@ -49,8 +49,8 @@ import org.apache.spark.serializer.Serializer
  * out of memory because of the size of `rdd2`.
  */
 private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
-    @transient var rdd1: RDD[_ <: Product2[K, V]],
-    @transient var rdd2: RDD[_ <: Product2[K, W]],
+    var rdd1: RDD[_ <: Product2[K, V]],
+    var rdd2: RDD[_ <: Product2[K, W]],
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
@@ -105,8 +105,8 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         seq
       }
     }
-    def integrate(dep: CoGroupSplitDep, op: Product2[K, V] => Unit): Unit = dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
+    def integrate(rdd: RDD[_], dep: CoGroupSplitDep, op: Product2[K, V] => Unit): Unit = dep match {
+      case NarrowCoGroupSplitDep(_, _, itsSplit) =>
         rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
 
       case ShuffleCoGroupSplitDep(handle) =>
@@ -116,9 +116,9 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         iter.foreach(op)
     }
     // the first dep is rdd1; add all values to the map
-    integrate(partition.deps(0), t => getSeq(t._1) += t._2)
+    integrate(rdd1, partition.deps(0), t => getSeq(t._1) += t._2)
     // the second dep is rdd2; remove all of its keys
-    integrate(partition.deps(1), t => map.remove(t._1))
+    integrate(rdd2, partition.deps(1), t => map.remove(t._1))
     map.iterator.map { t =>  t._2.iterator.map { (t._1, _) } }.flatten
   }
 

@@ -34,7 +34,7 @@ import org.apache.spark.shuffle.ShuffleHandle
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 
 private[spark] case class NarrowCoGroupSplitDep(
-    rdd: RDD[_],
+    @ transient rdd: RDD[_],
     splitIndex: Int,
     var split: Partition
   ) extends CoGroupSplitDep {
@@ -67,7 +67,7 @@ private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep]
  * @param part partitioner used to partition the shuffle output
  */
 @DeveloperApi
-class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
+class CoGroupedRDD[K](var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
@@ -125,9 +125,9 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     // A list of (rdd iterator, dependency number) pairs
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
+      case NarrowCoGroupSplitDep(_, _, itsSplit) =>
         // Read them from the parent
-        val it = rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]]
+        val it = rdds(depNum).iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]]
         rddIterators += ((it, depNum))
 
       case ShuffleCoGroupSplitDep(handle) =>
