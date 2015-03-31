@@ -153,7 +153,7 @@ public class JavaUtils {
       }
       
       return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
-              timeSuffixes.getOrDefault(suffix, unit));
+              timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch(NumberFormatException e) {
       throw new NumberFormatException(timeError + "\n" + e.toString());
     }
