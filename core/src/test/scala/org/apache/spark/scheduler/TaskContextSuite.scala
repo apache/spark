@@ -89,6 +89,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
       }
     }
     taskThread.start()
+    Thread.sleep(500)
 
     task.kill(false)
     assert(TaskContextSuite.interupted === true)

@@ -54,8 +54,12 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
           ) ++ Seq(
-          // SPARK-6510 Add a Graph#minus method acting as Set#difference
+            // SPARK-6510 Add a Graph#minus method acting as Set#difference
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
+          ) ++ Seq(
+            // SPARK-5205
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskInterruptionListener")
           )
 
         case v if v.startsWith("1.3") =>
@@ -206,10 +210,6 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
-          ) ++ Seq(
-            // SPARK-5205
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.TaskContext.addTaskInterruptionListener")
           ) ++ Seq(
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff")
