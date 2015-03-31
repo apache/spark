@@ -25,7 +25,8 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-class CheckAnalysis {
+trait CheckAnalysis {
+  self: Analyzer =>
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -33,17 +34,22 @@ class CheckAnalysis {
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  def failAnalysis(msg: String): Nothing = {
+  protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
 
-  def apply(plan: LogicalPlan): Unit = {
+  def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
+            if (operator.childrenResolved) {
+              // Throw errors for specific problems with get field.
+              operator.resolveChildren(a.name, resolver, throwErrors = true)
+            }
+
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
