@@ -73,7 +73,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private var actor: ActorRef = null
 
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
     if (actor != null) {
       throw new SparkException("ReceiverTracker already started")
     }
@@ -87,7 +87,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop(graceful: Boolean) = synchronized {
+  def stop(graceful: Boolean): Unit = synchronized {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
@@ -202,7 +202,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
-    def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
       case RegisterReceiver(streamId, typ, host, receiverActor) =>
         registerReceiver(streamId, typ, host, receiverActor, sender)
         sender ! true
@@ -245,16 +245,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       if (graceful) {
         val pollTime = 100
-        def done = { receiverInfo.isEmpty && !running }
         logInfo("Waiting for receiver job to terminate gracefully")
-        while(!done) {
+        while (receiverInfo.nonEmpty || running) {
           Thread.sleep(pollTime)
         }
         logInfo("Waited for receiver job to terminate gracefully")
       }
 
       // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
+      if (receiverInfo.nonEmpty) {
         logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")
@@ -297,9 +296,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
 
-        // Due to SPARK-5205, `Receiver` stage can not be stopped properly, we need to add a
-        // callback to do some more clean works.
-        context.addTaskInterruptedListener { context => {
+        // To ensure that receivers are stopped properly when their tasks / stages are killed,
+        // register a callback to stop the receiver when its task is interrupted.
+        // See SPARK-5205 for more details.
+        context.addTaskInterruptionListener { context => {
           if (context.isInterrupted()) {
             supervisor.stop("Receiver was killed by user.", None)
           }

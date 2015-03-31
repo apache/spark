@@ -18,14 +18,14 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent._
+import ExecutionContext.Implicits.global
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import scala.concurrent._
-import ExecutionContext.Implicits.global
-import java.util.concurrent.CountDownLatch
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -161,14 +161,14 @@ private[streaming] abstract class ReceiverSupervisor(
     }
   }
 
-  /** Check if receiver has been marked for stopping. */
-  def isReceiverStarted() = {
+  /** Check if receiver has been marked for stopping */
+  def isReceiverStarted(): Boolean = {
     logDebug("state = " + receiverState)
     receiverState == Started
   }
 
-  /** Check if receiver has been marked for stopping. */
-  def isReceiverStopped() = {
+  /** Check if receiver has been marked for stopping */
+  def isReceiverStopped(): Boolean = {
     logDebug("state = " + receiverState)
     receiverState == Stopped
   }

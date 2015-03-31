@@ -397,6 +397,13 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
   }
 
+  test("resolve udtf with single alias") {
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    val df = sql("SELECT explode(a) AS val FROM data")
+    val col = df("val")
+  }
+
   test("logical.Project should not be resolved if it contains aggregates or generators") {
     // This test is used to test the fix of SPARK-5875.
     // The original issue was that Project's resolved will be true when it contains

@@ -62,7 +62,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
   }
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
@@ -169,7 +169,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverUrl, executorId, sparkHostPort, cores, userClassPath, env),
         name = "Executor")
       workerUrl.foreach { url =>
-        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.actorSystem.awaitTermination()
     }

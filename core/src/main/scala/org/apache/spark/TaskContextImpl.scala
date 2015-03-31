@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{TaskInterruptionListener, TaskInterruptionListenerException, TaskCompletionListener, TaskCompletionListenerException}
-
-import scala.collection.mutable.ArrayBuffer
 
 private[spark] class TaskContextImpl(
     val stageId: Int,
@@ -66,12 +67,12 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  override def addTaskInterruptedListener(listener: TaskInterruptionListener): this.type = {
+  override def addTaskInterruptionListener(listener: TaskInterruptionListener): this.type = {
     onInterruptedCallbacks += listener
     this
   }
 
-  override def addTaskInterruptedListener(f: TaskContext => Unit): this.type = {
+  override def addTaskInterruptionListener(f: TaskContext => Unit): this.type = {
     onInterruptedCallbacks += new TaskInterruptionListener {
       override def onTaskInterrupted(context: TaskContext): Unit = f(context)
     }
@@ -87,7 +88,7 @@ private[spark] class TaskContextImpl(
       try {
         listener.onTaskCompletion(this)
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           errorMsgs += e.getMessage
           logError("Error in TaskCompletionListener", e)
       }
@@ -97,11 +98,7 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /**
-   * Marks the task as interruption, i.e. cancellation. We add this
-   * method for some more clean works. For example, we need to register
-   * an "interruption" callback to completely stop a receiver supervisor.
-   */
+  /** Marks the task as interrupted and triggers the listeners. */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
     val errorMsgs = new ArrayBuffer[String](2)
@@ -110,7 +107,7 @@ private[spark] class TaskContextImpl(
       try {
         listener.onTaskInterrupted(this)
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           errorMsgs += e.getMessage
           logError("Error in TaskInterruptionListener", e)
       }

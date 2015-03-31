@@ -109,14 +109,14 @@ abstract class TaskContext extends Serializable {
    * listener for some more clean works. An example use is to stop `receiver supervisor`
    * properly.
    */
-  def addTaskInterruptedListener(listener: TaskInterruptionListener): TaskContext
+  def addTaskInterruptionListener(listener: TaskInterruptionListener): TaskContext
 
   /**
    * Add a listener in the form of a Scala closure to be executed on task interruption.
    * We add this listener for some more clean works. An example use is to stop `receiver
    * supervisor` properly.
    */
-  def addTaskInterruptedListener(f: TaskContext => Unit): TaskContext
+  def addTaskInterruptionListener(f: TaskContext => Unit): TaskContext
 
   /**
    * The ID of the stage that this task belong to.

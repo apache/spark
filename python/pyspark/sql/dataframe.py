@@ -50,13 +50,6 @@ class DataFrame(object):
 
         ageCol = people.age
 
-    Note that the :class:`Column` type can also be manipulated
-    through its various functions::
-
-        # The following creates a new column that increases everybody's age by 10.
-        people.age + 10
-
-
     A more concrete example::
 
         # To create DataFrame using SQLContext
@@ -77,7 +70,7 @@ class DataFrame(object):
     @property
     def rdd(self):
         """
-        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        Return the content of the :class:`DataFrame` as an :class:`pyspark.RDD`
         of :class:`Row` s.
         """
         if not hasattr(self, '_lazy_rdd'):
@@ -162,7 +155,7 @@ class DataFrame(object):
                 "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
         return jmode
 
-    def saveAsTable(self, tableName, source=None, mode="append", **options):
+    def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source as a table.
 
         The data source is specified by the `source` and a set of `options`.
@@ -188,7 +181,7 @@ class DataFrame(object):
                                           self.sql_ctx._sc._gateway._gateway_client)
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
 
-    def save(self, path=None, source=None, mode="append", **options):
+    def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the `source` and a set of `options`.
@@ -519,6 +512,25 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     orderBy = sort
+
+    def describe(self, *cols):
+        """Computes statistics for numeric columns.
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical columns.
+
+        >>> df.describe().show()
+        summary age
+        count   2
+        mean    3.5
+        stddev  1.5
+        min     2
+        max     5
+        """
+        cols = ListConverter().convert(cols,
+                                       self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        return DataFrame(jdf, self.sql_ctx)
 
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
@@ -984,6 +996,23 @@ class Column(object):
         return Column(jc)
 
     __getslice__ = substr
+
+    def inSet(self, *cols):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.inSet("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.inSet([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cols[0]
+        cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
 
     # order
     asc = _unary_op("asc", "Returns a sort expression based on the"
