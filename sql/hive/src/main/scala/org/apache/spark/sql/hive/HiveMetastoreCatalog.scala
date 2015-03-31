@@ -483,11 +483,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           (relation, parquetRelation, attributedRewrites)
       }
 
-      // Quick fix for SPARK-6450: Notice that we're using both the MetastoreRelation instances and
-      // their output attributes as the key of the map. This is because MetastoreRelation.equals
-      // doesn't take output attributes into account, thus multiple MetastoreRelation instances
-      // pointing to the same table get collapsed into a single entry in the map. A proper fix for
-      // this should be overriding equals & hashCode in MetastoreRelation.
       val relationMap = toBeReplaced.map(r => (r._1, r._2)).toMap
       val attributedRewrites = AttributeMap(toBeReplaced.map(_._3).fold(Nil)(_ ++: _))
 
