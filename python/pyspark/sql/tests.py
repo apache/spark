@@ -120,10 +120,12 @@ class SQLTests(ReusedPySparkTestCase):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
         data = self.sqlCtx.createDataFrame(rdd)
+
         class PlusFour:
             def __call__(self, col):
                 if col is not None:
                     return col + 4
+
         call = PlusFour()
         pudf = UserDefinedFunction(call, LongType())
         res = data.select(pudf(data['number']).alias('plus_four'))
@@ -133,9 +135,11 @@ class SQLTests(ReusedPySparkTestCase):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
         data = self.sqlCtx.createDataFrame(rdd)
+
         def some_func(col, param):
             if col is not None:
                 return col + param
+
         pfunc = functools.partial(some_func, param=4)
         pudf = UserDefinedFunction(pfunc, LongType())
         res = data.select(pudf(data['number']).alias('plus_four'))
