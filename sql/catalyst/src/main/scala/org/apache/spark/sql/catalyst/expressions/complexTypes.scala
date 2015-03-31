@@ -155,7 +155,8 @@ case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
   override lazy val resolved: Boolean = childrenResolved
 
   override lazy val dataType: StructType = {
-    assert(resolved, s"CreateStruct is called with unresolved children: $children.")
+    assert(resolved,
+      s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
     val fields = children.map { child =>
       StructField(child.name, child.dataType, child.nullable, child.metadata)
     }
