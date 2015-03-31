@@ -575,10 +575,11 @@ class Airflow(BaseView):
     @expose('/headers')
     def headers(self):
         d = {k: v for k, v in request.headers}
-        d['is_superuser'] = current_user.is_superuser()
-        d['data_profiling'] = current_user.data_profiling()
-        d['is_anonymous'] = current_user.is_anonymous()
-        d['is_authenticated'] = current_user.is_authenticated()
+        if hasattr(current_user, 'is_superuser'):
+            d['is_superuser'] = current_user.is_superuser()
+            d['data_profiling'] = current_user.data_profiling()
+            d['is_anonymous'] = current_user.is_anonymous()
+            d['is_authenticated'] = current_user.is_authenticated()
         return Response(
             response=json.dumps(d, indent=4),
             status=200, mimetype="application/json")
