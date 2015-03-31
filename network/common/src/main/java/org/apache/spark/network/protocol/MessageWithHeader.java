@@ -22,7 +22,6 @@ import java.nio.channels.WritableByteChannel;
 
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.FileRegion;
 import io.netty.util.AbstractReferenceCounted;
