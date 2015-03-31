@@ -78,6 +78,7 @@ trait HiveTypeCoercion {
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
     Division ::
+    PropagateTypes ::
     Nil
 
   /**

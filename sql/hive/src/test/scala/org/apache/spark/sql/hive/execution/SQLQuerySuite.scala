@@ -41,8 +41,32 @@ case class NestedArray1(a: NestedArray2)
  */
 class SQLQuerySuite extends QueryTest {
 
+  test("SPARK-5371: union with null and sum") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+
+    val query = sql(
+      """
+        |SELECT
+        |  MIN(c1),
+        |  MIN(c2)
+        |FROM (
+        |  SELECT
+        |    SUM(c1) c1,
+        |    NULL c2
+        |  FROM table1
+        |  UNION ALL
+        |  SELECT
+        |    NULL c1,
+        |    SUM(c2) c2
+        |  FROM table1
+        |) a
+      """.stripMargin)
+    checkAnswer(query, Row(1, 1) :: Nil)
+  }
+
   test("explode nested Field") {
-    Seq(NestedArray1(NestedArray2(Seq(1,2,3)))).toDF.registerTempTable("nestedArray")
+    Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
