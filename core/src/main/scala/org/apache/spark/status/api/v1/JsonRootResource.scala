@@ -73,6 +73,11 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
   }
 
 
+  @Path("applications/{appId}/stages/{stageId: \\d+}/{attemptId: \\d+}/taskSummary")
+  def getStageAttemptTaskSummary(): StageTaskSummary = {
+    new StageTaskSummary(uiRoot)
+  }
+
   @Path("applications/{appId}/storage/rdd")
   def getRdds(): AllRDDResource = {
     new AllRDDResource(uiRoot)

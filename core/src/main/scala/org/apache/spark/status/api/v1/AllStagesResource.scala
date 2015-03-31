@@ -146,9 +146,9 @@ private[v1] object AllStagesResource {
     )
   }
 
-  def taskMetricDistributions(allTaskData: Seq[TaskUIData], quantiles: Array[Double]): TaskMetricDistributions = {
+  def taskMetricDistributions(allTaskData: Iterable[TaskUIData], quantiles: Array[Double]): TaskMetricDistributions = {
 
-    val rawMetrics = allTaskData.flatMap{_.taskMetrics}
+    val rawMetrics = allTaskData.flatMap{_.taskMetrics}.toSeq
 
     def getMetric[T](data: Seq[T], f: T => Double): IndexedSeq[Double] =
       Distribution(data.map{d=> f(d)}).get.getQuantiles(quantiles)
