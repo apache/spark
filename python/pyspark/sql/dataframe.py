@@ -447,7 +447,7 @@ class DataFrame(object):
 
     def join(self, other, joinExprs=None, joinType=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
-        
+
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
