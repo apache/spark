@@ -118,10 +118,7 @@ private[sql] class DefaultSource
     val relation = if (doInsertion) {
       // This is a hack. We always set nullable/containsNull/valueContainsNull to true
       // for the schema of a parquet data.
-      val df =
-        sqlContext.createDataFrame(
-          data.queryExecution.toRdd,
-          data.schema.asNullable)
+      val df = sqlContext.createDataFrame(data, data.schema.asNullable)
       val createdRelation =
         createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
       createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)

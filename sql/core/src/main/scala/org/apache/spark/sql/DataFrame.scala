@@ -726,7 +726,7 @@ class DataFrame private[sql](
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     def convert[A](x: Any): A = x match {
       case utf: UTF8String => x.toString.asInstanceOf[A]
-      case other: A => other
+      case other => other.asInstanceOf[A]
     }
     def rowFunction(row: Row): TraversableOnce[Row] = {
       f(convert[A](row(0))).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
@@ -898,8 +898,8 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions), schema)
+    val repartitioned = queryExecution.toRdd.map(_.copy()).repartition(numPartitions)
+    DataFrame(sqlContext, LogicalRDD(schema.toAttributes, repartitioned)(sqlContext))
   }
 
   /**

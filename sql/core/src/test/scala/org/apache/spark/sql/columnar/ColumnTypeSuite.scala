@@ -109,7 +109,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   testNativeColumnType[StringType.type](
     STRING,
     (buffer: ByteBuffer, string: UTF8String) => {
-      val bytes = string.getBytes("utf-8")
+      val bytes = string.getBytes
       buffer.putInt(bytes.length)
       buffer.put(bytes)
     },

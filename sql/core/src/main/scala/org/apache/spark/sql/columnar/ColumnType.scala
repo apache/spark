@@ -313,7 +313,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
-    val stringBytes = v.getBytes("utf-8")
+    val stringBytes = v.getBytes
     buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
   }
 

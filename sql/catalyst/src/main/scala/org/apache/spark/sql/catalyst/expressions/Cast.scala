@@ -119,7 +119,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
-    case StringType => buildCast[UTF8String](_, _.getBytes("UTF-8"))
+    case StringType => buildCast[UTF8String](_, _.getBytes)
   }
 
   // UDFToBoolean

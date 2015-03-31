@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.{BooleanType, StructField, StructType, StringType}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row, Attribute}
@@ -61,7 +62,11 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
 
   override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  override def execute(): RDD[Row] = {
+    val converted = sideEffectResult.map(r => ScalaReflection.convertToCatalyst(r, this.schema)
+      .asInstanceOf[Row])
+    sqlContext.sparkContext.parallelize(converted, 1)
+  }
 }
 
 /**

@@ -390,10 +390,31 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    // TODO(davies): only do convertion when needed (having StringType)
-    val logicalPlan = LogicalRDD(schema.toAttributes,
-      RDDConversions.rowToRowRdd(rowRDD, schema))(self)
-    DataFrame(this, logicalPlan)
+    def needsConversion(dt: DataType): Boolean = dt match {
+      case StringType => true
+      case dt: ArrayType => needsConversion(dt.elementType)
+      case dt: MapType => needsConversion(dt.keyType) || needsConversion(dt.valueType)
+      case dt: StructType =>
+        !dt.fields.forall(f => !needsConversion(f.dataType))
+      // TODO(davies): check other types and values
+      case other => false
+    }
+    val convertedRdd = if (needsConversion(schema)) {
+      RDDConversions.rowToRowRdd(rowRDD, schema)
+    } else {
+      rowRDD
+    }
+    DataFrame(this, LogicalRDD(schema.toAttributes, convertedRdd)(self))
+  }
+
+  /**
+   * An internal API to apply a new schema on existing DataFrame without do the
+   * conversion for Rows.
+   */
+  private[sql] def createDataFrame(df: DataFrame, schema: StructType): DataFrame = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
+    DataFrame(this, LogicalRDD(schema.toAttributes, df.queryExecution.toRdd)(self))
   }
 
   /**

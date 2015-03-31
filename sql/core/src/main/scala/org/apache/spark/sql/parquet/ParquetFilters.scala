@@ -76,7 +76,7 @@ private[sql] object ParquetFilters {
       case StringType =>
         (n: String, v: Any) => FilterApi.notEq(
           binaryColumn(n),
-          Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes())).orNull)
+          Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes)).orNull)
       case BinaryType =>
         (n: String, v: Any) => FilterApi.notEq(
           binaryColumn(n),
@@ -94,7 +94,7 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
       case StringType =>
         (n: String, v: Any) =>
-          FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes()))
+          FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
       case BinaryType =>
         (n: String, v: Any) =>
           FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
