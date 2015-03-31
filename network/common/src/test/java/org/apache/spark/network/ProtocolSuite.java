@@ -17,8 +17,6 @@
 
 package org.apache.spark.network;
 
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
 import com.google.common.primitives.Ints;
@@ -31,16 +29,16 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-import org.apache.spark.network.protocol.Message;
-import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.RpcRequest;
-import org.apache.spark.network.protocol.RpcFailure;
-import org.apache.spark.network.protocol.RpcResponse;
+import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
+import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcRequest;
+import org.apache.spark.network.protocol.RpcResponse;
+import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {
@@ -107,44 +105,12 @@ public class ProtocolSuite {
       throws Exception {
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(Ints.checkedCast(in.count()));
-      in.transferTo(channel, 0);
+      while (in.transfered() < in.count()) {
+        in.transferTo(channel, in.transfered());
+      }
       out.add(Unpooled.wrappedBuffer(channel.getData()));
     }
 
   }
-
-  private static class ByteArrayWritableChannel implements WritableByteChannel {
-
-    private final byte[] data;
-    private int offset;
-
-    ByteArrayWritableChannel(int size) {
-      this.data = new byte[size];
-      this.offset = 0;
-    }
-
-    byte[] getData() {
-      return data;
-    }
-
-    @Override
-    public int write(ByteBuffer src) {
-      int available = src.remaining();
-      src.get(data, offset, available);
-      offset += available;
-      return available;
-    }
-
-    @Override
-    public void close() {
-
-    }
-
-    @Override
-    public boolean isOpen() {
-      return true;
-    }
-
-   }
 
 }

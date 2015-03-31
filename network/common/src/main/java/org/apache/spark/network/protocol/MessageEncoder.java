@@ -17,20 +17,13 @@
 
 package org.apache.spark.network.protocol;
 
-import java.io.IOException;
-import java.nio.channels.WritableByteChannel;
-import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.primitives.Ints;
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import io.netty.util.AbstractReferenceCounted;
-import io.netty.util.ReferenceCountUtil;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,79 +78,6 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     } else {
       out.add(header);
     }
-  }
-
-  /**
-   * A wrapper message that holds two separate pieces (a header and a body) to avoid
-   * copying the body's content.
-   */
-  private static class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
-
-    private final ByteBuf header;
-    private final int headerLength;
-    private final Object body;
-    private final long bodyLength;
-    private int bytesTransferred;
-
-    MessageWithHeader(ByteBuf header, int headerLength, Object body, long bodyLength) {
-      this.header = header;
-      this.headerLength = headerLength;
-      this.body = body;
-      this.bodyLength = bodyLength;
-    }
-
-    @Override
-    public long count() {
-      return headerLength + bodyLength;
-    }
-
-    @Override
-    public long position() {
-      return 0;
-    }
-
-    @Override
-    public long transfered() {
-      long total = bytesTransferred;
-      if (body instanceof FileRegion) {
-        total += ((FileRegion)body).transfered();
-      }
-      return total;
-    }
-
-    @Override
-    public long transferTo(WritableByteChannel target, long position) throws IOException {
-      Preconditions.checkArgument(position >= 0 && position < count(), "Invalid position.");
-
-      if (position < headerLength && position >= 0) {
-        header.skipBytes(Ints.checkedCast(position));
-        int remaining = header.readableBytes();
-        target.write(header.nioBuffer());
-        bytesTransferred += remaining;
-      }
-
-      long bodyPos = position > headerLength ? position - headerLength : 0;
-      if (body instanceof FileRegion) {
-        ((FileRegion)body).transferTo(target, bodyPos);
-      } else if (body instanceof ByteBuf) {
-        ByteBuf buf = (ByteBuf) body;
-        buf.skipBytes(Ints.checkedCast(bodyPos));
-        target.write(buf.nioBuffer());
-        bytesTransferred += bodyLength;
-      } else {
-        throw new IllegalArgumentException(
-          String.format("Body type %s not supported!", body.getClass().getName()));
-      }
-
-      return transfered();
-    }
-
-    @Override
-    protected void deallocate() {
-      header.release();
-      ReferenceCountUtil.release(body);
-    }
-
   }
 
 }
