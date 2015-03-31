@@ -86,6 +86,7 @@ case class UserDefinedGenerator(
 
   override def eval(input: Row): TraversableOnce[Row] = {
     val inputRow = new InterpretedProjection(children)
+    //TODO(davies): convertToScala
     function(inputRow(input))
   }
 

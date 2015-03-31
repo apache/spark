@@ -87,7 +87,8 @@ trait ScalaReflection {
     case (r: Row, s: StructType) => convertRowToScala(r, s)
     case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
     case (i: Int, DateType) => DateUtils.toJavaDate(i)
-    case (s: UTF8String, StringType) => s.toString()
+    case (s: UTF8String, StringType) =>
+      s.toString()
     case (other, _) => other
   }
 

@@ -701,8 +701,10 @@ class DataFrame private[sql](
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributes = schema.toAttributes
-    val rowFunction =
-      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+    def rowFunction(row: Row): TraversableOnce[Row] = {
+      val rows = f(row)
+      rows.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    }
     val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false, None, logicalPlan)
@@ -722,9 +724,12 @@ class DataFrame private[sql](
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    def convert[A](x: Any): A = x match {
+      case utf: UTF8String => x.toString.asInstanceOf[A]
+      case other: A => other
+    }
     def rowFunction(row: Row): TraversableOnce[Row] = {
-      f((if (row(0).isInstanceOf[UTF8String]) row(0).toString else row(0)).asInstanceOf[A]).
-        map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+      f(convert[A](row(0))).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
 

@@ -114,11 +114,10 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    val utf8 = UTF8String(values(i))
-    if (utf8 != null) {
-      utf8.toString
-    } else {
-      null
+    values(i) match {
+      case null => null
+      case s: String => s
+      case utf8: UTF8String => utf8.toString
     }
   }
 

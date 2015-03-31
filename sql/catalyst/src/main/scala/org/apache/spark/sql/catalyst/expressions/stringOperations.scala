@@ -129,7 +129,7 @@ trait CaseConversionExpression {
     if (evaluated == null) {
       null
     } else {
-      convert(UTF8String(evaluated))
+      convert(evaluated.asInstanceOf[UTF8String])
     }
   }
 }
@@ -171,7 +171,8 @@ trait StringComparison {
       null
     } else {
       val rightEval = right.eval(input)
-      if (rightEval == null) null else compare(UTF8String(leftEval), UTF8String(rightEval))
+      if (rightEval == null) null
+      else compare(leftEval.asInstanceOf[UTF8String], rightEval.asInstanceOf[UTF8String])
     }
   }
 
@@ -286,7 +287,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       string match {
         case ba: Array[Byte] => slice(ba, start, length)
         case s: UTF8String => slice(s, start, length)
-        case other => slice(UTF8String(other), start, length)
       }
     }
   }

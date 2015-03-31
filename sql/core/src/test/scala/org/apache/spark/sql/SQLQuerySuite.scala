@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+import org.apache.spark.sql.types._
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -698,7 +695,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       val v4 = try values(3).toInt catch {
         case _: NumberFormatException => null
       }
-      print("rowRDD1",values, v4)
       Row(values(0).toInt, values(1), values(2).toBoolean, v4)
     }
 

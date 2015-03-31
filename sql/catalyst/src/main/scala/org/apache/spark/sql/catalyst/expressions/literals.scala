@@ -29,7 +29,7 @@ object Literal {
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
-    case s: String => Literal(UTF8String(s), StringType)
+    case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
@@ -62,7 +62,11 @@ object IntegerLiteral {
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+case class Literal(var value: Any, dataType: DataType) extends LeafExpression {
+
+  if (dataType == StringType && value.isInstanceOf[String]) {
+    value = UTF8String(value.asInstanceOf[String])
+  }
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -70,9 +74,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   override def toString: String = if (value != null) value.toString else "null"
 
   type EvaluatedType = Any
-  override def eval(input: Row): Any = {
-    value
-  }
+  override def eval(input: Row): Any = value
 }
 
 // TODO: Specialize

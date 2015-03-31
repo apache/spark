@@ -222,7 +222,7 @@ private[sql] class StringColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row.getString(ordinal)
+      val value = row(ordinal).asInstanceOf[UTF8String]
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += STRING.actualSize(row, ordinal)

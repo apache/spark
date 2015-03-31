@@ -117,7 +117,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
       val length = buffer.getInt()
       val bytes = new Array[Byte](length)
       buffer.get(bytes)
-      new String(bytes, "utf-8")
+      UTF8String(bytes)
     })
 
   testColumnType[BinaryType.type, Array[Byte]](

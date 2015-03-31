@@ -252,17 +252,9 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     case other => values(ordinal).update(value)
   }
 
-  override def setString(ordinal: Int, value: String): Unit = {
-    update(ordinal, UTF8String(value))
-  }
+  override def setString(ordinal: Int, value: String): Unit = update(ordinal, value)
 
-  override def getString(ordinal: Int): String = {
-    //TODO(davies): FIXME
-    apply(ordinal) match {
-      case s: UTF8String => s.toString()
-      //case ms: MutableString => ms.value.toString()
-    }
-  }
+  override def getString(ordinal: Int): String = apply(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

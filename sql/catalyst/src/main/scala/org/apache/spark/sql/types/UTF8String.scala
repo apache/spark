@@ -94,15 +94,14 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 }
 
 object UTF8String {
-  implicit def apply(s: String): UTF8String  = new UTF8String().set(s)
-  implicit def toString(utf: UTF8String): String = utf.toString
+  def apply(s: String): UTF8String  = new UTF8String().set(s)
   def apply(bytes: Array[Byte]): UTF8String = new UTF8String().set(bytes)
-  def apply(utf8: UTF8String): UTF8String = utf8
-  def apply(o: Any): UTF8String = o match {
-    case null => null
-    case utf8: UTF8String => utf8
-    case s: String => new UTF8String().set(s)
-    case bytes: Array[Byte]=> new UTF8String().set(bytes)
-    case other => new UTF8String().set(other.toString)
-  }
+  //def apply(utf8: UTF8String): UTF8String = utf8
+//  def apply(o: Any): UTF8String = o match {
+//    case null => null
+//    case utf8: UTF8String => utf8
+//    case s: String => new UTF8String().set(s)
+//    case bytes: Array[Byte]=> new UTF8String().set(bytes)
+//    case other => new UTF8String().set(other.toString)
+//  }
 }

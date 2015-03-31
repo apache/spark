@@ -960,7 +960,7 @@ private[sql] object ParquetRelation2 extends Logging {
       // Then falls back to string
       .getOrElse {
         if (raw == defaultPartitionName) Literal(null, NullType) else
-          Literal(UTF8String(raw), StringType)
+          Literal(raw, StringType)
       }
   }
 
