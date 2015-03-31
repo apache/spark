@@ -185,7 +185,7 @@ class SQLContext(object):
         return schema
 
     def inferSchema(self, rdd, samplingRatio=None):
-        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead
+        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
         warnings.warn("inferSchema is deprecated, please use createDataFrame instead")
 
@@ -195,7 +195,7 @@ class SQLContext(object):
         return self.createDataFrame(rdd, None, samplingRatio)
 
     def applySchema(self, rdd, schema):
-        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead
+        """::note: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
         warnings.warn("applySchema is deprecated, please use createDataFrame instead")
 
@@ -315,7 +315,7 @@ class SQLContext(object):
 
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         """
-        if (rdd.__class__ is DataFrame):
+        if (df.__class__ is DataFrame):
             self._ssql_ctx.registerDataFrameAsTable(df._jdf, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
