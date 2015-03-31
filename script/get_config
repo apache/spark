@@ -11,5 +11,5 @@ mkdir $CONFIG_PATH
 curl -o /tmp/cloudera_configs.zip http://util-ng.chi.shopify.com:7180/cmf/services/47/client-config
 unzip -j /tmp/cloudera_configs.zip -d $CONFIG_PATH
 
-# We need to replace some properties that are only needed by the cluster
-sed -i '' -e 's/\/etc\/hadoop.*</Data Rocks!</g' $CONFIG_PATH/core-site.xml
+# The topology script isn't available locally so we just don't run it
+perl -0777 -i -pe 's/\s*<property>\n\s*<name>net.topology.script.file.name<\/name>\n\s*<value>[^<]+?<\/value>\n\s*<\/property>//igs' $CONFIG_PATH/core-site.xml
