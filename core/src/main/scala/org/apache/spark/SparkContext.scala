@@ -24,8 +24,6 @@ import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
-import java.util.concurrent.locks.ReentrantLock
-import java.util.concurrent.TimeUnit
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
