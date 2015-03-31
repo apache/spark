@@ -144,6 +144,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         expectedAnswer: Seq[Row],
         ct: ClassTag[_]) = {
       before()
+      conf.setConf("spark.sql.autoSortMergeJoin", "false")
 
       var df = sql(query)
 
@@ -178,6 +179,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }
 
+      conf.setConf("spark.sql.autoSortMergeJoin", "true")
       after()
     }
 

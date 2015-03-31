@@ -86,7 +86,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
           }
         }
         val sortingExpressions = expressions.map(s => new SortOrder(s, Ascending))
-        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+        val ordering = new RowOrdering(sortingExpressions, child.output)
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))

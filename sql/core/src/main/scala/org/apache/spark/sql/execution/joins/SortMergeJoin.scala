@@ -67,17 +67,21 @@ case class SortMergeJoin(
         private[this] var currentlPosition: Int = -1
         private[this] var currentrPosition: Int = -1
 
-        override final def hasNext: Boolean =
-          (currentlPosition != -1 && currentlPosition < currentlMatches.size) ||
-            nextMatchingPair
+        override final def hasNext: Boolean = currentlPosition != -1 || nextMatchingPair
 
         override final def next(): Row = {
+          if (!hasNext) {
+            return null
+          }
           val joinedRow =
             joinRow(currentlMatches(currentlPosition), currentrMatches(currentrPosition))
           currentrPosition += 1
           if (currentrPosition >= currentrMatches.size) {
             currentlPosition += 1
             currentrPosition = 0
+            if (currentlPosition >= currentlMatches.size) {
+              currentlPosition = -1
+            }
           }
           joinedRow
         }
@@ -100,13 +104,13 @@ case class SortMergeJoin(
           }
         }
 
-        // initialize iterator
-        private def initialize() = {
+        private def fetchFirst() = {
           fetchLeft()
           fetchRight()
+          currentrPosition = 0
         }
-
-        initialize()
+        // initialize iterator
+        fetchFirst()
 
         /**
          * Searches the left/right iterator for the next rows that matches.
@@ -115,49 +119,49 @@ case class SortMergeJoin(
          *         of tuples.
          */
         private def nextMatchingPair(): Boolean = {
-          currentlPosition = -1
-          currentlMatches = null
-          var stop: Boolean = false
-          while (!stop && leftElement != null && rightElement != null) {
-            if (ordering.compare(leftKey, rightKey) > 0) {
-              fetchRight()
-            } else if (ordering.compare(leftKey, rightKey) < 0) {
-              fetchLeft()
-            } else {
-              stop = true
-            }
-          }
-          currentrMatches = new CompactBuffer[Row]()
-          while (stop && rightElement != null) {
-            if (!rightKey.anyNull) {
-              currentrMatches += rightElement
-            }
-            fetchRight()
-            if (ordering.compare(leftKey, rightKey) != 0) {
-              stop = false
-            }
-          }
-          if (currentrMatches.size > 0) {
-            stop = false
-            currentlMatches = new CompactBuffer[Row]()
-            val leftMatch = leftKey.copy()
-            while (!stop && leftElement != null) {
-              if (!leftKey.anyNull) {
-                currentlMatches += leftElement
-              }
-              fetchLeft()
-              if (ordering.compare(leftKey, leftMatch) != 0) {
-                stop = true
-              }
-            }
-          }
-
-          if (currentlMatches == null) {
-            false
-          } else {
-            currentlPosition = 0
-            currentrPosition = 0
+          if (currentlPosition > -1) {
             true
+          } else {
+            currentlPosition = -1
+            currentlMatches = null
+            var stop: Boolean = false
+            while (!stop && leftElement != null && rightElement != null) {
+              if (ordering.compare(leftKey, rightKey) == 0 && !leftKey.anyNull) {
+                stop = true
+              } else if (ordering.compare(leftKey, rightKey) > 0 || rightKey.anyNull) {
+                fetchRight()
+              } else { //if (ordering.compare(leftKey, rightKey) < 0 || leftKey.anyNull)
+                fetchLeft()
+              }
+            }
+            currentrMatches = new CompactBuffer[Row]()
+            while (stop && rightElement != null) {
+              currentrMatches += rightElement
+              fetchRight()
+              if (ordering.compare(leftKey, rightKey) != 0) {
+                stop = false
+              }
+            }
+            if (currentrMatches.size > 0) {
+              stop = false
+              currentlMatches = new CompactBuffer[Row]()
+              val leftMatch = leftKey.copy()
+              while (!stop && leftElement != null) {
+                currentlMatches += leftElement
+                fetchLeft()
+                if (ordering.compare(leftKey, leftMatch) != 0) {
+                  stop = true
+                }
+              }
+            }
+
+            if (currentlMatches == null) {
+              false
+            } else {
+              currentlPosition = 0
+              currentrPosition = 0
+              true
+            }
           }
         }
       }
