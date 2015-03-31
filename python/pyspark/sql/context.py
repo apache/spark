@@ -40,7 +40,7 @@ __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 def _monkey_patch_RDD(sqlCtx):
     def toDF(self, schema=None, sampleRatio=None):
         """
-        Convert current :class:`RDD` into a :class:`DataFrame`
+        Converts current :class:`RDD` into a :class:`DataFrame`
 
         This is a shorthand for ``sqlCtx.createDataFrame(rdd, schema, sampleRatio)``
 
@@ -59,13 +59,14 @@ def _monkey_patch_RDD(sqlCtx):
 class SQLContext(object):
     """Main entry point for Spark SQL functionality.
 
-    A SQLContext can be used create L{DataFrame}, register L{DataFrame} as
+    A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
 
-    When created, L{SQLContext} adds a method called ``toDF`` to :class:`RDD`, which could be
-    used to convert an RDD into a DataFrame, it's a shorthand for L{SQLContext.createDataFrame}.
+    When created, :class:`SQLContext` adds a method called ``toDF`` to :class:`RDD`,
+    which could be used to convert an RDD into a DataFrame, it's a shorthand for
+    :func:`SQLContext.createDataFrame`.
 
-    :param sparkContext: The SparkContext to wrap.
+    :param sparkContext: The :class:`SparkContext` backing this SQLContext.
     :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instantiate a new
         SQLContext in the JVM, instead we make all calls to this object.
     """
@@ -209,21 +210,23 @@ class SQLContext(object):
 
     def createDataFrame(self, data, schema=None, samplingRatio=None):
         """
-        Create a DataFrame from an RDD of L{tuple}/L{list}, list or L{pandas.DataFrame}.
+        Creates a :class:`DataFrame` from an :class:`RDD` of :class:`tuple`/:class:`list`,
+        list or :class:`pandas.DataFrame`.
 
         When ``schema`` is a list of column names, the type of each column
-        will be inferred from ``rdd``.
+        will be inferred from ``data``.
 
         When ``schema`` is ``None``, it will try to infer the schema (column names and types)
-        from ``rdd``, which should be an RDD of :class:`Row`, or L{namedtuple}, or L{dict}.
+        from ``data``, which should be an RDD of :class:`Row`,
+        or :class:`namedtuple`, or :class:`dict`.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of Row/tuple/list/dict, list, or pandas.DataFrame
-        :param schema: a StructType or list of column names. default None.
+        :param data: an RDD of :class:`Row`/:class:`tuple`/:class:`list`/:class:`dict`,
+            :class:`list`, or :class:`pandas.DataFrame`.
+        :param schema: a :class:`StructType` or list of column names. default None.
         :param samplingRatio: the sample ratio of rows used for inferring
-        :return: a L{DataFrame}
 
         >>> l = [('Alice', 1)]
         >>> sqlCtx.createDataFrame(l).collect()
@@ -309,9 +312,9 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     def registerDataFrameAsTable(self, df, tableName):
-        """Registers the given L{DataFrame} as a temporary table in the catalog.
+        """Registers the given :class:`DataFrame` as a temporary table in the catalog.
 
-        Temporary tables exist only during the lifetime of this instance of L{SQLContext}.
+        Temporary tables exist only during the lifetime of this instance of :class:`SQLContext`.
 
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         """
@@ -321,7 +324,7 @@ class SQLContext(object):
             raise ValueError("Can only register DataFrame as table")
 
     def parquetFile(self, *paths):
-        """Loads a Parquet file, returning the result as a L{DataFrame}.
+        """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
@@ -339,8 +342,7 @@ class SQLContext(object):
         return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
-        """
-        Loads a text file storing one JSON object per line as a L{DataFrame}.
+        """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
 
         If the schema is provided, applies the given schema to this JSON dataset.
         Otherwise, it samples the dataset with ratio ``samplingRatio`` to determine the schema.
@@ -379,7 +381,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
-        """Loads an RDD storing one JSON object per string as a L{DataFrame}.
+        """Loads an RDD storing one JSON object per string as a :class:`DataFrame`.
 
         If the schema is provided, applies the given schema to this JSON dataset.
         Otherwise, it samples the dataset with ratio ``samplingRatio`` to determine the schema.
@@ -421,7 +423,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     def load(self, path=None, source=None, schema=None, **options):
-        """Returns the dataset in a data source as a L{DataFrame}.
+        """Returns the dataset in a data source as a :class:`DataFrame`.
 
         The data source is specified by the ``source`` and a set of ``options``.
         If ``source`` is not specified, the default data source configured by
@@ -455,7 +457,7 @@ class SQLContext(object):
         If ``source`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        Optionally, a schema can be provided as the schema of the returned L{DataFrame} and
+        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created external table.
         """
         if path is not None:
@@ -476,7 +478,7 @@ class SQLContext(object):
         return DataFrame(df, self)
 
     def sql(self, sqlQuery):
-        """Returns a L{DataFrame} representing the result of the given query.
+        """Returns a :class:`DataFrame` representing the result of the given query.
 
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
@@ -486,7 +488,7 @@ class SQLContext(object):
         return DataFrame(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(self, tableName):
-        """Returns the specified table as a L{DataFrame}.
+        """Returns the specified table as a :class:`DataFrame`.
 
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.table("table1")
@@ -496,12 +498,12 @@ class SQLContext(object):
         return DataFrame(self._ssql_ctx.table(tableName), self)
 
     def tables(self, dbName=None):
-        """Returns a L{DataFrame} containing names of tables in the given database.
+        """Returns a :class:`DataFrame` containing names of tables in the given database.
 
         If ``dbName`` is not specified, the current database will be used.
 
         The returned DataFrame has two columns: ``tableName`` and ``isTemporary``
-        (a column with L{BooleanType} indicating if a table is a temporary one or not).
+        (a column with :class:`BooleanType` indicating if a table is a temporary one or not).
 
         >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.tables()
@@ -545,12 +547,12 @@ class SQLContext(object):
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
-    Configuration for Hive is read from hive-site.xml on the classpath.
+    Configuration for Hive is read from ``hive-site.xml`` on the classpath.
     It supports running both SQL and HiveQL commands.
 
     :param sparkContext: The SparkContext to wrap.
     :param hiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
-        L{HiveContext} in the JVM, instead we make all calls to this object.
+        :class:`HiveContext` in the JVM, instead we make all calls to this object.
     """
 
     def __init__(self, sparkContext, hiveContext=None):
