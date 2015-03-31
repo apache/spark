@@ -519,7 +519,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       Loader.checkSchema[Data](dataFrame.schema)
 
       val word2VecMap = dataArray.map(i => (i.getString(0), i.getSeq[Float](1).toArray)).toMap
-      return new Word2VecModel(word2VecMap)
+      new Word2VecModel(word2VecMap)
     }
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]) = {
@@ -528,12 +528,13 @@ object Word2VecModel extends Loader[Word2VecModel] {
       import sqlContext.implicits._
 
       val vectorSize = model.values.head.size
+      val numWords = model.size
       val metadata = compact(render
         (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
-         ("vectorSize" -> vectorSize)))
+         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataArray = model.keys.map(word => Data(word, model(word)))
+      val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
       sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
     }
   }
@@ -542,15 +543,19 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
-    val vectorSize = (metadata \ "vectorSize").extract[Int]
+    val expectedVectorSize = (metadata \ "vectorSize").extract[Int]
+    val expectedNumWords = (metadata \ "numWords").extract[Int]
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
-        val expectedVectorSize = model.getVectors.values.head.size
+        val vectorSize = model.getVectors.values.head.size
+        val numWords = model.getVectors.size
         require(expectedVectorSize == vectorSize,
           s"Word2VecModel requires each word to be mapped to a vector of size " +
-          s"$vectorSize, got vector of size $expectedVectorSize")
+          s"$expectedVectorSize, got vector of size $vectorSize")
+        require(expectedNumWords == numWords,
+          s"Word2VecModel requires $expectedNumWords words, but got $numWords")
         model
       case _ => throw new Exception(
         s"Word2VecModel.load did not recognize model with (className, format version):" +

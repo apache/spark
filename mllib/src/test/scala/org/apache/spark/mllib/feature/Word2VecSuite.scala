@@ -71,8 +71,7 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     try {
       model.save(sc, path)
       val sameModel = Word2VecModel.load(sc, path)
-      assert(sameModel.getVectors.keys === model.getVectors.keys)
-      assert(sameModel.getVectors.values.toArray === model.getVectors.values.toArray)
+      assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
     } finally {
       Utils.deleteRecursively(tempDir)
     }
