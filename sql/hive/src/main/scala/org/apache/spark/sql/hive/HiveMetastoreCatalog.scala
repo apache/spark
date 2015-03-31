@@ -218,6 +218,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+    val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
+    val parquetOptions = Map(
+      ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json,
+      ParquetRelation2.MERGE_SCHEMA -> mergeSchema.toString)
 
     // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
     // serialize the Metastore schema to JSON and pass it as a data source option because of the
@@ -234,18 +238,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val paths = partitions.map(_.path)
-      LogicalRelation(
-        ParquetRelation2(
-          paths,
-          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json),
-          None,
-          Some(partitionSpec))(hive))
+      LogicalRelation(ParquetRelation2(paths, parquetOptions, None, Some(partitionSpec))(hive))
     } else {
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
-      LogicalRelation(
-        ParquetRelation2(
-          paths,
-          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json))(hive))
+      LogicalRelation(ParquetRelation2(paths, parquetOptions)(hive))
     }
   }
 
