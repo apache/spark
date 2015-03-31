@@ -611,7 +611,7 @@ private[spark] object Utils extends Logging {
         }
         Utils.setupSecureURLConnection(uc, securityMgr)
 
-        val timeoutMs = Utils.timeStringAsS(conf.get("spark.files.fetchTimeout","60s")).toInt*1000
+        val timeoutMs = Utils.timeStringAsMs(conf.get("spark.files.fetchTimeout", "60s")).toInt
         uc.setConnectTimeout(timeoutMs)
         uc.setReadTimeout(timeoutMs)
         uc.connect()
@@ -1010,7 +1010,7 @@ private[spark] object Utils extends Logging {
     )
   }
 
-  val timeSuffixes = Map (
+  private val timeSuffixes = Map(
     "us" -> TimeUnit.MICROSECONDS,
     "ms" -> TimeUnit.MILLISECONDS,
     "s" -> TimeUnit.SECONDS,
@@ -1018,11 +1018,12 @@ private[spark] object Utils extends Logging {
     "h" -> TimeUnit.HOURS,
     "d" -> TimeUnit.DAYS
   )
+
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-   def parseTimeString(str: String) : (Option[TimeUnit], Long) = {
+  private def parseTimeString(str: String, unit:TimeUnit) : Long = {
     val timeError = "Time must be specified as seconds (s), " +
         "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
         "E.g. 50s, 100ms, or 250us."
@@ -1031,14 +1032,14 @@ private[spark] object Utils extends Logging {
       val lower = str.toLowerCase.trim()
       var suffix: String = ""
       timeSuffixes.foreach(s => {
-        if(lower.endsWith(s._1)) {
+        if (lower.endsWith(s._1)) {
           suffix = s._1
         }
       })
 
-      (timeSuffixes.get(suffix), str.substring(0, str.length - suffix.length).toLong)
+      unit.convert(str.substring(0, str.length - suffix.length).toLong, 
+        timeSuffixes.getOrElse(suffix, unit))
     } catch {
-
       case e: NumberFormatException => throw new NumberFormatException(timeError + "\n" +
           e.toString)
     }
@@ -1049,8 +1050,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in us.
    */
   def timeStringAsUs(str: String): Long = {
-    val parsed = parseTimeString(str)
-    parsed._1.getOrElse(TimeUnit.MICROSECONDS).toMicros(parsed._2)
+    parseTimeString(str, TimeUnit.MICROSECONDS)
   }
 
   /**
@@ -1058,8 +1058,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   def timeStringAsMs(str : String) : Long = {
-    val parsed = parseTimeString(str)
-    parsed._1.getOrElse(TimeUnit.MILLISECONDS).toMillis(parsed._2)
+    parseTimeString(str, TimeUnit.MILLISECONDS)
   }
 
   /**
@@ -1067,8 +1066,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsS(str : String) : Long = {
-    val parsed = parseTimeString(str)
-    parsed._1.getOrElse(TimeUnit.SECONDS).toSeconds(parsed._2)
+    parseTimeString(str, TimeUnit.SECONDS)
   }
 
   /**

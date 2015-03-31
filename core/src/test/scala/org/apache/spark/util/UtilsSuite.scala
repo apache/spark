@@ -35,7 +35,32 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
+  test("timeConversion") {
+    assert(Utils.timeStringAsS("1") === 1)
+    assert(Utils.timeStringAsS("1s") === 1)
+    assert(Utils.timeStringAsS("1000ms") === 1)
+    assert(Utils.timeStringAsS("1000000us") === 1)
+    assert(Utils.timeStringAsS("1min") === 60)
+    assert(Utils.timeStringAsS("1h") === 60 * 60)
+    assert(Utils.timeStringAsS("1d") === 60 * 60 * 24)
+    
+    assert(Utils.timeStringAsMs("1") === 1)
+    assert(Utils.timeStringAsMs("1ms") === 1)
+    assert(Utils.timeStringAsMs("1000us") === 1)
+    assert(Utils.timeStringAsMs("1s") === 1000)
+    assert(Utils.timeStringAsMs("1min") === 1000 * 60)
+    assert(Utils.timeStringAsMs("1h") === 1000 * 60 * 60)
+    assert(Utils.timeStringAsMs("1d") === 1000 * 60 * 60 * 24)
 
+    assert(Utils.timeStringAsUs("1") === 1)
+    assert(Utils.timeStringAsUs("1us") === 1)
+    assert(Utils.timeStringAsUs("1ms") === 1000)
+    assert(Utils.timeStringAsUs("1s") === 1000 * 1000)
+    assert(Utils.timeStringAsUs("1min") === 1000 * 1000 * 60)
+    assert(Utils.timeStringAsUs("1h") === 1000L * 1000L * 60 * 60)
+    assert(Utils.timeStringAsUs("1d") === 1000L * 1000L * 60 * 60 * 24)
+  }
+  
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")

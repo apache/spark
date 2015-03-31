@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +26,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{Utils, ManualClock}
+import org.apache.spark.util.{ManualClock, Utils}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -152,7 +151,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
   private val conf = new SparkConf
 
-  val LOCALITY_WAIT_MS = Utils.timeStringAsMs(conf.get("spark.locality.wait", "3000ms"))
+  val LOCALITY_WAIT_MS = Utils.timeStringAsMs(conf.get("spark.locality.wait", "3s"))
   val MAX_TASK_FAILURES = 4
 
   override def beforeEach() {

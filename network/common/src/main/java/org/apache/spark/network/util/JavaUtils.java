@@ -21,9 +21,11 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,34 +124,39 @@ public class JavaUtils {
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
+  private static ImmutableMap<String, TimeUnit> timeSuffixes = 
+          new ImmutableMap.Builder<String, TimeUnit>()
+          .put("us",TimeUnit.MICROSECONDS)
+          .put("ms",TimeUnit.MILLISECONDS)
+          .put("s", TimeUnit.SECONDS)
+          .put("min", TimeUnit.MINUTES)
+          .put("h", TimeUnit.HOURS)
+          .put("d", TimeUnit.DAYS)
+          .build();
+  
   /**
-   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a microsecond count for
+   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  private static long timeStringToUs(String str) throws NumberFormatException {
+  private static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
+    String timeError = "Time must be specified as seconds (s), " +
+            "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
+            "E.g. 50s, 100ms, or 250us.";
     String lower = str.toLowerCase().trim();
+    
     try {
-      if (lower.endsWith("ms")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 2)) * 1000;
-      } else if (lower.endsWith("us")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 2));
-      } else if (lower.endsWith("s")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000;
-      } else if (lower.endsWith("min")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 3)) * 1000 * 1000 * 60;
-      } else if (lower.endsWith("h")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60 * 60;
-      } else if (lower.endsWith("d")) {
-        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60 * 60 * 24;
-      } else {// No suffix, default selected by calling function
-        return Long.parseLong(lower);
+      String suffix = "";
+      for (String tail: timeSuffixes.keySet()) {
+        if (lower.endsWith(tail)) {
+          suffix = tail;
+        }
       }
+      
+      return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
+              timeSuffixes.getOrDefault(suffix, unit));
     } catch(NumberFormatException e) {
-      throw new NumberFormatException("Time must be specified as seconds (s), " +
-              "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
-              "E.g. 50s, 100ms, or 250us.\n" + e.toString());
+      throw new NumberFormatException(timeError + "\n" + e.toString());
     }
-
   }
 
   /**
@@ -157,23 +164,23 @@ public class JavaUtils {
    * no suffix is provided, the passed number is assumed to be in us.
    */
   public static long timeStringAsUs(String str) throws NumberFormatException {
-    return timeStringToUs(str);
+    return parseTimeString(str, TimeUnit.MICROSECONDS);
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   public static long timeStringAsMs(String str) throws NumberFormatException {
-    return timeStringToUs(str)/1000;
+    return parseTimeString(str, TimeUnit.MILLISECONDS);
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   public static long timeStringAsS(String str) throws NumberFormatException {
-    return timeStringToUs(str)/1000/1000;
+    return parseTimeString(str, TimeUnit.SECONDS);
   }
 
 }
