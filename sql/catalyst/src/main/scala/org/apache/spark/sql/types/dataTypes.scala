@@ -349,7 +349,7 @@ class StringType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = String
+  private[sql] type JvmType = UTF8String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 
@@ -385,6 +385,13 @@ class BinaryType private() extends NativeType with PrimitiveType {
         if (res != 0) return res
       }
       x.length - y.length
+    }
+    override def equiv(x: Array[Byte], y: Array[Byte]): Boolean = {
+      if (x.length != y.length) {
+        false
+      } else {
+        compare(x, y) == 0
+      }
     }
   }
 

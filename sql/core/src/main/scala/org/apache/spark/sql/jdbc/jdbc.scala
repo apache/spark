@@ -18,11 +18,8 @@
 package org.apache.spark.sql
 
 import java.sql.{Connection, DriverManager, PreparedStatement}
-import org.apache.spark.{Logging, Partition}
-import org.apache.spark.sql._
-import org.apache.spark.sql.sources.LogicalRelation
 
-import org.apache.spark.sql.jdbc.{JDBCPartitioningInfo, JDBCRelation, JDBCPartition}
+import org.apache.spark.Logging
 import org.apache.spark.sql.types._
 
 package object jdbc {
@@ -80,7 +77,7 @@ package object jdbc {
                   case ShortType => stmt.setInt(i + 1, row.getShort(i))
                   case ByteType => stmt.setInt(i + 1, row.getByte(i))
                   case BooleanType => stmt.setBoolean(i + 1, row.getBoolean(i))
-                  case StringType => stmt.setString(i + 1, row.getString(i))
+                  case StringType => stmt.setString(i + 1, row.getString(i).toString)
                   case BinaryType => stmt.setBytes(i + 1, row.getAs[Array[Byte]](i))
                   case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                   case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))

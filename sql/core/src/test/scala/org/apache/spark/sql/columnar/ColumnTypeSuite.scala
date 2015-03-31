@@ -65,7 +65,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(BOOLEAN, true, 1)
-    checkActualSize(STRING, "hello", 4 + "hello".getBytes("utf-8").length)
+    checkActualSize(STRING, UTF8String("hello"), 4 + "hello".getBytes("utf-8").length)
     checkActualSize(DATE, 0, 4)
     checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
@@ -108,7 +108,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
 
   testNativeColumnType[StringType.type](
     STRING,
-    (buffer: ByteBuffer, string: String) => {
+    (buffer: ByteBuffer, string: UTF8String) => {
       val bytes = string.getBytes("utf-8")
       buffer.putInt(bytes.length)
       buffer.put(bytes)

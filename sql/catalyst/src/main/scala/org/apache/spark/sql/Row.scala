@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.{StructType, DateUtils}
+import org.apache.spark.sql.types.{UTF8String, StructType}
 
 object Row {
   /**
@@ -39,12 +39,22 @@ object Row {
   /**
    * This method can be used to construct a [[Row]] with the given values.
    */
-  def apply(values: Any*): Row = new GenericRow(values.toArray)
+  def apply(values: Any*): Row = {
+    new GenericRow(values.map {
+      case s: String => UTF8String(s)
+      case other => other
+    }.toArray)
+  }
 
   /**
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
-  def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
+  def fromSeq(values: Seq[Any]): Row = {
+    new GenericRow(values.map {
+      case s: String => UTF8String(s)
+      case other => other
+    }.toArray)
+  }
 
   def fromTuple(tuple: Product): Row = fromSeq(tuple.productIterator.toSeq)
 

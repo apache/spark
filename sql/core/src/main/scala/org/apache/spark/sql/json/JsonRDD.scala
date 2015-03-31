@@ -409,7 +409,7 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case StringType => toString(value)
+        case StringType => UTF8String(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
         case IntegerType => value.asInstanceOf[IntegerType.JvmType]
         case LongType => toLong(value)
@@ -421,6 +421,7 @@ private[sql] object JsonRDD extends Logging {
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case MapType(StringType, valueType, _) =>
           val map = value.asInstanceOf[Map[String, Any]]
+          //TODO(davies): use UTF8String for key?
           map.mapValues(enforceCorrectType(_, valueType)).map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
@@ -451,6 +452,7 @@ private[sql] object JsonRDD extends Logging {
     def valWriter: (DataType, Any) => Unit = {
       case (_, null) | (NullType, _)  => gen.writeNull()
       case (StringType, v: String) => gen.writeString(v)
+      case (StringType, v: UTF8String) => gen.writeString(v.toString)
       case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
       case (ShortType, v: Short) => gen.writeNumber(v)

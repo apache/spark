@@ -199,7 +199,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
       schema match {
         case StringType => writer.addBinary(
           Binary.fromByteArray(
-            value.asInstanceOf[String].getBytes("utf-8")
+            value.asInstanceOf[UTF8String].getBytes("utf-8")
           )
         )
         case BinaryType => writer.addBinary(
@@ -349,7 +349,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[String].getBytes("utf-8")))
+        Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes("utf-8")))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))

@@ -216,6 +216,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val $primitiveTerm: ${termForType(dataType)} = $value
          """.children
 
+//      case expressions.Literal(value: UTF8String, dataType) =>
+//        q"""
+//          val $nullTerm = ${value == null}
+//          val $primitiveTerm: ${termForType(dataType)} = $value
+//         """.children
+
       case expressions.Literal(value: String, dataType) =>
         q"""
           val $nullTerm = ${value == null}
@@ -243,7 +249,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             if($nullTerm)
               ${defaultPrimitive(StringType)}
             else
-              new String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
+              UTF8String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
         """.children
 
       case Cast(child @ DateType(), StringType) =>
@@ -584,6 +590,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
+      case StringType => q"$inputRow.apply($ordinal).asInstanceOf[UTF8String]"
       case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
     }
@@ -595,6 +602,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       ordinal: Int,
       value: TermName) = {
     dataType match {
+      case StringType => q"$destinationRow.setString($ordinal, $value)"
       case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
       case _ => q"$destinationRow.update($ordinal, $value)"
     }

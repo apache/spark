@@ -48,7 +48,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
     check("10", Literal(10, IntegerType))
     check("1000000000000000", Literal(1000000000000000L, LongType))
     check("1.5", Literal(1.5, FloatType))
-    check("hello", Literal("hello", StringType))
+    check("hello", Literal(UTF8String("hello"), StringType))
     check(defaultPartitionName, Literal(null, NullType))
   }
 
@@ -83,7 +83,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         ArrayBuffer("a", "b", "c"),
         ArrayBuffer(
           Literal(10, IntegerType),
-          Literal("hello", StringType),
+          Literal(UTF8String("hello"), StringType),
           Literal(1.5, FloatType))))
 
     check(

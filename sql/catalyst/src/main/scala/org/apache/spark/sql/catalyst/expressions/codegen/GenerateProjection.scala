@@ -118,12 +118,20 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           q"if(i == $i) return $elementName" :: Nil
         case _ => Nil
       }
-
-      q"""
-      override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
-        ..$ifStatements;
-        $accessorFailure
-      }"""
+      dataType match {
+        case StringType =>
+          q"""
+          override def getString(i: Int): String = {
+            ..$ifStatements;
+            $accessorFailure
+          }"""
+        case other =>
+          q"""
+          override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
+            ..$ifStatements;
+            $accessorFailure
+          }"""
+      }
     }
 
     val specificMutatorFunctions = NativeType.all.map { dataType =>
@@ -135,12 +143,20 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           q"if(i == $i) { nullBits($i) = false; $elementName = value; return }" :: Nil
         case _ => Nil
       }
-
-      q"""
-      override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
-        ..$ifStatements;
-        $accessorFailure
-      }"""
+      dataType match {
+        case StringType =>
+          q"""
+          override def setString(i: Int, value: String): Unit = {
+            ..$ifStatements;
+            $accessorFailure
+          }"""
+        case other =>
+          q"""
+          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
+            ..$ifStatements;
+            $accessorFailure
+          }"""
+      }
     }
 
     val hashValues = expressions.zipWithIndex.map { case (e,i) =>

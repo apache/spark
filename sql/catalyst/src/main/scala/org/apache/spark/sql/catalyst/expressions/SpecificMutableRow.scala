@@ -170,6 +170,21 @@ final class MutableByte extends MutableValue {
   }
 }
 
+//final class MutableString extends MutableValue {
+//  var value: UTF8String = _
+//  override def boxed: Any = if (isNull) null else value
+//  override def update(v: Any): Unit = {
+//    isNull = false
+//    value = v.asInstanceOf[UTF8String]
+//  }
+//  override def copy(): MutableString = {
+//    val newCopy = new MutableString
+//    newCopy.isNull = isNull
+//    newCopy.value = value
+//    newCopy.asInstanceOf[MutableString]
+//  }
+//}
+
 final class MutableAny extends MutableValue {
   var value: Any = _
   override def boxed: Any = if (isNull) null else value
@@ -202,6 +217,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case DoubleType => new MutableDouble
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
+//        case StringType => new MutableString
         case _ => new MutableAny
       }.toArray)
 
@@ -230,13 +246,23 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericRow(newValues)
   }
 
-  override def update(ordinal: Int, value: Any): Unit = {
-    if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
+  override def update(ordinal: Int, value: Any): Unit = value match {
+    case null => setNullAt(ordinal)
+    case s: String => update(ordinal, UTF8String(s))
+    case other => values(ordinal).update(value)
   }
 
-  override def setString(ordinal: Int, value: String): Unit = update(ordinal, value)
+  override def setString(ordinal: Int, value: String): Unit = {
+    update(ordinal, UTF8String(value))
+  }
 
-  override def getString(ordinal: Int): String = apply(ordinal).asInstanceOf[String]
+  override def getString(ordinal: Int): String = {
+    //TODO(davies): FIXME
+    apply(ordinal) match {
+      case s: UTF8String => s.toString()
+      //case ms: MutableString => ms.value.toString()
+    }
+  }
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

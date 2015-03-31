@@ -216,8 +216,8 @@ private[sql] class IntColumnStats extends ColumnStats {
 }
 
 private[sql] class StringColumnStats extends ColumnStats {
-  protected var upper: String = null
-  protected var lower: String = null
+  protected var upper: UTF8String = null
+  protected var lower: UTF8String = null
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)

@@ -316,7 +316,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val literal: Parser[Literal] =
     ( numericLiteral
     | booleanLiteral
-    | stringLit ^^ {case s => Literal(s, StringType) }
+    | stringLit ^^ {case s => Literal(UTF8String(s), StringType) }
     | NULL ^^^ Literal(null, NullType)
     )
 
