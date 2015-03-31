@@ -3,8 +3,10 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from functools import wraps
+import imp
 import inspect
 import logging
+import os
 import re
 import smtplib
 
@@ -304,3 +306,30 @@ def send_MIME_email(e_from, e_to, mime_msg):
     logging.info("Sent an altert email to " + str(e_to))
     s.sendmail(e_from, e_to, mime_msg.as_string())
     s.quit()
+
+def import_module_attrs(parent_module_globals, module_attrs_dict):
+    '''
+    Attemps to import a set of modules and specified attributes in the
+    form of a dictionary. The attributes are copied in the parent module's
+    namespace. The function returns a list of attributes names that can be
+    affected to __all__.
+
+    This is used in the context of ``operators`` and ``hooks`` and
+    silence the import errors for when libraries are missing. It makes
+    for a clean package abstracting the underlying modules and only
+    brings funcitonal operators to those namespaces.
+
+    >>> module_attrs = {'os': ['path', 'chdir'], 'sys': ['maxint']}
+    '''
+    imported_attrs = []
+    for mod, attrs in module_attrs_dict.items():
+        try:
+            folder = os.path.dirname(parent_module_globals['__file__'])
+            f, filename, description = imp.find_module(mod, [folder])
+            module = imp.load_module(mod, f, filename, description)
+            for attr in attrs:
+                parent_module_globals[attr] = getattr(module, attr)
+                imported_attrs += [attr]
+        except:
+            logging.warning("Couldn't import module " + mod)
+    return imported_attrs

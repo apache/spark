@@ -2,9 +2,7 @@
 Imports operators dynamically while keeping the package API clean,
 abstracting the underlying modules
 '''
-
-import imp as _imp
-import os as _os
+from airflow.utils import import_module_attrs as _import_module_attrs
 
 _operators = {
     'bash_operator': ['BashOperator'],
@@ -32,16 +30,4 @@ _operators = {
     'subdag_operator': ['SubDagOperator'],
     }
 
-def f():
-    __all__ = []
-    for mod, ops in _operators.items():
-        try:
-            f, filename, description = _imp.find_module(mod, [_os.path.dirname(__file__)])
-            module = _imp.load_module(mod, f, filename, description)
-            for op in ops:
-                globals()[op] = getattr(module, op)
-                __all__ += [op]
-        except:
-            pass
-f()
-del f
+_import_module_attrs(globals(), _operators)
