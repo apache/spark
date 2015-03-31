@@ -81,3 +81,4 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     shuffleBlockResolver.stop()
   }
 }
+
