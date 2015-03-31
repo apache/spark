@@ -67,17 +67,6 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
     new OneStageResource(uiRoot)
   }
 
-  @Path("applications/{appId}/stages/{stageId: \\d+}/{attemptId: \\d+}")
-  def getStageAttempt(): OneStageAttemptResource= {
-    new OneStageAttemptResource(uiRoot)
-  }
-
-
-  @Path("applications/{appId}/stages/{stageId: \\d+}/{attemptId: \\d+}/taskSummary")
-  def getStageAttemptTaskSummary(): StageTaskSummary = {
-    new StageTaskSummary(uiRoot)
-  }
-
   @Path("applications/{appId}/storage/rdd")
   def getRdds(): AllRDDResource = {
     new AllRDDResource(uiRoot)
