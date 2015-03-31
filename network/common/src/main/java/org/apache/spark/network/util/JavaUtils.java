@@ -135,12 +135,19 @@ public class JavaUtils {
         return Long.parseLong(lower.substring(0, lower.length() - 2));
       } else if (lower.endsWith("s")) {
         return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000;
-      } else {// Invalid suffix, force correct formatting
+      } else if (lower.endsWith("min")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60;
+      } else if (lower.endsWith("h")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60 * 60;
+      } else if (lower.endsWith("d")) {
+        return Long.parseLong(lower.substring(0, lower.length() - 1)) * 1000 * 1000 * 60 * 60 * 24;
+      } else {// No suffix, default selected by calling function
         return Long.parseLong(lower);
       }
     } catch(NumberFormatException e) {
       throw new NumberFormatException("Time must be specified as seconds (s), " +
-              "milliseconds (ms), or microseconds (us) e.g. 50s, 100ms, or 250us.");
+              "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
+              "E.g. 50s, 100ms, or 250us.\n" + e.toString());
     }
 
   }
