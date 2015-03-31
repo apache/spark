@@ -288,7 +288,15 @@ class Word2Vec extends Serializable with Logging {
       }
     }
     
-    val newSentences = sentences.repartition(numPartitions).cache()
+    // Use sortBy to repartition and get a predictably sorted RDD.
+    val newSentences = sentences.sortBy( arr => {
+      if(arr.length > 0) {
+        arr(0)
+      } else {
+        ""
+      }
+    }, true, numPartitions).cache()
+    
     val initRandom = new XORShiftRandom(seed)
 
     if (vocabSize.toLong * vectorSize * 8 >= Int.MaxValue) {
