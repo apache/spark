@@ -287,7 +287,10 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case object NoRelation extends LeafNode {
+/**
+ * A relation with one row. This is used in "SELECT ..." without a from clause.
+ */
+case object OneRowRelation extends LeafNode {
   override def output: Seq[Attribute] = Nil
 
   /**

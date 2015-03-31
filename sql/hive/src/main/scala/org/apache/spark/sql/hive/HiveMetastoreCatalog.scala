@@ -32,7 +32,7 @@ import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{SaveMode, AnalysisException, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Catalog, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NoSuchTableException, Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -697,7 +697,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
     (@transient sqlContext: SQLContext)
-  extends LeafNode {
+  extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
 
@@ -778,6 +778,13 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+
+  override def newInstance() = {
+    val newCopy = MetastoreRelation(databaseName, tableName, alias)(table, partitions)(sqlContext)
+    // The project here is an ugly hack to work around the fact that MetastoreRelation's
+    // equals method is broken.  Please remove this when SPARK-6555 is fixed.
+    Project(newCopy.output, newCopy)
+  }
 }
 
 
