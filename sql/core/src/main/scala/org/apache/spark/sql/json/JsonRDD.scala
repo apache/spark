@@ -49,7 +49,7 @@ private[sql] object JsonRDD extends Logging {
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
       if (schemaData.isEmpty()) {
-        Set.empty[(String,DataType)]
+        Set.empty[(String, DataType)]
       } else {
         parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
       }
