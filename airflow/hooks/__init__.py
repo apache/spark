@@ -21,13 +21,13 @@ _hooks = {
 def f():
     __all__ = []
     for mod, hks in _hooks.items():
-        #try:
-        f, filename, description = _imp.find_module(mod, [_os.path.dirname(__file__)])
-        module = _imp.load_module(mod, f, filename, description)
-        for hk in hks:
-            globals()[hk] = getattr(module, hk)
-            __all__ += [hk]
-        #except:
-        #    pass
+        try:
+            f, filename, description = _imp.find_module(mod, [_os.path.dirname(__file__)])
+            module = _imp.load_module(mod, f, filename, description)
+            for hk in hks:
+                globals()[hk] = getattr(module, hk)
+                __all__ += [hk]
+        except:
+            pass
 f()
 del f
