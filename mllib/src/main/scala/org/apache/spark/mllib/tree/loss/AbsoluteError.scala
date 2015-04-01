@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
-import org.apache.spark.rdd.RDD
+
 
 /**
  * :: DeveloperApi ::
@@ -41,15 +41,12 @@ object AbsoluteError extends Loss {
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
-  override def gradient(
-      model: TreeEnsembleModel,
-      point: LabeledPoint): Double = {
+  override def gradient(model: TreeEnsembleModel, point: LabeledPoint): Double = {
     if ((point.label - model.predict(point.features)) < 0) 1.0 else -1.0
   }
 
-  override def computeError(prediction: Double, label: Double): Double = {
+  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
     val err = label - prediction
     math.abs(err)
   }
-
 }

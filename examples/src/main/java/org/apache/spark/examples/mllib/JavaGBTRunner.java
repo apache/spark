@@ -17,6 +17,9 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
@@ -26,20 +29,22 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.classification.GBTClassificationModel;
+import org.apache.spark.mllib.classification.GBTClassifier;
+import org.apache.spark.mllib.regression.GBTRegressionModel;
+import org.apache.spark.mllib.regression.GBTRegressor;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.GradientBoostedTrees;
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel;
 import org.apache.spark.mllib.util.MLUtils;
+
 
 /**
  * Classification and regression using gradient-boosted decision trees.
  */
-public final class JavaGradientBoostedTreesRunner {
+public final class JavaGBTRunner {
 
   private static void usage() {
-    System.err.println("Usage: JavaGradientBoostedTreesRunner <libsvm format data file>" +
-        " <Classification/Regression>");
+    System.err.println("Usage: JavaGBTRunner <libsvm format data file>" +
+      " <Classification/Regression>");
     System.exit(-1);
   }
 
@@ -55,16 +60,13 @@ public final class JavaGradientBoostedTreesRunner {
     if (args.length > 2) {
       usage();
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTreesRunner");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaGBTRunner");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 
-    // Set parameters.
-    //  Note: All features are treated as continuous.
-    BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(algo);
-    boostingStrategy.setNumIterations(10);
-    boostingStrategy.treeStrategy().setMaxDepth(5);
+    // Empty categoricalFeatures indicates all features are continuous.
+    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
 
     if (algo.equals("Classification")) {
       // Compute the number of classes from the data.
@@ -73,48 +75,53 @@ public final class JavaGradientBoostedTreesRunner {
           return p.label();
         }
       }).countByValue().size();
-      boostingStrategy.treeStrategy().setNumClasses(numClasses);
 
       // Train a GradientBoosting model for classification.
-      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      GBTClassifier gbt = new GBTClassifier()
+        .setNumIterations(10)
+        .setMaxDepth(5);
+      final GBTClassificationModel model = gbt.run(data, categoricalFeatures, numClasses);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
-          data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-            @Override public Tuple2<Double, Double> call(LabeledPoint p) {
-              return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-            }
-          });
+        data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+          @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          }
+        });
       Double trainErr =
-          1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-            @Override public Boolean call(Tuple2<Double, Double> pl) {
-              return !pl._1().equals(pl._2());
-            }
-          }).count() / data.count();
+        1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+          @Override public Boolean call(Tuple2<Double, Double> pl) {
+            return !pl._1().equals(pl._2());
+          }
+        }).count() / data.count();
       System.out.println("Training error: " + trainErr);
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
-      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      GBTRegressor gbt = new GBTRegressor()
+        .setNumIterations(10)
+        .setMaxDepth(5);
+      final GBTRegressionModel model = gbt.run(data);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
-          data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-            @Override public Tuple2<Double, Double> call(LabeledPoint p) {
-              return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-            }
-          });
+        data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+          @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+            return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          }
+        });
       Double trainMSE =
-          predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-            @Override public Double call(Tuple2<Double, Double> pl) {
-              Double diff = pl._1() - pl._2();
-              return diff * diff;
-            }
-          }).reduce(new Function2<Double, Double, Double>() {
-            @Override public Double call(Double a, Double b) {
-              return a + b;
-            }
-          }) / data.count();
+        predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
+          @Override public Double call(Tuple2<Double, Double> pl) {
+            Double diff = pl._1() - pl._2();
+            return diff * diff;
+          }
+        }).reduce(new Function2<Double, Double, Double>() {
+          @Override public Double call(Double a, Double b) {
+            return a + b;
+          }
+        }) / data.count();
       System.out.println("Training Mean Squared Error: " + trainMSE);
       System.out.println("Learned regression tree model:\n" + model);
     } else {

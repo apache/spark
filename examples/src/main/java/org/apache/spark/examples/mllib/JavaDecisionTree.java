@@ -21,17 +21,20 @@ import java.util.HashMap;
 
 import scala.Tuple2;
 
-import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.classification.DecisionTreeClassifier;
+import org.apache.spark.mllib.classification.DecisionTreeClassificationModel;
+import org.apache.spark.mllib.regression.DecisionTreeRegressionModel;
+import org.apache.spark.mllib.regression.DecisionTreeRegressor;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.DecisionTree;
-import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
+
 
 /**
  * Classification and regression using decision trees.
@@ -59,15 +62,19 @@ public final class JavaDecisionTree {
     }).countByValue().size();
 
     // Set parameters.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    //  Empty categoricalFeatures indicates all features are continuous.
+    HashMap<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     String impurity = "gini";
     Integer maxDepth = 5;
     Integer maxBins = 32;
 
     // Train a DecisionTree model for classification.
-    final DecisionTreeModel model = DecisionTree.trainClassifier(data, numClasses,
-      categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+    DecisionTreeClassifier dtClassifier = new DecisionTreeClassifier()
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins);
+    final DecisionTreeClassificationModel model =
+      dtClassifier.run(data, categoricalFeatures, numClasses);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> predictionAndLabel =
@@ -87,8 +94,11 @@ public final class JavaDecisionTree {
 
     // Train a DecisionTree model for regression.
     impurity = "variance";
-    final DecisionTreeModel regressionModel = DecisionTree.trainRegressor(data,
-        categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+    DecisionTreeRegressor dtRegressor = new DecisionTreeRegressor()
+      .setImpurity(impurity)
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins);
+    final DecisionTreeRegressionModel regressionModel = dtRegressor.run(data, categoricalFeatures);
 
     // Evaluate model on training instances and compute training error
     JavaPairRDD<Double, Double> regressorPredictionAndLabel =
