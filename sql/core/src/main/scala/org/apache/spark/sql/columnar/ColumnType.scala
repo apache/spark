@@ -333,7 +333,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to.setString(toOrdinal, from.getString(fromOrdinal))
+    to.update(toOrdinal, from(fromOrdinal))
   }
 }
 

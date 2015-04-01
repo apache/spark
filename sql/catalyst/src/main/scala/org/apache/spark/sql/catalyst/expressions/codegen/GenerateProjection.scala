@@ -111,7 +111,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificAccessorFunctions = NativeType.all.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        case (e, i) if e.dataType == dataType =>
+        // getString() is not used by expressions
+        case (e, i) if e.dataType == dataType && dataType != StringType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
@@ -136,7 +137,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificMutatorFunctions = NativeType.all.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        case (e, i) if e.dataType == dataType =>
+        // setString() is not used by expressions
+        case (e, i) if e.dataType == dataType && dataType != StringType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
