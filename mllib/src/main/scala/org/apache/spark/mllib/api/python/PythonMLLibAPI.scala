@@ -434,8 +434,39 @@ private[python] class PythonMLLibAPI extends Serializable {
     new Normalizer(p).transform(rdd)
   }
 
+  private[python] class StandardScalerModelWrapper(model: StandardScalerModel)
+    extends VectorTransformer {
+    /**
+     * Wrapper of StandardScalerModel transform method
+     * @param vector
+     * @return
+     */
+    def transform(vector: Vector): Vector = model.transform(vector)
+
+    /**
+     * Setter of the boolean which decides
+     * whether it uses mean or not
+     * @param withMean
+     * @return
+     */
+    def setWithMean(withMean: Boolean): this.type = {
+      model.setWithMean(withMean)
+      this
+    }
+
+    /**
+     * Setter of the boolean which decides
+     * whether it uses mean or not
+     * @param withStd
+     * @return
+     */
+    def setWithStd(withStd: Boolean): this.type = {
+      model.setWithStd(withStd)
+      this
+    }
+  }
   /**
-   * Java stub for IDF.fit(). This stub returns a
+   * Java stub for StandardScaler.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
@@ -443,8 +474,9 @@ private[python] class PythonMLLibAPI extends Serializable {
   def fitStandardScaler(
       withMean: Boolean,
       withStd: Boolean,
-      data: JavaRDD[Vector]): StandardScalerModel = {
-    new StandardScaler(withMean, withStd).fit(data.rdd)
+      data: JavaRDD[Vector]): StandardScalerModelWrapper = {
+    val model = new StandardScaler(withMean, withStd).fit(data.rdd)
+    new StandardScalerModelWrapper(model)
   }
 
   /**
