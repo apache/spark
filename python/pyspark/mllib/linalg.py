@@ -636,14 +636,12 @@ class DenseMatrix(Matrix):
 
     def __getitem__(self, indices):
         i, j = indices
-        if i > self.numRows or i < 0:
-            raise ValueError(
-                "Row index %d should not be greater than numRows %d "
-                "or negative." % (i, self.numRows))
-        if j > self.numCols or j < 0:
-            raise ValueError(
-                "Column index %d should not be greater than numCols %d "
-                "or negative." % (j, self.numCols))
+        if i < 0 or i >= self.numRows:
+            raise ValueError("Row index %d is out of range [0, %d)"
+                             % (i, self.numRows))
+        if j >= self.numCols or j < 0:
+            raise ValueError("Column index %d is out of range [0, %d)"
+                             % (j, self.numCols))
         return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
