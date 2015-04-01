@@ -85,7 +85,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
             iter.map(r => mutablePair.update(hashExpressions(r), r))
           }
         }
-        val sortingExpressions = expressions.map(s => new SortOrder(s, Ascending))
+        val sortingExpressions = expressions.zipWithIndex.map {
+          case (exp, index) =>
+            new SortOrder(BoundReference(index, exp.dataType, exp.nullable), Ascending)
+        }
         val ordering = new RowOrdering(sortingExpressions, child.output)
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
