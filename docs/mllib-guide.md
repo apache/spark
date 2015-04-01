@@ -80,11 +80,6 @@ include `netlib-java`'s native proxies by default. To configure
 [netlib-java](https://github.com/fommil/netlib-java) documentation for
 your platform's additional installation instructions.
 
-MLlib also uses [jblas](https://github.com/mikiobraun/jblas) which
-will require you to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
-if it is not already present on your nodes.
-
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org)
 version 1.4 or newer.
 
@@ -107,6 +102,8 @@ In the `spark.mllib` package, there were several breaking changes.  The first ch
     * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
     * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
 * `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.  This was never meant for external use.
+* In linear regression (including Lasso and ridge regression), the squared loss is now divided by 2.
+  So in order to produce the same result as in 1.2, the regularization parameter needs to be divided by 2 and the step size needs to be multiplied by 2.
 
 ## Previous Spark Versions
 

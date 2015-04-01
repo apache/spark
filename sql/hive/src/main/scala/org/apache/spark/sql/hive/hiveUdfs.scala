@@ -333,6 +333,8 @@ private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
       if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
       throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
 
+    case Project(Seq(Alias(udtf @ HiveGenericUdtf(_, _, _), name)), child) =>
+        Generate(udtf.copy(aliasNames = Seq(name)), join = false, outer = false, None, child)
     case Project(Seq(MultiAlias(udtf @ HiveGenericUdtf(_, _, _), names)), child) =>
         Generate(udtf.copy(aliasNames = names), join = false, outer = false, None, child)
   }

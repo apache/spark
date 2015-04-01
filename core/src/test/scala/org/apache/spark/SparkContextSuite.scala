@@ -79,26 +79,49 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
   }
-
+  
   test("addFile works") {
-    val file = File.createTempFile("someprefix", "somesuffix")
-    val absolutePath = file.getAbsolutePath
+    val file1 = File.createTempFile("someprefix1", "somesuffix1")
+    val absolutePath1 = file1.getAbsolutePath
+
+    val pluto = Utils.createTempDir()
+    val file2 = File.createTempFile("someprefix2", "somesuffix2", pluto)
+    val relativePath = file2.getParent + "/../" + file2.getParentFile.getName + "/" + file2.getName
+    val absolutePath2 = file2.getAbsolutePath
+
     try {
-      Files.write("somewords", file, UTF_8)
-      val length = file.length()
+      Files.write("somewords1", file1, UTF_8)
+      Files.write("somewords2", file2, UTF_8)
+      val length1 = file1.length()
+      val length2 = file2.length()
+
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addFile(file.getAbsolutePath)
+      sc.addFile(file1.getAbsolutePath)
+      sc.addFile(relativePath)
       sc.parallelize(Array(1), 1).map(x => {
-        val gotten = new File(SparkFiles.get(file.getName))
-        if (!gotten.exists()) {
-          throw new SparkException("file doesn't exist")
+        val gotten1 = new File(SparkFiles.get(file1.getName))
+        val gotten2 = new File(SparkFiles.get(file2.getName))
+        if (!gotten1.exists()) {
+          throw new SparkException("file doesn't exist : " + absolutePath1)
         }
-        if (length != gotten.length()) {
+        if (!gotten2.exists()) {
+          throw new SparkException("file doesn't exist : " + absolutePath2)
+        }
+
+        if (length1 != gotten1.length()) {
           throw new SparkException(
-            s"file has different length $length than added file ${gotten.length()}")
+            s"file has different length $length1 than added file ${gotten1.length()} : " + absolutePath1)
         }
-        if (absolutePath == gotten.getAbsolutePath) {
-          throw new SparkException("file should have been copied")
+        if (length2 != gotten2.length()) {
+          throw new SparkException(
+            s"file has different length $length2 than added file ${gotten2.length()} : " + absolutePath2)
+        }
+
+        if (absolutePath1 == gotten1.getAbsolutePath) {
+          throw new SparkException("file should have been copied :" + absolutePath1)
+        }
+        if (absolutePath2 == gotten2.getAbsolutePath) {
+          throw new SparkException("file should have been copied : " + absolutePath2)
         }
         x
       }).count()
@@ -106,7 +129,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       sc.stop()
     }
   }
-
+  
   test("addFile recursive works") {
     val pluto = Utils.createTempDir()
     val neptune = Utils.createTempDir(pluto.getAbsolutePath)

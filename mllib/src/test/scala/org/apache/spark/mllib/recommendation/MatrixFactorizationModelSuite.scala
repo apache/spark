@@ -86,7 +86,7 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
     val topK = 10
     val predictedUsers = model.recommendUsersForProducts(topK).collect().toMap
-    
+
     assert(predictedUsers(2)(0).user == 1)
     assert(predictedUsers(2)(0).rating ~== 39.0 relTol 1e-14)
     assert(predictedUsers(2)(1).user == 0)

@@ -113,7 +113,7 @@ private[sql] case class InMemoryRelation(
           val columnBuilders = output.map { attribute =>
             val columnType = ColumnType(attribute.dataType)
             val initialBufferSize = columnType.defaultSize * batchSize
-            ColumnBuilder(columnType.typeId, initialBufferSize, attribute.name, useCompression)
+            ColumnBuilder(attribute.dataType, initialBufferSize, attribute.name, useCompression)
           }.toArray
 
           var rowCount = 0
@@ -274,8 +274,10 @@ private[sql] case class InMemoryColumnarTableScan(
       def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]) = {
         val rows = cacheBatches.flatMap { cachedBatch =>
           // Build column accessors
-          val columnAccessors = requestedColumnIndices.map { batch =>
-            ColumnAccessor(ByteBuffer.wrap(cachedBatch.buffers(batch)))
+          val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
+            ColumnAccessor(
+              relation.output(batchColumnIndex).dataType,
+              ByteBuffer.wrap(cachedBatch.buffers(batchColumnIndex)))
           }
 
           // Extract rows via column accessors
