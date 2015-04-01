@@ -137,11 +137,10 @@ class VectorTests(PySparkTestCase):
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
-        numcols = mat.numCols
-        for ind, val in enumerate(mat.values):
-            rowind = ind // numcols
-            colind = ind - rowind * numcols
-            self.assertEquals(mat[rowind, colind], val)
+        expected = [[0, 6], [1, 8], [4, 10]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat[i, j], expected[i][j])
 
 
 class ListTests(PySparkTestCase):
