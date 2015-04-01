@@ -32,7 +32,7 @@ import parquet.schema.{PrimitiveType => ParquetPrimitiveType, _}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
 
 private[parquet] object SparkRowReadSupport {
@@ -102,13 +102,12 @@ private[parquet] class SparkRowReadSupport extends ReadSupport[Row] with Logging
   }
 }
 
-private[parquet] class SparkRowRecordMaterializer(parquetSchema: MessageType, sparkSchema: StructType)
+private[parquet] class SparkRowRecordMaterializer(
+    parquetSchema: MessageType,
+    sparkSchema: StructType)
   extends RecordMaterializer[Row] {
 
-  private val rootConverter = {
-    val noopUpdater = new ParentContainerUpdater {}
-    new StructConverter(parquetSchema, sparkSchema, noopUpdater)
-  }
+  private val rootConverter = new CatalystStructConverter(parquetSchema, sparkSchema, NoopUpdater)
 
   override def getCurrentRecord: Row = rootConverter.currentRow
 
@@ -126,7 +125,20 @@ private[parquet] trait ParentContainerUpdater {
   def setDouble(value: Double): Unit = set(value)
 }
 
-private[parquet] class StructConverter(
+private[parquet] object NoopUpdater extends ParentContainerUpdater
+
+private[parquet] class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
+  override def set(value: Any): Unit = row(ordinal) = value
+  override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
+  override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
+  override def setShort(value: Short): Unit = row.setShort(ordinal, value)
+  override def setInt(value: Int): Unit = row.setInt(ordinal, value)
+  override def setLong(value: Long): Unit = row.setLong(ordinal, value)
+  override def setDouble(value: Double): Unit = row.setDouble(ordinal, value)
+  override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
+}
+
+private[parquet] class CatalystStructConverter(
     parquetType: GroupType,
     sparkType: StructType,
     updater: ParentContainerUpdater)
@@ -137,16 +149,7 @@ private[parquet] class StructConverter(
   private val fieldConverters: Array[Converter] = {
     parquetType.getFields.zip(sparkType).zipWithIndex.map {
       case ((parquetFieldType, sparkField), ordinal) =>
-        newConverter(parquetFieldType, sparkField.dataType, new ParentContainerUpdater {
-          override def set(value: Any): Unit = currentRow(ordinal) = value
-          override def setBoolean(value: Boolean): Unit = currentRow.setBoolean(ordinal, value)
-          override def setByte(value: Byte): Unit = currentRow.setByte(ordinal, value)
-          override def setShort(value: Short): Unit = currentRow.setShort(ordinal, value)
-          override def setInt(value: Int): Unit = currentRow.setInt(ordinal, value)
-          override def setLong(value: Long): Unit = currentRow.setLong(ordinal, value)
-          override def setDouble(value: Double): Unit = currentRow.setDouble(ordinal, value)
-          override def setFloat(value: Float): Unit = currentRow.setFloat(ordinal, value)
-        })
+        newConverter(parquetFieldType, sparkField.dataType, new RowUpdater(currentRow, ordinal))
     }.toArray
   }
 
@@ -169,7 +172,7 @@ private[parquet] class StructConverter(
 
     sparkType match {
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
-        new SimplePrimitiveConverter(updater)
+        new CatalystPrimitiveConverter(updater)
 
       case ByteType =>
         new PrimitiveConverter {
@@ -184,10 +187,10 @@ private[parquet] class StructConverter(
         }
 
       case t: DecimalType =>
-        new DecimalConverter(t, updater)
+        new CatalystDecimalConverter(t, updater)
 
       case StringType =>
-        new StringConverter(updater)
+        new CatalystStringConverter(updater)
 
       case TimestampType =>
         new PrimitiveConverter {
@@ -204,13 +207,13 @@ private[parquet] class StructConverter(
         }
 
       case t: ArrayType =>
-        new ArrayConverter(parquetType.asGroupType(), t, updater)
+        new CatalystArrayConverter(parquetType.asGroupType(), t, updater)
 
       case t: MapType =>
-        new MapConverter(parquetType.asGroupType(), t, updater)
+        new CatalystMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new StructConverter(parquetType.asGroupType(), t, updater)
+        new CatalystStructConverter(parquetType.asGroupType(), t, updater)
 
       case t: UserDefinedType[_] =>
         val sparkTypeForUDT = t.sqlType
@@ -227,7 +230,9 @@ private[parquet] class StructConverter(
   // Other converters
   /////////////////////////////////////////////////////////////////////////////
 
-  class SimplePrimitiveConverter(updater: ParentContainerUpdater) extends PrimitiveConverter {
+  private final class CatalystPrimitiveConverter(updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
     override def addBoolean(value: Boolean): Unit = updater.setBoolean(value)
     override def addInt(value: Int): Unit = updater.setInt(value)
     override def addLong(value: Long): Unit = updater.setLong(value)
@@ -236,7 +241,9 @@ private[parquet] class StructConverter(
     override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
   }
 
-  class StringConverter(updater: ParentContainerUpdater) extends PrimitiveConverter {
+  private final class CatalystStringConverter(updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
     private var expandedDictionary: Array[String] = null
 
     override def hasDictionarySupport: Boolean = true
@@ -254,7 +261,10 @@ private[parquet] class StructConverter(
     override def addBinary(value: Binary): Unit = updater.set(value.toStringUsingUTF8)
   }
 
-  class DecimalConverter(decimalType: DecimalType, updater: ParentContainerUpdater)
+  // TODO Handle decimals stored as INT32 and INT64
+  private final class CatalystDecimalConverter(
+      decimalType: DecimalType,
+      updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
     override def addBinary(value: Binary): Unit = {
@@ -282,14 +292,14 @@ private[parquet] class StructConverter(
     }
   }
 
-  class ArrayConverter(
+  private final class CatalystArrayConverter(
       parquetSchema: GroupType,
       sparkSchema: ArrayType,
       updater: ParentContainerUpdater)
     extends GroupConverter {
 
     // TODO This is slow! Needs specialization.
-    private val array = ArrayBuffer.empty[Any]
+    private val currentArray = ArrayBuffer.empty[Any]
 
     private val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
@@ -297,7 +307,7 @@ private[parquet] class StructConverter(
 
       if (isElementType(repeatedType, elementType)) {
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
-          override def set(value: Any): Unit = array += value
+          override def set(value: Any): Unit = currentArray += value
         })
       } else {
         new ElementConverter(repeatedType.asGroupType().getType(0), elementType)
@@ -306,9 +316,9 @@ private[parquet] class StructConverter(
 
     override def getConverter(fieldIndex: Int): Converter = elementConverter
 
-    override def end(): Unit = updater.set(array)
+    override def end(): Unit = updater.set(currentArray)
 
-    override def start(): Unit = array.clear()
+    override def start(): Unit = currentArray.clear()
 
     private def isElementType(repeatedType: Type, elementType: DataType): Boolean = {
       (repeatedType, elementType) match {
@@ -320,7 +330,7 @@ private[parquet] class StructConverter(
     }
 
     /** Array element converter */
-    private class ElementConverter(
+    private final class ElementConverter(
         parquetType: Type,
         sparkType: DataType)
       extends GroupConverter {
@@ -333,19 +343,19 @@ private[parquet] class StructConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
-      override def end(): Unit = array += currentElement
+      override def end(): Unit = currentArray += currentElement
 
       override def start(): Unit = currentElement = null
     }
   }
 
-  class MapConverter(
+  private final class CatalystMapConverter(
       parquetType: GroupType,
       sparkType: MapType,
       updater: ParentContainerUpdater)
     extends GroupConverter {
 
-    private val map = mutable.Map.empty[Any, Any]
+    private val currentMap = mutable.Map.empty[Any, Any]
 
     private val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
@@ -358,11 +368,11 @@ private[parquet] class StructConverter(
 
     override def getConverter(fieldIndex: Int): Converter = keyValueConverter
 
-    override def end(): Unit = updater.set(map)
+    override def end(): Unit = updater.set(currentMap)
 
-    override def start(): Unit = map.clear()
+    override def start(): Unit = currentMap.clear()
 
-    private class KeyValueConverter(
+    private final class KeyValueConverter(
         parquetKeyType: Type,
         parquetValueType: Type,
         sparkKeyType: DataType,
@@ -373,21 +383,18 @@ private[parquet] class StructConverter(
 
       private var currentValue: Any = _
 
-      private val keyConverter =
+      private val converters = Array(
         newConverter(parquetKeyType, sparkKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
-        })
+        }),
 
-      private val valueConverter =
         newConverter(parquetValueType, sparkValueType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        })
+        }))
 
-      override def getConverter(fieldIndex: Int): Converter = {
-        if (fieldIndex == 0) keyConverter else valueConverter
-      }
+      override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-      override def end(): Unit = map(currentKey) = currentValue
+      override def end(): Unit = currentMap(currentKey) = currentValue
 
       override def start(): Unit = {
         currentKey = null
