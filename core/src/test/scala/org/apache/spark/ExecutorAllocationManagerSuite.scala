@@ -49,18 +49,19 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
     val sc0 = new SparkContext(conf)
+    contexts += sc0
     assert(sc0.executorAllocationManager.isDefined)
     sc0.stop()
 
     // Min < 0
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
-    intercept[SparkException] { new SparkContext(conf1) }
+    intercept[SparkException] { contexts += new SparkContext(conf1) }
     SparkEnv.get.stop()
     SparkContext.clearActiveContext()
 
     // Max < 0
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
-    intercept[SparkException] { new SparkContext(conf2) }
+    intercept[SparkException] { contexts += new SparkContext(conf2) }
     SparkEnv.get.stop()
     SparkContext.clearActiveContext()
 
