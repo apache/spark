@@ -273,7 +273,7 @@ class DataFrame private[sql](
   def printSchema(): Unit = println(schema.treeString)
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purpose.
+   * Prints the plans (logical and physical) to the console for debugging purposes.
    * @group basic
    */
   def explain(extended: Boolean): Unit = {
@@ -285,7 +285,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Only prints the physical plan to the console for debugging purpose.
+   * Only prints the physical plan to the console for debugging purposes.
    * @group basic
    */
   def explain(): Unit = explain(extended = false)
@@ -976,8 +976,8 @@ class DataFrame private[sql](
   def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
-   * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-   * table is tied to the [[SQLContext]] that was used to create this DataFrame.
+   * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
+   * temporary table is tied to the [[SQLContext]] that was used to create this DataFrame.
    *
    * @group basic
    */
@@ -1252,7 +1252,7 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
@@ -1276,7 +1276,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.
