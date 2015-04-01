@@ -72,9 +72,11 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     in.encode(header);
     assert header.writableBytes() == 0;
 
-    out.add(header);
     if (body != null && bodyLength > 0) {
-      out.add(body);
+      out.add(new MessageWithHeader(header, body, bodyLength));
+    } else {
+      out.add(header);
     }
   }
+
 }

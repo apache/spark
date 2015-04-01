@@ -173,7 +173,24 @@ class Vector(object):
 
 class DenseVector(Vector):
     """
-    A dense vector represented by a value array.
+    A dense vector represented by a value array. We use numpy array for
+    storage and arithmetics will be delegated to the underlying numpy
+    array.
+
+    >>> v = Vectors.dense([1.0, 2.0])
+    >>> u = Vectors.dense([3.0, 4.0])
+    >>> v + u
+    DenseVector([4.0, 6.0])
+    >>> 2 - v
+    DenseVector([1.0, 0.0])
+    >>> v / 2
+    DenseVector([0.5, 1.0])
+    >>> v * u
+    DenseVector([3.0, 8.0])
+    >>> u / v
+    DenseVector([3.0, 2.0])
+    >>> u % 2
+    DenseVector([1.0, 0.0])
     """
     def __init__(self, ar):
         if isinstance(ar, basestring):
@@ -291,6 +308,25 @@ class DenseVector(Vector):
 
     def __getattr__(self, item):
         return getattr(self.array, item)
+
+    def _delegate(op):
+        def func(self, other):
+            if isinstance(other, DenseVector):
+                other = other.array
+            return DenseVector(getattr(self.array, op)(other))
+        return func
+
+    __neg__ = _delegate("__neg__")
+    __add__ = _delegate("__add__")
+    __sub__ = _delegate("__sub__")
+    __mul__ = _delegate("__mul__")
+    __div__ = _delegate("__div__")
+    __mod__ = _delegate("__mod__")
+    __radd__ = _delegate("__radd__")
+    __rsub__ = _delegate("__rsub__")
+    __rmul__ = _delegate("__rmul__")
+    __rdiv__ = _delegate("__rdiv__")
+    __rmod__ = _delegate("__rmod__")
 
 
 class SparseVector(Vector):

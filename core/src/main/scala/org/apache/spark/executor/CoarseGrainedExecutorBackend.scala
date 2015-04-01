@@ -169,7 +169,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverUrl, executorId, sparkHostPort, cores, userClassPath, env),
         name = "Executor")
       workerUrl.foreach { url =>
-        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.actorSystem.awaitTermination()
     }

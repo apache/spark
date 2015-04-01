@@ -40,14 +40,12 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       override val extendedResolutionRules = EliminateSubQueries :: Nil
     }
 
-  val checkAnalysis = new CheckAnalysis
-
 
   def caseSensitiveAnalyze(plan: LogicalPlan) =
-    checkAnalysis(caseSensitiveAnalyzer(plan))
+    caseSensitiveAnalyzer.checkAnalysis(caseSensitiveAnalyzer(plan))
 
   def caseInsensitiveAnalyze(plan: LogicalPlan) =
-    checkAnalysis(caseInsensitiveAnalyzer(plan))
+    caseInsensitiveAnalyzer.checkAnalysis(caseInsensitiveAnalyzer(plan))
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
   val testRelation2 = LocalRelation(
@@ -56,6 +54,21 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("c", DoubleType)(),
     AttributeReference("d", DecimalType.Unlimited)(),
     AttributeReference("e", ShortType)())
+
+  val nestedRelation = LocalRelation(
+    AttributeReference("top", StructType(
+      StructField("duplicateField", StringType) ::
+      StructField("duplicateField", StringType) ::
+      StructField("differentCase", StringType) ::
+      StructField("differentcase", StringType) :: Nil
+    ))())
+
+  val nestedRelation2 = LocalRelation(
+    AttributeReference("top", StructType(
+      StructField("aField", StringType) ::
+      StructField("bField", StringType) ::
+      StructField("cField", StringType) :: Nil
+    ))())
 
   before {
     caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
@@ -168,6 +181,24 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     testRelation2.groupBy('a)('b),
     "'b'" :: "group by" :: Nil
   )
+
+  errorTest(
+    "ambiguous field",
+    nestedRelation.select($"top.duplicateField"),
+    "Ambiguous reference to fields" :: "duplicateField" :: Nil,
+    caseSensitive = false)
+
+  errorTest(
+    "ambiguous field due to case insensitivity",
+    nestedRelation.select($"top.differentCase"),
+    "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
+    caseSensitive = false)
+
+  errorTest(
+    "missing field",
+    nestedRelation2.select($"top.c"),
+    "No such struct field" :: "aField" :: "bField" :: "cField" :: Nil,
+    caseSensitive = false)
 
   case class UnresolvedTestPlan() extends LeafNode {
     override lazy val resolved = false

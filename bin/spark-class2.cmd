@@ -29,31 +29,20 @@ if "x%1"=="x" (
   exit /b 1
 )
 
-set LAUNCHER_CP=0
-if exist %SPARK_HOME%\RELEASE goto find_release_launcher
+rem Find assembly jar
+set SPARK_ASSEMBLY_JAR=0
 
-rem Look for the Spark launcher in both Scala build directories. The launcher doesn't use Scala so
-rem it doesn't really matter which one is picked up. Add the compiled classes directly to the
-rem classpath instead of looking for a jar file, since it's very common for people using sbt to use
-rem the "assembly" target instead of "package".
-set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.10\classes
-if exist %LAUNCHER_CLASSES% (
-  set LAUNCHER_CP=%LAUNCHER_CLASSES%
-)
-set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.11\classes
-if exist %LAUNCHER_CLASSES% (
-  set LAUNCHER_CP=%LAUNCHER_CLASSES%
-)
-goto check_launcher
-
-:find_release_launcher
-for %%d in (%SPARK_HOME%\lib\spark-launcher*.jar) do (
-  set LAUNCHER_CP=%%d
+if exist "%SPARK_HOME%\RELEASE" (
+  set ASSEMBLY_DIR=%SPARK_HOME%\lib
+) else (
+  set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
 )
 
-:check_launcher
-if "%LAUNCHER_CP%"=="0" (
-  echo Failed to find Spark launcher JAR.
+for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
+  set SPARK_ASSEMBLY_JAR=%%d
+)
+if "%SPARK_ASSEMBLY_JAR%"=="0" (
+  echo Failed to find Spark assembly JAR.
   echo You need to build Spark before running this program.
   exit /b 1
 )
@@ -64,7 +53,7 @@ if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
-for /f "tokens=*" %%i in ('cmd /C ""%RUNNER%" -cp %LAUNCHER_CP% org.apache.spark.launcher.Main %*"') do (
+for /f "tokens=*" %%i in ('cmd /C ""%RUNNER%" -cp %SPARK_ASSEMBLY_JAR% org.apache.spark.launcher.Main %*"') do (
   set SPARK_CMD=%%i
 )
 %SPARK_CMD%
