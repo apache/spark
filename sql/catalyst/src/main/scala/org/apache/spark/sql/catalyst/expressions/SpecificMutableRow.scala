@@ -170,20 +170,20 @@ final class MutableByte extends MutableValue {
   }
 }
 
-//final class MutableString extends MutableValue {
-//  var value: UTF8String = _
-//  override def boxed: Any = if (isNull) null else value
-//  override def update(v: Any): Unit = {
-//    isNull = false
-//    value = v.asInstanceOf[UTF8String]
-//  }
-//  override def copy(): MutableString = {
-//    val newCopy = new MutableString
-//    newCopy.isNull = isNull
-//    newCopy.value = value
-//    newCopy.asInstanceOf[MutableString]
-//  }
-//}
+final class MutableString extends MutableValue {
+  var value: UTF8String = _
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
+    isNull = false
+    value = v.asInstanceOf[UTF8String]
+  }
+  override def copy(): MutableString = {
+    val newCopy = new MutableString
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy.asInstanceOf[MutableString]
+  }
+}
 
 final class MutableAny extends MutableValue {
   var value: Any = _
@@ -217,7 +217,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case DoubleType => new MutableDouble
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
-//        case StringType => new MutableString
+        // TODO(davies): Enable this
+        // case StringType => new MutableString
         case _ => new MutableAny
       }.toArray)
 

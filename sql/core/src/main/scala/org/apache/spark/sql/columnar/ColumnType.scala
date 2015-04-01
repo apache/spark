@@ -329,7 +329,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def getField(row: Row, ordinal: Int): UTF8String = {
-    row.apply(ordinal).asInstanceOf[UTF8String]
+    row(ordinal).asInstanceOf[UTF8String]
   }
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {

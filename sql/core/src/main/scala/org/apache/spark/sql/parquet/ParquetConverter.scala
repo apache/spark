@@ -480,7 +480,7 @@ private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverte
   override def hasDictionarySupport: Boolean = true
 
   override def setDictionary(dictionary: Dictionary):Unit =
-    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).getBytes}
+    dict = Array.tabulate(dictionary.getMaxId + 1) { dictionary.decodeToBinary(_).getBytes }
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
     parent.updateString(fieldIndex, dict(dictionaryId))

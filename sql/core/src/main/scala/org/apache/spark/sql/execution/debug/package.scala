@@ -165,7 +165,6 @@ package object debug {
       case (_: Long, LongType) =>
       case (_: Int, IntegerType) =>
       case (_: UTF8String, StringType) =>
-      case (_: String, StringType) =>
       case (_: Float, FloatType) =>
       case (_: Byte, ByteType) =>
       case (_: Short, ShortType) =>

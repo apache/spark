@@ -17,31 +17,50 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Arrays
+
 /**
- *  A UTF-8 String used only in SparkSQL
+ *  A UTF-8 String, as internal representation of StringType in SparkSQL
+ *
+ *  A String encoded in UTF-8 as an Array[Byte], which can be used for comparison,
+ *  search, see http://en.wikipedia.org/wiki/UTF-8 for details.
+ *
+ *  Note: This is not designed for general use cases, should not be used outside SQL.
  */
 
 private[sql] final class UTF8String extends Ordered[UTF8String] with Serializable {
+
   private var bytes: Array[Byte] = _
 
+  /**
+   * Update the UTF8String with String.
+   */
   def set(str: String): UTF8String = {
     bytes = str.getBytes("utf-8")
     this
   }
 
+  /**
+   * Update the UTF8String with Array[Byte], which should be encoded in UTF-8
+   */
   def set(bytes: Array[Byte]): UTF8String = {
     this.bytes = bytes.clone()
     this
   }
 
+  /**
+   * Return the number of code points in it.
+   *
+   * This is only used by Substring() when `start` is negative.
+   */
   def length(): Int = {
     var len = 0
     var i: Int = 0
     while (i < bytes.length) {
       val b = bytes(i)
       i += 1
-      if (b >= 196) {
-        i += UTF8String.bytesFromUTF8(b - 196)
+      if (b >= 192) {
+        i += UTF8String.tailBytesOfUTF8(b - 192)
       }
       len += 1
     }
@@ -52,8 +71,13 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
     bytes
   }
 
-  def slice(start: Int, end: Int): UTF8String = {
-    if (end <= start || start >= bytes.length || bytes == null) {
+  /**
+   * Return a substring of this,
+   * @param start the position of first code point
+   * @param until the position after last code point
+   */
+  def slice(start: Int, until: Int): UTF8String = {
+    if (until <= start || start >= bytes.length || bytes == null) {
       new UTF8String
     }
 
@@ -62,21 +86,21 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
     while (c < start && i < bytes.length) {
       val b = bytes(i)
       i += 1
-      if (b >= 196) {
-        i += UTF8String.bytesFromUTF8(b - 196)
+      if (b >= 192) {
+        i += UTF8String.tailBytesOfUTF8(b - 192)
       }
       c += 1
     }
-    val bstart = i
-    while (c < end && i < bytes.length) {
-      val b = bytes(i)
-      i += 1
-      if (b >= 196) {
-        i += UTF8String.bytesFromUTF8(b - 196)
+    var j = i
+    while (c < until && j < bytes.length) {
+      val b = bytes(j)
+      j += 1
+      if (b >= 192) {
+        j += UTF8String.tailBytesOfUTF8(b - 192)
       }
       c += 1
     }
-    UTF8String(java.util.Arrays.copyOfRange(bytes, bstart, i))
+    UTF8String(Arrays.copyOfRange(bytes, i, j))
   }
 
   def contains(sub: UTF8String): Boolean = {
@@ -92,10 +116,12 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
   }
 
   def toUpperCase(): UTF8String = {
+    // upper case depends on locale, fallback to String.
     UTF8String(toString().toUpperCase)
   }
 
   def toLowerCase(): UTF8String = {
+    // lower case depends on locale, fallback to String.
     UTF8String(toString().toLowerCase)
   }
 
@@ -121,21 +147,23 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
 
   override def equals(other: Any): Boolean = other match {
     case s: UTF8String =>
-      java.util.Arrays.equals(bytes, s.bytes)
+      Arrays.equals(bytes, s.bytes)
     case s: String =>
+      // fail fast
       bytes.length >= s.length && length() == s.length && toString() == s
     case _ =>
       false
   }
 
   override def hashCode(): Int = {
-    java.util.Arrays.hashCode(bytes)
+    Arrays.hashCode(bytes)
   }
 }
 
 private[sql] object UTF8String {
   // number of tailing bytes in a UTF8 sequence for a code point
-  private[types] val bytesFromUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
+  // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
+  private[types] val tailBytesOfUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
     3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5)

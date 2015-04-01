@@ -152,7 +152,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           }"""
         case other =>
           q"""
-          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
+          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}):Unit = {
             ..$ifStatements;
             $accessorFailure
           }"""

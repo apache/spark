@@ -386,13 +386,6 @@ class BinaryType private() extends NativeType with PrimitiveType {
       }
       x.length - y.length
     }
-    override def equiv(x: Array[Byte], y: Array[Byte]): Boolean = {
-      if (x.length != y.length) {
-        false
-      } else {
-        compare(x, y) == 0
-      }
-    }
   }
 
   /**

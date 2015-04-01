@@ -956,8 +956,7 @@ private[sql] object ParquetRelation2 extends Logging {
       .orElse(Try(Literal(new JBigDecimal(raw), DecimalType.Unlimited)))
       // Then falls back to string
       .getOrElse {
-        if (raw == defaultPartitionName) Literal(null, NullType) else
-          Literal(raw, StringType)
+        if (raw == defaultPartitionName) Literal(null, NullType) else Literal(raw, StringType)
       }
   }
 

@@ -63,7 +63,7 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
   override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
 
   override def execute(): RDD[Row] = {
-    val converted = sideEffectResult.map(r => ScalaReflection.convertToCatalyst(r, this.schema)
+    val converted = sideEffectResult.map(r => ScalaReflection.convertToCatalyst(r, schema)
       .asInstanceOf[Row])
     sqlContext.sparkContext.parallelize(converted, 1)
   }

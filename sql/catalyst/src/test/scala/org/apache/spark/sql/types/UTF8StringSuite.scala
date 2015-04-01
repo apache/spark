@@ -42,17 +42,23 @@ class UTF8StringSuite extends FunSuite {
     assert(!UTF8String("hello").contains(UTF8String("vello")))
     assert(UTF8String("大千世界").contains(UTF8String("千世")))
     assert(!UTF8String("大千世界").contains(UTF8String("世千")))
+  }
 
+  test("prefix") {
     assert(UTF8String("hello").startsWith(UTF8String("hell")))
     assert(!UTF8String("hello").startsWith(UTF8String("ell")))
     assert(UTF8String("大千世界").startsWith(UTF8String("大千")))
     assert(!UTF8String("大千世界").startsWith(UTF8String("千")))
+  }
 
+  test("suffix") {
     assert(UTF8String("hello").endsWith(UTF8String("ello")))
     assert(!UTF8String("hello").endsWith(UTF8String("ellov")))
     assert(UTF8String("大千世界").endsWith(UTF8String("世界")))
     assert(!UTF8String("大千世界").endsWith(UTF8String("世")))
+  }
 
+  test("slice") {
     assert(UTF8String("hello").slice(1, 3) == UTF8String("ell"))
     assert(UTF8String("大千世界").slice(0, 1) == UTF8String("大"))
     assert(UTF8String("大千世界").slice(1, 3) == UTF8String("千世"))

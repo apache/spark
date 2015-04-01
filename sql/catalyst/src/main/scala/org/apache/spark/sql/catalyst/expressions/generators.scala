@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.{ScalaReflection, trees}
 import org.apache.spark.sql.types._
 
 /**
@@ -82,12 +82,13 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator{
 
+  var input_schema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+
   override protected def makeOutput(): Seq[Attribute] = schema
 
   override def eval(input: Row): TraversableOnce[Row] = {
     val inputRow = new InterpretedProjection(children)
-    //TODO(davies): convertToScala
-    function(inputRow(input))
+    function(ScalaReflection.convertToCatalyst(inputRow(input), input_schema).asInstanceOf[Row])
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
