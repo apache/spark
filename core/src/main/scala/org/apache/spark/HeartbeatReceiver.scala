@@ -78,7 +78,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
     case RegisterTaskScheduler(scheduler) =>
       this.scheduler = scheduler
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      if (scheduler == null) {
+      if (scheduler != null) {
         val unknownExecutor = !scheduler.executorHeartbeatReceived(
           executorId, taskMetrics, blockManagerId)
         val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
