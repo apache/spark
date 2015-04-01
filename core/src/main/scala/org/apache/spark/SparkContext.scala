@@ -1402,11 +1402,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         env.metricsSystem.report()
         metadataCleaner.cancel()
         cleaner.foreach(_.stop())
+        executorAllocationManager.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
         listenerBus.stop()
         eventLogger.foreach(_.stop())
-        executorAllocationManager.foreach(_.stop())
         env.actorSystem.stop(heartbeatReceiver)
         progressBar.foreach(_.stop())
         taskScheduler = null
