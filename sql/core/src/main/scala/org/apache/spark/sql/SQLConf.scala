@@ -61,6 +61,8 @@ private[spark] object SQLConf {
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
+  val MULTIWAY_JOIN = "spark.sql.multiway_join"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -189,6 +191,12 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
+
+  /**
+   * Enable the multi-way join in optimization, false by default
+   */
+  private[spark] def multiwayJoin: Boolean =
+    getConf(MULTIWAY_JOIN, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 

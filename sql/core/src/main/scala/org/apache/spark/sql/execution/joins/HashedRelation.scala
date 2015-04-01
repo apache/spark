@@ -27,8 +27,7 @@ import org.apache.spark.util.collection.CompactBuffer
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
  * object.
  */
-private[joins] sealed trait HashedRelation {
-  protected[this] val constantEmptyBuffer = CompactBuffer.constantEmpty[Row]()
+private[joins] trait HashedRelation {
   def get(key: Row): CompactBuffer[Row]
 }
 
@@ -39,14 +38,7 @@ private[joins] sealed trait HashedRelation {
 private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, CompactBuffer[Row]])
   extends HashedRelation with Serializable {
 
-  override def get(key: Row): CompactBuffer[Row] = {
-    val buffer = hashTable.get(key)
-    if (buffer == null) {
-      constantEmptyBuffer
-    } else {
-      buffer
-    }
-  }
+  override def get(key: Row): CompactBuffer[Row] = hashTable.get(key)
 }
 
 
@@ -56,16 +48,10 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
  */
 private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Serializable {
-  private val singleElementBuffer = CompactBuffer[Row](null)
 
   override def get(key: Row): CompactBuffer[Row] = {
     val v = hashTable.get(key)
-    if (v eq null) {
-      constantEmptyBuffer
-    } else {
-      singleElementBuffer(0) = v
-      singleElementBuffer
-    }
+    if (v eq null) null else CompactBuffer(v)
   }
 
   def getValue(key: Row): Row = hashTable.get(key)

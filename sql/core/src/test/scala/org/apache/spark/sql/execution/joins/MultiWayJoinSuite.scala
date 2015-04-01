@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.collection.CompactBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,9 +40,22 @@ abstract class TestMultiwayJoin2 extends MultiwayJoin {
       Seq(AttributeReference("e", IntegerType)(), AttributeReference("f", IntegerType)()))
 }
 
+class TestHashedRelation(buffer: CompactBuffer[Row]) extends HashedRelation {
+  override def get(key: Row): CompactBuffer[Row] = buffer
+}
+
 class MultiWayJoinSuite extends FunSuite {
-  val tables = Array(Array(Row(3, 5), Row(7, 10)), Array(Row(4, 4), Row(7, 7)))
-  val tables2 = Array(Array(Row(3, 5), Row(7, 10)), Array(Row(4, 4), Row(7, 7)), Array(Row(1,1), Row(8, 8)))
+  val tables = Array(
+    CompactBuffer() += Row(3, 5) += Row(7, 10),
+    CompactBuffer() += Row(4, 4) += Row(7, 7)).map { buffer =>
+    new HashedBufferBuilder(new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
+  }
+  val tables2 = Array(
+    CompactBuffer() += Row(3, 5) += Row(7, 10),
+    CompactBuffer() += Row(4, 4) += Row(7, 7),
+    CompactBuffer() += Row(1, 1) += Row(8, 8)).map { buffer =>
+    new HashedBufferBuilder(new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
+  }
 
   test("With Multiple Input Row") {
     val row1 = new MultiJoinedRow(2, 2)

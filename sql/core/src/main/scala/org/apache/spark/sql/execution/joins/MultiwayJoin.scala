@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.JoinFilter
-import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Expression, Row, Projection, Attribute}
+import org.apache.spark.sql.catalyst.plans.{JoinType, Inner, LeftOuter, RightOuter, LeftSemi, FullOuter}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.{CompactBuffer, BitSet}
+
+case class JoinFilter(joinType: JoinType, filter: Expression)
+case class JoinKey(leftKeys: Seq[Expression], rightkeys: Seq[Expression])
 
 /**
  * A mutable wrapper that makes multiple rows appear as a single concatenated row.  Designed to
@@ -131,93 +133,162 @@ private[sql] class MultiJoinedRow(colNums: Int*) extends Row {
   }
 }
 
+trait CompactBufferBuilder extends java.io.Serializable {
+  def build: CompactBuffer[Row]
+
+  // TODO HashedRelation should always return a non empty Buffer?
+  @inline
+  protected[this] def handleNullBuffer(buffer: CompactBuffer[Row]) = {
+    if (buffer == null) {
+      CompactBufferBuilder.EMPTY_BUFFER
+    } else {
+      buffer
+    }
+  }
+}
+
+object CompactBufferBuilder {
+  val EMPTY_BUFFER = CompactBuffer.constantEmpty[Row]()
+}
+
+class IteratorBufferBuilder extends CompactBufferBuilder {
+  val buffer = CompactBuffer[Row](null)
+
+  def withIterator(input: Row) = {
+    buffer.update(0, input)
+    this
+  }
+
+  def build = buffer
+}
+
+class HashedBufferBuilder(relation: HashedRelation) extends CompactBufferBuilder {
+  @transient
+  var buffer:CompactBuffer[Row] = null
+
+  def withEquiJoinKey(key: Row) = {
+    buffer = handleNullBuffer(relation.get(key))
+
+    this
+  }
+
+  def build = buffer
+}
+
+class CorrelatedBufferBuilder(key: Projection, relation: HashedRelation) extends CompactBufferBuilder {
+  @transient
+  var input: Row = _
+  def withLeft(input: Row): this.type = {
+    this.input = input
+    this
+  }
+
+  def build: CompactBuffer[Row] = {
+    handleNullBuffer(relation.get(input))
+  }
+}
+
+class ConstantBufferBuilder(row: Row) extends CompactBufferBuilder {
+  val buffer: CompactBuffer[Row] = if (row == null) {
+    CompactBufferBuilder.EMPTY_BUFFER
+  } else {
+    CompactBuffer(row)
+  }
+
+  def build = buffer
+}
+
 trait MultiwayJoin {
   def joinFilters: Array[JoinFilter]
 
   def childrenOutputs: Seq[Seq[Attribute]]
 
-  @transient
-  lazy val output = childrenOutputs.reduce(_ ++ _)
+  def output = childrenOutputs.reduce(_ ++ _)
 
-  @transient
-  val lengths = childrenOutputs.map(_.length).toArray
-
-  @transient
-  lazy val result = new GenericMutableRow(output.length)
-
-
-  @transient
   private[this] val NULL_ROWS = Array.tabulate(childrenOutputs.length) { idx =>
-    Array(Row(Array.fill[Any](childrenOutputs(idx).length)(null): _*))
+    new ConstantBufferBuilder(Row(Array.fill[Any](childrenOutputs(idx).length)(null): _*))
   }
 
-  @transient
-  private[this] val EMPTY_ROW = Array.empty[Row]
+  private[this] val EMPTY_ROW = new ConstantBufferBuilder(null)
 
   // The output buffer array. The product function returns an iterator that will
   // always return this outputBuffer. Downstream operations need to make sure
   // they are just streaming through the output.
-  @transient
   private[this] val inputBuffer = new MultiJoinedRow(childrenOutputs.map(_.length).toArray: _*)
 
   @inline
-  private[this] final def joinFilter(row: MultiJoinedRow, pos: Int): Boolean = {
+  private[this] final def predicate(row: MultiJoinedRow, pos: Int): Boolean = {
     true == joinFilters(pos).filter.eval(row)
   }
 
-  def product(bufs: Array[Array[Row]]): Iterator[MultiJoinedRow] = {
+  def product(bufs: Array[CompactBufferBuilder]): Iterator[MultiJoinedRow] = {
     assert(bufs.length == joinFilters.length + 1)
 
     var i = 0
 
-    var partial: Iterator[MultiJoinedRow] = createBase(bufs(i), i)
+    var partial: Iterator[MultiJoinedRow] = createBase(bufs(i).build, i)
     while (i < joinFilters.length) {
       val joinCondition = joinFilters(i)
       i += 1
 
+      val currentBuilder = bufs(i)
       partial = joinCondition.joinType match {
+        case Inner if currentBuilder.isInstanceOf[CorrelatedBufferBuilder] =>
+          product2(partial, currentBuilder.asInstanceOf[CorrelatedBufferBuilder], i)
+
         case Inner =>
-          if (bufs(i).size == 0) {
-            createBase(EMPTY_ROW, i)
+          val buffer = currentBuilder.build
+          if (buffer.size == 0) {
+            createBase(EMPTY_ROW.build, i)
           } else {
-            product2(partial, bufs(i), i)
+            product2(partial, buffer, i)
           }
 
         case FullOuter =>
-          if (partial.hasNext == false && bufs(i).size == 0) {
-            createBase(EMPTY_ROW, i)
+          val buffer = currentBuilder.build
+          if (partial.hasNext == false && buffer.size == 0) {
+            createBase(EMPTY_ROW.build, i)
           } else if (partial.hasNext == false) {
-            product2(createBase(NULL_ROWS(i - 1), i - 1), bufs(i), i)
-          } else if (bufs(i).size == 0) {
-            product2(partial, NULL_ROWS(i), i)
+            product2(createBase(NULL_ROWS(i - 1).build, i - 1), buffer, i)
+          } else if (buffer.size == 0) {
+            product2(partial, NULL_ROWS(i).build, i)
           } else {
-            product2FullOuterJoin(partial, bufs(i), i)
+            product2FullOuterJoin(partial, buffer, i)
           }
+
         case LeftOuter =>
+          val buffer = currentBuilder.build
           if (partial.hasNext == false) {
-            createBase(EMPTY_ROW, i)
-          } else if (bufs(i).size == 0) {
-            product2(partial, NULL_ROWS(i), i)
+            createBase(EMPTY_ROW.build, i)
+          } else if (buffer.size == 0) {
+            product2(partial, NULL_ROWS(i).build, i)
           } else {
-            product2LeftOuterJoin(partial, bufs(i), i)
+            product2LeftOuterJoin(partial, buffer, i)
           }
 
         case RightOuter =>
-          if (bufs(i).size == 0) {
-            createBase(EMPTY_ROW, i)
+          val buffer = currentBuilder.build
+          if (buffer.size == 0) {
+            createBase(EMPTY_ROW.build, i)
           } else if (partial.hasNext == false) {
-            product2(createBase(NULL_ROWS(i - 1), i - 1), bufs(i), i)
+            product2(createBase(NULL_ROWS(i - 1).build, i - 1), buffer, i)
           } else {
-            product2RightOuterJoin(partial, bufs(i), i)
+            product2RightOuterJoin(partial, buffer, i)
           }
+
+        case LeftSemi if currentBuilder.isInstanceOf[CorrelatedBufferBuilder] =>
+          // For semi join, we only need one element from the table on the right
+          // to verify a row exists.
+          product2LeftSemiJoin(partial, currentBuilder.asInstanceOf[CorrelatedBufferBuilder], i)
 
         case LeftSemi =>
           // For semi join, we only need one element from the table on the right
           // to verify a row exists.
-          if (partial.hasNext == false || bufs(i).size == 0) {
-            createBase(EMPTY_ROW, i)
+          val buffer = currentBuilder.build
+          if (partial.hasNext == false || buffer.size == 0) {
+            createBase(EMPTY_ROW.build, i)
           } else {
-            product2LeftSemiJoin(partial, bufs(i), i)
+            product2LeftSemiJoin(partial, buffer, i)
           }
       }
     }
@@ -231,7 +302,7 @@ trait MultiwayJoin {
     iter.filter { e =>
       // Per outer join semantic, on more than 1 null table value allowed, we need to filter out
       // the entries from the iterator if it's failed in join filter testing (just keep 1)
-      val valid = joinFilter(e, pos - 1)
+      val valid = predicate(e, pos - 1)
       if (valid) {
         true
       } else {
@@ -243,13 +314,19 @@ trait MultiwayJoin {
     }
   }
 
-  private[this] def product2(left: Iterator[MultiJoinedRow], right: Array[Row], pos: Int): Iterator[MultiJoinedRow] = {
-    (for (l <- left; r <- right.iterator) yield {
+  private[this] def product2(left: Iterator[MultiJoinedRow], right: CorrelatedBufferBuilder, pos: Int): Iterator[MultiJoinedRow] = {
+    (for (l <- left; r <- right.withLeft(l).build.iterator) yield {
       l.withNewTable(pos, r)
-    }).filter(joinFilter(_, pos - 1))
+    }).filter(predicate(_, pos - 1))
   }
 
-  private[this] def product2FullOuterJoin(left: Iterator[MultiJoinedRow], right: Array[Row], pos: Int): Iterator[MultiJoinedRow] =
+  private[this] def product2(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] = {
+    (for (l <- left; r <- right.iterator) yield {
+      l.withNewTable(pos, r)
+    }).filter(predicate(_, pos - 1))
+  }
+
+  private[this] def product2FullOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] =
   {
     val bs = new BitSet(right.length)
     var needReset = true
@@ -262,7 +339,7 @@ trait MultiwayJoin {
         l.withNewTable(pos, r)
       }.filter { e =>
         idxInner += 1
-        val filter = joinFilter(e, pos - 1)
+        val filter = predicate(e, pos - 1)
         if (filter) {
           bs.set(idxInner)
         }
@@ -283,26 +360,35 @@ trait MultiwayJoin {
     }).map(e => inputBuffer.withNewTable(pos, e))
   }
 
-  private[this] def product2LeftOuterJoin(left: Iterator[MultiJoinedRow], right: Array[Row], pos: Int)
+  private[this] def product2LeftOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
   : Iterator[MultiJoinedRow] = {
     left.flatMap { l =>
       val r = right.iterator.map { r =>
         l.withNewTable(pos, r)
-      }.filter(joinFilter(_, pos - 1))
+      }.filter(predicate(_, pos - 1))
       if (r.hasNext) r else Iterator(l.clearTable(pos))
     }
   }
 
-  private[this] def product2LeftSemiJoin(left: Iterator[MultiJoinedRow], right: Array[Row], pos: Int)
+  private[this] def product2LeftSemiJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
   : Iterator[MultiJoinedRow] = {
     (left.filter { l =>
       right.exists { r =>
-        joinFilter(l.withNewTable(pos, r), pos - 1)
+        predicate(l.withNewTable(pos, r), pos - 1)
       }
     }).map(_.clearTable(pos))
   }
 
-  private[this] def product2RightOuterJoin(left: Iterator[MultiJoinedRow], right: Array[Row], pos: Int)
+  private[this] def product2LeftSemiJoin(left: Iterator[MultiJoinedRow], right: CorrelatedBufferBuilder, pos: Int)
+  : Iterator[MultiJoinedRow] = {
+    (left.filter { l =>
+      right.withLeft(l).build.exists { r =>
+        predicate(l.withNewTable(pos, r), pos - 1)
+      }
+    }).map(_.clearTable(pos))
+  }
+
+  private[this] def product2RightOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
   : Iterator[MultiJoinedRow] = {
     val bs = new BitSet(right.length)
     var needReset = true
@@ -312,7 +398,7 @@ trait MultiwayJoin {
       var idxInner = -1
       right.iterator.flatMap { r =>
         idxInner += 1
-        if (joinFilter(l.withNewTable(pos, r), pos - 1)) {
+        if (predicate(l.withNewTable(pos, r), pos - 1)) {
           bs.set(idxInner)
           Iterator(l)
         } else {
@@ -344,7 +430,7 @@ trait MultiwayJoin {
     inputBuffer
   }
 
-  private[this] def createBase(left: Array[Row], pos: Int): Iterator[MultiJoinedRow] = {
+  private[this] def createBase(left: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] = {
     resetInputBuffer(pos)
 
     left.iterator.map { l =>
