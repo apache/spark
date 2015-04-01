@@ -146,7 +146,9 @@ private[v1] object AllStagesResource {
     )
   }
 
-  def taskMetricDistributions(allTaskData: Iterable[TaskUIData], quantiles: Array[Double]): TaskMetricDistributions = {
+  def taskMetricDistributions(
+      allTaskData: Iterable[TaskUIData],
+      quantiles: Array[Double]): TaskMetricDistributions = {
 
     val rawMetrics = allTaskData.flatMap{_.taskMetrics}.toSeq
 
@@ -186,7 +188,8 @@ private[v1] object AllStagesResource {
       }.metricOption
 
     val shuffleReadMetrics =
-      new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](_.shuffleReadMetrics) {
+      new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](
+          _.shuffleReadMetrics) {
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
           readBytes = m(_.totalBytesRead),
           readRecords = m(_.recordsRead),
@@ -199,7 +202,8 @@ private[v1] object AllStagesResource {
       }.metricOption
 
     val shuffleWriteMetrics =
-      new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](_.shuffleWriteMetrics) {
+      new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](
+          _.shuffleWriteMetrics) {
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = m(_.shuffleBytesWritten),
           writeRecords = m(_.shuffleRecordsWritten),

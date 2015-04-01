@@ -178,7 +178,8 @@ object TaskSorting extends JerseyEnum[TaskSorting] {
     DecreasingRuntime
   )
 
-  val alternateNames: Map[String, TaskSorting] = values.flatMap{x => x.alternateNames.map{_ -> x}}.toMap
+  val alternateNames: Map[String, TaskSorting] =
+    values.flatMap{x => x.alternateNames.map{_ -> x}}.toMap
 
   override def fromString(s: String): TaskSorting = {
     alternateNames.find { case (k, v) =>
