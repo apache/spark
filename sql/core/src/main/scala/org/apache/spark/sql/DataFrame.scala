@@ -952,10 +952,12 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s.
+   * Represents the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s. Note that the RDD is
+   * memoized. Once called, it won't change even if you change any query planning related Spark SQL
+   * configurations (e.g. `spark.sql.shuffle.partitions`).
    * @group rdd
    */
-  def rdd: RDD[Row] = {
+  lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
