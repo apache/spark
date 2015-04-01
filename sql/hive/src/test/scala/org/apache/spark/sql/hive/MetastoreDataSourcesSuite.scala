@@ -25,6 +25,8 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.mapred.InvalidInputException
 
 import org.apache.spark.sql._
@@ -681,6 +683,25 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     val actualSchema = table("wide_schema").schema
     assert(schema === actualSchema)
   }
+
+  test("SPARK-6655 still support a schema stored in spark.sql.sources.schema") {
+    val schema = StructType(StructField("int", IntegerType, true) :: Nil)
+    // Manually create the schema in metastore.
+    val tbl = new Table("default", "spark6655")
+    tbl.setProperty("spark.sql.sources.provider", "json")
+    tbl.setProperty("spark.sql.sources.schema", schema.json)
+    tbl.setProperty("EXTERNAL", "FALSE")
+    tbl.setTableType(TableType.MANAGED_TABLE)
+    catalog.synchronized {
+      catalog.client.createTable(tbl)
+    }
+
+    invalidateTable("spark6655")
+    val actualSchema = table("spark6655").schema
+    assert(schema === actualSchema)
+    sql("drop table spark6655")
+  }
+
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =
