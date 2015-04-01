@@ -44,12 +44,14 @@ import org.jboss.netty.handler.codec.compression._
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
-  host: String,
-  port: Int,
-  storageLevel: StorageLevel,
-  enableDecompression: Boolean
-) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
+    @transient ssc_ : StreamingContext,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel,
+    enableDecompression: Boolean
+  ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
+
+  super.setPreferredLocation(host)
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel, enableDecompression)
@@ -63,7 +65,7 @@ class FlumeInputDStream[T: ClassTag](
  * which are not serializable.
  */
 class SparkFlumeEvent() extends Externalizable {
-  var event : AvroFlumeEvent = new AvroFlumeEvent()
+  var event: AvroFlumeEvent = new AvroFlumeEvent()
 
   /* De-serialize from bytes. */
   def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -186,8 +188,6 @@ class FlumeReceiver(
     }
     logInfo("Flume receiver stopped")
   }
-
-  override def preferredLocation = Some(host)
   
   /** A Netty Pipeline factory that will decompress incoming data from 
     * and the Netty client and compress data going back to the client.
@@ -205,6 +205,6 @@ class FlumeReceiver(
       pipeline.addFirst("deflater", encoder)
       pipeline.addFirst("inflater", new ZlibDecoder())
       pipeline
+    }
   }
-}
 }
