@@ -24,7 +24,7 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateR
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
-private[spark] object JsonProtocol {
+private[deploy] object JsonProtocol {
  def writeWorkerInfo(obj: WorkerInfo): JObject = {
    ("id" -> obj.id) ~
    ("host" -> obj.host) ~
@@ -67,6 +67,27 @@ private[spark] object JsonProtocol {
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
   }
 
+  def writeDriverInfo(obj: DriverInfo): JObject = {
+    ("id" -> obj.id) ~
+    ("starttime" -> obj.startTime.toString) ~
+    ("state" -> obj.state.toString) ~
+    ("cores" -> obj.desc.cores) ~
+    ("memory" -> obj.desc.mem)
+  }
+
+  def writeMasterState(obj: MasterStateResponse): JObject = {
+    ("url" -> obj.uri) ~
+    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
+    ("cores" -> obj.workers.map(_.cores).sum) ~
+    ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
+    ("memory" -> obj.workers.map(_.memory).sum) ~
+    ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
+    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
+    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
+    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
+    ("status" -> obj.status.toString)
+  }
+
   def writeWorkerState(obj: WorkerStateResponse): JObject = {
     ("id" -> obj.workerId) ~
     ("masterurl" -> obj.masterUrl) ~
@@ -78,5 +99,4 @@ private[spark] object JsonProtocol {
     ("executors" -> obj.executors.toList.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.toList.map(writeExecutorRunner))
   }
-
 }
