@@ -248,7 +248,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         """.children
 
       case Cast(child @ DateType(), StringType) =>
-        child.castOrNull(c => q"org.apache.spark.sql.types.UTF8String(org.apache.spark.sql.types.DateUtils.toString($c))", StringType)
+        child.castOrNull(c =>
+          q"""org.apache.spark.sql.types.UTF8String(
+                org.apache.spark.sql.types.DateUtils.toString($c))""",
+          StringType)
 
       case Cast(child @ NumericType(), IntegerType) =>
         child.castOrNull(c => q"$c.toInt", IntegerType)
@@ -574,7 +577,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val localLogger = log
         val localLoggerTree = reify { localLogger }
         q"""
-          $localLoggerTree.debug(${e.toString} + ": " +  (if($nullTerm) "null" else $primitiveTerm.toString))
+          $localLoggerTree.debug(
+            ${e.toString} + ": " + (if ($nullTerm) "null" else $primitiveTerm.toString))
         """ :: Nil
       } else {
         Nil
