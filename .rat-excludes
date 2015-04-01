@@ -30,6 +30,9 @@ log4j-defaults.properties
 bootstrap-tooltip.js
 jquery-1.11.1.min.js
 sorttable.js
+vis.min.js
+vis.min.css
+vis.map
 .*avsc
 .*txt
 .*json
