@@ -415,6 +415,102 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
+    def test_dropna(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        # shouldn't drop a non-null row
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', 50, 80.1)], schema).dropna().count(),
+            1)
+
+        # dropping rows with a single null value
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, 80.1)], schema).dropna().count(),
+            0)
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, 80.1)], schema).dropna(how='any').count(),
+            0)
+
+        # if how = 'all', only drop rows if all values are null
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, 80.1)], schema).dropna(how='all').count(),
+            1)
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(None, None, None)], schema).dropna(how='all').count(),
+            0)
+
+        # how and subset
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', 50, None)], schema).dropna(how='any', subset=['name', 'age']).count(),
+            1)
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, None)], schema).dropna(how='any', subset=['name', 'age']).count(),
+            0)
+
+        # threshold
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, 80.1)], schema).dropna(thresh=2).count(),
+            1)
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, None)], schema).dropna(thresh=2).count(),
+            0)
+
+        # threshold and subset
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', 50, None)], schema).dropna(thresh=2, subset=['name', 'age']).count(),
+            1)
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', None, 180.9)], schema).dropna(thresh=2, subset=['name', 'age']).count(),
+            0)
+
+        # thresh should take precedence over how
+        self.assertEqual(self.sqlCtx.createDataFrame(
+            [(u'Alice', 50, None)], schema).dropna(
+                how='any', thresh=2, subset=['name', 'age']).count(),
+            1)
+
+    def test_fillna(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        # fillna shouldn't change non-null values
+        row = self.sqlCtx.createDataFrame([(u'Alice', 10, 80.1)], schema).fillna(50).first()
+        self.assertEqual(row.age, 10)
+
+        # fillna with int
+        row = self.sqlCtx.createDataFrame([(u'Alice', None, None)], schema).fillna(50).first()
+        self.assertEqual(row.age, 50)
+        self.assertEqual(row.height, 50.0)
+
+        # fillna with double
+        row = self.sqlCtx.createDataFrame([(u'Alice', None, None)], schema).fillna(50.1).first()
+        self.assertEqual(row.age, 50)
+        self.assertEqual(row.height, 50.1)
+
+        # fillna with string
+        row = self.sqlCtx.createDataFrame([(None, None, None)], schema).fillna("hello").first()
+        self.assertEqual(row.name, u"hello")
+        self.assertEqual(row.age, None)
+
+        # fillna with subset specified for numeric cols
+        row = self.sqlCtx.createDataFrame(
+            [(None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
+        self.assertEqual(row.name, None)
+        self.assertEqual(row.age, 50)
+        self.assertEqual(row.height, None)
+
+        # fillna with subset specified for numeric cols
+        row = self.sqlCtx.createDataFrame(
+            [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
+        self.assertEqual(row.name, "haha")
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 

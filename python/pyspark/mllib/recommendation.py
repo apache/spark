@@ -90,6 +90,8 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> sameModel = MatrixFactorizationModel.load(sc, path)
     >>> sameModel.predict(2,2)
     0.43...
+    >>> sameModel.predictAll(testset).collect()
+    [Rating(...
     >>> try:
     ...     os.removedirs(path)
     ... except OSError:
@@ -110,6 +112,12 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     def productFeatures(self):
         return self.call("getProductFeatures")
+
+    @classmethod
+    def load(cls, sc, path):
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        return MatrixFactorizationModel(wrapper)
 
 
 class ALS(object):

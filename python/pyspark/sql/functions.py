@@ -78,7 +78,7 @@ __all__.sort()
 
 
 def countDistinct(col, *cols):
-    """ Return a new Column for distinct count of `col` or `cols`
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
@@ -93,7 +93,7 @@ def countDistinct(col, *cols):
 
 
 def approxCountDistinct(col, rsd=None):
-    """ Return a new Column for approximate distinct count of `col`
+    """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
     >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
     [Row(c=2)]
@@ -144,7 +144,7 @@ class UserDefinedFunction(object):
 
 
 def udf(f, returnType=StringType()):
-    """Create a user defined function (UDF)
+    """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
