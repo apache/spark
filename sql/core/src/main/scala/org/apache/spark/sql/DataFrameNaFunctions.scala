@@ -21,14 +21,17 @@ import java.{lang => jl}
 
 import scala.collection.JavaConversions._
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 
 /**
+ * :: Experimental ::
  * Functionality for working with missing data in [[DataFrame]]s.
  */
+@Experimental
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
