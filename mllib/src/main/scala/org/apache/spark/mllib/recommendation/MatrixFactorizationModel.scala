@@ -156,9 +156,9 @@ class MatrixFactorizationModel(
    * Recommends topK products for all users
    *
    * @param num how many products to return for every user.
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of rating
-   * objects which contains the same userId, recommended productID and a "score" in the rating field.
-   * Semantics of score is same as recommendProducts API
+   * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of
+   * rating objects which contains the same userId, recommended productID and a "score" in the
+   * rating field. Semantics of score is same as recommendProducts API
    */
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
     val topK = userFeatures.map { x => (x._1, num) }
@@ -169,9 +169,9 @@ class MatrixFactorizationModel(
    * Recommends topK users for all products
    *
    * @param num how many users to return for every product.
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array of rating
-   * objects which contains the recommended userId, same productID and a "score" in the rating field.
-   * Semantics of score is same as recommendUsers API
+   * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array
+   * of rating objects which contains the recommended userId, same productID and a "score" in the
+   * rating field. Semantics of score is same as recommendUsers API
    */
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
     val topK = productFeatures.map { x => (x._1, num) }
@@ -185,9 +185,9 @@ class MatrixFactorizationModel(
    * Recommend topK products for users in userTopK RDD
    *
    * @param userTopK how many products to return for every user in userTopK RDD.
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of rating
-   * objects which contains the same userId, recommended productID and a "score" in the rating field.
-   * Semantics of score is same as recommendProducts API
+   * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array
+   * of rating objects which contains the same userId, recommended productID and a "score" in the
+   * rating field. Semantics of score is same as recommendProducts API
    */
   def recommendProductsForUsers(
     userTopK: RDD[(Int, Int)]): RDD[(Int, Array[Rating])] = {
@@ -219,9 +219,9 @@ class MatrixFactorizationModel(
    * Recommends topK users for all products in productTopK RDD
    *
    * @param productTopK how many users to return for every product in productTopK RDD
-   * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array of rating
-   * objects which contains the recommended userId, same productID and a "score" in the rating field.
-   * Semantics of score is same as recommendUsers API
+   * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array
+   * of Rating objects which contains the recommended userId, same productID and a "score" in the
+   * rating field. Semantics of score is same as recommendUsers API
    */
   def recommendUsersForProducts(
     productTopK: RDD[(Int, Int)]): RDD[(Int, Array[Rating])] = {

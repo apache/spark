@@ -32,11 +32,11 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
 
   def this() = this(null.asInstanceOf[Seq[BlockMessage]])
 
-  def apply(i: Int) = blockMessages(i)
+  def apply(i: Int): BlockMessage = blockMessages(i)
 
-  def iterator = blockMessages.iterator
+  def iterator: Iterator[BlockMessage] = blockMessages.iterator
 
-  def length = blockMessages.length
+  def length: Int = blockMessages.length
 
   def set(bufferMessage: BufferMessage) {
     val startTime = System.currentTimeMillis

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
 
-protected[sql] object DataTypeConversions {
+private[sql] object DataTypeConversions {
 
   def productToRow(product: Product, schema: StructType): Row = {
     val mutableRow = new GenericMutableRow(product.productArity)

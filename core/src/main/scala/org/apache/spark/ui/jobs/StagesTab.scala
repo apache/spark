@@ -32,10 +32,10 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
 
-  def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  def isFairScheduler: Boolean = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
-  def handleKillRequest(request: HttpServletRequest) =  {
-    if ((killEnabled) && (parent.securityManager.checkModifyPermissions(request.getRemoteUser))) {
+  def handleKillRequest(request: HttpServletRequest): Unit = {
+    if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
       if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {

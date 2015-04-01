@@ -197,7 +197,7 @@ object MovieLensALS {
   def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
   }
-
+  
   /** Compute MAP (Mean Average Precision) statistics for top N product Recommendation */
   def computeRankingMetrics(
     model: MatrixFactorizationModel,

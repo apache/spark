@@ -298,7 +298,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private[streaming]
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
 
-    def hadoopFiles = data.asInstanceOf[mutable.HashMap[Time, Array[String]]]
+    private def hadoopFiles = data.asInstanceOf[mutable.HashMap[Time, Array[String]]]
 
     override def update(time: Time) {
       hadoopFiles.clear()
@@ -320,7 +320,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       }
     }
 
-    override def toString() = {
+    override def toString: String = {
       "[\n" + hadoopFiles.size + " file sets\n" +
         hadoopFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n") + "\n]"
     }

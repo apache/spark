@@ -58,7 +58,6 @@ import org.apache.spark.util.Utils
  */
 private[python] class PythonMLLibAPI extends Serializable {
 
-
   /**
    * Loads and serializes labeled points saved with `RDD#saveAsTextFile`.
    * @param jsc Java SparkContext
@@ -78,7 +77,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      if (model.isInstanceOf[LogisticRegressionModel]) {
+        val lrModel = model.asInstanceOf[LogisticRegressionModel]
+        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+          .map(_.asInstanceOf[Object]).asJava
+      } else {
+        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      }
     } finally {
       data.rdd.unpersist(blocking = false)
     }
@@ -111,9 +116,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regParam: Double,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lrAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -135,8 +142,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val lassoAlg = new LassoWithSGD()
+    lassoAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     lassoAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -157,8 +168,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): JList[Object] = {
+      initialWeights: Vector,
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val ridgeAlg = new RidgeRegressionWithSGD()
+    ridgeAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     ridgeAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -181,9 +196,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val SVMAlg = new SVMWithSGD()
     SVMAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     SVMAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -207,9 +224,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regParam: Double,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithSGD()
     LogRegAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     LogRegAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -233,9 +252,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       regType: String,
       intercept: Boolean,
       corrections: Int,
-      tolerance: Double): JList[Object] = {
+      tolerance: Double,
+      validateData: Boolean,
+      numClasses: Int): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithLBFGS()
     LogRegAlg.setIntercept(intercept)
+      .setValidateData(validateData)
+      .setNumClasses(numClasses)
     LogRegAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -336,20 +359,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       model.predictSoft(data)
   }
 
-  /**
-   * A Wrapper of MatrixFactorizationModel to provide helpfer method for Python
-   */
-  private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
-    extends MatrixFactorizationModel(model.rank, model.userFeatures, model.productFeatures) {
 
-    def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
-      predict(SerDe.asTupleRDD(userAndProducts.rdd))
-
-    def getUserFeatures = SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
-
-    def getProductFeatures = SerDe.fromTuple2RDD(productFeatures.asInstanceOf[RDD[(Any, Any)]])
-
-  }
 
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
@@ -909,7 +919,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseVector
   private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       val bytes = new Array[Byte](8 * vector.size)
       val bb = ByteBuffer.wrap(bytes)
@@ -941,7 +951,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseMatrix
   private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
       val bytes = new Array[Byte](8 * m.values.size)
       val order = ByteOrder.nativeOrder()
@@ -973,7 +983,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for SparseVector
   private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       val n = v.indices.size
       val indiceBytes = new Array[Byte](4 * n)
@@ -1015,7 +1025,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for LabeledPoint
   private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
       saveObjects(out, pickler, point.label, point.features)
     }
@@ -1031,7 +1041,7 @@ private[spark] object SerDe extends Serializable {
   // Pickler for Rating
   private[python] class RatingPickler extends BasePickler[Rating] {
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val rating: Rating = obj.asInstanceOf[Rating]
       saveObjects(out, pickler, rating.user, rating.product, rating.rating)
     }
