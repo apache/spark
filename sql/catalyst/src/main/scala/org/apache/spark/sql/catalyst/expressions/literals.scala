@@ -41,6 +41,19 @@ object Literal {
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
+
+  /**
+   * convert String in `v` as UTF8String
+    */
+  def convertToUTF8String(v: Any): Any = v match {
+    case s: String => UTF8String(s)
+    case seq: Seq[Any] => seq.map(convertToUTF8String)
+    case r: Row => Row(r.toSeq.map(convertToUTF8String): _*)
+    case arr: Array[Any] => arr.toSeq.map(convertToUTF8String).toArray
+    case m: Map[Any, Any] =>
+      m.map { case (k, v) => (convertToUTF8String(k), convertToUTF8String(v)) }.toMap
+    case other => other
+  }
 }
 
 /**
@@ -62,16 +75,10 @@ object IntegerLiteral {
   }
 }
 
-case class Literal(var value: Any, dataType: DataType) extends LeafExpression {
+case class Literal (var value: Any, dataType: DataType) extends LeafExpression {
 
-  // TODO(davies): FIXME
-  (value, dataType) match {
-    case (s: String, StringType) =>
-      value = UTF8String(s)
-    case (seq: Seq[String], dt:ArrayType) if dt.elementType == StringType =>
-      value = seq.map(UTF8String(_))
-    case _ =>
-  }
+  // TODO(davies): move this out of constructor
+  value = Literal.convertToUTF8String(value)
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null

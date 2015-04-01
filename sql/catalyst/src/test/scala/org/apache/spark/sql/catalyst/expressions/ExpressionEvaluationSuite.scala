@@ -33,10 +33,7 @@ import org.apache.spark.sql.types._
 class ExpressionEvaluationSuite extends FunSuite {
 
   def create_row(values: Array[Any]): Row = {
-    new GenericRow(values.toSeq.map {
-      case s: String => UTF8String(s)
-      case other => other
-    }.toArray)
+    new GenericRow(values.toSeq.map(Literal.convertToUTF8String).toArray)
   }
 
   test("literals") {
@@ -558,10 +555,10 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("map casting") {
     val map = Literal(
-      Map(u("a") -> u("123"), u("b") -> u("abc"), u("c") -> u(""), u("d") -> null),
+      Map("a" -> "123", "b" -> "abc", "c" -> "", "d" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
     val map_notNull = Literal(
-      Map(u("a") -> u("123"), u("b") -> u("abc"), u("c") -> u("")),
+      Map("a" -> "123", "b" -> "abc", "c" -> ""),
       MapType(StringType, StringType, valueContainsNull = false))
 
     {
@@ -619,14 +616,14 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("struct casting") {
     val struct = Literal(
-      Row(u("123"), u("abc"), u(""), null),
+      Row("123", "abc", "", null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true),
         StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal(
-      Row(u("123"), u("abc"), u("")),
+      Row("123", "abc", ""),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
         StructField("b", StringType, nullable = false),
@@ -712,13 +709,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
   }
 
-  def u(s: String): UTF8String = UTF8String(s)
-
   test("complex casting") {
     val complex = Literal(
       Row(
-        Seq(u("123"), u("abc"), u("")),
-        Map(u("a") -> u("123"), u("b") -> u("abc"), u("c") -> u("")),
+        Seq("123", "abc", ""),
+        Map("a" -> "123", "b" -> "abc", "c" -> ""),
         Row(0)),
       StructType(Seq(
         StructField("a",
@@ -829,11 +824,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("complex type") {
     val row = create_row(Array[Any](
-      "^Ba*n",                                      // 0
-      null.asInstanceOf[UTF8String],                // 1
-      create_row(Array[Any]("aa", "bb")),           // 2
-      Map(u("aa")->u("bb")),                        // 3
-      Seq(u("aa"), u("bb"))                         // 4
+      "^Ba*n",                                // 0
+      null.asInstanceOf[UTF8String],          // 1
+      create_row(Array[Any]("aa", "bb")),     // 2
+      Map("aa"->"bb"),                        // 3
+      Seq("aa", "bb")                         // 4
     ))
 
     val typeS = StructType(
