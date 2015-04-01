@@ -140,3 +140,16 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
       .entity(msg)
       .build()
 )
+
+private[v1] class BadParameterException(msg: String) extends WebApplicationException(
+  new IllegalArgumentException(msg),
+  Response
+    .status(Response.Status.BAD_REQUEST)
+    .entity(msg)
+    .build()
+) {
+  def this(param: String, exp: String, actual: String) = {
+    this("Bad value for parameter \"" + param + "\".  Expected a " + exp + ", got \"" +
+      actual + "\"")
+  }
+}

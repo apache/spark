@@ -80,9 +80,14 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
           stageInfo.stageId + ":" + stageInfo.attemptId)
           )
       }
-      //TODO error handling
-      val quantiles = quantileString.split(",").map{_.toDouble}
-      println("quantiles = " + quantiles.mkString(","))
+      val quantiles = quantileString.split(",").map{s =>
+        try {
+          s.toDouble
+        } catch {
+          case nfe: NumberFormatException =>
+            throw new BadParameterException("quantiles", "double", s)
+        }
+      }
       AllStagesResource.taskMetricDistributions(stageUiData.taskData.values, quantiles)
     }
   }
