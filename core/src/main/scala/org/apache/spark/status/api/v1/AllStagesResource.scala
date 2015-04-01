@@ -153,7 +153,7 @@ private[v1] object AllStagesResource {
     def getMetric[T](data: Seq[T], f: T => Double): IndexedSeq[Double] =
       Distribution(data.map{d=> f(d)}).get.getQuantiles(quantiles)
 
-    abstract class MetricHelper[I,O](f: InternalTaskMetrics => Option[I]) {
+    private abstract class MetricHelper[I,O](f: InternalTaskMetrics => Option[I]) {
       val data: Seq[I] = rawMetrics.flatMap{x => f(x)}
       def build: O
       def m(f: I => Double): IndexedSeq[Double] = getMetric(data, f)
