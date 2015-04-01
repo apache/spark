@@ -441,7 +441,6 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         sc.parallelize(idx to (idx + 3)).collect()
       }
 
-
       val expJobInfo = Seq(
         ("9", "collect"),
         ("8", "count")
@@ -450,7 +449,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       eventually(timeout(1 second), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         // The completed jobs table should have two rows. The first row will be the most recent job:
-        find("completed").get.text should be ("Completed Jobs (2)")
+        find("completed-summary").get.text should be ("Completed Jobs: 10, only showing 2")
+        find("completed").get.text should be ("Completed Jobs (10, only showing 2)")
         val rows = findAll(cssSelector("tbody tr")).toIndexedSeq.map{_.underlying}
         rows.size should be (expJobInfo.size)
         for {
@@ -481,8 +481,6 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       goToUi(sc, "/jobs/job/?id=7")
       find("no-info").get.text should be ("No information to display for job 7")
 
-      //TODO json for one job
-
       val expStageInfo = Seq(
         ("19", "collect"),
         ("18", "count"),
@@ -491,7 +489,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
       eventually(timeout(1 second), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
-        find("completed").get.text should be ("Completed Stages (20)")
+        find("completed-summary").get.text should be ("Completed Stages: 20, only showing 3")
+        find("completed").get.text should be ("Completed Stages (20, only showing 3)")
         val rows = findAll(cssSelector("tbody tr")).toIndexedSeq.map{_.underlying}
         rows.size should be (3)
         for {
