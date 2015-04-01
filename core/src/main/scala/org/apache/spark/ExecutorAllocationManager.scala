@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.mutable
 
