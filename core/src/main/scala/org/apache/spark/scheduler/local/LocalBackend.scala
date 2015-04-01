@@ -23,12 +23,13 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import akka.actor.{Actor, ActorRef, Props}
+import akka.pattern.ask
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
 
 private case class ReviveOffers()
 
@@ -97,8 +98,11 @@ private[spark] class LocalActor(
  * master all run in the same JVM. It sits behind a TaskSchedulerImpl and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
-private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend {
+private[spark] class LocalBackend(
+    conf: SparkConf,
+    scheduler: TaskSchedulerImpl,
+    val totalCores: Int)
+  extends SchedulerBackend with ExecutorBackend with Logging {
 
   private val appId = "local-" + System.currentTimeMillis
   var localActor: ActorRef = null
@@ -110,7 +114,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def stop() {
-    localActor ! StopExecutor
+    (localActor ? StopExecutor)(AkkaUtils.askTimeout(conf))
   }
 
   override def reviveOffers() {

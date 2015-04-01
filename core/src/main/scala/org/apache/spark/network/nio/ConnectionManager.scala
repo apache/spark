@@ -85,11 +85,11 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 120))
 
   // Get the thread counts from the Spark Configuration.
-  // 
+  //
   // Even though the ThreadPoolExecutor constructor takes both a minimum and maximum value,
   // we only query for the minimum value because we are using LinkedBlockingDeque.
-  // 
-  // The JavaDoc for ThreadPoolExecutor points out that when using a LinkedBlockingDeque (which is 
+  //
+  // The JavaDoc for ThreadPoolExecutor points out that when using a LinkedBlockingDeque (which is
   // an unbounded queue) no more than corePoolSize threads will ever be created, so only the "min"
   // parameter is necessary.
   private val handlerThreadCount = conf.getInt("spark.core.connection.handler.threads.min", 20)
@@ -988,6 +988,7 @@ private[nio] class ConnectionManager(
 
   def stop() {
     ackTimeoutMonitor.stop()
+    selector.wakeup()
     selectorThread.interrupt()
     selectorThread.join()
     selector.close()
