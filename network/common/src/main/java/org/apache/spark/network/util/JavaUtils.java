@@ -126,8 +126,8 @@ public class JavaUtils {
 
   private static ImmutableMap<String, TimeUnit> timeSuffixes = 
     ImmutableMap.<String, TimeUnit>builder()
-      .put("us",TimeUnit.MICROSECONDS)
-      .put("ms",TimeUnit.MILLISECONDS)
+      .put("us", TimeUnit.MICROSECONDS)
+      .put("ms", TimeUnit.MILLISECONDS)
       .put("s", TimeUnit.SECONDS)
       .put("min", TimeUnit.MINUTES)
       .put("h", TimeUnit.HOURS)
@@ -148,7 +148,12 @@ public class JavaUtils {
       String suffix = "";
       for (String tail: timeSuffixes.keySet()) {
         if (lower.endsWith(tail)) {
-          suffix = tail;
+          // Handle special case for overlapping suffixes
+          if(!tail.equals("s") || 
+                  (tail.equals("s") && !lower.endsWith("us") && !lower.endsWith("ms")))
+          {
+            suffix = tail;
+          }
         }
       }
       
