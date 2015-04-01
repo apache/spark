@@ -629,17 +629,13 @@ class Word2VecTests(PySparkTestCase):
             ["I", "like", "soccer", "very", "much"],
             ["I", "live", "in", "Tokyo"]
         ]
-        model = None
-        try:
-            model = Word2Vec()\
-                .setVectorSize(2)\
-                .setLearningRate(0.01)\
-                .setNumPartitions(2)\
-                .setNumIterations(10)\
-                .setSeed(1024)\
-                .setMinCount(3)
-        except:
-            self.fail()
+        model = Word2Vec()\
+            .setVectorSize(2)\
+            .setLearningRate(0.01)\
+            .setNumPartitions(2)\
+            .setNumIterations(10)\
+            .setSeed(1024)\
+            .setMinCount(3)
         self.assertEquals(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEquals(model.numPartitions, 2)
@@ -649,12 +645,16 @@ class Word2VecTests(PySparkTestCase):
 
     def test_word2vec_get_vectors(self):
         data = [
-            ["I", "have", "a", "pen"],
-            ["I", "like", "soccer", "very", "much"],
-            ["I", "live", "in", "Tokyo"]
+            ["a", "b", "c", "d", "e", "f", "g"],
+            ["a", "b", "c", "d", "e", "f"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "b", "c", "d"],
+            ["a", "b", "c"],
+            ["a", "b"],
+            ["a"]
         ]
         model = Word2Vec().fit(self.sc.parallelize(data))
-        self.assertEquals(len(model.getVectors()), 0)
+        self.assertEquals(len(model.getVectors()), 3)
 
 
 if __name__ == "__main__":
