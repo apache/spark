@@ -39,7 +39,7 @@ case class SortMergeJoin(
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = HashSortedPartitioning(leftKeys, 0)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredOrderedDistribution(leftKeys) :: ClusteredOrderedDistribution(rightKeys) :: Nil
