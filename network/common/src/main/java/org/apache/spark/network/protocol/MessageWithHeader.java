@@ -37,7 +37,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   private final int headerLength;
   private final Object body;
   private final long bodyLength;
-  private int totalBytesTransferred;
+  private long totalBytesTransferred;
 
   MessageWithHeader(ByteBuf header, Object body, long bodyLength) {
     Preconditions.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
