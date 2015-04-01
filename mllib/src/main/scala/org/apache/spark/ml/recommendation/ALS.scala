@@ -18,6 +18,7 @@
 package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
+import java.io.IOException
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -26,7 +27,7 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.jblas.DoubleMatrix
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.netlib.util.intW
 
 import org.apache.spark.{Logging, Partitioner}
@@ -47,7 +48,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
-  with HasPredictionCol {
+  with HasPredictionCol with HasCheckpointInterval {
 
   /**
    * Param for rank of the matrix factorization.
@@ -165,6 +166,7 @@ class ALSModel private[ml] (
     itemFactors: RDD[(Int, Array[Float])])
   extends Model[ALSModel] with ALSParams {
 
+  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
@@ -263,6 +265,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   /** @group setParam */
   def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
+  /** @group setParam */
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
@@ -275,6 +280,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   setMaxIter(20)
   setRegParam(1.0)
+  setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
     val map = this.paramMap ++ paramMap
@@ -286,7 +292,8 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
       numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
       maxIter = map(maxIter), regParam = map(regParam), implicitPrefs = map(implicitPrefs),
-      alpha = map(alpha), nonnegative = map(nonnegative))
+      alpha = map(alpha), nonnegative = map(nonnegative),
+      checkpointInterval = map(checkpointInterval))
     val model = new ALSModel(this, map, map(rank), userFactors, itemFactors)
     Params.inheritValues(map, this, model)
     model
@@ -361,14 +368,14 @@ object ALS extends Logging {
   private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
-    private var ata: DoubleMatrix = _
+    private var ata: Array[Double] = _
     private var initialized: Boolean = false
 
     private def initialize(rank: Int): Unit = {
       if (!initialized) {
         this.rank = rank
         workspace = NNLS.createWorkspace(rank)
-        ata = new DoubleMatrix(rank, rank)
+        ata = new Array[Double](rank * rank)
         initialized = true
       } else {
         require(this.rank == rank)
@@ -385,7 +392,7 @@ object ALS extends Logging {
       val rank = ne.k
       initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
-      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -398,17 +405,16 @@ object ALS extends Logging {
       var i = 0
       var pos = 0
       var a = 0.0
-      val data = ata.data
       while (i < rank) {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          data(i * rank + j) = a
-          data(j * rank + i) = a
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
           pos += 1
           j += 1
         }
-        data(i * rank + i) += lambda
+        ata(i * rank + i) += lambda
         i += 1
       }
     }
@@ -496,6 +502,7 @@ object ALS extends Logging {
       nonnegative: Boolean = false,
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
@@ -523,6 +530,18 @@ object ALS extends Logging {
     val seedGen = new XORShiftRandom(seed)
     var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
     var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
+    var previousCheckpointFile: Option[String] = None
+    val shouldCheckpoint: Int => Boolean = (iter) =>
+      sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)
+    val deletePreviousCheckpointFile: () => Unit = () =>
+      previousCheckpointFile.foreach { file =>
+        try {
+          FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
+        } catch {
+          case e: IOException =>
+            logWarning(s"Cannot delete checkpoint file $file:", e)
+        }
+      }
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
@@ -530,19 +549,30 @@ object ALS extends Logging {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, solver)
         previousItemFactors.unpersist()
-        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
-          itemFactors.checkpoint()
-        }
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
+        // TODO: Generalize PeriodicGraphCheckpointer and use it here.
+        if (shouldCheckpoint(iter)) {
+          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
+        }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+        if (shouldCheckpoint(iter)) {
+          deletePreviousCheckpointFile()
+          previousCheckpointFile = itemFactors.getCheckpointFile
+        }
         previousUserFactors.unpersist()
       }
     } else {
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
+        if (shouldCheckpoint(iter)) {
+          itemFactors.checkpoint()
+          itemFactors.count() // checkpoint item factors and cut lineage
+          deletePreviousCheckpointFile()
+          previousCheckpointFile = itemFactors.getCheckpointFile
+        }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
       }

@@ -142,8 +142,8 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 
 <div data-lang="python"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.context.SparkContext-class.html) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.conf.SparkConf-class.html) object
+The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.html#pyspark.SparkConf) object
 that contains information about your application.
 
 {% highlight python %}
@@ -237,8 +237,12 @@ You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`.
 the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" ./bin/pyspark
 {% endhighlight %}
+
+After the IPython Notebook server is launched, you can create a new "Python 2" notebook from 
+the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of 
+your notebook before you start to try Spark from the IPython notebook.
 
 </div>
 
@@ -725,7 +729,7 @@ class MyClass(object):
     def __init__(self):
         self.field = "Hello"
     def doStuff(self, rdd):
-        return rdd.map(lambda s: self.field + x)
+        return rdd.map(lambda s: self.field + s)
 {% endhighlight %}
 
 To avoid this issue, the simplest way is to copy `field` into a local variable instead
@@ -734,13 +738,76 @@ of accessing it externally:
 {% highlight python %}
 def doStuff(self, rdd):
     field = self.field
-    return rdd.map(lambda s: field + x)
+    return rdd.map(lambda s: field + s)
 {% endhighlight %}
 
 </div>
 
 </div>
 
+### Understanding closures <a name="ClosuresLink"></a>
+One of the harder things about Spark is understanding the scope and life cycle of variables and methods when executing code across a cluster. RDD operations that modify variables outside of their scope can be a frequent source of confusion. In the example below we'll look at code that uses `foreach()` to increment a counter, but similar issues can occur for other operations as well.
+
+#### Example
+
+Consider the naive RDD element sum below, which behaves completely differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN): 
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+var counter = 0
+var rdd = sc.parallelize(data)
+
+// Wrong: Don't do this!!
+rdd.foreach(x => counter += x)
+
+println("Counter value: " + counter)
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+int counter = 0;
+JavaRDD<Integer> rdd = sc.parallelize(data); 
+
+// Wrong: Don't do this!!
+rdd.foreach(x -> counter += x);
+
+println("Counter value: " + counter);
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+counter = 0
+rdd = sc.parallelize(data)
+
+# Wrong: Don't do this!!
+rdd.foreach(lambda x: counter += x)
+
+print("Counter value: " + counter)
+
+{% endhighlight %}
+</div>
+
+</div>
+
+#### Local vs. cluster modes
+
+The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node. 
+
+However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
+
+What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+
+In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an Accumulator instead if some global aggregation is needed.
+
+#### Printing elements of an RDD 
+Another common idiom is attempting to print out the elements of an RDD using `rdd.foreach(println)` or `rdd.map(println)`. On a single machine, this will generate the expected output and print all the RDD's elements. However, in `cluster` mode, the output to `stdout` being called by the executors is now writing to the executor's `stdout` instead, not the one on the driver, so `stdout` on the driver won't show these! To print all elements on the driver, one can use the `collect()` method to first bring the RDD to the driver node thus: `rdd.collect().foreach(println)`. This can cause the driver to run out of memory, though, because `collect()` fetches the entire RDD to a single machine; if you only need to print a few elements of the RDD, a safer approach is to use the `take()`: `rdd.take(100).foreach(println)`.
+ 
 ### Working with Key-Value Pairs
 
 <div class="codetabs">
@@ -849,7 +916,7 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -870,7 +937,7 @@ for details.
   <td> Similar to map, but each input item can be mapped to 0 or more output items (so <i>func</i> should return a Seq rather than a single item). </td>
 </tr>
 <tr>
-  <td> <b>mapPartitions</b>(<i>func</i>) </td>
+  <td> <b>mapPartitions</b>(<i>func</i>) <a name="MapPartLink"></a> </td>
   <td> Similar to map, but runs separately on each partition (block) of the RDD, so <i>func</i> must be of type
     Iterator&lt;T&gt; => Iterator&lt;U&gt; when running on an RDD of type T. </td>
 </tr>
@@ -897,7 +964,7 @@ for details.
   <td> Return a new dataset that contains the distinct elements of the source dataset.</td>
 </tr>
 <tr>
-  <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
+  <td> <b>groupByKey</b>([<i>numTasks</i>]) <a name="GroupByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
       average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better 
@@ -908,25 +975,25 @@ for details.
   </td>
 </tr>
 <tr>
-  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) </td>
+  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) <a name="ReduceByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function <i>func</i>, which must be of type (V,V) => V. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numTasks</i>]) </td>
+  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numTasks</i>]) <a name="AggregateByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, U) pairs where the values for each key are aggregated using the given combine functions and a neutral "zero" value. Allows an aggregated value type that is different than the input value type, while avoiding unnecessary allocations. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numTasks</i>]) </td>
+  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numTasks</i>]) <a name="SortByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean <code>ascending</code> argument.</td>
 </tr>
 <tr>
-  <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
+  <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="JoinLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key.
     Outer joins are supported through <code>leftOuterJoin</code>, <code>rightOuterJoin</code>, and <code>fullOuterJoin</code>.
   </td>
 </tr>
 <tr>
-  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
+  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="CogroupLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>
@@ -939,17 +1006,17 @@ for details.
     process's stdin and lines output to its stdout are returned as an RDD of strings. </td>
 </tr>
 <tr>
-  <td> <b>coalesce</b>(<i>numPartitions</i>) </td>
+  <td> <b>coalesce</b>(<i>numPartitions</i>) <a name="CoalesceLink"></a> </td>
   <td> Decrease the number of partitions in the RDD to numPartitions. Useful for running operations more efficiently
     after filtering down a large dataset. </td>
 </tr>
 <tr>
   <td> <b>repartition</b>(<i>numPartitions</i>) </td>
   <td> Reshuffle the data in the RDD randomly to create either more or fewer partitions and balance it across them.
-    This always shuffles all data over the network. </td>
+    This always shuffles all data over the network. <a name="RepartitionLink"></a></td>
 </tr>
 <tr>
-  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) <a name="Repartition2Link"></a></td>
   <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
   sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
   each partition because it can push the sorting down into the shuffle machinery. </td>
@@ -962,7 +1029,7 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.rdd.RDD-class.html))
+ [Python](api/python/pyspark.html#pyspark.RDD))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1013,14 +1080,76 @@ for details.
     <code>SparkContext.objectFile()</code>. </td>
 </tr>
 <tr>
-  <td> <b>countByKey</b>() </td>
+  <td> <b>countByKey</b>() <a name="CountByLink"></a> </td>
   <td> Only available on RDDs of type (K, V). Returns a hashmap of (K, Int) pairs with the count of each key. </td>
 </tr>
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
-  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an accumulator variable (see below) or interacting with external storage systems. </td>
+  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#AccumLink">Accumulator</a> or interacting with external storage systems. 
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
 </tr>
 </table>
+
+### Shuffle operations
+
+Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
+mechanism for re-distributing data so that is grouped differently across partitions. This typically
+involves copying data across executors and machines, making the shuffle a complex and
+costly operation.
+
+#### Background
+
+To understand what happens during the shuffle we can consider the example of the
+[`reduceByKey`](#ReduceByLink) operation. The `reduceByKey` operation generates a new RDD where all
+values for a single key are combined into a tuple - the key and the result of executing a reduce
+function against all values associated with that key. The challenge is that not all values for a
+single key necessarily reside on the same partition, or even the same machine, but they must be
+co-located to compute the result.
+
+In Spark, data is generally not distributed across partitions to be in the necessary place for a
+specific operation. During computations, a single task will operate on a single partition - thus, to
+organize all the data for a single `reduceByKey` reduce task to execute, Spark needs to perform an
+all-to-all operation. It must read from all partitions to find all the values for all keys, 
+and then bring together values across partitions to compute the final result for each key - 
+this is called the **shuffle**.
+
+Although the set of elements in each partition of newly shuffled data will be deterministic, and so
+is the ordering of partitions themselves, the ordering of these elements is not. If one desires predictably 
+ordered data following shuffle then it's possible to use: 
+
+* `mapPartitions` to sort each partition using, for example, `.sorted`
+* `repartitionAndSortWithinPartitions` to efficiently sort partitions while simultaneously repartitioning
+* `sortBy` to make a globally ordered RDD
+
+Operations which can cause a shuffle include **repartition** operations like
+[`repartition`](#RepartitionLink), and [`coalesce`](#CoalesceLink), **'ByKey** operations
+(except for counting) like [`groupByKey`](#GroupByLink) and [`reduceByKey`](#ReduceByLink), and
+**join** operations like [`cogroup`](#CogroupLink) and [`join`](#JoinLink).
+
+#### Performance Impact
+The **Shuffle** is an expensive operation since it involves disk I/O, data serialization, and
+network I/O. To organize data for the shuffle, Spark generates sets of tasks - *map* tasks to
+organize the data, and a set of *reduce* tasks to aggregate it. This nomenclature comes from
+MapReduce and does not directly relate to Spark's `map` and `reduce` operations.
+
+Internally, results from individual map tasks are kept in memory until they can't fit. Then, these 
+are sorted based on the target partition and written to a single file. On the reduce side, tasks 
+read the relevant sorted blocks.
+        
+Certain shuffle operations can consume significant amounts of heap memory since they employ 
+in-memory data structures to organize records before or after transferring them. Specifically, 
+`reduceByKey` and `aggregateByKey` create these structures on the map side and `'ByKey` operations 
+generate these on the reduce side. When data does not fit in memory Spark will spill these tables 
+to disk, incurring the additional overhead of disk I/O and increased garbage collection.
+
+Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
+are not cleaned up from Spark's temporary storage until Spark is stopped, which means that
+long-running Spark jobs may consume available disk space. This is done so the shuffle doesn't need
+to be re-computed if the lineage is re-computed. The temporary storage directory is specified by the
+`spark.local.dir` configuration parameter when configuring the Spark context.
+
+Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
+'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.html). 
 
 ## RDD Persistence
 
@@ -1041,7 +1170,7 @@ replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-proj
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/pyspark.storagelevel.StorageLevel-class.html))
+[Python](api/python/pyspark.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
@@ -1143,6 +1272,12 @@ than shipping a copy of it with tasks. They can be used, for example, to give ev
 large input dataset in an efficient manner. Spark also attempts to distribute broadcast variables
 using efficient broadcast algorithms to reduce communication cost.
 
+Spark actions are executed through a set of stages, separated by distributed "shuffle" operations.
+Spark automatically broadcasts the common data needed by tasks within each stage. The data
+broadcasted this way is cached in serialized form and deserialized before running each task. This
+means that explicitly creating broadcast variables is only useful when tasks across multiple stages
+need the same data or when caching the data in deserialized form is important.
+
 Broadcast variables are created from a variable `v` by calling `SparkContext.broadcast(v)`. The
 broadcast variable is a wrapper around `v`, and its value can be accessed by calling the `value`
 method. The code below shows this:
@@ -1191,7 +1326,7 @@ run on the cluster so that `v` is not shipped to the nodes more than once. In ad
 `v` should not be modified after it is broadcast in order to ensure that all nodes get the same
 value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
-## Accumulators
+## Accumulators <a name="AccumLink"></a>
 
 Accumulators are variables that are only "added" to through an associative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
@@ -1304,7 +1439,7 @@ scala> accum.value
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/python/pyspark.accumulators.AccumulatorParam-class.html).
+create their own types by subclassing [AccumulatorParam](api/python/pyspark.html#pyspark.AccumulatorParam).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:
@@ -1336,25 +1471,28 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
-val acc = sc.accumulator(0)
-data.map(x => acc += x; f(x))
-// Here, acc is still 0 because no actions have cause the `map` to be computed.
+val accum = sc.accumulator(0)
+data.map { x => accum += x; f(x) }
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 Accumulator<Integer> accum = sc.accumulator(0);
-data.map(x -> accum.add(x); f(x););
-// Here, accum is still 0 because no actions have cause the `map` to be computed.
+data.map(x -> { accum.add(x); return f(x); });
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 accum = sc.accumulator(0)
-data.map(lambda x => acc.add(x); f(x))
-# Here, acc is still 0 because no actions have cause the `map` to be computed.
+def g(x):
+  accum.add(x)
+  return f(x)
+data.map(g)
+# Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
@@ -1365,6 +1503,11 @@ data.map(lambda x => acc.add(x); f(x))
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
 In short, once you package your application into a JAR (for Java/Scala) or a set of `.py` or `.zip` files (for Python),
 the `bin/spark-submit` script lets you submit it to any supported cluster manager.
+
+# Launching Spark jobs from Java / Scala
+
+The [org.apache.spark.launcher](api/java/index.html?org/apache/spark/launcher/package-summary.html)
+package provides classes for launching Spark jobs as child processes using a simple Java API.
 
 # Unit Testing
 

@@ -86,7 +86,8 @@ private[yarn] class YarnAllocator(
   @volatile private var targetNumExecutors = args.numExecutors
 
   // Keep track of which container is running which executor to remove the executors later
-  private val executorIdToContainer = new HashMap[String, Container]
+  // Visible for testing.
+  private[yarn] val executorIdToContainer = new HashMap[String, Container]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -137,7 +138,10 @@ private[yarn] class YarnAllocator(
    * be killed.
    */
   def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
-    targetNumExecutors = requestedTotal
+    if (requestedTotal != targetNumExecutors) {
+      logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
+      targetNumExecutors = requestedTotal
+    }
   }
 
   /**
@@ -148,8 +152,6 @@ private[yarn] class YarnAllocator(
       val container = executorIdToContainer.remove(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
-      targetNumExecutors -= 1
-      assert(targetNumExecutors >= 0, "Allocator killed more executors than are allocated!")
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
@@ -351,7 +353,8 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  private def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
+  // Visible for testing.
+  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
 

@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
@@ -63,8 +63,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
-  // Note that this is a lazy val so we can override the default value in subclasses.
-  protected[sql] lazy val conf: SQLConf = new SQLConf
+  /**
+   * @return Spark SQL configuration
+   */
+  protected[sql] def conf = tlSession.get().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -103,9 +105,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
+  // TODO how to handle the temp table per user session?
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
 
+  // TODO how to handle the temp function per user session?
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
@@ -116,6 +120,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   @transient
@@ -137,6 +145,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
 
   protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+
+  @transient
+  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
+    override def initialValue: SQLSession = defaultSession
+  }
+
+  @transient
+  protected[sql] val defaultSession = createSession()
 
   sparkContext.getConf.getAll.foreach {
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
@@ -165,7 +181,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   @transient
-  lazy val emptyDataFrame = DataFrame(this, NoRelation)
+  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -194,6 +210,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group basic
+   * TODO move to SQLSession?
    */
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
@@ -229,8 +246,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sqlContext = new SQLContext
-   *   import sqlContext._
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
    * }}}
    *
    * @group basic
@@ -975,9 +992,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
-    def codegenEnabled = self.conf.codegenEnabled
+    def codegenEnabled: Boolean = self.conf.codegenEnabled
 
-    def numPartitions = self.conf.numShufflePartitions
+    def numPartitions: Int = self.conf.numShufflePartitions
 
     def strategies: Seq[Strategy] =
       experimental.extraStrategies ++ (
@@ -1052,11 +1069,29 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
-  @transient
-  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
-    override val extendedCheckRules = Seq(
-      sources.PreWriteCheck(catalog)
-    )
+  protected[sql] def openSession(): SQLSession = {
+    detachSession()
+    val session = createSession()
+    tlSession.set(session)
+
+    session
+  }
+
+  protected[sql] def currentSession(): SQLSession = {
+    tlSession.get()
+  }
+
+  protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[sql] def detachSession(): Unit = {
+    tlSession.remove()
+  }
+
+  protected[sql] class SQLSession {
+    // Note that this is a lazy val so we can override the default value in subclasses.
+    protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
   /**
@@ -1066,11 +1101,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = checkAnalysis(analyzed)
+    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {
-      assertAnalyzed
+      assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
@@ -1171,38 +1206,56 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
+    val (dataType, _) = inferDataType(beanClass)
+    dataType.asInstanceOf[StructType].fields.map { f =>
+      AttributeReference(f.name, f.dataType, f.nullable)()
+    }
+  }
+
+  /**
+   * Infers the corresponding SQL data type of a Java class.
+   * @param clazz Java class
+   * @return (SQL data type, nullable)
+   */
+  private def inferDataType(clazz: Class[_]): (DataType, Boolean) = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
-    val beanInfo = Introspector.getBeanInfo(beanClass)
+    clazz match {
+      case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
 
-    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
-    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
-    //       element ordering.
-    val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
-    fields.map { property =>
-      val (dataType, nullable) = property.getPropertyType match {
-        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
-        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
-        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
-        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
-        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
-        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
-        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
-        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
-        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
+      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+      case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+      case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+      case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+      case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+      case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+      case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
-        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
-        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
-        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
-        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
-        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
-        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
-        case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
-        case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
-        case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-      }
-      AttributeReference(property.getName, dataType, nullable)()
+      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+      case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+      case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+      case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+      case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+      case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+      case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+
+      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+      case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+      case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+
+      case c: Class[_] if c.isArray =>
+        val (dataType, nullable) = inferDataType(c.getComponentType)
+        (ArrayType(dataType, nullable), true)
+
+      case _ =>
+        val beanInfo = Introspector.getBeanInfo(clazz)
+        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+        val fields = properties.map { property =>
+          val (dataType, nullable) = inferDataType(property.getPropertyType)
+          new StructField(property.getName, dataType, nullable)
+        }
+        (new StructType(fields), true)
     }
   }
 }

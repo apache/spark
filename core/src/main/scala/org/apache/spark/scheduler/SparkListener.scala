@@ -300,7 +300,7 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
-    def f(d: Double) = format.format(d)
+    def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
 
@@ -346,7 +346,7 @@ private[spark] object StatsReportListener extends Logging {
   /**
    * Reformat a time interval in milliseconds to a prettier format for output
    */
-  def millisToString(ms: Long) = {
+  def millisToString(ms: Long): String = {
     val (size, units) =
       if (ms > hours) {
         (ms.toDouble / hours, "hours")

@@ -37,11 +37,12 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
  * a [[FunctionRegistry]].
  */
-class Analyzer(catalog: Catalog,
-               registry: FunctionRegistry,
-               caseSensitive: Boolean,
-               maxIterations: Int = 100)
-  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
+class Analyzer(
+    catalog: Catalog,
+    registry: FunctionRegistry,
+    caseSensitive: Boolean,
+    maxIterations: Int = 100)
+  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion with CheckAnalysis {
 
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
@@ -64,9 +65,7 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*),
-    Batch("Remove SubQueries", fixedPoint,
-      EliminateSubQueries)
+      extendedResolutionRules : _*)
   )
 
   /**
@@ -170,12 +169,12 @@ class Analyzer(catalog: Catalog,
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation) = {
+    def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+          u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
@@ -214,6 +213,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(c.copy(children = expandedArgs), name)() :: Nil
+            case Alias(c @ CreateStruct(args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(c.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
@@ -237,22 +242,41 @@ class Analyzer(catalog: Catalog,
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+        val (oldRelation, newRelation) = right.collect {
+          // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
             val newVersion = oldVersion.newInstance()
-            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
-            (oldVersion, newVersion, newAttributes)
-        }.head // Only handle first case found, others will be fixed on the next pass.
+            (oldVersion, newVersion)
 
+          // Handle projects that create conflicting aliases.
+          case oldVersion @ Project(projectList, _)
+              if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+
+          case oldVersion @ Aggregate(_, aggregateExpressions, _)
+              if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+            (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+        }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
+          sys.error(
+            s"""
+              |Failure when resolving conflicting references in Join:
+              |$plan
+              |
+              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+              """.stripMargin)
+        }
+
+        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
         val newRight = right transformUp {
           case r if r == oldRelation => newRelation
+        } transformUp {
           case other => other transformExpressions {
             case a: Attribute => attributeRewrites.get(a).getOrElse(a)
           }
         }
-
         j.copy(right = newRight)
 
       case q: LogicalPlan =>
@@ -264,12 +288,24 @@ class Analyzer(catalog: Catalog,
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolveChildren(name, resolver).getOrElse(u)
+            val result =
+              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
             resolveGetField(child, fieldName)
         }
+    }
+
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     /**
@@ -319,19 +355,16 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
-        val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes =
-          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
+        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
-        val missingInProject = requiredAttributes -- p.output
-        if (missingInProject.nonEmpty) {
+        // If this rule was not a no-op, return the transformed plan, otherwise return the original.
+        if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
-          Project(projectList.map(_.toAttribute),
-            Sort(ordering, global,
-              Project(projectList ++ missingInProject, child)))
+          Project(p.output,
+            Sort(resolvedOrdering, global,
+              Project(projectList ++ missing, child)))
         } else {
-          logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
+          logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
@@ -343,17 +376,53 @@ class Analyzer(catalog: Catalog,
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        logDebug(s"Grouping expressions: $groupingRelation")
-        val resolved = unresolved.flatMap(groupingRelation.resolve(_, resolver))
-        val missingInAggs = resolved.filterNot(a.outputSet.contains)
-        logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
-        if (missingInAggs.nonEmpty) {
+        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, a, groupingRelation)
+
+        if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
-            Sort(ordering, global, Aggregate(grouping, aggs ++ missingInAggs, child)))
+            Sort(resolvedOrdering, global,
+              Aggregate(grouping, aggs ++ missing, child)))
         } else {
           s // Nothing we can do here. Return original plan.
         }
+    }
+
+    /**
+     * Given a child and a grandchild that are present beneath a sort operator, returns
+     * a resolved sort ordering and a list of attributes that are missing from the child
+     * but are present in the grandchild.
+     */
+    def resolveAndFindMissing(
+        ordering: Seq[SortOrder],
+        child: LogicalPlan,
+        grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
+      // Find any attributes that remain unresolved in the sort.
+      val unresolved: Seq[String] =
+        ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+
+      // Create a map from name, to resolved attributes, when the desired name can be found
+      // prior to the projection.
+      val resolved: Map[String, NamedExpression] =
+        unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
+
+      // Construct a set that contains all of the attributes that we need to evaluate the
+      // ordering.
+      val requiredAttributes = AttributeSet(resolved.values)
+
+      // Figure out which ones are missing from the projection, so that we can add them and
+      // remove them after the sort.
+      val missingInProject = requiredAttributes -- child.output
+
+      // Now that we have all the attributes we need, reconstruct a resolved ordering.
+      // It is important to do it here, instead of waiting for the standard resolved as adding
+      // attributes to the project below can actually introduce ambiquity that was not present
+      // before.
+      val resolvedOrdering = ordering.map(_ transform {
+        case u @ UnresolvedAttribute(name) => resolved.getOrElse(name, u)
+      }).asInstanceOf[Seq[SortOrder]]
+
+      (resolvedOrdering, missingInProject.toSeq)
     }
   }
 

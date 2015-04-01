@@ -17,29 +17,39 @@
 
 package test.org.apache.spark.sql;
 
+import java.io.Serializable;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
+import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
+import org.apache.spark.sql.types.*;
+
 import static org.apache.spark.sql.functions.*;
 
-
 public class JavaDataFrameSuite {
+  private transient JavaSparkContext jsc;
   private transient SQLContext context;
 
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
     TestData$.MODULE$.testData();
+    jsc = new JavaSparkContext(TestSQLContext.sparkContext());
     context = TestSQLContext$.MODULE$;
   }
 
   @After
   public void tearDown() {
+    jsc = null;
     context = null;
   }
 
@@ -89,5 +99,34 @@ public class JavaDataFrameSuite {
     DataFrame df = context.table("testData");
     df.show();
     df.show(1000);
+  }
+
+  public static class Bean implements Serializable {
+    private double a = 0.0;
+    private Integer[] b = new Integer[]{0, 1};
+
+    public double getA() {
+      return a;
+    }
+
+    public Integer[] getB() {
+      return b;
+    }
+  }
+
+  @Test
+  public void testCreateDataFrameFromJavaBeans() {
+    Bean bean = new Bean();
+    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
+    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    StructType schema = df.schema();
+    Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
+      schema.apply("a"));
+    Assert.assertEquals(
+      new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
+      schema.apply("b"));
+    Row first = df.select("a", "b").first();
+    Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
+    Assert.assertArrayEquals(bean.getB(), first.<Integer[]>getAs(1));
   }
 }

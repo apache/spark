@@ -244,6 +244,12 @@ class IDFModel(JavaVectorTransformer):
         x = _convert_to_vector(x)
         return JavaVectorTransformer.transform(self, x)
 
+    def idf(self):
+        """
+        Returns the current IDF vector.
+        """
+        return self.call('idf')
+
 
 class IDF(object):
     """
