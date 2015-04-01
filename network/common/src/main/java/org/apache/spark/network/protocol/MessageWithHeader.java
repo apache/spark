@@ -39,11 +39,11 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   private final long bodyLength;
   private int totalBytesTransferred;
 
-  MessageWithHeader(ByteBuf header, int headerLength, Object body, long bodyLength) {
+  MessageWithHeader(ByteBuf header, Object body, long bodyLength) {
     Preconditions.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
       "Body must be a ByteBuf or a FileRegion.");
     this.header = header;
-    this.headerLength = headerLength;
+    this.headerLength = header.readableBytes();
     this.body = body;
     this.bodyLength = bodyLength;
   }
@@ -65,11 +65,11 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
 
   @Override
   public long transferTo(WritableByteChannel target, long position) throws IOException {
-    Preconditions.checkArgument(position >= 0 && position < count(), "Invalid position.");
+    Preconditions.checkArgument(position == totalBytesTransferred, "Invalid position.");
     long written = 0;
 
     if (position < headerLength) {
-      written += copyByteBuf(header, target, position);
+      written += copyByteBuf(header, target);
       if (header.readableBytes() > 0) {
         totalBytesTransferred += written;
         return written;
@@ -77,10 +77,14 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     }
 
     if (body instanceof FileRegion) {
+      // Adjust the position. If the write is happening as part of the same call where the header
+      // (or some part of it) is written, `position` will be less than the header size, so we want
+      // to start from position 0 in the FileRegion object. Otherwise, we start from the position
+      // requested by the caller.
       long bodyPos = position > headerLength ? position - headerLength : 0;
       written += ((FileRegion)body).transferTo(target, bodyPos);
     } else if (body instanceof ByteBuf) {
-      written += copyByteBuf((ByteBuf) body, target, position);
+      written += copyByteBuf((ByteBuf) body, target);
     }
 
     totalBytesTransferred += written;
@@ -93,12 +97,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     ReferenceCountUtil.release(body);
   }
 
-  private int copyByteBuf(ByteBuf buf, WritableByteChannel target, long position)
-    throws IOException {
-
-    if (position > totalBytesTransferred) {
-      buf.skipBytes(Ints.checkedCast(position - totalBytesTransferred));
-    }
+  private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {
     int written = target.write(buf.nioBuffer());
     buf.skipBytes(written);
     return written;
