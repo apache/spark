@@ -80,6 +80,9 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
+    "stage task summary" -> "applications/local-1427397477963/stages/20/0/taskSummary",
+    "stage task summary w/ custom quantiles" ->
+      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=0.01,0.5,0.99",
     "stage list with accumulable json" -> "applications/local-1426533911241/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/stages/0/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
@@ -149,6 +152,13 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
     // will take some mucking w/ jersey to get a better error msg in this case
+
+
+    val badQuantiles = getContentAndCode(
+      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=foo,0.1")
+    badQuantiles._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badQuantiles._3 should be (Some("Bad value for parameter \"quantiles\".  Expected a double, " +
+      "got \"foo\""))
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }

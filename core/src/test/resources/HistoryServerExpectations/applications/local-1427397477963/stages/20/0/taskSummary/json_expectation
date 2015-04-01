@@ -1,0 +1,15 @@
+{
+  "quantiles" : [ 0.05, 0.25, 0.5, 0.75, 0.95 ],
+  "executorDeserializeTime" : [ 0.0, 0.0, 0.0, 1.0, 3.0 ],
+  "executorRunTime" : [ 6.0, 6.0, 7.0, 10.0, 48.0 ],
+  "resultSize" : [ 930.0, 930.0, 930.0, 930.0, 930.0 ],
+  "jvmGcTime" : [ 0.0, 0.0, 0.0, 0.0, 7.0 ],
+  "resultSerializationTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "memoryBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "diskBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "shuffleWriteMetrics" : {
+    "writeBytes" : [ 9598.0, 9599.0, 9600.0, 9601.0, 9603.0 ],
+    "writeRecords" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+    "writeTime" : [ 278805.0, 308809.0, 327953.0, 367487.0, 944783.0 ]
+  }
+}
