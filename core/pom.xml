@@ -359,6 +359,12 @@
       <artifactId>py4j</artifactId>
       <version>0.8.2.1</version>
     </dependency>
+    <dependency>
+      <groupId>com.intel.chimera</groupId>
+      <artifactId>chimera</artifactId>
+      <version>0.0.1</version>
+      <type>jar</type>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
