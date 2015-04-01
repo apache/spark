@@ -1473,7 +1473,7 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
-      <!-- Build the JARs-->
+      <!-- Build test-jar's for all projects, since some projects depend on tests from others -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
