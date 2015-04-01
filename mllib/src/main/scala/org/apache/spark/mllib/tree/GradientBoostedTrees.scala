@@ -81,11 +81,11 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   /**
    * Method to validate a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @param validationInput Validation dataset:
-                          RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-                          Should be different from and follow the same distribution as input.
-                          e.g., these two datasets could be created from an original dataset
-                          by using [[org.apache.spark.rdd.RDD.randomSplit()]]
+   * @param validationInput Validation dataset.
+   *                        This dataset should be different from the training dataset,
+   *                        but it should follow the same distribution.
+   *                        E.g., these two datasets could be created from an original dataset
+   *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @return a gradient boosted trees model that can be used for prediction
    */
   def runWithValidation(

@@ -175,7 +175,7 @@ class Node (
   }
 }
 
-private[tree] object Node {
+private[mllib] object Node {
 
   /**
    * Return a node with the given node id (but nothing else set).

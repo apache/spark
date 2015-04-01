@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
+
 /**
  * :: Experimental ::
  * Represents a random forest model.
@@ -58,10 +59,12 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
 
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
+  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 object RandomForestModel extends Loader[RandomForestModel] {
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): RandomForestModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
@@ -109,8 +112,6 @@ class GradientBoostedTreesModel(
       GradientBoostedTreesModel.SaveLoadV1_0.thisClassName)
   }
 
-  override protected def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
-
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
@@ -155,6 +156,7 @@ class GradientBoostedTreesModel(
     evaluationArray
   }
 
+  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
@@ -210,6 +212,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     }
     newPredError
   }
+
+  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
@@ -340,12 +344,12 @@ private[tree] sealed class TreeEnsembleModel(
   }
 
   /**
-   * Get number of trees in forest.
+   * Get number of trees in ensemble.
    */
   def numTrees: Int = trees.size
 
   /**
-   * Get total number of nodes, summed over all trees in the forest.
+   * Get total number of nodes, summed over all trees in the ensemble.
    */
   def totalNumNodes: Int = trees.map(_.numNodes).sum
 }
