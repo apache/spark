@@ -27,6 +27,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
  */
 private[spark] object NNLS {
   class Workspace(val n: Int) {
+
     val scratch = new Array[Double](n)
     val grad = new Array[Double](n)
     val x = new Array[Double](n)
@@ -67,7 +68,7 @@ private[spark] object NNLS {
 
     val n = atb.length
     val scratch = ws.scratch
-
+    
     // find the optimal unconstrained step
     def steplen(dir: Array[Double], res: Array[Double]): Double = {
       val top = blas.ddot(n, dir, 1, res, 1)
@@ -138,7 +139,7 @@ private[spark] object NNLS {
       if (stop(step, ndir, nx)) {
         return x.clone
       }
-
+      
       // don't run through the walls
       i = 0
       while (i < n) {

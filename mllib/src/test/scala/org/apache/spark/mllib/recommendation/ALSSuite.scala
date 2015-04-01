@@ -25,6 +25,7 @@ import org.scalatest.FunSuite
 import org.jblas.DoubleMatrix
 
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import breeze.optimize.proximal.Constraint._
 import org.apache.spark.storage.StorageLevel
 
 object ALSSuite {
@@ -128,11 +129,11 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
 
   test("pseudorandomness") {
     val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
-    val model11 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
-    val model12 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
+    val model11 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 1)
+    val model12 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 1)
     val u11 = model11.userFeatures.values.flatMap(_.toList).collect().toList
     val u12 = model12.userFeatures.values.flatMap(_.toList).collect().toList
-    val model2 = ALS.train(ratings, 5, 1, 1.0, 2, 2)
+    val model2 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 2)
     val u2 = model2.userFeatures.values.flatMap(_.toList).collect().toList
     assert(u11 == u12)
     assert(u11 != u2)
@@ -144,7 +145,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     var model = new ALS()
       .setRank(5)
       .setIterations(1)
-      .setLambda(1.0)
+      .setUserLambda(1.0)
+      .setProductLambda(1.0)
       .setBlocks(2)
       .setSeed(1)
       .setFinalRDDStorageLevel(storageLevel)
@@ -155,7 +157,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     model = new ALS()
       .setRank(5)
       .setIterations(1)
-      .setLambda(1.0)
+      .setUserLambda(1.0)
+      .setProductLambda(1.0)
       .setBlocks(2)
       .setSeed(1)
       .setFinalRDDStorageLevel(storageLevel)
@@ -219,17 +222,23 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
 
-    val model = new ALS()
+    val als = new ALS()
       .setUserBlocks(numUserBlocks)
       .setProductBlocks(numProductBlocks)
       .setRank(features)
       .setIterations(iterations)
       .setAlpha(1.0)
       .setImplicitPrefs(implicitPrefs)
-      .setLambda(0.01)
+      .setUserLambda(0.01)
+      .setProductLambda(0.01)
       .setSeed(0L)
-      .setNonnegative(!negativeFactors)
-      .run(sc.parallelize(sampledRatings))
+    
+    if(!negativeFactors) {
+      als.setUserConstraint(POSITIVE)
+      als.setProductConstraint(POSITIVE)
+    }
+    
+    val model = als.run(sc.parallelize(sampledRatings))
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {

@@ -25,10 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
-
 import net.razorvine.pickle._
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
@@ -52,6 +49,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import breeze.optimize.proximal.Constraint._
 
 /**
  * The Java stubs necessary for the Python mllib bindings. It is called by Py4J on the Python side.
@@ -371,17 +369,19 @@ private[python] class PythonMLLibAPI extends Serializable {
       ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
+      constraint: Constraint,
       lambda: Double,
       blocks: Int,
-      nonnegative: Boolean,
       seed: java.lang.Long): MatrixFactorizationModel = {
 
     val als = new ALS()
       .setRank(rank)
       .setIterations(iterations)
-      .setLambda(lambda)
+      .setUserLambda(lambda)
+      .setProductLambda(lambda)
+      .setUserConstraint(constraint)
+      .setProductConstraint(constraint)
       .setBlocks(blocks)
-      .setNonnegative(nonnegative)
 
     if (seed != null) als.setSeed(seed)
 
@@ -399,21 +399,23 @@ private[python] class PythonMLLibAPI extends Serializable {
       ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
+      constraint: Constraint,
       lambda: Double,
       blocks: Int,
       alpha: Double,
-      nonnegative: Boolean,
       seed: java.lang.Long): MatrixFactorizationModel = {
 
     val als = new ALS()
       .setImplicitPrefs(true)
       .setRank(rank)
       .setIterations(iterations)
-      .setLambda(lambda)
+      .setUserLambda(lambda)
+      .setProductLambda(lambda)
+      .setUserConstraint(constraint)
+      .setProductConstraint(constraint)
       .setBlocks(blocks)
       .setAlpha(alpha)
-      .setNonnegative(nonnegative)
-
+      
     if (seed != null) als.setSeed(seed)
 
     val model =  als.run(ratingsJRDD.rdd)

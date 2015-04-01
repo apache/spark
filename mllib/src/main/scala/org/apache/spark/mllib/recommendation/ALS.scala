@@ -23,6 +23,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import breeze.optimize.proximal.Constraint._
 
 /**
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
@@ -59,24 +60,23 @@ case class Rating(user: Int, product: Int, rating: Double)
  * preferences rather than explicit ratings given to items.
  */
 class ALS private (
-    private var numUserBlocks: Int,
-    private var numProductBlocks: Int,
-    private var rank: Int,
-    private var iterations: Int,
-    private var lambda: Double,
-    private var implicitPrefs: Boolean,
-    private var alpha: Double,
-    private var seed: Long = System.nanoTime()
-  ) extends Serializable with Logging {
-
+  private var numUserBlocks: Int,
+  private var numProductBlocks: Int,
+  private var rank: Int,
+  private var iterations: Int,
+  private var userConstraint: Constraint,
+  private var productConstraint: Constraint,
+  private var userLambda: Double,
+  private var productLambda: Double,
+  private var implicitPrefs: Boolean,
+  private var alpha: Double,
+  private var seed: Long = System.nanoTime()) extends Serializable with Logging {
   /**
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
-   * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
+   * userLambda: 0.01, productLambda: 0.01, implicitPrefs: false, alpha: 1.0}.
    */
-  def this() = this(-1, -1, 10, 10, 0.01, false, 1.0)
 
-  /** If true, do alternating nonnegative least squares. */
-  private var nonnegative = false
+  def this() = this(-1, -1, 10, 10, SMOOTH, SMOOTH, 0.01, 0.01, false, 1.0)
 
   /** storage level for user/product in/out links */
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
@@ -123,12 +123,30 @@ class ALS private (
     this
   }
 
-  /** Set the regularization parameter, lambda. Default: 0.01. */
-  def setLambda(lambda: Double): this.type = {
-    this.lambda = lambda
+  /** Set the user regularization parameter, lambda. Default: 0.01. */
+  def setUserLambda(userLambda: Double): ALS = {
+    this.userLambda = userLambda
     this
   }
 
+  /* Set the product regularization parameter, lambda. Default : 0.01 */
+  def setProductLambda(productLambda: Double): ALS = {
+    this.productLambda = productLambda
+    this
+  }
+
+  /* Set user constraint, Default: SMOOTH */
+  def setUserConstraint(userConstraint: Constraint): ALS = {
+    this.userConstraint = userConstraint
+    this
+  }
+
+  /* Set product constraint, Default: SMOOTH */
+  def setProductConstraint(productConstraint: Constraint): ALS = {
+    this.productConstraint = productConstraint
+    this
+  }
+  
   /** Sets whether to use implicit preference. Default: false. */
   def setImplicitPrefs(implicitPrefs: Boolean): this.type = {
     this.implicitPrefs = implicitPrefs
@@ -146,15 +164,6 @@ class ALS private (
   /** Sets a random seed to have deterministic results. */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
-    this
-  }
-
-  /**
-   * Set whether the least-squares problems solved at each iteration should have
-   * nonnegativity constraints.
-   */
-  def setNonnegative(b: Boolean): this.type = {
-    this.nonnegative = b
     this
   }
 
@@ -222,10 +231,12 @@ class ALS private (
       numUserBlocks = numUserBlocks,
       numItemBlocks = numProductBlocks,
       maxIter = iterations,
-      regParam = lambda,
+      userRegParam = userLambda,
+      itemRegParam = productLambda,
       implicitPrefs = implicitPrefs,
       alpha = alpha,
-      nonnegative = nonnegative,
+      userConstraint = userConstraint,
+      itemConstraint = productConstraint,
       intermediateRDDStorageLevel = intermediateRDDStorageLevel,
       finalRDDStorageLevel = StorageLevel.NONE,
       checkpointInterval = checkpointInterval,
@@ -266,19 +277,22 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param userLambda     L2 smoothness regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
    */
   def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      seed: Long
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, false, 1.0, seed).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    userConstraint: Constraint,
+    productConstraint: Constraint,
+    userLambda: Double,
+    productLambda: Double,
+    blocks: Int,
+    seed: Long): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, userConstraint, productConstraint,
+      userLambda, productLambda, false, 1.0, seed).run(ratings)
   }
 
   /**
@@ -291,17 +305,19 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param lambda     L2 smoothness regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    */
   def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, false, 1.0).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    constraint: Constraint,
+    lambda: Double,
+    blocks: Int): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations,
+      constraint, constraint, lambda, lambda,
+      false, 1.0).run(ratings)
   }
 
   /**
@@ -316,9 +332,12 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
-    : MatrixFactorizationModel = {
-    train(ratings, rank, iterations, lambda, -1)
+  def train(ratings: RDD[Rating],
+            rank: Int,
+            iterations: Int,
+            constraint: Constraint,
+            lambda: Double): MatrixFactorizationModel = {
+    train(ratings, rank, iterations, constraint, lambda, -1)
   }
 
   /**
@@ -332,9 +351,8 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
-  def train(ratings: RDD[Rating], rank: Int, iterations: Int)
-    : MatrixFactorizationModel = {
-    train(ratings, rank, iterations, 0.01, -1)
+  def train(ratings: RDD[Rating], rank: Int, iterations: Int): MatrixFactorizationModel = {
+    train(ratings, rank, iterations, SMOOTH, 0.01, -1)
   }
 
   /**
@@ -352,16 +370,16 @@ object ALS {
    * @param alpha      confidence parameter
    * @param seed       random seed
    */
-  def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      alpha: Double,
-      seed: Long
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, true, alpha, seed).run(ratings)
+  def trainImplicit(ratings: RDD[Rating],
+                    rank: Int,
+                    iterations: Int,
+                    lambda: Double,
+                    blocks: Int,
+                    alpha: Double,
+                    seed: Long): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations,
+            SMOOTH, SMOOTH, lambda, lambda,
+            true, alpha, seed).run(ratings)
   }
 
   /**
@@ -378,15 +396,14 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
    */
-  def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      alpha: Double
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, true, alpha).run(ratings)
+  def trainImplicit(ratings: RDD[Rating],
+                    rank: Int,
+                    iterations: Int,
+                    lambda: Double,
+                    blocks: Int,
+                    alpha: Double): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, SMOOTH, SMOOTH,
+            lambda, lambda, true, alpha).run(ratings)
   }
 
   /**
@@ -403,7 +420,7 @@ object ALS {
    * @param alpha      confidence parameter
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
-    : MatrixFactorizationModel = {
+  : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
   }
 
@@ -420,7 +437,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
-    : MatrixFactorizationModel = {
+  : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
   }
 }

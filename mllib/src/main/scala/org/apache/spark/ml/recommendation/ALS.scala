@@ -20,6 +20,7 @@ package org.apache.spark.ml.recommendation
 import java.{util => ju}
 import java.io.IOException
 
+import breeze.optimize.proximal.{ProximalL1, QuadraticMinimizer}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
@@ -43,6 +44,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
+import breeze.optimize.proximal.Constraint._
+import breeze.linalg.{DenseVector=>BrzVector}
+import breeze.linalg.{DenseMatrix=>BrzMatrix}
 
 /**
  * Common params for ALS.
@@ -72,8 +76,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for number of item blocks.
    * @group param
    */
-  val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
+  val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
 
   /** @group getParam */
   def getNumItemBlocks: Int = get(numItemBlocks)
@@ -289,11 +292,17 @@ class ALS extends Estimator[ALSModel] with ALSParams {
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
+
+    val userRegParam = map(regParam)
+    val userConstraint = if(map(nonnegative)) POSITIVE else SMOOTH
+
     val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
       numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
-      maxIter = map(maxIter), regParam = map(regParam), implicitPrefs = map(implicitPrefs),
-      alpha = map(alpha), nonnegative = map(nonnegative),
-      checkpointInterval = map(checkpointInterval))
+      maxIter = map(maxIter),
+      userRegParam=userRegParam, itemRegParam=userRegParam,
+      implicitPrefs = map(implicitPrefs),
+      alpha = map(alpha),
+      userConstraint=userConstraint, itemConstraint=userConstraint)
     val model = new ALSModel(this, map, map(rank), userFactors, itemFactors)
     Params.inheritValues(map, this, model)
     model
@@ -322,6 +331,58 @@ object ALS extends Logging {
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
+  }
+
+  /** QuadraticMinimization solver for least square problems. */
+  private[recommendation] class QuadraticSolver(rank: Int,
+                                                constraint: Constraint)
+    extends LeastSquaresNESolver {
+    private val qm = QuadraticMinimizer(rank, constraint)
+    private val init = qm.initialize
+    // Elastic Net beta parameter for L1 regularization
+    private val beta = if (constraint==SPARSE) 0.99 else 0.0
+
+    /** Quadratic Minimization solver for least square problems with non-smooth constraints (L1)
+      *
+      * minimize 0.5x'Hx + c'x + g(z)
+      * s.t Aeq x = beq
+      *
+      * Affine constraints are optional, Supported g(z) are one of the following
+      *
+      * 1. z >= 0
+      * 2. lb <= z <= ub
+      * 3. 1'z = s, s>=0
+      * 4. lambda*L1(z)
+      *
+      * TO DO: Add the remaining constraints
+      *
+      * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
+      * @param lambda regularization constant, which will be scaled by n
+      * @return the solution x
+      */
+    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      require(ne.k == rank, s"ALS:QuadraticSolver rank $rank expected ${ne.k}")
+
+      // If Elastic Net formulation is being run, give (1-beta)*lambda to L2 and
+      // beta*lambda to L1. The nomenclature used here is exactly same as GLMNET
+      val scaledlambda = lambda * (1- beta) * ne.n
+      var i = 0
+      var j = 2
+      while (i < ne.triK) {
+        ne.ata(i) += scaledlambda
+        i += j
+        j += 1
+      }
+      if (constraint == SPARSE) {
+        val regParamL1 = beta * lambda * ne.n
+        qm.getProximal.asInstanceOf[ProximalL1].setLambda(regParamL1)
+      }
+      val q = new BrzVector(ne.atb)
+      q *= -1.0
+      val x = qm.minimize(ne.ata, q, init)
+      ne.reset()
+      x.data.map(x => x.toFloat)
+    }
   }
 
   /** Cholesky solver for least square problems. */
@@ -496,10 +557,12 @@ object ALS extends Logging {
       numUserBlocks: Int = 10,
       numItemBlocks: Int = 10,
       maxIter: Int = 10,
-      regParam: Double = 1.0,
+      userRegParam: Double = 1.0,
+      itemRegParam: Double = 1.0,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0,
-      nonnegative: Boolean = false,
+      userConstraint: Constraint = SMOOTH,
+      itemConstraint: Constraint = SMOOTH,
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
@@ -512,7 +575,27 @@ object ALS extends Logging {
     val itemPart = new ALSPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
-    val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
+    val solver = System.getenv("solver")
+
+    val userSolver =
+      if (userConstraint == POSITIVE) new NNLSSolver
+      else {
+        if (solver == "mllib") new CholeskySolver
+        else {
+          println(s"QuadraticSolver for users with constraint ${userConstraint.toString}")
+          new QuadraticSolver(rank, userConstraint)
+        }
+      }
+
+    val itemSolver =
+      if (itemConstraint == POSITIVE) new NNLSSolver
+      else {
+        if (solver == "mllib") new CholeskySolver
+        else {
+          println(s"QuadraticSolver for items with constraint ${itemConstraint.toString}")
+          new QuadraticSolver(rank, itemConstraint)
+        }
+      }
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
       .persist(intermediateRDDStorageLevel)
     val (userInBlocks, userOutBlocks) =
@@ -546,8 +629,8 @@ object ALS extends Logging {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
         val previousItemFactors = itemFactors
-        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
-          userLocalIndexEncoder, implicitPrefs, alpha, solver)
+        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, userRegParam,
+          userLocalIndexEncoder, implicitPrefs, alpha, userSolver)
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
@@ -555,8 +638,8 @@ object ALS extends Logging {
           itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
         }
         val previousUserFactors = userFactors
-        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
-          itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, itemRegParam,
+          itemLocalIndexEncoder, implicitPrefs, alpha, itemSolver)
         if (shouldCheckpoint(iter)) {
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
@@ -565,16 +648,16 @@ object ALS extends Logging {
       }
     } else {
       for (iter <- 0 until maxIter) {
-        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
-          userLocalIndexEncoder, solver = solver)
+        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, itemRegParam,
+          userLocalIndexEncoder, solver = itemSolver)
         if (shouldCheckpoint(iter)) {
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
-        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
-          itemLocalIndexEncoder, solver = solver)
+        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, userRegParam,
+          itemLocalIndexEncoder, solver = userSolver)
       }
     }
     val userIdAndFactors = userInBlocks
@@ -1102,6 +1185,7 @@ object ALS extends Logging {
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
+        var solveTime = 0.0
         srcFactors.foreach { case (srcBlockId, factors) =>
           sortedSrcFactors(srcBlockId) = factors
         }
@@ -1127,9 +1211,12 @@ object ALS extends Logging {
             }
             i += 1
           }
+          val startTime = System.nanoTime()
           dstFactors(j) = solver.solve(ls, regParam)
+          solveTime += (System.nanoTime() - startTime)
           j += 1
         }
+        logInfo(s"solveTime ${solveTime/1e6} ms")
         dstFactors
     }
   }
