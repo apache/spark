@@ -20,7 +20,8 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
-import atexit
+
+from py4j.java_collections import ListConverter
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -29,12 +30,12 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, LargeObjectSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.traceback_utils import CallSite, first_spark_call
-
-from py4j.java_collections import ListConverter
+from pyspark.status import StatusTracker
+from pyspark.profiler import ProfilerCollector, BasicProfiler
 
 
 __all__ = ['SparkContext']
@@ -58,15 +59,16 @@ class SparkContext(object):
 
     _gateway = None
     _jvm = None
-    _writeToFile = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
+    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
+
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None):
+                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -88,6 +90,9 @@ class SparkContext(object):
         :param conf: A L{SparkConf} object setting Spark properties.
         :param gateway: Use an existing gateway and JVM, otherwise a new JVM
                will be instantiated.
+        :param jsc: The JavaSparkContext instance (optional).
+        :param profiler_cls: A class of custom Profiler used to do profiling
+               (default is pyspark.profiler.BasicProfiler).
 
 
         >>> from pyspark.context import SparkContext
@@ -102,14 +107,14 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc)
+                          conf, jsc, profiler_cls)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc):
+                 conf, jsc, profiler_cls):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -182,17 +187,22 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename.lower().endswith("zip") or filename.lower().endswith("egg"):
+                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
-            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark") \
+                .getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
-        self._profile_stats = []
+        if self._conf.get("spark.python.profile", "false") == "true":
+            dump_path = self._conf.get("spark.python.profile.dump", None)
+            self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
+        else:
+            self.profiler_collector = None
 
     def _initialize_context(self, jconf):
         """
@@ -210,7 +220,6 @@ class SparkContext(object):
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
-                SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
                 if (SparkContext._active_spark_context and
@@ -228,6 +237,14 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+    def __getnewargs__(self):
+        # This method is called when attempting to pickle SparkContext, which is always an error:
+        raise Exception(
+            "It appears that you are attempting to reference SparkContext from a broadcast "
+            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "not in code that it run on workers. For more information, see SPARK-5063."
+        )
 
     def __enter__(self):
         """
@@ -319,7 +336,7 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize))
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
         serializer.dump_stream(c, tempFile)
         tempFile.close()
@@ -407,7 +424,7 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -424,7 +441,7 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
@@ -624,15 +641,7 @@ class SparkContext(object):
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
-        ser = LargeObjectSerializer()
-
-        # pass large object by py4j is very slow and need much memory
-        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        ser.dump_stream([value], tempFile)
-        tempFile.close()
-        jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
-        return Broadcast(jbroadcast.id(), None, jbroadcast,
-                         self._pickled_broadcast_vars, tempFile.name)
+        return Broadcast(self, value, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """
@@ -697,7 +706,7 @@ class SparkContext(object):
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
 
-        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
@@ -800,6 +809,12 @@ class SparkContext(object):
         """
         self._jsc.sc().cancelAllJobs()
 
+    def statusTracker(self):
+        """
+        Return :class:`StatusTracker` object
+        """
+        return StatusTracker(self._jsc.statusTracker())
+
     def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
         """
         Executes the given partitionFunc on the specified set of partitions,
@@ -823,42 +838,18 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
-        return list(mappedRDD._collect_iterator_through_file(it))
-
-    def _add_profile(self, id, profileAcc):
-        if not self._profile_stats:
-            dump_path = self._conf.get("spark.python.profile.dump")
-            if dump_path:
-                atexit.register(self.dump_profiles, dump_path)
-            else:
-                atexit.register(self.show_profiles)
-
-        self._profile_stats.append([id, profileAcc, False])
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions,
+                                          allowLocal)
+        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        for i, (id, acc, showed) in enumerate(self._profile_stats):
-            stats = acc.value
-            if not showed and stats:
-                print "=" * 60
-                print "Profile of RDD<id=%d>" % id
-                print "=" * 60
-                stats.sort_stats("time", "cumulative").print_stats()
-                # mark it as showed
-                self._profile_stats[i][2] = True
+        self.profiler_collector.show_profiles()
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
         """
-        if not os.path.exists(path):
-            os.makedirs(path)
-        for id, acc, _ in self._profile_stats:
-            stats = acc.value
-            if stats:
-                p = os.path.join(path, "rdd_%d.pstats" % id)
-                stats.dump_stats(p)
-        self._profile_stats = []
+        self.profiler_collector.dump_profiles(path)
 
 
 def _test():

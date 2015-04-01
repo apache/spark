@@ -23,7 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
+import org.apache.spark.streaming.util.RecurringTimer
+import org.apache.spark.util.SystemClock
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -116,7 +117,7 @@ private[streaming] class BlockGenerator(
 
   /**
    * Push a single data item into the buffer. After buffering the data, the
-   * `BlockGeneratorListnere.onAddData` callback will be called. All received data items
+   * `BlockGeneratorListener.onAddData` callback will be called. All received data items
    * will be periodically pushed into BlockManager.
    */
   def addDataWithCallback(data: Any, metadata: Any) = synchronized {

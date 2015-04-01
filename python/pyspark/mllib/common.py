@@ -18,7 +18,7 @@
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
-from py4j.java_collections import MapConverter, ListConverter, JavaArray, JavaList
+from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -54,15 +54,13 @@ _picklable_classes = [
 
 
 # this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd, cache=False):
+def _to_java_object_rdd(rdd):
     """ Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    if cache:
-        rdd.cache()
     return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
@@ -72,9 +70,7 @@ def _py2java(sc, obj):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
-    elif isinstance(obj, dict):
-        obj = MapConverter().convert(obj, sc._gateway._gateway_client)
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list) and (obj or isinstance(obj[0], JavaObject)):
         obj = ListConverter().convert(obj, sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass
@@ -138,3 +134,20 @@ class JavaModelWrapper(object):
     def call(self, name, *a):
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
+
+
+def inherit_doc(cls):
+    """
+    A decorator that makes a class inherit documentation from its parents.
+    """
+    for name, func in vars(cls).items():
+        # only inherit docstring for public functions
+        if name.startswith("_"):
+            continue
+        if not func.__doc__:
+            for parent in cls.__bases__:
+                parent_func = getattr(parent, name, None)
+                if parent_func and getattr(parent_func, "__doc__", None):
+                    func.__doc__ = parent_func.__doc__
+                    break
+    return cls
