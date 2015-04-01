@@ -19,7 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -28,9 +28,19 @@ import org.apache.spark.util.ManualClock
 /**
  * Test add and remove behavior of ExecutorAllocationManager.
  */
-class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
+class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter {
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
+
+  private val contexts = new mutable.ListBuffer[SparkContext]()
+
+  before {
+    contexts.clear()
+  }
+
+  after {
+    contexts.foreach(_.stop())
+  }
 
   test("verify min/max executors") {
     val conf = new SparkConf()
@@ -665,16 +675,6 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).contains("executor-2"))
     assert(!removeTimes(manager).contains("executor-1"))
   }
-}
-
-/**
- * Helper methods for testing ExecutorAllocationManager.
- * This includes methods to access private methods and fields in ExecutorAllocationManager.
- */
-private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
-  private val schedulerBacklogTimeout = 1L
-  private val sustainedSchedulerBacklogTimeout = 2L
-  private val executorIdleTimeout = 3L
 
   private def createSparkContext(minExecutors: Int = 1, maxExecutors: Int = 5): SparkContext = {
     val conf = new SparkConf()
@@ -688,8 +688,21 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
         sustainedSchedulerBacklogTimeout.toString)
       .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout.toString)
       .set("spark.dynamicAllocation.testing", "true")
-    new SparkContext(conf)
+    val sc = new SparkContext(conf)
+    contexts += sc
+    sc
   }
+
+}
+
+/**
+ * Helper methods for testing ExecutorAllocationManager.
+ * This includes methods to access private methods and fields in ExecutorAllocationManager.
+ */
+private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
+  private val schedulerBacklogTimeout = 1L
+  private val sustainedSchedulerBacklogTimeout = 2L
+  private val executorIdleTimeout = 3L
 
   private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
     new StageInfo(stageId, 0, "name", numTasks, Seq.empty, "no details")
