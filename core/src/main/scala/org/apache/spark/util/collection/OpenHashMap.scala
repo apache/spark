@@ -53,6 +53,15 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
 
   override def size: Int = if (haveNullValue) _keySet.size + 1 else _keySet.size
 
+  /** Tests whether this map contains a binding for a key. */
+  def contains(k: K): Boolean = {
+    if (k == null) {
+      haveNullValue
+    } else {
+      _keySet.getPos(k) != OpenHashSet.INVALID_POS
+    }
+  }
+
   /** Get the value for a given key */
   def apply(k: K): V = {
     if (k == null) {

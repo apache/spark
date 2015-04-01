@@ -365,6 +365,31 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     sql("DROP TABLE IF EXISTS test_insert_parquet")
   }
+
+  test("SPARK-6450 regression test") {
+    sql(
+      """CREATE TABLE IF NOT EXISTS ms_convert (key INT)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    // This shouldn't throw AnalysisException
+    val analyzed = sql(
+      """SELECT key FROM ms_convert
+        |UNION ALL
+        |SELECT key FROM ms_convert
+      """.stripMargin).queryExecution.analyzed
+
+    assertResult(2) {
+      analyzed.collect {
+        case r @ LogicalRelation(_: ParquetRelation2) => r
+      }.size
+    }
+
+    sql("DROP TABLE ms_convert")
+  }
 }
 
 class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {

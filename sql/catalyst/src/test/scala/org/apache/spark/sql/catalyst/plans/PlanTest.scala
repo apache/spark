@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{NoRelation, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -55,6 +55,6 @@ class PlanTest extends FunSuite {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, NoRelation), Filter(e2, NoRelation))
+    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
   }
 }

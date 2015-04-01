@@ -339,7 +339,11 @@ private[master] class Master(
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
-            appInfo.removeExecutor(exec)
+            // If an application has already finished, preserve its
+            // state to display its information properly on the UI
+            if (!appInfo.isFinished) {
+              appInfo.removeExecutor(exec)
+            }
             exec.worker.removeExecutor(exec)
 
             val normalExit = exitStatus == Some(0)
@@ -427,6 +431,10 @@ private[master] class Master(
 
       if (canCompleteRecovery) { completeRecovery() }
     }
+
+    case UnregisterApplication(applicationId) =>
+      logInfo(s"Received unregister request from application $applicationId")
+      idToApp.get(applicationId).foreach(finishApplication)
 
     case DisassociatedEvent(_, address, _) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was

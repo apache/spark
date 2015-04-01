@@ -45,7 +45,7 @@ abstract class Generator extends Expression {
   override lazy val dataType =
     ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
 
-  override def nullable = false
+  override def nullable: Boolean = false
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -89,7 +89,7 @@ case class UserDefinedGenerator(
     function(inputRow(input))
   }
 
-  override def toString = s"UserDefinedGenerator(${children.mkString(",")})"
+  override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 }
 
 /**
@@ -130,5 +130,5 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     }
   }
 
-  override def toString() = s"explode($child)"
+  override def toString: String = s"explode($child)"
 }

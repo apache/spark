@@ -36,12 +36,12 @@ object CurrentOrigin {
     override def initialValue: Origin = Origin()
   }
 
-  def get = value.get()
-  def set(o: Origin) = value.set(o)
+  def get: Origin = value.get()
+  def set(o: Origin): Unit = value.set(o)
 
-  def reset() = value.set(Origin())
+  def reset(): Unit = value.set(Origin())
 
-  def setPosition(line: Int, start: Int) = {
+  def setPosition(line: Int, start: Int): Unit = {
     value.set(
       value.get.copy(line = Some(line), startPosition = Some(start)))
   }
@@ -57,7 +57,7 @@ object CurrentOrigin {
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   self: BaseType with Product =>
 
-  val origin = CurrentOrigin.get
+  val origin: Origin = CurrentOrigin.get
 
   /** Returns a Seq of the children of this node */
   def children: Seq[BaseType]
@@ -340,12 +340,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /** Returns the name of this type of TreeNode.  Defaults to the class name. */
-  def nodeName = getClass.getSimpleName
+  def nodeName: String = getClass.getSimpleName
 
   /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
    */
-  protected def stringArgs = productIterator
+  protected def stringArgs: Iterator[Any] = productIterator
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
@@ -357,18 +357,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }.mkString(", ")
 
   /** String representation of this node without any children */
-  def simpleString = s"$nodeName $argString".trim
+  def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString = generateTreeString(0, new StringBuilder).toString
+  def treeString: String = generateTreeString(0, new StringBuilder).toString
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
    * The numbers can be used with [[trees.TreeNode.apply apply]] to easily access specific subtrees.
    */
-  def numberedTreeString =
+  def numberedTreeString: String =
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
 
   /**
@@ -420,14 +420,14 @@ trait BinaryNode[BaseType <: TreeNode[BaseType]] {
   def left: BaseType
   def right: BaseType
 
-  def children = Seq(left, right)
+  def children: Seq[BaseType] = Seq(left, right)
 }
 
 /**
  * A [[TreeNode]] with no children.
  */
 trait LeafNode[BaseType <: TreeNode[BaseType]] {
-  def children = Nil
+  def children: Seq[BaseType] = Nil
 }
 
 /**
@@ -435,6 +435,5 @@ trait LeafNode[BaseType <: TreeNode[BaseType]] {
  */
 trait UnaryNode[BaseType <: TreeNode[BaseType]] {
   def child: BaseType
-  def children = child :: Nil
+  def children: Seq[BaseType] = child :: Nil
 }
-

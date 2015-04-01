@@ -40,35 +40,46 @@ else
   fi
 fi
 
-# Look for the launcher. In non-release mode, add the compiled classes directly to the classpath
-# instead of looking for a jar file.
-SPARK_LAUNCHER_CP=
-if [ -f $SPARK_HOME/RELEASE ]; then
-  LAUNCHER_DIR="$SPARK_HOME/lib"
-  num_jars="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" | wc -l)"
-  if [ "$num_jars" -eq "0" -a -z "$SPARK_LAUNCHER_CP" ]; then
-    echo "Failed to find Spark launcher in $LAUNCHER_DIR." 1>&2
-    echo "You need to build Spark before running this program." 1>&2
-    exit 1
-  fi
-
-  LAUNCHER_JARS="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" || true)"
-  if [ "$num_jars" -gt "1" ]; then
-    echo "Found multiple Spark launcher jars in $LAUNCHER_DIR:" 1>&2
-    echo "$LAUNCHER_JARS" 1>&2
-    echo "Please remove all but one jar." 1>&2
-    exit 1
-  fi
-
-  SPARK_LAUNCHER_CP="${LAUNCHER_DIR}/${LAUNCHER_JARS}"
+# Find assembly jar
+SPARK_ASSEMBLY_JAR=
+if [ -f "$SPARK_HOME/RELEASE" ]; then
+  ASSEMBLY_DIR="$SPARK_HOME/lib"
 else
-  LAUNCHER_DIR="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION"
-  if [ ! -d "$LAUNCHER_DIR/classes" ]; then
-    echo "Failed to find Spark launcher classes in $LAUNCHER_DIR." 1>&2
-    echo "You need to build Spark before running this program." 1>&2
+  ASSEMBLY_DIR="$SPARK_HOME/assembly/target/scala-$SPARK_SCALA_VERSION"
+fi
+
+num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" | wc -l)"
+if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" ]; then
+  echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
+  echo "You need to build Spark before running this program." 1>&2
+  exit 1
+fi
+ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" || true)"
+if [ "$num_jars" -gt "1" ]; then
+  echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
+  echo "$ASSEMBLY_JARS" 1>&2
+  echo "Please remove all but one jar." 1>&2
+  exit 1
+fi
+
+SPARK_ASSEMBLY_JAR="${ASSEMBLY_DIR}/${ASSEMBLY_JARS}"
+
+# Verify that versions of java used to build the jars and run Spark are compatible
+if [ -n "$JAVA_HOME" ]; then
+  JAR_CMD="$JAVA_HOME/bin/jar"
+else
+  JAR_CMD="jar"
+fi
+
+if [ $(command -v "$JAR_CMD") ] ; then
+  jar_error_check=$("$JAR_CMD" -tf "$SPARK_ASSEMBLY_JAR" nonexistent/class/path 2>&1)
+  if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
+    echo "Loading Spark jar with '$JAR_CMD' failed. " 1>&2
+    echo "This is likely because Spark was compiled with Java 7 and run " 1>&2
+    echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark " 1>&2
+    echo "or build Spark with Java 6." 1>&2
     exit 1
   fi
-  SPARK_LAUNCHER_CP="$LAUNCHER_DIR/classes"
 fi
 
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
@@ -77,7 +88,7 @@ fi
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$SPARK_LAUNCHER_CP" org.apache.spark.launcher.Main "$@")
+done < <("$RUNNER" -cp "$SPARK_ASSEMBLY_JAR" org.apache.spark.launcher.Main "$@")
 
 if [ "${CMD[0]}" = "usage" ]; then
   "${CMD[@]}"

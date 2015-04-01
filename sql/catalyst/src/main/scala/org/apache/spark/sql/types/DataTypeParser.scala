@@ -112,4 +112,4 @@ private[sql] object DataTypeParser {
 }
 
 /** The exception thrown from the [[DataTypeParser]]. */
-protected[sql] class DataTypeException(message: String) extends Exception(message)
+private[sql] class DataTypeException(message: String) extends Exception(message)
