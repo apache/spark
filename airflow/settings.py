@@ -7,12 +7,11 @@ from sqlalchemy import create_engine
 from airflow.configuration import conf
 
 HEADER = """\
-       .__         _____.__
-_____  |__|_______/ ____\  |   ______  _  __
-\__  \ |  \_  __ \   __\|  |  /  _ \ \/ \/ /
- / __ \|  ||  | \/|  |  |  |_(  <_> )     /
-(____  /__||__|   |__|  |____/\____/ \/\_/
-     \/"""
+  ____________       _____________
+ ____    |__( )_________  __/__  /________      __
+____  /| |_  /__  ___/_  /_ __  /_  __ \_ | /| / /
+ __  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
+ _/_/  |_/_/  /_/    /_/    /_/  \____/____/|__/"""
 
 BASE_LOG_URL = '/admin/airflow/log'
 AIRFLOW_HOME = os.path.expanduser(conf.get('core', 'AIRFLOW_HOME'))
