@@ -138,7 +138,7 @@ public class JavaUtils {
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  public static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
+  private static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
     String timeError = "Time must be specified as seconds (s), " +
       "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
       "E.g. 50s, 100ms, or 250us.";
@@ -149,7 +149,7 @@ public class JavaUtils {
       for (String tail: timeSuffixes.keySet()) {
         if (lower.endsWith(tail)) {
           // Handle special case for overlapping suffixes
-          if(!tail.equals("s") || 
+          if (!tail.equals("s") || 
                   (tail.equals("s") && !lower.endsWith("us") && !lower.endsWith("ms")))
           {
             suffix = tail;
@@ -160,7 +160,7 @@ public class JavaUtils {
       return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
         timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
-      throw new NumberFormatException(timeError + "\n" + e.toString());
+      throw new NumberFormatException(timeError + "\n" + e.getMessage());
     }
   }
 

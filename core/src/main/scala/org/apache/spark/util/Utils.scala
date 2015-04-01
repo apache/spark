@@ -1017,7 +1017,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in us.
    */
   def timeStringAsUs(str: String): Long = {
-    JavaUtils.parseTimeString(str, TimeUnit.MICROSECONDS)
+    JavaUtils.timeStringAsUs(str)
   }
 
   /**
@@ -1025,7 +1025,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   def timeStringAsMs(str : String) : Long = {
-    JavaUtils.parseTimeString(str, TimeUnit.MILLISECONDS)
+    JavaUtils.timeStringAsMs(str)
   }
 
   /**
@@ -1033,7 +1033,7 @@ private[spark] object Utils extends Logging {
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsS(str : String) : Long = {
-    JavaUtils.parseTimeString(str, TimeUnit.SECONDS)
+    JavaUtils.timeStringAsS(str)
   }
 
   /**
