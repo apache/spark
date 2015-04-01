@@ -37,7 +37,7 @@ class UTF8StringSuite extends FunSuite {
     check("世 界", 3)
   }
 
-  test("contains, prefix and suffix") {
+  test("contains") {
     assert(UTF8String("hello").contains(UTF8String("ello")))
     assert(!UTF8String("hello").contains(UTF8String("vello")))
     assert(UTF8String("大千世界").contains(UTF8String("千世")))
@@ -59,7 +59,7 @@ class UTF8StringSuite extends FunSuite {
   }
 
   test("slice") {
-    assert(UTF8String("hello").slice(1, 3) == UTF8String("ell"))
+    assert(UTF8String("hello").slice(1, 3) == UTF8String("el"))
     assert(UTF8String("大千世界").slice(0, 1) == UTF8String("大"))
     assert(UTF8String("大千世界").slice(1, 3) == UTF8String("千世"))
     assert(UTF8String("大千世界").slice(3, 5) == UTF8String("界"))

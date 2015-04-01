@@ -64,8 +64,13 @@ object IntegerLiteral {
 
 case class Literal(var value: Any, dataType: DataType) extends LeafExpression {
 
-  if (dataType == StringType && value.isInstanceOf[String]) {
-    value = UTF8String(value.asInstanceOf[String])
+  // TODO(davies): FIXME
+  (value, dataType) match {
+    case (s: String, StringType) =>
+      value = UTF8String(s)
+    case (seq: Seq[String], dt:ArrayType) if dt.elementType == StringType =>
+      value = seq.map(UTF8String(_))
+    case _ =>
   }
 
   override def foldable: Boolean = true

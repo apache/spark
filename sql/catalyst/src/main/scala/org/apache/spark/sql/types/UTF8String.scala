@@ -28,7 +28,7 @@ import java.util.Arrays
  *  Note: This is not designed for general use cases, should not be used outside SQL.
  */
 
-private[sql] final class UTF8String extends Ordered[UTF8String] with Serializable {
+final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   private var bytes: Array[Byte] = _
 
@@ -57,7 +57,7 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
     var len = 0
     var i: Int = 0
     while (i < bytes.length) {
-      val b = bytes(i)
+      val b = bytes(i) & 0xFF
       i += 1
       if (b >= 192) {
         i += UTF8String.tailBytesOfUTF8(b - 192)
@@ -84,7 +84,7 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
     var c = 0
     var i: Int = 0
     while (c < start && i < bytes.length) {
-      val b = bytes(i)
+      val b = bytes(i) & 0xFF
       i += 1
       if (b >= 192) {
         i += UTF8String.tailBytesOfUTF8(b - 192)
@@ -93,7 +93,7 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
     }
     var j = i
     while (c < until && j < bytes.length) {
-      val b = bytes(j)
+      val b = bytes(j) & 0xFF
       j += 1
       if (b >= 192) {
         j += UTF8String.tailBytesOfUTF8(b - 192)
@@ -160,7 +160,7 @@ private[sql] final class UTF8String extends Ordered[UTF8String] with Serializabl
   }
 }
 
-private[sql] object UTF8String {
+object UTF8String {
   // number of tailing bytes in a UTF8 sequence for a code point
   // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
   private[types] val tailBytesOfUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
