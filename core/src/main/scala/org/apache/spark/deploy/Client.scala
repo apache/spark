@@ -89,7 +89,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
 
   /* Find out driver status then exit the JVM */
   def pollAndReportStatus(driverId: String) {
-    println(s"... waiting before polling master for driver state")
+    println("... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
     val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
