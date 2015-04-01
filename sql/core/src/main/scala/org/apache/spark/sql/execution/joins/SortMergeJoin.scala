@@ -130,7 +130,7 @@ case class SortMergeJoin(
                 stop = true
               } else if (ordering.compare(leftKey, rightKey) > 0 || rightKey.anyNull) {
                 fetchRight()
-              } else { //if (ordering.compare(leftKey, rightKey) < 0 || leftKey.anyNull)
+              } else { // if (ordering.compare(leftKey, rightKey) < 0 || leftKey.anyNull)
                 fetchLeft()
               }
             }
