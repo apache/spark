@@ -128,14 +128,7 @@ private[spark] class YarnClientSchedulerBackend(
     val t = new Thread {
       override def run() {
         while (!stopping) {
-          var state: YarnApplicationState = null
-          try {
-            val report = client.getApplicationReport(appId)
-            state = report.getYarnApplicationState()
-          } catch {
-            case e: ApplicationNotFoundException =>
-              state = YarnApplicationState.KILLED
-          }
+          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
           if (state == YarnApplicationState.FINISHED ||
             state == YarnApplicationState.KILLED ||
             state == YarnApplicationState.FAILED) {
@@ -143,7 +136,6 @@ private[spark] class YarnClientSchedulerBackend(
             sc.stop()
             stopping = true
           }
-          Thread.sleep(1000L)
         }
         Thread.currentThread().interrupt()
       }
