@@ -78,7 +78,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
               if (part == null) {
                 throw new AnalysisException(
                   s"Could not read schema from the metastore because it is corrupted " +
-                    s"(missing part ${index} of the schema).")
+                  s"(missing part ${index} of the schema).")
               }
 
               part
