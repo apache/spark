@@ -809,11 +809,10 @@ object Client extends Logging {
       }
     }
     addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
-    // Since we have a spark assembly that is including all the yarn and other dependencies we need,
-    // add an option to allow the user to not include the cluster default yarn/mapreduce application
-    // classpaths when running spark on yarn.
-    val isPopulateHadoopClasspath = conf.getBoolean("spark.yarn.cluster.classpath.populate", true)
-    if (isPopulateHadoopClasspath) {
+    // Because the Spark assembly may already include Hadoop and its dependencies we need,
+    // add an option to allow the user to not include the cluster default yarn/mapreduce
+    // application classpaths when running spark on yarn.
+    if (conf.getBoolean("spark.yarn.includeClusterHadoopClasspath", true)) {
       populateHadoopClasspath(conf, env)
     }
     sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
