@@ -19,6 +19,7 @@ package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
 
+import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
@@ -28,6 +29,29 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 object FlumeUtils {
   private val DEFAULT_POLLING_PARALLELISM = 5
   private val DEFAULT_POLLING_BATCH_SIZE = 1000
+
+  // Build a flume conf which is used to pass conf to Execitpr.
+  private def getFlumeConf(decompression: Boolean = false) = {
+    val sparkConf = new SparkConf()
+    val maxThread = sparkConf.getInt("spark.streaming.flume.threads", 0)
+    val enableDecompression = sparkConf.getBoolean("spark.streaming,flume.decompression",
+      decompression)
+    val enableSSL = sparkConf.getBoolean("spark.streaming.flume.ssl", false)
+    val keyStorePath = sparkConf.get("spark.streaming.flume.keyStore", "")
+    val keyStorePassword = sparkConf.get("spark.streaming.flume.keystore-password", "")
+    val keyStoreType = sparkConf.get("spark.streaming.flume.keystore-type", "JKS")
+
+    validateFlumeConf(enableSSL, keyStorePath, keyStorePassword)
+    FlumeConf(maxThread, enableDecompression, enableSSL, keyStorePath,
+      keyStorePassword, keyStoreType)
+  }
+
+  private
+  def validateFlumeConf(enableSSL: Boolean, keyStorePath: String, keyStorePassword: String) = {
+    if (enableSSL && (keyStorePath.isEmpty || keyStorePassword.isEmpty)) {
+      throw new SparkException("When enable SSL, keyStore or keyStorePassWord can not be empty.")
+    }
+  }
 
   /**
    * Create a input stream from a Flume source.
@@ -61,7 +85,7 @@ object FlumeUtils {
       enableDecompression: Boolean
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](
-        ssc, hostname, port, storageLevel, enableDecompression)
+        ssc, hostname, port, storageLevel, getFlumeConf(enableDecompression))
 
     inputStream
   }

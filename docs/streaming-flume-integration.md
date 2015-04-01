@@ -27,6 +27,10 @@ Configure Flume agent to send data to an Avro sink by having the following in th
     agent.sinks.avroSink.channel = memoryChannel
     agent.sinks.avroSink.hostname = <chosen machine's hostname>
 	agent.sinks.avroSink.port = <chosen port on the machine>
+	agent.sinks.avroSink.ssl = <default: false>
+	agent.sinks.avroSink.keystore = <path of keyStore file: necessary if `ssl` is true>
+	agent.sinks.avroSink.keystore-password = <password of keyStore: necessary if `ssl` is true>
+	agent.sinks.avroSink.keystore-type = <default: JKS>
 
 See the [Flume's documentation](https://flume.apache.org/documentation.html) for more information about
 configuring Flume agents.
@@ -37,8 +41,15 @@ configuring Flume agents.
 		groupId = org.apache.spark
 		artifactId = spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}
 		version = {{site.SPARK_VERSION_SHORT}}
+		
+2. **Configuration:** if `agent.sinks.avroSink.ssl` is true, this configuration has to set in the spark conf.
 
-2. **Programming:** In the streaming application code, import `FlumeUtils` and create input DStream as follows.
+        spark.streaming.flume.ssl = true
+        spark.streaming.flume.keystore = <path of keyStore file>
+        spark.streaming.flume.keystore-password = <password of keyStore>
+        spark.streaming.flume.keystore-type = <default: JKS>
+
+3. **Programming:** In the streaming application code, import `FlumeUtils` and create input DStream as follows.
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
@@ -64,7 +75,7 @@ configuring Flume agents.
     cluster (Mesos, YARN or Spark Standalone), so that resource allocation can match the names and launch
     the receiver in the right machine.
 
-3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+4. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
 ## Approach 2: Pull-based Approach using a Custom Sink
 Instead of Flume pushing data directly to Spark Streaming, this approach runs a custom Flume sink that allows the following.
