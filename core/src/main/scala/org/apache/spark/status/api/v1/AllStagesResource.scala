@@ -35,7 +35,7 @@ private[v1] class AllStagesResource(uiRoot: UIRoot) {
     @QueryParam("status") statuses: java.util.List[StageStatus]
   ): Seq[StageData] = {
     uiRoot.withSparkUI(appId) { ui =>
-      val listener = ui.stagesTab.listener
+      val listener = ui.jobProgressListener
       val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
       val adjStatuses = {
         if (statuses.isEmpty()) {
@@ -118,7 +118,7 @@ private[v1] object AllStagesResource {
   }
 
   def stagesAndStatus(ui: SparkUI): Seq[(StageStatus, Seq[StageInfo])] = {
-    val listener = ui.stagesTab.listener
+    val listener = ui.jobProgressListener
     listener.synchronized {
       Seq(
         StageStatus.Active -> listener.activeStages.values.toSeq,
