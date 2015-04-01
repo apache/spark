@@ -55,6 +55,8 @@ private[mesos] class SuperviseRetryList(state: MesosClusterPersistenceEngine) {
     state.fetchAll[RetryState]().foreach(drivers.+=)
   }
 
+  def size: Int = drivers.size
+
   def contains(submissionId: String): Boolean =
     drivers.exists(d => d.submission.submissionId.equals(submissionId))
 

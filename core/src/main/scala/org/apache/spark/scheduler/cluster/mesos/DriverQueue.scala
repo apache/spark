@@ -44,6 +44,8 @@ private[mesos] class DriverQueue(state: MesosClusterPersistenceEngine, capacity:
 
   def isFull = count >= capacity
 
+  def size: Int = count
+
   def contains(submissionId: String): Boolean = {
     queue.exists(s => s.submissionId.equals(submissionId))
   }

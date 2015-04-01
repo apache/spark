@@ -23,18 +23,20 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 import java.util.{Collections, Date, List => JList}
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.{Scheduler, SchedulerDriver}
+
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkException, TaskState}
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.{SparkConf, SparkException, SecurityManager, TaskState}
 
 
 /**
@@ -111,6 +113,8 @@ private[spark] class MesosClusterSchedulerDriver(
 
   var frameworkUrl: String = _
 
+  private val metricsSystem =
+    MetricsSystem.createMetricsSystem("mesos_cluster", conf, new SecurityManager(conf))
   private val master = conf.get("spark.master")
   private val appName = conf.get("spark.app.name")
   private val queuedCapacity = conf.getInt("spark.deploy.mesos.queuedDrivers", 200)
@@ -123,13 +127,14 @@ private[spark] class MesosClusterSchedulerDriver(
   private var frameworkId: String = null
 
   // Stores all the launched and running drivers' states.
-  private var launchedDrivers: LaunchedDrivers = _
+  var launchedDrivers: LaunchedDrivers = _
 
   // A queue that stores all the submitted drivers that hasn't been launched.
-  private var queue: DriverQueue = _
+  var queue: DriverQueue = _
 
   // All supervised drivers that are waiting to retry after termination.
-  private var superviseRetryList: SuperviseRetryList = _
+  var superviseRetryList: SuperviseRetryList = _
+
   private var masterInfo: MasterInfo = _
 
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
@@ -223,11 +228,15 @@ private[spark] class MesosClusterSchedulerDriver(
       frameworkId = id
     }
     recoverState
+    metricsSystem.registerSource(new MesosClusterSchedulerSource(this))
+    metricsSystem.start()
     startScheduler(
       "MesosClusterScheduler", master, MesosClusterSchedulerDriver.this, builder.build())
   }
 
   def stop(): Unit = {
+    metricsSystem.report()
+    metricsSystem.stop()
     driver.stop(true)
   }
 

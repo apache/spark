@@ -40,6 +40,8 @@ private[mesos] class LaunchedDrivers(state: MesosClusterPersistenceEngine) {
     }
   }
 
+  def size: Int = drivers.size
+
   def get(submissionId: String): MesosClusterTaskState = drivers(submissionId)
 
   def states: Iterable[MesosClusterTaskState] = {
