@@ -17,24 +17,24 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Properties
-
-import org.apache.spark.TaskContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
 /**
- * Tracks information about an active job in the DAGScheduler.
+ * The ResultStage represents the final stage in a job.
  */
-private[spark] class ActiveJob(
-    val jobId: Int,
-    val finalStage: ResultStage,
-    val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int],
-    val callSite: CallSite,
-    val listener: JobListener,
-    val properties: Properties) {
+private[spark] class ResultStage(
+    id: Int,
+    rdd: RDD[_],
+    numTasks: Int,
+    parents: List[Stage],
+    jobId: Int,
+    callSite: CallSite)
+  extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  val numPartitions = partitions.length
-  val finished = Array.fill[Boolean](numPartitions)(false)
-  var numFinished = 0
+  // The active job for this result stage. Will be empty if the job has already finished
+  // (e.g., because the job was cancelled).
+  var resultOfJob: Option[ActiveJob] = None
+
+  override def toString: String = "ResultStage " + id
 }
