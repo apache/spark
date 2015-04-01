@@ -180,17 +180,17 @@ class DenseVector(Vector):
     >>> v = Vectors.dense([1.0, 2.0])
     >>> u = Vectors.dense([3.0, 4.0])
     >>> v + u
-    array([ 4.,  6.])
+    DenseVector([4.0, 6.0])
     >>> 2 - v
-    array([ 1.,  0.])
+    DenseVector([1.0, 0.0])
     >>> v / 2
-    array([ 0.5,  1. ])
+    DenseVector([0.5, 1.0])
     >>> v * u
-    array([ 3.,  8.])
+    DenseVector([3.0, 8.0])
     >>> u / v
-    array([ 3.,  2.])
+    DenseVector([3.0, 2.0])
     >>> u % 2
-    array([ 1.,  0.])
+    DenseVector([1.0, 0.0])
     """
     def __init__(self, ar):
         if isinstance(ar, basestring):
@@ -313,7 +313,7 @@ class DenseVector(Vector):
         def func(self, other):
             if isinstance(other, DenseVector):
                 other = other.array
-            return getattr(self.array, op)(other)
+            return DenseVector(getattr(self.array, op)(other))
         return func
 
     __neg__ = _delegate("__neg__")
