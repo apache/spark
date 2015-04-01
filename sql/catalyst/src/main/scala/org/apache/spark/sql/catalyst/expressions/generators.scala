@@ -82,13 +82,13 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator{
 
-  var input_schema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
-
   override protected def makeOutput(): Seq[Attribute] = schema
 
   override def eval(input: Row): TraversableOnce[Row] = {
+    // TODO(davies): improve this
+    val input_schema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
     val inputRow = new InterpretedProjection(children)
-    function(ScalaReflection.convertToCatalyst(inputRow(input), input_schema).asInstanceOf[Row])
+    function(ScalaReflection.convertToScala(inputRow(input), input_schema).asInstanceOf[Row])
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"

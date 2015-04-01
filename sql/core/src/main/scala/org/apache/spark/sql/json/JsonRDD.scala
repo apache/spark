@@ -450,7 +450,7 @@ private[sql] object JsonRDD extends Logging {
   private[sql] def rowToJSON(rowSchema: StructType, gen: JsonGenerator)(row: Row) = {
     def valWriter: (DataType, Any) => Unit = {
       case (_, null) | (NullType, _)  => gen.writeNull()
-      case (StringType, v: UTF8String) => gen.writeString(v.toString)
+      case (StringType, v: String) => gen.writeString(v.toString)
       case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
       case (ShortType, v: Short) => gen.writeNumber(v)

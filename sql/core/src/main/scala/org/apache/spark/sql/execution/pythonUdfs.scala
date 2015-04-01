@@ -140,7 +140,6 @@ object EvaluatePython {
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
     case (date: Int, DateType) => DateUtils.toJavaDate(date)
-    case (s: UTF8String, StringType) => s.toString
 
     // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
