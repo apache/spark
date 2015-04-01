@@ -220,7 +220,7 @@ private[spark] class ApplicationMaster(
 
     val appId = client.getAttemptId().getApplicationId().toString()
     val historyAddress =
-      sparkConf.getOption("spark.yarn.historyServer.address")
+      Option(yarnConf.get("spark.yarn.historyServer.address"))
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
         .getOrElse("")
 
