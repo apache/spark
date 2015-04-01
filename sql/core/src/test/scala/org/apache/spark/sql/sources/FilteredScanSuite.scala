@@ -185,7 +185,7 @@ class FilteredScanSuite extends DataSourceTest {
     Seq(Row(3, 3 * 2, "c" * 10)))
 
   sqlTest(
-    "SELECT a, b, c FROM oneToTenFiltered WHERE c like 'd%'",
+    "SELECT a, b, c FROM oneToTenFiltered WHERE c like '%d'",
     Seq(Row(4, 4 * 2, "d" * 10)))
 
   sqlTest(
