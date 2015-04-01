@@ -17,12 +17,14 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.{Node, NodeSeq}
+import scala.xml.{Node, NodeSeq, Unparsed}
 
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData.JobUIData
+import org.apache.spark.JobExecutionStatus
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -94,6 +96,40 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     </table>
   }
 
+  private val controlPanel : Seq[Node] = {
+    <div class="control-panel">
+      <div id="application-timeline-zoom-lock">
+        <input type="checkbox" checked="checked"></input>
+        <span>Zoom Lock</span>
+      </div>
+    </div>
+  }
+
+  private val executorsLegend: Seq[Node] = {
+    <div class="legend-area"><svg width="200px" height="55px">
+      <rect x="5px" y="5px" width="20px" height="15px"
+        rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <text x="35px" y="17px">Executor Added</text>
+      <rect x="5px" y="35px" width="20px" height="15px"
+        rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
+      <text x="35px" y="47px">Executor Removed</text>
+    </svg></div>
+  }
+
+  private val jobsLegend: Seq[Node] = {
+    <div class="legend-area"><svg width="200px" height="85px">
+      <rect x="5px" y="5px" width="20px" height="15px"
+        rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <text x="35px" y="17px">Succeeded Job</text>
+      <rect x="5px" y="35px" width="20px" height="15px"
+        rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
+      <text x="35px" y="47px">Failed Job</text>
+      <rect x="5px" y="65px" width="20px" height="15px"
+        rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
+      <text x="35px" y="77px">Running Job</text>
+    </svg></div>
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeJobs = listener.activeJobs.values.toSeq
@@ -154,6 +190,101 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </div>
 
       var content = summary
+
+      val groupArrayStr =
+        s"""
+          |[
+          |  {
+          |    'id': 'executors',
+          |    'content': '<div>Executors</div>${executorsLegend.toString().filter(_ != '\n')}',
+          |  },
+          |  {
+          |    'id': 'jobs',
+          |    'content': '<div>Jobs</div>${jobsLegend.toString().filter(_ != '\n')}',
+          |  }
+          |]
+        """.stripMargin
+
+      val jobEventArray = (completedJobs ++ failedJobs ++ activeJobs).flatMap { jobUIData =>
+        val jobId = jobUIData.jobId
+        val status = jobUIData.status
+        val submissionTimeOpt = jobUIData.submissionTime
+        val completionTimeOpt = jobUIData.completionTime
+
+        if (status == JobExecutionStatus.UNKNOWN || submissionTimeOpt.isEmpty ||
+          completionTimeOpt.isEmpty && status != JobExecutionStatus.RUNNING) {
+          None
+        }
+
+        val submissionTime = submissionTimeOpt.get
+        val completionTime = completionTimeOpt.getOrElse(now)
+        val classNameByStatus = status match {
+          case JobExecutionStatus.SUCCEEDED => "succeeded"
+          case JobExecutionStatus.FAILED => "failed"
+          case JobExecutionStatus.RUNNING => "running"
+        }
+
+        val timelineObject =
+          s"""
+             |{
+             |  'className': 'job application-timeline-object ${classNameByStatus}',
+             |  'group': 'jobs',
+             |  'start': new Date(${submissionTime}),
+             |  'end': new Date(${completionTime}),
+             |  'content': '<div class="application-timeline-content">' +
+             |    'Job ${jobId}</div>',
+             |  'title': 'Job ${jobId}\\nStatus: ${status}\\n' +
+             |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+             |    '${
+                     if (status != JobExecutionStatus.RUNNING) {
+                       s"""\\nCompletion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                     } else {
+                       ""
+                     }
+                   }'
+             |}
+           """.stripMargin
+          Option(timelineObject)
+      }
+
+      val executorAddedEventArray = listener.executorIdToAddedTime.map {
+        case (executorId, addedTime) =>
+          s"""
+            |{
+            |  'className': 'executor application-tmeline-object added',
+            |  'group': 'executors',
+            |  'start': new Date(${addedTime}),
+            |  'content': '<div>Executor ${executorId} added</div>',
+            |  'title': 'Added at ${UIUtils.formatDate(new Date(addedTime))}'
+            |}
+          """.stripMargin
+      }
+
+      val executorRemovedEventArray = listener.executorIdToRemovedTimeAndReason.map {
+        case (executorId, (removedTime, reason)) =>
+          s"""
+            |{
+            |  'className': 'executor application-timeline-object removed',
+            |  'group': 'executors',
+            |  'start': new Date(${removedTime}),
+            |  'content': '<div>Executor ${executorId} removed (${reason})</div>',
+            |  'title': 'Removed at ${UIUtils.formatDate(new Date(removedTime))}\\n' +
+            |    'Reason: ${reason}'
+            |}
+          """.stripMargin
+      }
+
+      val eventArrayStr =
+        (jobEventArray ++ executorAddedEventArray ++
+          executorRemovedEventArray).mkString("[", ",", "]")
+
+      content ++= <h4>Events on Application Timeline</h4> ++ controlPanel ++
+        <div id="application-timeline"></div>
+      content ++=
+        <script type="text/javascript">
+          {Unparsed(s"drawApplicationTimeline(${groupArrayStr}, ${eventArrayStr});")}
+        </script>
+
       if (shouldShowActiveJobs) {
         content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
           activeJobsTable
@@ -166,6 +297,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
           failedJobsTable
       }
+
       val helpText = """A job is triggered by an action, like "count()" or "saveAsTextFile()".""" +
         " Click on a job's title to see information about the stages of tasks associated with" +
         " the job."
