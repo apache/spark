@@ -23,10 +23,6 @@ div#application-timeline, div#job-timeline {
   margin-bottom: 30px;
 }
 
-#application-timeline .vis.timeline .item.selected {
-
-}
-
 #application-timeline div.legend-area {
   margin-top: 20px;
 }
