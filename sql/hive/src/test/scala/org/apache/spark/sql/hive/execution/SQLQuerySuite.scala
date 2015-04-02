@@ -457,15 +457,4 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
     setConf("spark.sql.hive.convertCTAS", originalConf)
   }
-
-  test("sanity test for SPARK-6618") {
-    (1 to 100).par.map { i =>
-      val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(Seq(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
-    }
-  }
 }
