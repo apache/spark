@@ -670,6 +670,16 @@ class DenseMatrix(Matrix):
         """
         return self.values.reshape((self.numRows, self.numCols), order='F')
 
+    def __getitem__(self, indices):
+        i, j = indices
+        if i < 0 or i >= self.numRows:
+            raise ValueError("Row index %d is out of range [0, %d)"
+                             % (i, self.numRows))
+        if j >= self.numCols or j < 0:
+            raise ValueError("Column index %d is out of range [0, %d)"
+                             % (j, self.numCols))
+        return self.values[i + j * self.numRows]
+
     def __eq__(self, other):
         return (isinstance(other, DenseMatrix) and
                 self.numRows == other.numRows and

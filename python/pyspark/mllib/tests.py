@@ -135,6 +135,13 @@ class VectorTests(PySparkTestCase):
         for ind in [4, -5, 7.8]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
 
+    def test_matrix_indexing(self):
+        mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
+        expected = [[0, 6], [1, 8], [4, 10]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat[i, j], expected[i][j])
+
 
 class ListTests(PySparkTestCase):
 
