@@ -37,7 +37,6 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils
 
@@ -447,8 +446,10 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
   }
 
   private def startThriftServer(port: Int, attempt: Int) = {
-    warehousePath = util.getTempFilePath("warehouse")
-    metastorePath = util.getTempFilePath("metastore")
+    warehousePath = Utils.createTempDir()
+    warehousePath.delete()
+    metastorePath = Utils.createTempDir()
+    metastorePath.delete()
     logPath = null
     logTailingProcess = null
 

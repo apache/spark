@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -54,7 +55,7 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))

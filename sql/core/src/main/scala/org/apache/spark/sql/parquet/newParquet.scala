@@ -42,6 +42,7 @@ import parquet.hadoop.{ParquetInputFormat, _}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions
@@ -121,7 +122,8 @@ private[sql] class DefaultSource
       val df =
         sqlContext.createDataFrame(
           data.queryExecution.toRdd,
-          data.schema.asNullable)
+          data.schema.asNullable,
+          needsConversion = false)
       val createdRelation =
         createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
       createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
@@ -181,7 +183,7 @@ private[sql] case class ParquetRelation2(
   private val defaultPartitionName = parameters.getOrElse(
     ParquetRelation2.DEFAULT_PARTITION_NAME, "__HIVE_DEFAULT_PARTITION__")
 
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case relation: ParquetRelation2 =>
       // If schema merging is required, we don't compare the actual schemas since they may evolve.
       val schemaEquality = if (shouldMergeSchemas) {
@@ -196,6 +198,23 @@ private[sql] case class ParquetRelation2(
         maybePartitionSpec == relation.maybePartitionSpec
 
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (shouldMergeSchemas) {
+      com.google.common.base.Objects.hashCode(
+        shouldMergeSchemas: java.lang.Boolean,
+        paths.toSet,
+        maybeMetastoreSchema,
+        maybePartitionSpec)
+    } else {
+      com.google.common.base.Objects.hashCode(
+        shouldMergeSchemas: java.lang.Boolean,
+        schema,
+        paths.toSet,
+        maybeMetastoreSchema,
+        maybePartitionSpec)
+    }
   }
 
   private[sql] def sparkContext = sqlContext.sparkContext
@@ -370,19 +389,19 @@ private[sql] case class ParquetRelation2(
   @transient private val metadataCache = new MetadataCache
   metadataCache.refresh()
 
-  def partitionSpec = metadataCache.partitionSpec
+  def partitionSpec: PartitionSpec = metadataCache.partitionSpec
 
-  def partitionColumns = metadataCache.partitionSpec.partitionColumns
+  def partitionColumns: StructType = metadataCache.partitionSpec.partitionColumns
 
-  def partitions = metadataCache.partitionSpec.partitions
+  def partitions: Seq[Partition] = metadataCache.partitionSpec.partitions
 
-  def isPartitioned = partitionColumns.nonEmpty
+  def isPartitioned: Boolean = partitionColumns.nonEmpty
 
   private def partitionKeysIncludedInDataSchema = metadataCache.partitionKeysIncludedInParquetSchema
 
   private def parquetSchema = metadataCache.parquetSchema
 
-  override def schema = metadataCache.schema
+  override def schema: StructType = metadataCache.schema
 
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
@@ -418,15 +437,24 @@ private[sql] case class ParquetRelation2(
     // Push down filters when possible. Notice that not all filters can be converted to Parquet
     // filter predicate. Here we try to convert each individual predicate and only collect those
     // convertible ones.
-    predicates
-      .flatMap(ParquetFilters.createFilter)
-      .reduceOption(FilterApi.and)
-      .filter(_ => sqlContext.conf.parquetFilterPushDown)
-      .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    if (sqlContext.conf.parquetFilterPushDown) {
+      predicates
+        // Don't push down predicates which reference partition columns
+        .filter { pred =>
+          val partitionColNames = partitionColumns.map(_.name).toSet
+          val referencedColNames = pred.references.map(_.name).toSet
+          referencedColNames.intersect(partitionColNames).isEmpty
+        }
+        .flatMap(ParquetFilters.createFilter)
+        .reduceOption(FilterApi.and)
+        .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    }
 
     if (isPartitioned) {
-      def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
-      logInfo(s"Reading $percentRead% of partitions")
+      logInfo {
+        val percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
+        s"Reading $percentRead% of partitions"
+      }
     }
 
     val requiredColumns = output.map(_.name)
@@ -592,13 +620,22 @@ private[sql] case class ParquetRelation2(
     val destinationPath = new Path(paths.head)
 
     if (overwrite) {
-      try {
-        destinationPath.getFileSystem(conf).delete(destinationPath, true)
-      } catch {
-        case e: IOException =>
+      val fs = destinationPath.getFileSystem(conf)
+      if (fs.exists(destinationPath)) {
+        var success: Boolean = false
+        try {
+          success = fs.delete(destinationPath, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${destinationPath.toString} prior" +
+                s" to writing to Parquet table:\n${e.toString}")
+        }
+        if (!success) {
           throw new IOException(
             s"Unable to clear output directory ${destinationPath.toString} prior" +
-              s" to writing to Parquet file:\n${e.toString}")
+              s" to writing to Parquet table.")
+        }
       }
     }
 
@@ -634,7 +671,8 @@ private[sql] case class ParquetRelation2(
       } finally {
         writer.close(hadoopContext)
       }
-      committer.commitTask(hadoopContext)
+
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
@@ -653,7 +691,7 @@ private[sql] case class ParquetRelation2(
   }
 }
 
-private[sql] object ParquetRelation2 {
+private[sql] object ParquetRelation2 extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 
@@ -673,7 +711,26 @@ private[sql] object ParquetRelation2 {
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .map(DataType.fromJson(_).asInstanceOf[StructType])
+        .flatMap { serializedSchema =>
+          // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
+          // whatever is available.
+          Try(DataType.fromJson(serializedSchema))
+            .recover { case _: Throwable =>
+              logInfo(
+                s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
+                  "falling back to the deprecated DataType.fromCaseClassString parser.")
+              DataType.fromCaseClassString(serializedSchema)
+            }
+            .recover { case cause: Throwable =>
+              logWarning(
+                s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
+                   |\t$serializedSchema
+                 """.stripMargin,
+                cause)
+            }
+            .map(_.asInstanceOf[StructType])
+            .toOption
+        }
 
       maybeSparkSchema.getOrElse {
         // Falls back to Parquet schema if Spark SQL schema is absent.
@@ -703,7 +760,7 @@ private[sql] object ParquetRelation2 {
   private[parquet] def mergeMetastoreParquetSchema(
       metastoreSchema: StructType,
       parquetSchema: StructType): StructType = {
-    def schemaConflictMessage =
+    def schemaConflictMessage: String =
       s"""Converting Hive Metastore Parquet, but detected conflicting schemas. Metastore schema:
          |${metastoreSchema.prettyJson}
          |
@@ -711,12 +768,15 @@ private[sql] object ParquetRelation2 {
          |${parquetSchema.prettyJson}
        """.stripMargin
 
-    assert(metastoreSchema.size == parquetSchema.size, schemaConflictMessage)
+    val mergedParquetSchema = mergeMissingNullableFields(metastoreSchema, parquetSchema)
+
+    assert(metastoreSchema.size <= mergedParquetSchema.size, schemaConflictMessage)
 
     val ordinalMap = metastoreSchema.zipWithIndex.map {
       case (field, index) => field.name.toLowerCase -> index
     }.toMap
-    val reorderedParquetSchema = parquetSchema.sortBy(f => ordinalMap(f.name.toLowerCase))
+    val reorderedParquetSchema = mergedParquetSchema.sortBy(f => 
+      ordinalMap.getOrElse(f.name.toLowerCase, metastoreSchema.size + 1))
 
     StructType(metastoreSchema.zip(reorderedParquetSchema).map {
       // Uses Parquet field names but retains Metastore data types.
@@ -726,6 +786,32 @@ private[sql] object ParquetRelation2 {
         throw new SparkException(schemaConflictMessage)
     })
   }
+
+  /**
+   * Returns the original schema from the Parquet file with any missing nullable fields from the
+   * Hive Metastore schema merged in.
+   *
+   * When constructing a DataFrame from a collection of structured data, the resulting object has
+   * a schema corresponding to the union of the fields present in each element of the collection.
+   * Spark SQL simply assigns a null value to any field that isn't present for a particular row.
+   * In some cases, it is possible that a given table partition stored as a Parquet file doesn't
+   * contain a particular nullable field in its schema despite that field being present in the
+   * table schema obtained from the Hive Metastore. This method returns a schema representing the
+   * Parquet file schema along with any additional nullable fields from the Metastore schema
+   * merged in.
+   */
+  private[parquet] def mergeMissingNullableFields(
+      metastoreSchema: StructType,
+      parquetSchema: StructType): StructType = {
+    val fieldMap = metastoreSchema.map(f => f.name.toLowerCase -> f).toMap
+    val missingFields = metastoreSchema
+      .map(_.name.toLowerCase)
+      .diff(parquetSchema.map(_.name.toLowerCase))
+      .map(fieldMap(_))
+      .filter(_.nullable)
+    StructType(parquetSchema ++ missingFields)
+  }
+
 
   // TODO Data source implementations shouldn't touch Catalyst types (`Literal`).
   // However, we are already using Catalyst expressions for partition pruning and predicate
@@ -787,9 +873,9 @@ private[sql] object ParquetRelation2 {
    *   PartitionValues(
    *     Seq("a", "b", "c"),
    *     Seq(
-   *       Literal(42, IntegerType),
-   *       Literal("hello", StringType),
-   *       Literal(3.14, FloatType)))
+   *       Literal.create(42, IntegerType),
+   *       Literal.create("hello", StringType),
+   *       Literal.create(3.14, FloatType)))
    * }}}
    */
   private[parquet] def parsePartition(
@@ -868,15 +954,16 @@ private[sql] object ParquetRelation2 {
       raw: String,
       defaultPartitionName: String): Literal = {
     // First tries integral types
-    Try(Literal(Integer.parseInt(raw), IntegerType))
-      .orElse(Try(Literal(JLong.parseLong(raw), LongType)))
+    Try(Literal.create(Integer.parseInt(raw), IntegerType))
+      .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
       // Then falls back to fractional types
-      .orElse(Try(Literal(JFloat.parseFloat(raw), FloatType)))
-      .orElse(Try(Literal(JDouble.parseDouble(raw), DoubleType)))
-      .orElse(Try(Literal(new JBigDecimal(raw), DecimalType.Unlimited)))
+      .orElse(Try(Literal.create(JFloat.parseFloat(raw), FloatType)))
+      .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
+      .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
       // Then falls back to string
       .getOrElse {
-        if (raw == defaultPartitionName) Literal(null, NullType) else Literal(raw, StringType)
+        if (raw == defaultPartitionName) Literal.create(null, NullType)
+        else Literal.create(raw, StringType)
       }
   }
 
@@ -895,7 +982,7 @@ private[sql] object ParquetRelation2 {
     }
 
     literals.map { case l @ Literal(_, dataType) =>
-      Literal(Cast(l, desiredType).eval(), desiredType)
+      Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
   }
 }

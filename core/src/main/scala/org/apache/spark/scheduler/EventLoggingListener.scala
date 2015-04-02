@@ -149,47 +149,60 @@ private[spark] class EventLoggingListener(
   }
 
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted) =
-    logEvent(event)
-  override def onTaskStart(event: SparkListenerTaskStart) =
-    logEvent(event)
-  override def onTaskGettingResult(event: SparkListenerTaskGettingResult) =
-    logEvent(event)
-  override def onTaskEnd(event: SparkListenerTaskEnd) =
-    logEvent(event)
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
-    logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
+
+  override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
+
+  override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = logEvent(event)
+
+  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
+
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = logEvent(event)
 
   // Events that trigger a flush
-  override def onStageCompleted(event: SparkListenerStageCompleted) =
+  override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     logEvent(event, flushLogger = true)
-  override def onJobStart(event: SparkListenerJobStart) =
+  }
+
+  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
+
+  override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
+
+  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
     logEvent(event, flushLogger = true)
-  override def onJobEnd(event: SparkListenerJobEnd) =
+  }
+
+  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
     logEvent(event, flushLogger = true)
-  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded) =
+  }
+
+  override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
     logEvent(event, flushLogger = true)
-  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved) =
+  }
+
+  override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     logEvent(event, flushLogger = true)
-  override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
+  }
+
+  override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
-  override def onApplicationStart(event: SparkListenerApplicationStart) =
+  }
+  override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
-  override def onApplicationEnd(event: SparkListenerApplicationEnd) =
+  }
+
+  override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     logEvent(event, flushLogger = true)
-  override def onExecutorAdded(event: SparkListenerExecutorAdded) =
-    logEvent(event, flushLogger = true)
-  override def onExecutorRemoved(event: SparkListenerExecutorRemoved) =
-    logEvent(event, flushLogger = true)
+  }
 
   // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
   /**
    * Stop logging events. The event log file will be renamed so that it loses the
    * ".inprogress" suffix.
    */
-  def stop() = {
+  def stop(): Unit = {
     writer.foreach(_.close())
 
     val target = new Path(logPath)

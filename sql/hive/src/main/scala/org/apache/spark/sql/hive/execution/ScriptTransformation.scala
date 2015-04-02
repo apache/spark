@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
@@ -51,9 +52,9 @@ case class ScriptTransformation(
     ioschema: HiveScriptIOSchema)(@transient sc: HiveContext)
   extends UnaryNode {
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  def execute() = {
+  def execute(): RDD[Row] = {
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)

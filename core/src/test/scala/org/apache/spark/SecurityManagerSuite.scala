@@ -21,6 +21,8 @@ import java.io.File
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.util.Utils
+
 class SecurityManagerSuite extends FunSuite {
 
   test("set security with conf") {
@@ -160,8 +162,7 @@ class SecurityManagerSuite extends FunSuite {
   }
 
   test("ssl off setup") {
-    val file = File.createTempFile("SSLOptionsSuite", "conf")
-    file.deleteOnExit()
+    val file = File.createTempFile("SSLOptionsSuite", "conf", Utils.createTempDir())
 
     System.setProperty("spark.ssl.configFile", file.getAbsolutePath)
     val conf = new SparkConf()

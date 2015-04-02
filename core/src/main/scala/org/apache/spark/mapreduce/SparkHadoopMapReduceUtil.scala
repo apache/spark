@@ -45,7 +45,7 @@ trait SparkHadoopMapReduceUtil {
       jobId: Int,
       isMap: Boolean,
       taskId: Int,
-      attemptId: Int) = {
+      attemptId: Int): TaskAttemptID = {
     val klass = Class.forName("org.apache.hadoop.mapreduce.TaskAttemptID")
     try {
       // First, attempt to use the old-style constructor that takes a boolean isMap

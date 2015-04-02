@@ -456,6 +456,13 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('tcp', 50070, 50070, authorized_address)
         master_group.authorize('tcp', 60070, 60070, authorized_address)
         master_group.authorize('tcp', 4040, 4045, authorized_address)
+        # HDFS NFS gateway requires 111,2049,4242 for tcp & udp
+        master_group.authorize('tcp', 111, 111, authorized_address)
+        master_group.authorize('udp', 111, 111, authorized_address)
+        master_group.authorize('tcp', 2049, 2049, authorized_address)
+        master_group.authorize('udp', 2049, 2049, authorized_address)
+        master_group.authorize('tcp', 4242, 4242, authorized_address)
+        master_group.authorize('udp', 4242, 4242, authorized_address)
         if opts.ganglia:
             master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
@@ -1159,8 +1166,8 @@ def real_main():
             if EC2_INSTANCE_TYPES[opts.instance_type] != \
                EC2_INSTANCE_TYPES[opts.master_instance_type]:
                 print >> stderr, \
-                    "Error: spark-ec2 currently does not support having a master and slaves with " + \
-                    "different AMI virtualization types."
+                    "Error: spark-ec2 currently does not support having a master and slaves " + \
+                    "with different AMI virtualization types."
                 print >> stderr, "master instance virtualization type: {t}".format(
                     t=EC2_INSTANCE_TYPES[opts.master_instance_type])
                 print >> stderr, "slave instance virtualization type: {t}".format(

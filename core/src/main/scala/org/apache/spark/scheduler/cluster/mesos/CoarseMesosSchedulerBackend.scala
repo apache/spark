@@ -277,7 +277,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           coresByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
-        if (state == MesosTaskState.TASK_FAILED || state == MesosTaskState.TASK_LOST) {
+        if (TaskState.isFailed(TaskState.fromMesos(state))) {
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +

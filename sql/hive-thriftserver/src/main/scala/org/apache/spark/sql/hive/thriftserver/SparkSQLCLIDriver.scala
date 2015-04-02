@@ -194,8 +194,8 @@ private[hive] object SparkSQLCLIDriver {
     val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
       classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
 
-    def promptWithCurrentDB = s"$prompt$currentDB"
-    def continuedPromptWithDBSpaces = continuedPrompt + ReflectionUtils.invokeStatic(
+    def promptWithCurrentDB: String = s"$prompt$currentDB"
+    def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
     var currentPrompt = promptWithCurrentDB

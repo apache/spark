@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.sources.LogicalRelation
@@ -31,6 +30,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.util.Utils
 
 class JsonSuite extends QueryTest {
   import org.apache.spark.sql.json.TestJsonData._
@@ -554,8 +554,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("jsonFile should be based on JSONRelation") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     sparkContext.parallelize(1 to 100).map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
     val jsonDF = jsonFile(path, 0.49)
 
@@ -580,8 +581,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Loading a JSON dataset from a text file") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
     val jsonDF = jsonFile(path)
 
@@ -611,8 +613,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     sql(
@@ -637,8 +640,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Applying schemas") {
-    val file = getTempFilePath("json")
-    val path = file.toString
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     val schema = StructType(

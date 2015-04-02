@@ -25,8 +25,6 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import akka.actor.{ActorSystem, Props}
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
@@ -39,7 +37,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{AkkaUtils, ManualClock}
+import org.apache.spark.util.{AkkaUtils, ManualClock, Utils}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
@@ -76,7 +74,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       new NioBlockTransferService(conf, securityMgr), securityMgr, 0)
     blockManager.initialize("app-id")
 
-    tempDirectory = Files.createTempDir()
+    tempDirectory = Utils.createTempDir()
     manualClock.setTime(0)
   }
 
@@ -93,10 +91,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     actorSystem.awaitTermination()
     actorSystem = null
 
-    if (tempDirectory != null && tempDirectory.exists()) {
-      FileUtils.deleteDirectory(tempDirectory)
-      tempDirectory = null
-    }
+    Utils.deleteRecursively(tempDirectory)
   }
 
   test("BlockManagerBasedBlockHandler - store blocks") {

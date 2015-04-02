@@ -19,43 +19,53 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
+PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/"
+PYTHON_LINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/python-lint-report.txt"
 
 cd "$SPARK_ROOT_DIR"
+
+# compileall: https://docs.python.org/2/library/compileall.html
+python -B -m compileall -q -l $PATHS_TO_CHECK > "$PYTHON_LINT_REPORT_PATH"
+compile_status="${PIPESTATUS[0]}"
 
 # Get pep8 at runtime so that we don't rely on it being installed on the build server.
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 #+ TODOs:
-#+  - Dynamically determine latest release version of pep8 and use that.
-#+  - Download this from a more reliable source. (GitHub raw can be flaky, apparently. (?))
+#+  - Download pep8 from PyPI. It's more "official".
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8.py"
-PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/pep8.py"
-PEP8_PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/"
+PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.6.2/pep8.py"
 
+# if [ ! -e "$PEP8_SCRIPT_PATH" ]; then
 curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
-curl_status=$?
+curl_status="$?"
 
-if [ $curl_status -ne 0 ]; then
+if [ "$curl_status" -ne 0 ]; then
     echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
-    exit $curl_status
+    exit "$curl_status"
 fi
-
+# fi
 
 # There is no need to write this output to a file
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" $PEP8_PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
-pep8_status=${PIPESTATUS[0]} #$?
+python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PYTHON_LINT_REPORT_PATH"
+pep8_status="${PIPESTATUS[0]}"
 
-if [ $pep8_status -ne 0 ]; then
-    echo "PEP 8 checks failed."
-    cat "$PEP8_REPORT_PATH"
+if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
+    lint_status=0
 else
-    echo "PEP 8 checks passed."
+    lint_status=1
 fi
 
-rm "$PEP8_REPORT_PATH"
-rm "$PEP8_SCRIPT_PATH"
+if [ "$lint_status" -ne 0 ]; then
+    echo "Python lint checks failed."
+    cat "$PYTHON_LINT_REPORT_PATH"
+else
+    echo "Python lint checks passed."
+fi
 
-exit $pep8_status
+rm "$PEP8_SCRIPT_PATH"
+rm "$PYTHON_LINT_REPORT_PATH"
+
+exit "$lint_status"

@@ -186,7 +186,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     override val isEmpty = !it.hasNext
 
     // initializes/resets to start iterating from the beginning
-    def resetIterator() = {
+    def resetIterator(): Iterator[(String, Partition)] = {
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
@@ -196,10 +196,10 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
-    def hasNext(): Boolean = { !isEmpty }
+    override def hasNext: Boolean = { !isEmpty }
 
     // return the next preferredLocation of some partition of the RDD
-    def next(): (String, Partition) = {
+    override def next(): (String, Partition) = {
       if (it.hasNext) {
         it.next()
       } else {
@@ -237,7 +237,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     val rotIt = new LocationIterator(prev)
 
     // deal with empty case, just create targetLen partition groups with no preferred location
-    if (!rotIt.hasNext()) {
+    if (!rotIt.hasNext) {
       (1 to targetLen).foreach(x => groupArr += PartitionGroup())
       return
     }
@@ -343,7 +343,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
 private case class PartitionGroup(prefLoc: Option[String] = None) {
   var arr = mutable.ArrayBuffer[Partition]()
-  def size = arr.size
+  def size: Int = arr.size
 }
 
 private object PartitionGroup {

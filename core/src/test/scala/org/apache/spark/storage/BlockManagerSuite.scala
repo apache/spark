@@ -170,8 +170,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
-    store.dropFromMemory("a1", null)
-    store.dropFromMemory("a2", null)
+    store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
@@ -413,8 +413,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       t2.join()
       t3.join()
 
-      store.dropFromMemory("a1", null)
-      store.dropFromMemory("a2", null)
+      store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
       store.waitForAsyncReregister()
     }
   }
@@ -1222,5 +1222,31 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(unrollMemoryAfterB5 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
+  }
+
+  test("lazily create a big ByteBuffer to avoid OOM if it cannot be put into MemoryStore") {
+    store = makeBlockManager(12000)
+    val memoryStore = store.memoryStore
+    val blockId = BlockId("rdd_3_10")
+    val result = memoryStore.putBytes(blockId, 13000, () => {
+      fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
+    })
+    assert(result.size === 13000)
+    assert(result.data === null)
+    assert(result.droppedBlocks === Nil)
+  }
+
+  test("put a small ByteBuffer to MemoryStore") {
+    store = makeBlockManager(12000)
+    val memoryStore = store.memoryStore
+    val blockId = BlockId("rdd_3_10")
+    var bytes: ByteBuffer = null
+    val result = memoryStore.putBytes(blockId, 10000, () => {
+      bytes = ByteBuffer.allocate(10000)
+      bytes
+    })
+    assert(result.size === 10000)
+    assert(result.data === Right(bytes))
+    assert(result.droppedBlocks === Nil)
   }
 }

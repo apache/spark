@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -54,9 +53,9 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
    */
   protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
 
-  override def output = cmd.output
+  override def output: Seq[Attribute] = cmd.output
 
-  override def children = Nil
+  override def children: Seq[SparkPlan] = Nil
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
@@ -71,9 +70,10 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
 @DeveloperApi
 case class SetCommand(
     kv: Option[(String, Option[String])],
-    override val output: Seq[Attribute]) extends RunnableCommand with Logging {
+    override val output: Seq[Attribute])
+  extends RunnableCommand with Logging {
 
-  override def run(sqlContext: SQLContext) = kv match {
+  override def run(sqlContext: SQLContext): Seq[Row] = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       logWarning(
@@ -119,10 +119,11 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
       Seq(AttributeReference("plan", StringType, nullable = false)()),
-    extended: Boolean = false) extends RunnableCommand {
+    extended: Boolean = false)
+  extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
-  override def run(sqlContext: SQLContext) = try {
+  override def run(sqlContext: SQLContext): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = sqlContext.executePlan(logicalPlan)
     val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
@@ -140,9 +141,10 @@ case class ExplainCommand(
 case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
-    isLazy: Boolean) extends RunnableCommand {
+    isLazy: Boolean)
+  extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     plan.foreach { logicalPlan =>
       sqlContext.registerDataFrameAsTable(DataFrame(sqlContext, logicalPlan), tableName)
     }
@@ -166,7 +168,7 @@ case class CacheTableCommand(
 @DeveloperApi
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
@@ -181,7 +183,7 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 @DeveloperApi
 case object ClearCacheCommand extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.clearCache()
     Seq.empty[Row]
   }
@@ -196,9 +198,10 @@ case object ClearCacheCommand extends RunnableCommand {
 case class DescribeCommand(
     child: SparkPlan,
     override val output: Seq[Attribute],
-    isExtended: Boolean) extends RunnableCommand {
+    isExtended: Boolean)
+  extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     child.schema.fields.map { field =>
       val cmtKey = "comment"
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
@@ -220,7 +223,7 @@ case class DescribeCommand(
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
-  override val output = {
+  override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("tableName", StringType, false) ::
       StructField("isTemporary", BooleanType, false) :: Nil)
@@ -228,7 +231,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
     val rows = sqlContext.catalog.getTables(databaseName).map {

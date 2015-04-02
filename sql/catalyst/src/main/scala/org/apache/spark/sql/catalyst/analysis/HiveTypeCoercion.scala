@@ -78,6 +78,7 @@ trait HiveTypeCoercion {
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
     Division ::
+    PropagateTypes ::
     Nil
 
   /**
@@ -114,7 +115,7 @@ trait HiveTypeCoercion {
    * the appropriate numeric equivalent.
    */
   object ConvertNaNs extends Rule[LogicalPlan] {
-    val stringNaN = Literal("NaN", StringType)
+    val stringNaN = Literal.create("NaN", StringType)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan => q transformExpressions {

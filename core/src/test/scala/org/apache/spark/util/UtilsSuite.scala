@@ -122,7 +122,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes of a file") {
     val tmpDir2 = Utils.createTempDir()
-    tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
     f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
@@ -151,7 +150,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
-    tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), UTF_8)
     Files.write("abcdefghij", files(1), UTF_8)
@@ -357,7 +355,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   }
 
   test("loading properties from file") {
-    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    val tmpDir = Utils.createTempDir()
+    val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
@@ -370,7 +369,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     } finally {
-      outFile.delete()
+      Utils.deleteRecursively(tmpDir)
     }
   }
 

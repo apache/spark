@@ -30,6 +30,12 @@ class AnalysisException protected[sql] (
     val startPosition: Option[Int] = None)
   extends Exception with Serializable {
 
+  def withPosition(line: Option[Int], startPosition: Option[Int]) = {
+    val newException = new AnalysisException(message, line, startPosition)
+    newException.setStackTrace(getStackTrace)
+    newException
+  }
+
   override def getMessage: String = {
     val lineAnnotation = line.map(l => s" line $l").getOrElse("")
     val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")

@@ -45,11 +45,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       assert(inferPartitionColumnValue(raw, defaultPartitionName) === literal)
     }
 
-    check("10", Literal(10, IntegerType))
-    check("1000000000000000", Literal(1000000000000000L, LongType))
-    check("1.5", Literal(1.5, FloatType))
-    check("hello", Literal("hello", StringType))
-    check(defaultPartitionName, Literal(null, NullType))
+    check("10", Literal.create(10, IntegerType))
+    check("1000000000000000", Literal.create(1000000000000000L, LongType))
+    check("1.5", Literal.create(1.5, FloatType))
+    check("hello", Literal.create("hello", StringType))
+    check(defaultPartitionName, Literal.create(null, NullType))
   }
 
   test("parse partition") {
@@ -75,22 +75,22 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       "file://path/a=10",
       PartitionValues(
         ArrayBuffer("a"),
-        ArrayBuffer(Literal(10, IntegerType))))
+        ArrayBuffer(Literal.create(10, IntegerType))))
 
     check(
       "file://path/a=10/b=hello/c=1.5",
       PartitionValues(
         ArrayBuffer("a", "b", "c"),
         ArrayBuffer(
-          Literal(10, IntegerType),
-          Literal("hello", StringType),
-          Literal(1.5, FloatType))))
+          Literal.create(10, IntegerType),
+          Literal.create("hello", StringType),
+          Literal.create(1.5, FloatType))))
 
     check(
       "file://path/a=10/b_hello/c=1.5",
       PartitionValues(
         ArrayBuffer("c"),
-        ArrayBuffer(Literal(1.5, FloatType))))
+        ArrayBuffer(Literal.create(1.5, FloatType))))
 
     checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
