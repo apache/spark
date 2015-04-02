@@ -812,7 +812,7 @@ object Client extends Logging {
     // Because the Spark assembly may already include Hadoop and its dependencies we need,
     // add an option to allow the user to not include the cluster default yarn/mapreduce
     // application classpaths when running spark on yarn.
-    if (conf.getBoolean("spark.yarn.includeClusterHadoopClasspath", true)) {
+    if (sparkConf.getBoolean("spark.yarn.includeClusterHadoopClasspath", true)) {
       populateHadoopClasspath(conf, env)
     }
     sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
