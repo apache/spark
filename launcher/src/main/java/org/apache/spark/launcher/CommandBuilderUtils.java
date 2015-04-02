@@ -243,7 +243,7 @@ class CommandBuilderUtils {
     boolean needsQuotes = false;
     for (int i = 0; i < arg.length(); i++) {
       int c = arg.codePointAt(i);
-      if (Character.isWhitespace(c) || c == '"' || c == '=') {
+      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';') {
         needsQuotes = true;
         break;
       }
@@ -260,14 +260,13 @@ class CommandBuilderUtils {
         quoted.append('"');
         break;
 
-      case '=':
-        quoted.append('^');
-        break;
-
       default:
         break;
       }
       quoted.appendCodePoint(cp);
+    }
+    if (arg.codePointAt(arg.length() - 1) == '\\') {
+        quoted.append("\\");
     }
     quoted.append("\"");
     return quoted.toString();
