@@ -11,6 +11,41 @@ LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
 configuration.test_mode()
 
+
+class TransferTests(unittest.TestCase):
+
+    def setUp(self):
+        configuration.test_mode()
+        utils.initdb()
+        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG('hive_test', default_args=args)
+        self.dag = dag
+
+    def test_mysql_to_hive(self):
+        sql = "SELECT * FROM task_instance LIMIT 1000;"
+        t = operators.MySqlToHiveTransfer(
+            task_id='test_m2h',
+            mysql_conn_id='airflow_db',
+            sql=sql,
+            hive_table='airflow.test_mysql_to_hive',
+            recreate=True,
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_mysql_to_hive_partition(self):
+        sql = "SELECT * FROM task_instance LIMIT 1000;"
+        t = operators.MySqlToHiveTransfer(
+            task_id='test_m2h',
+            mysql_conn_id='airflow_db',
+            sql=sql,
+            hive_table='airflow.test_mysql_to_hive_part',
+            partition={'ds': '2015-01-02'},
+            recreate=False,
+            create=True,
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+
 class HivePrestoTest(unittest.TestCase):
 
     def setUp(self):

@@ -15,8 +15,9 @@ _operators = {
     ],
     'dummy_operator': ['DummyOperator'],
     'email_operator': ['EmailOperator'],
-    'hive2samba_operator': ['Hive2SambaOperator'],
+    'hive_to_samba_operator': ['Hive2SambaOperator'],
     'mysql_operator': ['MySqlOperator'],
+    'mysql_to_hive': ['MySqlToHiveTransfer'],
     'postgres_operator': ['PostgresOperator'],
     'sensors': [
         'SqlSensor',
