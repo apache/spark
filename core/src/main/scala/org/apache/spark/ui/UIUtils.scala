@@ -161,7 +161,7 @@ private[spark] object UIUtils extends Logging {
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")}
           typ="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/debug-tools.css")}></link>
+    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")}></link>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -169,7 +169,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
-    <script src={prependBaseUri("/static/debug-tools.js")}></script>
+    <script src={prependBaseUri("/static/timeline-view.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */

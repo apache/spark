@@ -22,7 +22,8 @@ import scala.xml.{Node, NodeSeq, Unparsed}
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.TimelineViewUtils._
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.JobExecutionStatus
 
@@ -105,31 +106,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     </div>
   }
 
-  private val executorsLegend: Seq[Node] = {
-    <div class="legend-area"><svg width="200px" height="55px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-        rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Executor Added</text>
-      <rect x="5px" y="35px" width="20px" height="15px"
-        rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
-      <text x="35px" y="47px">Executor Removed</text>
-    </svg></div>
-  }
-
-  private val jobsLegend: Seq[Node] = {
-    <div class="legend-area"><svg width="200px" height="85px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-        rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Succeeded Job</text>
-      <rect x="5px" y="35px" width="20px" height="15px"
-        rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
-      <text x="35px" y="47px">Failed Job</text>
-      <rect x="5px" y="65px" width="20px" height="15px"
-        rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
-      <text x="35px" y="77px">Running Job</text>
-    </svg></div>
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeJobs = listener.activeJobs.values.toSeq
@@ -196,11 +172,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           |[
           |  {
           |    'id': 'executors',
-          |    'content': '<div>Executors</div>${executorsLegend.toString().filter(_ != '\n')}',
+          |    'content': '<div>Executors</div>${nodesToFlatString(executorsLegend)}',
           |  },
           |  {
           |    'id': 'jobs',
-          |    'content': '<div>Jobs</div>${jobsLegend.toString().filter(_ != '\n')}',
+          |    'content': '<div>Jobs</div>${nodesToFlatString(jobsLegend)}',
           |  }
           |]
         """.stripMargin

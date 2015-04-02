@@ -27,6 +27,7 @@ import javax.servlet.http.HttpServletRequest
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.TimelineViewUtils._
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
@@ -39,31 +40,6 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         <span>Zoom Lock</span>
       </div>
     </div>
-  }
-
-  private val executorsLegend: Seq[Node] = {
-    <div class="legend-area"><svg width="200px" height="55px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Executor Added</text>
-      <rect x="5px" y="35px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
-      <text x="35px" y="47px">Executor Removed</text>
-    </svg></div>
-  }
-
-  private val stagesLegend: Seq[Node] = {
-    <div class="legend-area"><svg width="200px" height="85px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Completed Stage </text>
-      <rect x="5px" y="35px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
-      <text x="35px" y="47px">Failed Stage</text>
-      <rect x="5px" y="65px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
-      <text x="35px" y="77px">Active Stage</text>
-    </svg></div>
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -195,11 +171,11 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           |[
           |  {
           |    'id': 'executors',
-          |    'content': '<div>Executors</div>${executorsLegend.toString().filter(_ != '\n')}',
+          |    'content': '<div>Executors</div>${nodesToFlatString(executorsLegend)}',
           |  },
           |  {
           |    'id': 'stages',
-          |    'content': '<div>Stages</div>${stagesLegend.toString().filter(_ != '\n')}',
+          |    'content': '<div>Stages</div>${nodesToFlatString(stagesLegend)}',
           |  }
           |]
         """.stripMargin
