@@ -605,7 +605,7 @@ private[spark] class BlockManager(
             DataReadMethod.Network,
             data.limit()))
         } else {
-          return Some(data)
+          return Some(LargeByteBufferHelper.asLargeByteBuffer(data))
         }
       }
       logDebug(s"The value of block $blockId is null")
