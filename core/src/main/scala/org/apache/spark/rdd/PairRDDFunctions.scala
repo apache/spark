@@ -1044,6 +1044,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Output value class not set")
     }
     SparkHadoopUtil.get.addCredentials(hadoopConf)
+    SparkHadoopUtil.get.loginAsSparkUser()
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
