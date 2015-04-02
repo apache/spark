@@ -145,10 +145,10 @@ private[sql] class SQLConf extends Serializable {
     getConf(AUTO_BROADCASTJOIN_THRESHOLD, (10 * 1024 * 1024).toString).toInt
 
   /**
-   * By default it will choose sort merge join.
+   * By default not choose sort merge join.
    */
   private[spark] def autoSortMergeJoin: Boolean =
-    getConf(AUTO_SORTMERGEJOIN, true.toString).toBoolean
+    getConf(AUTO_SORTMERGEJOIN, false.toString).toBoolean
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,

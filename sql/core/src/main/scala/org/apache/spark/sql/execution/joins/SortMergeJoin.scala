@@ -140,14 +140,11 @@ case class SortMergeJoin(
               stop = ordering.compare(leftKey, rightKey) == 0
             }
             if (rightMatches.size > 0) {
-              stop = false
               leftMatches = new CompactBuffer[Row]()
               val leftMatch = leftKey.copy()
-              while (!stop && leftElement != null) {
+              while (ordering.compare(leftKey, leftMatch) == 0 && leftElement != null) {
                 leftMatches += leftElement
                 fetchLeft()
-                // exit loop when run out of left matches
-                stop = ordering.compare(leftKey, leftMatch) != 0
               }
             }
 

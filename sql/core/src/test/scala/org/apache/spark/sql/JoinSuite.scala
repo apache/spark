@@ -51,6 +51,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
+      case j: ShuffledHashJoin => j
       case j: SortMergeJoin => j
     }
 
@@ -63,6 +64,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("join operator selection") {
     cacheManager.clearCache()
 
+    val AUTO_SORTMERGEJOIN: Boolean = conf.autoSortMergeJoin
+    conf.setConf("spark.sql.autoSortMergeJoin", "false")
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
       ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
@@ -76,9 +79,9 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[HashOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[HashOuterJoin]),
@@ -92,6 +95,13 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    conf.setConf("spark.sql.autoSortMergeJoin", "true")
+    Seq(
+      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    conf.setConf("spark.sql.autoSortMergeJoin", AUTO_SORTMERGEJOIN.toString)
   }
 
   test("broadcasted hash join operator selection") {
