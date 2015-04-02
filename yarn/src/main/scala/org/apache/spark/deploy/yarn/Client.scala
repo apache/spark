@@ -67,7 +67,7 @@ private[spark] class Client(
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
   private val fireAndForget = isClusterMode &&
-    sparkConf.getBoolean("spark.yarn.cluster.quiet", false)
+    !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
 
   def stop(): Unit = yarnClient.stop()
@@ -622,13 +622,12 @@ private[spark] class Client(
   def run(): Unit = {
     val appId = submitApplication()
     if (fireAndForget) {
-      logInfo("... waiting before polling ResourceManager for application state")
-      Thread.sleep(5000)
       logInfo("... polling ResourceManager for application state")
-
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
-
+      if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+        throw new SparkException(s"Application finished with status: $state")
+      }
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report))
     } else {

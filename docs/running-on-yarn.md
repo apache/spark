@@ -196,6 +196,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.waitForCompletion</code></td>
+  <td>true</td>
+  <td>
+  Whether to wait for application to complete in cluster mode. If set this to true, client process will enter a loop to track application's status.
+  Otherwise, client process will exist as long as application is successfully submitted.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
