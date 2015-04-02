@@ -48,6 +48,12 @@ private[mllib] class StripePartitioner2
  */
 private[mllib] class XSparseMatrix(
     ) extends Matrix {
+
+  /** Convenience method for `Matrix`-`XSparseMatrix` multiplication. */
+  def multiply(y: XSparseMatrix): XSparseMatrix = {
+    //
+  }
+  
 }
 
 class StripeMatrix(
