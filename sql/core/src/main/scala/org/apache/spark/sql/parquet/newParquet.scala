@@ -434,17 +434,18 @@ private[sql] case class ParquetRelation2(
       FileInputFormat.setInputPaths(job, selectedFiles.map(_.getPath): _*)
     }
 
-    // Push down filters when possible. Notice that not all filters can be converted to Parquet
-    // filter predicate. Here we try to convert each individual predicate and only collect those
-    // convertible ones.
+    // Try to push down filters when filter push-down is enabled.
     if (sqlContext.conf.parquetFilterPushDown) {
+      val partitionColNames = partitionColumns.map(_.name).toSet
       predicates
         // Don't push down predicates which reference partition columns
         .filter { pred =>
-          val partitionColNames = partitionColumns.map(_.name).toSet
           val referencedColNames = pred.references.map(_.name).toSet
           referencedColNames.intersect(partitionColNames).isEmpty
         }
+        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+        // is used here.
         .flatMap(ParquetFilters.createFilter)
         .reduceOption(FilterApi.and)
         .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
