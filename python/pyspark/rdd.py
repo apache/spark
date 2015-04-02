@@ -113,23 +113,11 @@ def _parse_memory(s):
 
 def _load_from_socket(port, serializer):
     sock = socket.socket()
-    sock.settimeout(1)
+    sock.settimeout(3)
     try:
         sock.connect(("localhost", port))
         rf = sock.makefile("rb", 65536)
-        iter = serializer.load_stream(rf)
-        try:
-            yield next(iter)
-        except socket.timeout as e:
-            # the connection is not acknowledged by JVM, retry
-            # server will be closed after 3 seconds, then it will be refused
-            for v in _load_from_socket(port, serializer):
-                yield v
-            return
-
-        # increase the timeout, because the server side may be slowed down by GC
-        sock.settimeout(10)
-        for item in iter:
+        for item in serializer.load_stream(rf):
             yield item
     finally:
         sock.close()
