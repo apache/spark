@@ -67,7 +67,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
-        val table = synchronized {
+        val table = HiveMetastoreCatalog.this.synchronized {
           client.getTable(in.database, in.name)
         }
         val userSpecifiedSchema =
