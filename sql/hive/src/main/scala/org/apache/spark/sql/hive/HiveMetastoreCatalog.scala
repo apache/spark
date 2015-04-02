@@ -173,16 +173,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   def lookupRelation(
       tableIdentifier: Seq[String],
-      alias: Option[String]): LogicalPlan = {
+      alias: Option[String]): LogicalPlan = synchronized {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = try {
-      synchronized {
-        client.getTable(databaseName, tblName)
-      }
-    } catch {
+    val table = try client.getTable(databaseName, tblName) catch {
       case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
         throw new NoSuchTableException
     }
@@ -204,9 +200,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
-          synchronized {
-            HiveShim.getAllPartitionsOf(client, table).toSeq
-          }
+          HiveShim.getAllPartitionsOf(client, table).toSeq
         } else {
           Nil
         }
