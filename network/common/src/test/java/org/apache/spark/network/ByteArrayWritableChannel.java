@@ -15,26 +15,41 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.network;
 
-import java.util.Properties
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
-import org.apache.spark.TaskContext
-import org.apache.spark.util.CallSite
+public class ByteArrayWritableChannel implements WritableByteChannel {
 
-/**
- * Tracks information about an active job in the DAGScheduler.
- */
-private[spark] class ActiveJob(
-    val jobId: Int,
-    val finalStage: ResultStage,
-    val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int],
-    val callSite: CallSite,
-    val listener: JobListener,
-    val properties: Properties) {
+  private final byte[] data;
+  private int offset;
 
-  val numPartitions = partitions.length
-  val finished = Array.fill[Boolean](numPartitions)(false)
-  var numFinished = 0
+  public ByteArrayWritableChannel(int size) {
+    this.data = new byte[size];
+    this.offset = 0;
+  }
+
+  public byte[] getData() {
+    return data;
+  }
+
+  @Override
+  public int write(ByteBuffer src) {
+    int available = src.remaining();
+    src.get(data, offset, available);
+    offset += available;
+    return available;
+  }
+
+  @Override
+  public void close() {
+
+  }
+
+  @Override
+  public boolean isOpen() {
+    return true;
+  }
+
 }

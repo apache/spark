@@ -54,6 +54,8 @@ object Literal {
       m.map { case (k, v) => (convertToUTF8String(k), convertToUTF8String(v)) }.toMap
     case other => other
   }
+
+  def create(v: Any, dataType: DataType): Literal = Literal(convertToUTF8String(v), dataType)
 }
 
 /**
@@ -75,10 +77,10 @@ object IntegerLiteral {
   }
 }
 
-case class Literal (var value: Any, dataType: DataType) extends LeafExpression {
-
-  // TODO(davies): move this out of constructor
-  value = Literal.convertToUTF8String(value)
+/**
+ * In order to do type checking, use Literal.create() instead of constructor
+ */
+case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null

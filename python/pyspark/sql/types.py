@@ -33,8 +33,7 @@ __all__ = [
 
 
 class DataType(object):
-
-    """Spark SQL DataType"""
+    """Base class for data types."""
 
     def __repr__(self):
         return self.__class__.__name__
@@ -67,7 +66,6 @@ class DataType(object):
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
 class PrimitiveTypeSingleton(type):
-
     """Metaclass for PrimitiveType"""
 
     _instances = {}
@@ -79,66 +77,45 @@ class PrimitiveTypeSingleton(type):
 
 
 class PrimitiveType(DataType):
-
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
 
 
 class NullType(PrimitiveType):
+    """Null type.
 
-    """Spark SQL NullType
-
-    The data type representing None, used for the types which has not
-    been inferred.
+    The data type representing None, used for the types that cannot be inferred.
     """
 
 
 class StringType(PrimitiveType):
-
-    """Spark SQL StringType
-
-    The data type representing string values.
+    """String data type.
     """
 
 
 class BinaryType(PrimitiveType):
-
-    """Spark SQL BinaryType
-
-    The data type representing bytearray values.
+    """Binary (byte array) data type.
     """
 
 
 class BooleanType(PrimitiveType):
-
-    """Spark SQL BooleanType
-
-    The data type representing bool values.
+    """Boolean data type.
     """
 
 
 class DateType(PrimitiveType):
-
-    """Spark SQL DateType
-
-    The data type representing datetime.date values.
+    """Date (datetime.date) data type.
     """
 
 
 class TimestampType(PrimitiveType):
-
-    """Spark SQL TimestampType
-
-    The data type representing datetime.datetime values.
+    """Timestamp (datetime.datetime) data type.
     """
 
 
 class DecimalType(DataType):
-
-    """Spark SQL DecimalType
-
-    The data type representing decimal.Decimal values.
+    """Decimal (decimal.Decimal) data type.
     """
 
     def __init__(self, precision=None, scale=None):
@@ -166,80 +143,55 @@ class DecimalType(DataType):
 
 
 class DoubleType(PrimitiveType):
-
-    """Spark SQL DoubleType
-
-    The data type representing float values.
+    """Double data type, representing double precision floats.
     """
 
 
 class FloatType(PrimitiveType):
-
-    """Spark SQL FloatType
-
-    The data type representing single precision floating-point values.
+    """Float data type, representing single precision floats.
     """
 
 
 class ByteType(PrimitiveType):
-
-    """Spark SQL ByteType
-
-    The data type representing int values with 1 singed byte.
+    """Byte data type, i.e. a signed integer in a single byte.
     """
     def simpleString(self):
         return 'tinyint'
 
 
 class IntegerType(PrimitiveType):
-
-    """Spark SQL IntegerType
-
-    The data type representing int values.
+    """Int data type, i.e. a signed 32-bit integer.
     """
     def simpleString(self):
         return 'int'
 
 
 class LongType(PrimitiveType):
+    """Long data type, i.e. a signed 64-bit integer.
 
-    """Spark SQL LongType
-
-    The data type representing long values. If the any value is
-    beyond the range of [-9223372036854775808, 9223372036854775807],
-    please use DecimalType.
+    If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
+    please use :class:`DecimalType`.
     """
     def simpleString(self):
         return 'bigint'
 
 
 class ShortType(PrimitiveType):
-
-    """Spark SQL ShortType
-
-    The data type representing int values with 2 signed bytes.
+    """Short data type, i.e. a signed 16-bit integer.
     """
     def simpleString(self):
         return 'smallint'
 
 
 class ArrayType(DataType):
+    """Array data type.
 
-    """Spark SQL ArrayType
-
-    The data type representing list values. An ArrayType object
-    comprises two fields, elementType (a DataType) and containsNull (a bool).
-    The field of elementType is used to specify the type of array elements.
-    The field of containsNull is used to specify if the array has None values.
-
+    :param elementType: :class:`DataType` of each element in the array.
+    :param containsNull: boolean, whether the array can contain null (None) values.
     """
 
     def __init__(self, elementType, containsNull=True):
-        """Creates an ArrayType
-
-        :param elementType: the data type of elements.
-        :param containsNull: indicates whether the list contains None values.
-
+        """
         >>> ArrayType(StringType()) == ArrayType(StringType(), True)
         True
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
@@ -268,29 +220,17 @@ class ArrayType(DataType):
 
 
 class MapType(DataType):
+    """Map data type.
 
-    """Spark SQL MapType
+    :param keyType: :class:`DataType` of the keys in the map.
+    :param valueType: :class:`DataType` of the values in the map.
+    :param valueContainsNull: indicates whether values can contain null (None) values.
 
-    The data type representing dict values. A MapType object comprises
-    three fields, keyType (a DataType), valueType (a DataType) and
-    valueContainsNull (a bool).
-
-    The field of keyType is used to specify the type of keys in the map.
-    The field of valueType is used to specify the type of values in the map.
-    The field of valueContainsNull is used to specify if values of this
-    map has None values.
-
-    For values of a MapType column, keys are not allowed to have None values.
-
+    Keys in a map data type are not allowed to be null (None).
     """
 
     def __init__(self, keyType, valueType, valueContainsNull=True):
-        """Creates a MapType
-        :param keyType: the data type of keys.
-        :param valueType: the data type of values.
-        :param valueContainsNull: indicates whether values contains
-        null values.
-
+        """
         >>> (MapType(StringType(), IntegerType())
         ...        == MapType(StringType(), IntegerType(), True))
         True
@@ -325,30 +265,16 @@ class MapType(DataType):
 
 
 class StructField(DataType):
+    """A field in :class:`StructType`.
 
-    """Spark SQL StructField
-
-    Represents a field in a StructType.
-    A StructField object comprises three fields, name (a string),
-    dataType (a DataType) and nullable (a bool). The field of name
-    is the name of a StructField. The field of dataType specifies
-    the data type of a StructField.
-
-    The field of nullable specifies if values of a StructField can
-    contain None values.
-
+    :param name: string, name of the field.
+    :param dataType: :class:`DataType` of the field.
+    :param nullable: boolean, whether the field can be null (None) or not.
+    :param metadata: a dict from string to simple type that can be serialized to JSON automatically
     """
 
     def __init__(self, name, dataType, nullable=True, metadata=None):
-        """Creates a StructField
-        :param name: the name of this field.
-        :param dataType: the data type of this field.
-        :param nullable: indicates whether values of this field
-                         can be null.
-        :param metadata: metadata of this field, which is a map from string
-                         to simple type that can be serialized to JSON
-                         automatically
-
+        """
         >>> (StructField("f1", StringType(), True)
         ...      == StructField("f1", StringType(), True))
         True
@@ -384,17 +310,13 @@ class StructField(DataType):
 
 
 class StructType(DataType):
+    """Struct type, consisting of a list of :class:`StructField`.
 
-    """Spark SQL StructType
-
-    The data type representing rows.
-    A StructType object comprises a list of L{StructField}.
-
+    This is the data type representing a :class:`Row`.
     """
 
     def __init__(self, fields):
-        """Creates a StructType
-
+        """
         >>> struct1 = StructType([StructField("f1", StringType(), True)])
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
@@ -425,9 +347,9 @@ class StructType(DataType):
 
 
 class UserDefinedType(DataType):
-    """
+    """User-defined type (UDT).
+
     .. note:: WARN: Spark Internal Use Only
-    SQL User-Defined Type (UDT).
     """
 
     @classmethod
