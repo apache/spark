@@ -115,7 +115,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           LeftOuter,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(3, IntegerType))))
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(3))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -145,7 +145,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           RightOuter,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -159,7 +159,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           RightOuter,
-          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -174,7 +174,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           FullOuter,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -189,7 +189,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           FullOuter,
-          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -204,7 +204,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           LeftSemi,
-          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -218,7 +218,7 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           LeftSemi,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -231,10 +231,10 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           LeftOuter,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5))),
         JoinFilter(
           RightOuter,
-          GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(4, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables2).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -250,10 +250,10 @@ class MultiWayJoinSuite extends FunSuite {
       var joinFilters = Array(
         JoinFilter(
           LeftOuter,
-          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5))),
         JoinFilter(
           RightOuter,
-          GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
+          GreaterThan(BoundReference(4, IntegerType, true), Literal(5))))
     }
 
     val results = mwj.product(tables2).map(_.copy()).toArray.sortWith(_.toString < _.toString)
