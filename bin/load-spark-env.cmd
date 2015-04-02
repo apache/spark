@@ -54,7 +54,6 @@ if [%SPARK_SCALA_VERSION%] == [] (
 exit /b 0
 
 :LoadSparkEnv
-rem TODO: implement loader
 if exist "%user_conf_dir%\spark-env.cmd" (
   call "%user_conf_dir%\spark-env.cmd"
 )
