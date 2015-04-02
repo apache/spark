@@ -43,15 +43,15 @@ done
 
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
-# List masters from file
-if [ -f "${SPARK_CONF_DIR}/masters" ]; then
-  HOSTLIST=`cat "${SPARK_CONF_DIR}/masters"`
-  SPARK_MASTER_STRING=`for master in \`echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"\`; do echo "$master"; done | paste -sd "," -`
-fi
-
 # Find the port number for the master
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
+fi
+
+# List masters from file
+if [ -f "${SPARK_CONF_DIR}/masters" ]; then
+  HOSTLIST=`cat "${SPARK_CONF_DIR}/masters"`
+  SPARK_MASTER_STRING=`for master in \`echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"\`; do echo "$master:$SPARK_MASTER_PORT"; done | paste -sd "," -`
 fi
 
 if [ "$SPARK_MASTER_IP" = "" ]; then

@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Starts a slave instance on each machine specified in the conf/slaves file.
+# Starts a master instance on each machine specified in the conf/masters file.
 
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"

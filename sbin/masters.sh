@@ -98,5 +98,4 @@ for master in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
     sleep $SPARK_MASTER_SLEEP
   fi
 done
-
 wait

@@ -39,7 +39,7 @@ done
 . "$sbin/spark-config.sh"
 
 # Start Master
-"$sbin"/start-master.sh $TACHYON_STR
+"$sbin"/start-masters.sh $TACHYON_STR
 
 # Start Workers
 "$sbin"/start-slaves.sh $TACHYON_STR
