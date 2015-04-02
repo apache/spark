@@ -613,16 +613,7 @@ private[spark] object PythonRDD extends Logging {
       setDaemon(true)
       override def run() {
         try {
-          var sock: Socket = null
-          try {
-            sock = serverSocket.accept()
-          } catch {
-            case e: SocketTimeoutException =>
-              // there is a small chance that the client had connected, so retry
-              logWarning("Timed out after 4 seconds, retry once")
-              serverSocket.setSoTimeout(10)
-              sock = serverSocket.accept()
-          }
+          val sock = serverSocket.accept()
           val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           try {
             writeIteratorToStream(items, out)
