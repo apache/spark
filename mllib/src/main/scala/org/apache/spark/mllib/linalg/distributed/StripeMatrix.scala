@@ -41,28 +41,23 @@ private[mllib] object StripePartitioner {
 
 }
 
-private[mllib] class StripeMatrix(
+private[mllib] class StripePartitioner2
+
+private[mllib] class XSparseMatrix(
     ) extends Matrix {
 }
 
-class BlockSparseMatrix(
-    val rowBlocks: RDD[(Int, StripeMatrix)],
-    val rowLookup: RDD[(Int, StripeMatrix)],
-    val rowsPerBlock: Int,
-    val colBlocks: RDD[(Int, StripeMatrix)],
-    val colLookup: RDD[(Int, StripeMatrix)]
-    val colsPerBlock: Int) extends DistributedMatrix with Logging {
+class StripeMatrix(
+    val stripes: RDD[(Int, XSparseMatrix)],
+    val rowsPerStripe: Int) extends DistributedMatrix with Logging {
 
   def this(
-      val rowBlocks: RDD[(Int, StripeMatrix)],
-      val rowsPerBlock: Int,
-      val colBlocks: RDD[(Int, StripeMatrix)],
-      val colsPerBlock: Int) = { 
+ 
 	}
 	
 }
 
-object BlockSparseMatrix {
+object StripeMatrix {
 }
 
 	
