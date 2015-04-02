@@ -131,11 +131,9 @@ class GradientBoostedTreesModel(
     val numIterations = trees.length
     val evaluationArray = Array.fill(numIterations)(0.0)
 
-    var predictionAndError: RDD[(Double, Double)] = remappedData.map { i =>
-      val pred = treeWeights(0) * trees(0).predict(i.features)
-      val error = loss.computeError(pred, i.label)
-      (pred, error)
-    }
+    var predictionAndError = GradientBoostedTreesModel.computeInitialPredictionAndError(
+      remappedData, treeWeights(0), trees(0), loss)
+
     evaluationArray(0) = predictionAndError.values.mean()
 
     // Avoid the model being copied across numIterations.
@@ -143,17 +141,9 @@ class GradientBoostedTreesModel(
     val broadcastWeights = sc.broadcast(treeWeights)
 
     (1 until numIterations).map { nTree =>
-      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = broadcastWeights.value(nTree)
-        iter.map {
-          case (point, (pred, error)) => {
-            val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-            val newError = loss.computeError(newPred, point.label)
-            (newPred, newError)
-          }
-        }
-      }
+      predictionAndError = GradientBoostedTreesModel.updatePredictionError(
+        remappedData, predictionAndError, broadcastWeights.value(nTree),
+        broadcastTrees.value(nTree), loss)
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
@@ -165,6 +155,56 @@ class GradientBoostedTreesModel(
 }
 
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
+
+  /**
+   * Method to compute initial error and prediction as a RDD for the first
+   * iteration of gradient boosting.
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param initTreeWeight: learning rate assigned to the first tree.
+   * @param initTree: first DecisionTreeModel
+   * @param loss: evaluation metric
+   * @return a RDD with each element being a zip of the prediction and error
+   *         corresponding to every sample.
+   */
+  def computeInitialPredictionAndError(
+      data: RDD[LabeledPoint],
+      initTreeWeight: Double,
+      initTree: DecisionTreeModel, loss: Loss): RDD[(Double, Double)] = {
+    data.map { i =>
+      val pred = initTreeWeight * initTree.predict(i.features)
+      val error = loss.computeError(pred, i.label)
+      (pred, error)
+    }
+  }
+
+  /**
+   * Method to update a zipped predictionError RDD
+   * (as obtained with computeInitialPredictionAndError)
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param predictionAndError: predictionError RDD
+   * @param currentTreeWeight: learning rate.
+   * @param currentTree: first DecisionTree
+   * @param loss: evaluation metric
+   * @return a RDD with each element being a zip of the prediction and error
+   *         corresponing to each sample.
+   */
+  def updatePredictionError(
+    data: RDD[LabeledPoint],
+    predictionAndError: RDD[(Double, Double)],
+    currentTreeWeight: Double,
+    currentTree: DecisionTreeModel,
+    loss: Loss): RDD[(Double, Double)] = {
+
+    data.zip(predictionAndError).mapPartitions { iter =>
+      iter.map {
+        case (point, (pred, error)) => {
+          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+          val newError = loss.computeError(newPred, point.label)
+          (newPred, newError)
+        }
+      }
+    }
+  }
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
