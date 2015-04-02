@@ -82,19 +82,17 @@ case class AddJar(path: String) extends RunnableCommand {
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
-    val substituted =
-      new VariableSubstitution().substitute(sqlContext.asInstanceOf[HiveContext].hiveconf, path)
-    hiveContext.sparkContext.addJar(substituted)
+    hiveContext.sparkContext.addJar(path)
     try {
       val loader = Thread.currentThread().getContextClassLoader()
-      val newLoader = Utilities.addToClassPath(loader, StringUtils.split(substituted, ","))
+      val newLoader = Utilities.addToClassPath(loader, StringUtils.split(path, ","))
       Thread.currentThread().setContextClassLoader(newLoader)
       sqlContext.sparkContext.setClassLoader(newLoader)
-      logInfo("Added " + substituted + " to class path")
+      logInfo("Added " + path + " to class path")
       Seq(Row(0))
     } catch {
       case e: Throwable =>
-        logError("Unable to register " + substituted + "\nException: "
+        logError("Unable to register " + path + "\nException: "
           + e.getMessage() + "\n"
           + org.apache.hadoop.util.StringUtils.stringifyException(e), e)
         Seq(Row(1))
