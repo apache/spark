@@ -216,7 +216,7 @@ case class InsertIntoHiveTable(
             overwrite,
             numDynamicPartitions,
             holdDDLTime,
-            isSkewedStoreAsSubdir
+            isSkewedStoreAsSubdir)
         }
       } else {
         catalog.synchronized {
