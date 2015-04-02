@@ -17,9 +17,21 @@
 
 package org.apache.spark
 
+import java.io.File
+import java.util.concurrent.TimeUnit
+
+import com.google.common.base.Charsets._
+import com.google.common.io.Files
+
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
+
+import org.apache.spark.util.Utils
+import org.apache.spark.SparkContext._
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
@@ -71,5 +83,20 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     bytesWritable.set(inputArray, 0, 0)
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
+  }
+
+  test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
+      sc.cancelJobGroup("nonExistGroupId")
+      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+
+      // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
+      // SparkContext to shutdown, so the following assertion will fail.
+      assert(sc.parallelize(1 to 10).count() == 10L)
+    } finally {
+      sc.stop()
+    }
   }
 }

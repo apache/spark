@@ -477,8 +477,7 @@ class DAGScheduler(
       callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
-      properties: Properties = null): JobWaiter[U] =
-  {
+      properties: Properties): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
@@ -507,8 +506,7 @@ class DAGScheduler(
       callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
-      properties: Properties = null)
-  {
+      properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
@@ -529,9 +527,7 @@ class DAGScheduler(
       evaluator: ApproximateEvaluator[U, R],
       callSite: CallSite,
       timeout: Long,
-      properties: Properties = null)
-    : PartialResult[R] =
-  {
+      properties: Properties): PartialResult[R] = {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
@@ -678,7 +674,7 @@ class DAGScheduler(
     // Cancel all jobs belonging to this job group.
     // First finds all active jobs with this group id, and then kill stages for them.
     val activeInGroup = activeJobs.filter(activeJob =>
-      groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
+      Option(activeJob.properties).exists(_.get(SparkContext.SPARK_JOB_GROUP_ID) == groupId))
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
     submitWaitingStages()
@@ -725,8 +721,7 @@ class DAGScheduler(
       allowLocal: Boolean,
       callSite: CallSite,
       listener: JobListener,
-      properties: Properties = null)
-  {
+      properties: Properties) {
     var finalStage: Stage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
