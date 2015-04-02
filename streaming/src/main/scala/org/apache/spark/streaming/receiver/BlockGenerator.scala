@@ -19,6 +19,8 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
+import org.apache.spark.streaming.scheduler.RateLimiter
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
@@ -74,9 +76,12 @@ private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
     receiverId: Int,
     conf: SparkConf
-  ) extends RateLimiter(conf) with Logging {
+  ) extends Logging {
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
+
+  val receiverRateLimiter = RateLimiter.createReceiverRateLimiter(
+    conf, isDriver = false, receiverId, null)
 
   private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
@@ -111,7 +116,7 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def addData (data: Any): Unit = synchronized {
-    waitToPush()
+    receiverRateLimiter.waitToPush()
     currentBuffer += data
   }
 
@@ -121,7 +126,7 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
-    waitToPush()
+    receiverRateLimiter.waitToPush()
     currentBuffer += data
     listener.onAddData(data, metadata)
   }

@@ -18,6 +18,8 @@
 package org.apache.spark.streaming.kafka
 
 
+import org.apache.spark.streaming.scheduler.RateLimiter
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}
@@ -71,18 +73,20 @@ class DirectKafkaInputDStream[
 
   protected val kc = new KafkaCluster(kafkaParams)
 
-  protected val maxMessagesPerPartition: Option[Long] = {
-    val ratePerSec = context.sparkContext.getConf.getInt(
-      "spark.streaming.kafka.maxRatePerPartition", 0)
-    if (ratePerSec > 0) {
-      val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
-      Some((secsPerBatch * ratePerSec).toLong)
-    } else {
-      None
-    }
-  }
+  protected val directRateLimiter = RateLimiter.createDirectRateLimiter(ssc_.conf, ssc_)
 
   protected var currentOffsets = fromOffsets
+
+
+
+  protected def maxMessagesPerPartition: Option[Int] = {
+    val rate = directRateLimiter.getEffectiveRate
+    if (rate > 0)
+
+      Some(rate / fromOffsets.size)
+    else
+      None
+  }
 
   @tailrec
   protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
@@ -116,6 +120,10 @@ class DirectKafkaInputDStream[
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
+
+    val processedOffsets = untilOffsets.values.map(_.offset).sum
+      - currentOffsets.values.sum
+    directRateLimiter.updateProcessedRecords(validTime, processedOffsets)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)
