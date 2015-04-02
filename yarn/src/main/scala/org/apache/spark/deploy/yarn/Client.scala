@@ -626,7 +626,7 @@ private[spark] class Client(
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
-        throw new SparkException(s"Application finished with status: $state")
+        throw new SparkException(s"Application $appId finished with status: $state")
       }
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report))
@@ -634,14 +634,14 @@ private[spark] class Client(
       val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
       if (yarnApplicationState == YarnApplicationState.FAILED ||
         finalApplicationStatus == FinalApplicationStatus.FAILED) {
-        throw new SparkException("Application finished with failed status")
+        throw new SparkException(s"Application $appId finished with failed status")
       }
       if (yarnApplicationState == YarnApplicationState.KILLED ||
         finalApplicationStatus == FinalApplicationStatus.KILLED) {
-        throw new SparkException("Application is killed")
+        throw new SparkException(s"Application $appId is killed")
       }
       if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
-        throw new SparkException("The final status of application is undefined")
+        throw new SparkException(s"The final status of application $appId is undefined")
       }
     }
   }
