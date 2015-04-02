@@ -198,19 +198,19 @@ case $option in
   (status)
 
     if [ -f $pid ]; then
-      TARGET_PID=`cat $pid`
-      if kill -0 $TARGET_PID > /dev/null 2>&1; then
-        echo $command is running.
-        exit 0
-      else
-        echo $pid file is present but $command not running.
-        exit 1
-      fi
-    else
-      echo $command not running.
-      exit 2
-    fi
-    ;;
+         TARGET_ID="$(cat "$pid")"
+         if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+                 echo $command is running.
+                 exit 0
+         else
+             echo $pid file is present but $command not running
+             exit 1
+         fi  
+     else
+         echo $command not running.
+         exit 2
+     fi  
+     ;;
   
   (*)
     echo $usage
