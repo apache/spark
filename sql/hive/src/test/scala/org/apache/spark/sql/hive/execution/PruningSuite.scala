@@ -87,6 +87,12 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq("key"),
     Seq.empty)
 
+  createPruningTest("Column pruning - remove unnecesary column with explode",
+    "SELECT name, sum(d) FROM person LATERAL VIEW explode(data) d AS d GROUP BY name",
+    Seq("name", "d"),
+    Seq("name","data"),
+    Seq.empty)
+
   // Partition pruning tests
 
   createPruningTest("Partition pruning - non-partitioned, non-trivial project",
