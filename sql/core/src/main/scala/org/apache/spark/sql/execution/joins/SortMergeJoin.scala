@@ -44,7 +44,9 @@ case class SortMergeJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredOrderedDistribution(leftKeys) :: ClusteredOrderedDistribution(rightKeys) :: Nil
 
-  private val orders: Seq[SortOrder] = leftKeys.map(s => SortOrder(s, Ascending))
+  private val orders: Seq[SortOrder] = leftKeys.zipWithIndex.map {
+    case(expr, index) => SortOrder(BoundReference(index, expr.dataType, expr.nullable), Ascending)
+  }
   private val ordering: RowOrdering = new RowOrdering(orders, left.output)
 
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
