@@ -42,7 +42,8 @@ Class StripeMatrix
   7. Operation functions
     * def transpose: StripeMatrix
     * def transpose(rowsPerStripe: Int): StripeMatrix
-      (stripeIndex, XXXMatrix)
+      
+	(stripeIndex, XXXMatrix)
 	  
     * def add
     * def multiply
