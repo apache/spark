@@ -70,7 +70,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val table = synchronized {
           client.getTable(in.database, in.name)
         }
-        val userSpecifiedSchema =
+
+        def schemaStringFromParts: Option[String] = {
           Option(table.getProperty("spark.sql.sources.schema.numParts")).map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>
               val part = table.getProperty(s"spark.sql.sources.schema.part.${index}")
@@ -82,10 +83,19 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
               part
             }
-            // Stick all parts back to a single schema string in the JSON representation
-            // and convert it back to a StructType.
-            DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+            // Stick all parts back to a single schema string.
+            parts.mkString
           }
+        }
+
+        // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
+        // After SPARK-6024, we removed this flag.
+        // Although we are not using spark.sql.sources.schema any more, we need to still support.
+        val schemaString =
+          Option(table.getProperty("spark.sql.sources.schema")).orElse(schemaStringFromParts)
+
+        val userSpecifiedSchema =
+          schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
