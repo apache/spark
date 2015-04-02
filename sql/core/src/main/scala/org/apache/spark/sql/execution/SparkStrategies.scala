@@ -36,17 +36,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
 
   /**
-   * Flat the binary joins as multi-way join, the original binary join tree should be left/right deep,
-   * we don't support the bushy join in this rule.
-   * TODO we probably can support the right deep join, but we need to get the join reordering involved.
+   * Flat the binary joins as multi-way join, the original binary join tree should be
+   * left/right deep, we don't support the bushy join in this rule.
+   * TODO we probably can support the right deep join, but we need to get the join
+   * reordering involved.
    */
   object FlatMultiJoin extends Logging {
-    /** (build sides in join, join keys, join filters, multiple joins, index of the child node in the join, join keys of the streaming tables) */
-    type ReturnType = (MultiBuild, Seq[JoinKey], Seq[JoinFilter], Seq[LogicalPlan], Int, Set[Seq[Expression]])
+    /** (build sides in join,
+      * join keys,
+      * join filters,
+      * multiple joins,
+      * index of the child node in the join,
+      * join keys of the streaming tables)
+      * */
+    type ReturnType =
+      (MultiBuild, Seq[JoinKey], Seq[JoinFilter], Seq[LogicalPlan], Int, Set[Seq[Expression]])
 
     def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        // TODO we currently always assume the left side is fact relation, will add the join reordering later.
+        // TODO we currently always assume the left-most side is fact relation,
+        // will add the join reordering later.
         // left deep join
         def extractMultiJoin(p: LogicalPlan): ReturnType = {
           val tmp = unapply(p)
@@ -55,24 +64,47 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               if canBuildRelation(right) && (joinType == Inner || joinType == LeftSemi) =>
               // for broadcast join, we only support the inner join & left semi join
               build.add(index + 1)
-              (build, joinKeys :+ JoinKey(leftKeys, rightKeys), filters :+ JoinFilter(joinType, condition.getOrElse(Literal(true))), plans :+ right, index + 1, equiKeys)
+              (build,
+               joinKeys :+ JoinKey(leftKeys, rightKeys),
+               filters :+ JoinFilter(joinType, condition.getOrElse(Literal(true))),
+               plans :+ right,
+               index + 1,
+               equiKeys)
             case Some((build, joinKeys, filters, plans, index, equiKeys))
               if equiKeys.contains(leftKeys) =>
               // if it's the equi-join with the same join keys
-              (build, joinKeys :+ JoinKey(leftKeys, rightKeys), filters :+ JoinFilter(joinType, condition.getOrElse(Literal(true))), plans :+ right, index + 1, equiKeys + rightKeys)
+              (build,
+               joinKeys :+ JoinKey(leftKeys, rightKeys),
+               filters :+ JoinFilter(joinType, condition.getOrElse(Literal(true))),
+               plans :+ right,
+               index + 1,
+               equiKeys + rightKeys)
             case _ if canBuildRelation(right) && (joinType == Inner || joinType == LeftSemi) =>
               // bottom of this join tree, and its right side is the dimensional relation
               val build = new MultiBuild
               build.add(1)
-              (build, JoinKey(leftKeys, rightKeys) :: Nil, JoinFilter(joinType, condition.getOrElse(Literal(true))) :: Nil, left :: right :: Nil, 1, Set(Seq.empty[Expression]))
+              (build,
+               JoinKey(leftKeys, rightKeys) :: Nil,
+               JoinFilter(joinType, condition.getOrElse(Literal(true))) :: Nil,
+               left :: right :: Nil,
+               1,
+               Set(Seq.empty[Expression]))
             case _ =>
               // bottom of this join tree
-              (new MultiBuild, JoinKey(leftKeys, rightKeys) :: Nil, JoinFilter(joinType, condition.getOrElse(Literal(true))) :: Nil, left :: right :: Nil, 1, Set(leftKeys, rightKeys))
+              (new MultiBuild,
+               JoinKey(leftKeys, rightKeys) :: Nil,
+               JoinFilter(joinType, condition.getOrElse(Literal(true))) :: Nil,
+               left :: right :: Nil,
+               1,
+               Set(leftKeys, rightKeys))
           }
         }
 
         left match {
-          case logical.Project(_, p: Join) => Some(extractMultiJoin(p)) // ignore the Project node on top of the Join node
+          case logical.Project(_, p: Join) =>
+            // Column pruning added by optimizer is not necessary here
+            // we will have a PROJECTION node on top of the MULTIWAY-JOIN node
+            Some(extractMultiJoin(p))
           case _ => Some(extractMultiJoin(left))
         }
 
@@ -91,12 +123,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object MultiwayJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMultiJoin(build, joinKeys, joinFilters, children, _, _)
-          if (build.size() == children.size - 1) && // only a single fact relation exists
-            children.size > 2 && // more than 2 nodes in the join TODO can replace the binary join
-            build.contains(0) == false && // the left-most is the only fact relation
-            !joinFilters.exists(f => f.joinType != LeftSemi && f.joinType != Inner) => // only inner and left semi join supported
-        // only a single fact relation
-        DimensionJoin(joinKeys, joinFilters, children.map(child => planLater(child))) :: Nil
+        if sqlContext.conf.multiwayJoin &&
+         build.size() == children.size - 1 && // only a single fact relation exists
+         children.size > 2 && // more than 2 nodes in the join TODO can replace the binary join
+         build.contains(0) == false && // the left-most is the only fact relation
+         !joinFilters.exists(f => f.joinType != LeftSemi && f.joinType != Inner) =>
+        // only inner and left semi join supported
+        DimensionJoin(
+          joinKeys.toArray,
+          joinFilters.toArray,
+          children.map(child => planLater(child))) :: Nil
       case _ => Nil
     }
   }

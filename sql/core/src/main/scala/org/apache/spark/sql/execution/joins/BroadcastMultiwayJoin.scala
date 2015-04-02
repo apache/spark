@@ -38,8 +38,8 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 @AlphaComponent
 case class DimensionJoin(
-    keys: Seq[JoinKey],
-    filters: Seq[JoinFilter],
+    keys: Array[JoinKey],
+    filters: Array[JoinFilter],
     children: Seq[SparkPlan])
   extends SparkPlan with MultiwayJoin {
 
@@ -58,11 +58,11 @@ case class DimensionJoin(
   }
 
   private def joinKey(tblIdx: Int): Seq[Expression] = {
-    if (tblIdx == 0) keys(0).leftKeys else keys(tblIdx - 1).rightkeys
+    if (tblIdx == 0) keys(0).leftKeys else keys(tblIdx - 1).rightKeys
   }
 
   private def correlatedJoinKey(tblIdx: Int): Seq[Expression] = {
-    if (tblIdx == 0) keys(0).rightkeys else keys(tblIdx - 1).leftKeys
+    if (tblIdx == 0) keys(0).rightKeys else keys(tblIdx - 1).leftKeys
   }
 
   private def streamPlan = children(0)
@@ -73,7 +73,7 @@ case class DimensionJoin(
 
   override def childrenOutputs: Seq[Seq[Attribute]] = children.map(_.output)
 
-  override def requiredChildDistribution: Seq[Distribution] = children.map(_ => UnspecifiedDistribution)
+  override def requiredChildDistribution = children.map(_ => UnspecifiedDistribution)
 
   @transient protected lazy val keyGenerators: Array[Projection] =
     Array.tabulate(children.size)(i => newProjection(joinKey(i), children(i).output))

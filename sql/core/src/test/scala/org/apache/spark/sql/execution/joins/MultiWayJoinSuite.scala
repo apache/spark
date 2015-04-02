@@ -48,13 +48,15 @@ class MultiWayJoinSuite extends FunSuite {
   val tables = Array(
     CompactBuffer() += Row(3, 5) += Row(7, 10),
     CompactBuffer() += Row(4, 4) += Row(7, 7)).map { buffer =>
-    new HashedBufferBuilder(new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
+    new HashedBufferBuilder(
+      new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
   }
   val tables2 = Array(
     CompactBuffer() += Row(3, 5) += Row(7, 10),
     CompactBuffer() += Row(4, 4) += Row(7, 7),
     CompactBuffer() += Row(1, 1) += Row(8, 8)).map { buffer =>
-    new HashedBufferBuilder(new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
+    new HashedBufferBuilder(
+      new TestHashedRelation(buffer)).withEquiJoinKey(null): CompactBufferBuilder
   }
 
   test("With Multiple Input Row") {
@@ -98,8 +100,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #1") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Seq(
-        JoinFilter(Inner, GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
+      var joinFilters = Array(
+        JoinFilter(
+          Inner,
+          GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
     }
     val results = mwj.product(tables).map(_.copy()).toArray
     assert(1 === results.length)
@@ -108,8 +112,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #2") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Seq(
-        JoinFilter(LeftOuter, GreaterThan(BoundReference(0, IntegerType, true), Literal(3, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(3, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -122,8 +128,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #3") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftOuter, GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -134,8 +142,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #4") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(RightOuter, GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          RightOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -146,8 +156,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #5") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(RightOuter, GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          RightOuter,
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -159,8 +171,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #6") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(FullOuter, GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          FullOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -172,8 +186,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #7") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(FullOuter, GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          FullOuter,
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -185,8 +201,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #8") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftSemi, GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftSemi,
+          GreaterThan(BoundReference(2, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -197,8 +215,10 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #9") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftSemi, GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftSemi,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -208,9 +228,13 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #10") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftOuter, GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
-        JoinFilter(RightOuter, GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
+        JoinFilter(
+          RightOuter,
+          GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables2).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -223,9 +247,13 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #11") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftOuter, GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
-        JoinFilter(RightOuter, GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), Literal(5, IntegerType))),
+        JoinFilter(
+          RightOuter,
+          GreaterThan(BoundReference(4, IntegerType, true), Literal(5, IntegerType))))
     }
 
     val results = mwj.product(tables2).map(_.copy()).toArray.sortWith(_.toString < _.toString)
@@ -238,9 +266,13 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #12") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters: Seq[JoinFilter] = Array(
-        JoinFilter(LeftOuter, GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))),
-        JoinFilter(RightOuter, GreaterThan(BoundReference(2, IntegerType, true), BoundReference(4, IntegerType, true))))
+      var joinFilters = Array(
+        JoinFilter(
+          LeftOuter,
+          GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))),
+        JoinFilter(
+          RightOuter,
+          GreaterThan(BoundReference(2, IntegerType, true), BoundReference(4, IntegerType, true))))
     }
 
     val results = mwj.product(tables2).map(_.copy()).toArray.sortWith(_.toString < _.toString)

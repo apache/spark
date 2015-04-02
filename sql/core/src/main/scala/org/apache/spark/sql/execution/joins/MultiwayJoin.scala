@@ -23,11 +23,11 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.{CompactBuffer, BitSet}
 
 case class JoinFilter(joinType: JoinType, filter: Expression)
-case class JoinKey(leftKeys: Seq[Expression], rightkeys: Seq[Expression])
+case class JoinKey(leftKeys: Seq[Expression], rightKeys: Seq[Expression])
 
 /**
- * A mutable wrapper that makes multiple rows appear as a single concatenated row.  Designed to
- * be instantiated once per thread and reused.
+ * A mutable wrapper that makes multiple rows appear as a single concatenated row.
+ * Designed to be instantiated once per thread and reusable.
  */
 private[sql] class MultiJoinedRow(colNums: Int*) extends Row {
   assert(colNums.length >= 2)
@@ -182,7 +182,8 @@ class HashedBufferBuilder(relation: HashedRelation) extends CompactBufferBuilder
 // e.g. SELECT ... FROM a JOIN b ON a.key = b.key JOIN c ON b.value = c.value
 // We need the b.value in the entry has been computed, and then we can get the
 // buffer for relation "c", when iterating over the whole join series.
-class CorrelatedBufferBuilder(key: Projection, relation: HashedRelation) extends CompactBufferBuilder {
+class CorrelatedBufferBuilder(key: Projection, relation: HashedRelation)
+  extends CompactBufferBuilder {
   @transient
   var input: Row = _
   def withLeft(input: Row): this.type = {
@@ -208,7 +209,7 @@ class ConstantBufferBuilder(row: Row) extends CompactBufferBuilder {
 }
 
 trait MultiwayJoin {
-  def joinFilters: Seq[JoinFilter]
+  def joinFilters: Array[JoinFilter]
 
   def childrenOutputs: Seq[Seq[Attribute]]
 
@@ -270,6 +271,8 @@ trait MultiwayJoin {
             product2LeftSemiJoin(partial, buffer, i)
           }
 
+        // FULL OUTER / LEFT OUTER / RIGHT OUTER is not used right now
+        // will be used for multiway equi-joins (with all of the identical join keys)
         case FullOuter =>
           val buffer = currentBuilder.build
           if (partial.hasNext == false && buffer.size == 0) {
@@ -326,21 +329,29 @@ trait MultiwayJoin {
     }
   }
 
-  private[this] def product2(left: Iterator[MultiJoinedRow], right: CorrelatedBufferBuilder, pos: Int): Iterator[MultiJoinedRow] = {
+  private[this] def product2(
+    left: Iterator[MultiJoinedRow],
+    right: CorrelatedBufferBuilder,
+    pos: Int): Iterator[MultiJoinedRow] = {
     (for (l <- left;
           r <- right.withLeft(l).build.iterator) yield {
       l.withNewTable(pos, r)
     }).filter(predicate(_, pos - 1))
   }
 
-  private[this] def product2(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] = {
+  private[this] def product2(
+    left: Iterator[MultiJoinedRow],
+    right: CompactBuffer[Row],
+    pos: Int): Iterator[MultiJoinedRow] = {
     (for (l <- left; r <- right.iterator) yield {
       l.withNewTable(pos, r)
     }).filter(predicate(_, pos - 1))
   }
 
-  private[this] def product2FullOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] =
-  {
+  private[this] def product2FullOuterJoin(
+      left: Iterator[MultiJoinedRow],
+      right: CompactBuffer[Row],
+      pos: Int): Iterator[MultiJoinedRow] = {
     val bs = new BitSet(right.length)
     var needReset = true
 
@@ -373,8 +384,10 @@ trait MultiwayJoin {
     }).map(e => inputBuffer.withNewTable(pos, e))
   }
 
-  private[this] def product2LeftOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
-  : Iterator[MultiJoinedRow] = {
+  private[this] def product2LeftOuterJoin(
+    left: Iterator[MultiJoinedRow],
+    right: CompactBuffer[Row],
+    pos: Int): Iterator[MultiJoinedRow] = {
     left.flatMap { l =>
       val r = right.iterator.map { r =>
         l.withNewTable(pos, r)
@@ -383,8 +396,10 @@ trait MultiwayJoin {
     }
   }
 
-  private[this] def product2LeftSemiJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
-  : Iterator[MultiJoinedRow] = {
+  private[this] def product2LeftSemiJoin(
+    left: Iterator[MultiJoinedRow],
+    right: CompactBuffer[Row],
+    pos: Int): Iterator[MultiJoinedRow] = {
     (left.filter { l =>
       right.exists { r =>
         predicate(l.withNewTable(pos, r), pos - 1)
@@ -392,8 +407,10 @@ trait MultiwayJoin {
     }).map(_.clearTable(pos))
   }
 
-  private[this] def product2LeftSemiJoin(left: Iterator[MultiJoinedRow], right: CorrelatedBufferBuilder, pos: Int)
-  : Iterator[MultiJoinedRow] = {
+  private[this] def product2LeftSemiJoin(
+    left: Iterator[MultiJoinedRow],
+    right: CorrelatedBufferBuilder,
+    pos: Int): Iterator[MultiJoinedRow] = {
     (left.filter { l =>
       right.withLeft(l).build.exists { r =>
         predicate(l.withNewTable(pos, r), pos - 1)
@@ -401,8 +418,10 @@ trait MultiwayJoin {
     }).map(_.clearTable(pos))
   }
 
-  private[this] def product2RightOuterJoin(left: Iterator[MultiJoinedRow], right: CompactBuffer[Row], pos: Int)
-  : Iterator[MultiJoinedRow] = {
+  private[this] def product2RightOuterJoin(
+    left: Iterator[MultiJoinedRow],
+    right: CompactBuffer[Row],
+    pos: Int): Iterator[MultiJoinedRow] = {
     val bs = new BitSet(right.length)
     var needReset = true
 
@@ -443,7 +462,9 @@ trait MultiwayJoin {
     inputBuffer
   }
 
-  private[this] def createBase(left: CompactBuffer[Row], pos: Int): Iterator[MultiJoinedRow] = {
+  private[this] def createBase(
+    left: CompactBuffer[Row],
+    pos: Int): Iterator[MultiJoinedRow] = {
     resetInputBuffer(pos)
 
     left.iterator.map { l =>

@@ -1100,7 +1100,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
 
-  test("JOIN OPTIMIZATION START SCHEMA") {
+  test("JOIN OPTIMIZATION STAR SCHEMA") {
     Seq(1,2,3).map(i => (i, i.toString)).toDF("a", "b").registerTempTable("df")
 
     checkAnswer(
@@ -1127,21 +1127,27 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql(
         """
-          SELECT x.a, y.a, z.a FROM df x JOIN df y ON x.a = y.a AND y.a > 2 JOIN df z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, y.a, z.a
+          | FROM df x JOIN df y ON x.a = y.a AND y.a > 2
+          | JOIN df z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(3, 3, 3) :: Nil)
 
     checkAnswer(
       sql(
         """
-          SELECT x.a, z.a FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 2 JOIN df z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, z.a
+          | FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 2
+          | JOIN df z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(3, 3) :: Nil)
 
     checkAnswer(
       sql(
         """
-          SELECT x.a, z.a FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 1 JOIN df z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, z.a
+          | FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 1
+          | JOIN df z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(2, 2) :: Row(3, 3) :: Nil)
   }
@@ -1175,21 +1181,27 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql(
         """
-          SELECT x.a, y.a, z.a FROM x JOIN y ON x.a = y.a AND y.a < 3 JOIN z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, y.a, z.a
+          | FROM x JOIN y ON x.a = y.a AND y.a < 3
+          | JOIN z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(2, 2, 2) :: Nil)
 
     checkAnswer(
       sql(
         """
-          SELECT x.a, z.a FROM x LEFT SEMI JOIN y ON x.a = y.a AND x.a >= 2 JOIN z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, z.a
+          | FROM x LEFT SEMI JOIN y ON x.a = y.a AND x.a >= 2
+          | JOIN z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(2, 2) :: Nil)
 
     checkAnswer(
       sql(
         """
-          SELECT x.a, z.a FROM x LEFT SEMI JOIN y ON x.a = y.a AND y.a > 1 JOIN z ON x.a = z.a AND z.a > 1
+          | SELECT x.a, z.a
+          | FROM x LEFT SEMI JOIN y ON x.a = y.a AND y.a > 1
+          | JOIN z ON x.a = z.a AND z.a > 1
         """.stripMargin),
       Row(2, 2) :: Nil)
   }
