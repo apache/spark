@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 
 object Literal {
@@ -42,20 +43,9 @@ object Literal {
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 
-  /**
-   * convert String in `v` as UTF8String
-    */
-  def convertToUTF8String(v: Any): Any = v match {
-    case s: String => UTF8String(s)
-    case seq: Seq[Any] => seq.map(convertToUTF8String)
-    case r: Row => Row(r.toSeq.map(convertToUTF8String): _*)
-    case arr: Array[Any] => arr.toSeq.map(convertToUTF8String).toArray
-    case m: Map[Any, Any] =>
-      m.map { case (k, v) => (convertToUTF8String(k), convertToUTF8String(v)) }.toMap
-    case other => other
+  def create(v: Any, dataType: DataType): Literal = {
+    Literal(ScalaReflection.convertToCatalyst(v), dataType)
   }
-
-  def create(v: Any, dataType: DataType): Literal = Literal(convertToUTF8String(v), dataType)
 }
 
 /**

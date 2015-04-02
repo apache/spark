@@ -230,7 +230,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def execute(): RDD[Row] = {
     // TODO: Clean up after ourselves?
-    // TODO(davies): convert internal type to Scala Type
     val childResults = child.execute().map(_.copy()).cache()
 
     val parent = childResults.mapPartitions { iter =>

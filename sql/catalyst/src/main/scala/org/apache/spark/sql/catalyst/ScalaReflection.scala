@@ -78,8 +78,26 @@ trait ScalaReflection {
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
     case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
-    case (s: String, st: StringType) => UTF8String(s)
+    case (s: String, _) => UTF8String(s)
     case (other, _) => other
+  }
+
+  /**
+   *  Converts Scala objects to catalyst rows / types.
+   *  Note: This should be called before do evaluation on Row
+   *        (It does not support UDT)
+   */
+  def convertToCatalyst(a: Any): Any = a match {
+    case s: String => UTF8String(s)
+    case d: java.sql.Date => DateUtils.fromJavaDate(d)
+    case d: BigDecimal => Decimal(d)
+    case d: java.math.BigDecimal => Decimal(d)
+    case seq: Seq[Any] => seq.map(convertToCatalyst)
+    case r: Row => Row(r.toSeq.map(convertToCatalyst): _*)
+    case arr: Array[Any] => arr.toSeq.map(convertToCatalyst).toArray
+    case m: Map[Any, Any] =>
+      m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
+    case other => other
   }
 
   /** Converts Catalyst types used internally in rows to standard Scala types */

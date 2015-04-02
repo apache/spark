@@ -128,7 +128,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           }"""
         case other =>
           q"""
-          override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
+          override def ${accessorForType(dataType)}(i: Int): ${termForType(dataType)} = {
             ..$ifStatements;
             $accessorFailure
           }"""
@@ -148,13 +148,13 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       dataType match {
         case StringType =>
           q"""
-          override def setString(i: Int, value: String): Unit = {
+          override def setString(i: Int, value: String) {
             ..$ifStatements;
             $accessorFailure
           }"""
         case other =>
           q"""
-          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}):Unit = {
+          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}) {
             ..$ifStatements;
             $accessorFailure
           }"""

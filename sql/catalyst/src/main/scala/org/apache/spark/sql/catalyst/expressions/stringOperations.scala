@@ -19,9 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
-import scala.collection.IndexedSeqOptimized
-
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types._
 
@@ -226,8 +223,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
   @inline
-  def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
-      (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
+  def slicePos(startPos: Int, sliceLen: Int, length: () => Int): (Int, Int) = {
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
     // negative indices for start positions. If a start index i is greater than 0, it 
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
@@ -236,7 +232,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
 
     val start = startPos match {
       case pos if pos > 0 => pos - 1
-      case neg if neg < 0 => str.length + neg
+      case neg if neg < 0 => length() + neg
       case _ => 0
     }
 
@@ -245,34 +241,11 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       case x => start + x
     }
 
-    str.slice(start, end)    
-  }
-
-  @inline
-  def slice(str: UTF8String, startPos: Int, sliceLen: Int): Any = {
-    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
-    // negative indices for start positions. If a start index i is greater than 0, it
-    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
-    // to the -ith element before the end of the sequence. If a start index i is 0, it
-    // refers to the first element.
-
-    val start = startPos match {
-      case pos if pos > 0 => pos - 1
-      case neg if neg < 0 => str.length + neg
-      case _ => 0
-    }
-
-    val end = sliceLen match {
-      case max if max == Integer.MAX_VALUE => max
-      case x => start + x
-    }
-
-    str.slice(start, end)
+    (start, end)
   }
 
   override def eval(input: Row): Any = {
     val string = str.eval(input)
-
     val po = pos.eval(input)
     val ln = len.eval(input)
 
@@ -280,11 +253,14 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       null
     } else {
       val start = po.asInstanceOf[Int]
-      val length = ln.asInstanceOf[Int] 
-
+      val length = ln.asInstanceOf[Int]
       string match {
-        case ba: Array[Byte] => slice(ba, start, length)
-        case s: UTF8String => slice(s, start, length)
+        case ba: Array[Byte] =>
+          val (st, end) = slicePos(start, length, () => ba.length)
+          ba.slice(st, end)
+        case s: UTF8String =>
+          val (st, end) = slicePos(start, length, () => s.length)
+          s.slice(st, end)
       }
     }
   }

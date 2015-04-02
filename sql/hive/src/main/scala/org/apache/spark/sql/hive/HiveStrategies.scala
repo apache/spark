@@ -17,25 +17,22 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.expressions.Row
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Row, _}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.sources.DescribeCommand
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, _}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
-import org.apache.spark.sql.types.{UTF8String, StringType}
+import org.apache.spark.sql.sources.{CreateTableUsing, CreateTableUsingAsSelect, DescribeCommand}
+import org.apache.spark.sql.types.StringType
 
 
 private[hive] trait HiveStrategies {
@@ -131,10 +128,7 @@ private[hive] trait HiveStrategies {
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
-                inputData(i) = partitionValues(i) match {
-                  case s: String => UTF8String(s)
-                  case other => other
-                }
+                inputData(i) = ScalaReflection.convertToCatalyst(partitionValues(i))
                 i += 1
               }
               pruningCondition(inputData)

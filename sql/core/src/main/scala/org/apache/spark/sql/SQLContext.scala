@@ -396,11 +396,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // schema differs from the existing schema on any field data type.
     def needsConversion(dt: DataType): Boolean = dt match {
       case StringType => true
+      case DateType => true
+      case DecimalType() => true
       case dt: ArrayType => needsConversion(dt.elementType)
       case dt: MapType => needsConversion(dt.keyType) || needsConversion(dt.valueType)
-      case dt: StructType =>
-        !dt.fields.forall(f => !needsConversion(f.dataType))
-      // TODO(davies): check other types and values
+      case dt: StructType => !dt.fields.forall(f => !needsConversion(f.dataType))
       case other => false
     }
     val convertedRdd = if (needsConversion(schema)) {

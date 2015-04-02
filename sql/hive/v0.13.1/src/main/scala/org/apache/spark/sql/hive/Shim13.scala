@@ -23,12 +23,14 @@ import java.util.{Properties, ArrayList => JArrayList}
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
+import com.esotericsoftware.kryo.Kryo
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
@@ -45,7 +47,6 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.Logging
 import org.apache.spark.sql.types.{Decimal, DecimalType, UTF8String}
 
-
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
  * de-serialization cross process boundary.
@@ -60,19 +61,14 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   // for Serialization
   def this() = this(null)
 
-  import java.io.{InputStream, OutputStream}
-
-import com.esotericsoftware.kryo.Kryo
-  import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
-
-import org.apache.spark.util.Utils._
+  import org.apache.spark.util.Utils._
 
   @transient
   private val methodDeSerialize = {
     val method = classOf[Utilities].getDeclaredMethod(
       "deserializeObjectByKryo",
       classOf[Kryo],
-      classOf[InputStream],
+      classOf[java.io.InputStream],
       classOf[Class[_]])
     method.setAccessible(true)
 
@@ -85,7 +81,7 @@ import org.apache.spark.util.Utils._
       "serializeObjectByKryo",
       classOf[Kryo],
       classOf[Object],
-      classOf[OutputStream])
+      classOf[java.io.OutputStream])
     method.setAccessible(true)
 
     method

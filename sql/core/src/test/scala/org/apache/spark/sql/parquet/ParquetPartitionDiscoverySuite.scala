@@ -20,7 +20,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.parquet.ParquetRelation2._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
