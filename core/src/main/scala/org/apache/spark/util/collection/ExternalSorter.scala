@@ -664,6 +664,8 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
+   * Exposed for testing purposes.
+   *
    * Return an iterator over all the data written to this object, grouped by partition and
    * aggregated by the requested aggregator. For each partition we then have an iterator over its
    * contents, and these are expected to be accessed in order (you can't "skip ahead" to one
@@ -673,7 +675,7 @@ private[spark] class ExternalSorter[K, V, C](
    * For now, we just merge all the spilled files in once pass, but this can be modified to
    * support hierarchical merging.
    */
-  def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
+   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
     val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
     if (spills.isEmpty && partitionWriters == null) {
@@ -781,7 +783,7 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Read a partition file back as an iterator (used in our iterator method)
    */
-  def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
+  private def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
     if (writer.isOpen) {
       writer.commitAndClose()
     }

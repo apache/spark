@@ -505,7 +505,8 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), calcType)
 
-  private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
+  private def addFunction(value: Any) = Add(sum,
+    Cast(Literal.create(value, expr.dataType), calcType))
 
   override def eval(input: Row): Any = {
     if (count == 0L) {

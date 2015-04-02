@@ -15,24 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.util
 
-import java.nio.ByteBuffer
+import org.apache.spark.{SparkEnv, SparkConf}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
-
-private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+object RpcUtils {
 
   /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
+   * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
    */
-  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
-
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
-
-  def stop(): Unit
+  def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
+    val driverActorSystemName = SparkEnv.driverActorSystemName
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
+  }
 }

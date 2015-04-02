@@ -42,6 +42,7 @@ import parquet.hadoop.{ParquetInputFormat, _}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions
@@ -121,7 +122,8 @@ private[sql] class DefaultSource
       val df =
         sqlContext.createDataFrame(
           data.queryExecution.toRdd,
-          data.schema.asNullable)
+          data.schema.asNullable,
+          needsConversion = false)
       val createdRelation =
         createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
       createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
@@ -435,11 +437,18 @@ private[sql] case class ParquetRelation2(
     // Push down filters when possible. Notice that not all filters can be converted to Parquet
     // filter predicate. Here we try to convert each individual predicate and only collect those
     // convertible ones.
-    predicates
-      .flatMap(ParquetFilters.createFilter)
-      .reduceOption(FilterApi.and)
-      .filter(_ => sqlContext.conf.parquetFilterPushDown)
-      .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    if (sqlContext.conf.parquetFilterPushDown) {
+      predicates
+        // Don't push down predicates which reference partition columns
+        .filter { pred =>
+          val partitionColNames = partitionColumns.map(_.name).toSet
+          val referencedColNames = pred.references.map(_.name).toSet
+          referencedColNames.intersect(partitionColNames).isEmpty
+        }
+        .flatMap(ParquetFilters.createFilter)
+        .reduceOption(FilterApi.and)
+        .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
+    }
 
     if (isPartitioned) {
       logInfo {
@@ -662,7 +671,8 @@ private[sql] case class ParquetRelation2(
       } finally {
         writer.close(hadoopContext)
       }
-      committer.commitTask(hadoopContext)
+
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext, context)
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
@@ -758,12 +768,14 @@ private[sql] object ParquetRelation2 extends Logging {
          |${parquetSchema.prettyJson}
        """.stripMargin
 
-    assert(metastoreSchema.size <= parquetSchema.size, schemaConflictMessage)
+    val mergedParquetSchema = mergeMissingNullableFields(metastoreSchema, parquetSchema)
+
+    assert(metastoreSchema.size <= mergedParquetSchema.size, schemaConflictMessage)
 
     val ordinalMap = metastoreSchema.zipWithIndex.map {
       case (field, index) => field.name.toLowerCase -> index
     }.toMap
-    val reorderedParquetSchema = parquetSchema.sortBy(f => 
+    val reorderedParquetSchema = mergedParquetSchema.sortBy(f => 
       ordinalMap.getOrElse(f.name.toLowerCase, metastoreSchema.size + 1))
 
     StructType(metastoreSchema.zip(reorderedParquetSchema).map {
@@ -774,6 +786,32 @@ private[sql] object ParquetRelation2 extends Logging {
         throw new SparkException(schemaConflictMessage)
     })
   }
+
+  /**
+   * Returns the original schema from the Parquet file with any missing nullable fields from the
+   * Hive Metastore schema merged in.
+   *
+   * When constructing a DataFrame from a collection of structured data, the resulting object has
+   * a schema corresponding to the union of the fields present in each element of the collection.
+   * Spark SQL simply assigns a null value to any field that isn't present for a particular row.
+   * In some cases, it is possible that a given table partition stored as a Parquet file doesn't
+   * contain a particular nullable field in its schema despite that field being present in the
+   * table schema obtained from the Hive Metastore. This method returns a schema representing the
+   * Parquet file schema along with any additional nullable fields from the Metastore schema
+   * merged in.
+   */
+  private[parquet] def mergeMissingNullableFields(
+      metastoreSchema: StructType,
+      parquetSchema: StructType): StructType = {
+    val fieldMap = metastoreSchema.map(f => f.name.toLowerCase -> f).toMap
+    val missingFields = metastoreSchema
+      .map(_.name.toLowerCase)
+      .diff(parquetSchema.map(_.name.toLowerCase))
+      .map(fieldMap(_))
+      .filter(_.nullable)
+    StructType(parquetSchema ++ missingFields)
+  }
+
 
   // TODO Data source implementations shouldn't touch Catalyst types (`Literal`).
   // However, we are already using Catalyst expressions for partition pruning and predicate
@@ -835,9 +873,9 @@ private[sql] object ParquetRelation2 extends Logging {
    *   PartitionValues(
    *     Seq("a", "b", "c"),
    *     Seq(
-   *       Literal(42, IntegerType),
-   *       Literal("hello", StringType),
-   *       Literal(3.14, FloatType)))
+   *       Literal.create(42, IntegerType),
+   *       Literal.create("hello", StringType),
+   *       Literal.create(3.14, FloatType)))
    * }}}
    */
   private[parquet] def parsePartition(
@@ -916,15 +954,16 @@ private[sql] object ParquetRelation2 extends Logging {
       raw: String,
       defaultPartitionName: String): Literal = {
     // First tries integral types
-    Try(Literal(Integer.parseInt(raw), IntegerType))
-      .orElse(Try(Literal(JLong.parseLong(raw), LongType)))
+    Try(Literal.create(Integer.parseInt(raw), IntegerType))
+      .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
       // Then falls back to fractional types
-      .orElse(Try(Literal(JFloat.parseFloat(raw), FloatType)))
-      .orElse(Try(Literal(JDouble.parseDouble(raw), DoubleType)))
-      .orElse(Try(Literal(new JBigDecimal(raw), DecimalType.Unlimited)))
+      .orElse(Try(Literal.create(JFloat.parseFloat(raw), FloatType)))
+      .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
+      .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
       // Then falls back to string
       .getOrElse {
-        if (raw == defaultPartitionName) Literal(null, NullType) else Literal(raw, StringType)
+        if (raw == defaultPartitionName) Literal.create(null, NullType)
+        else Literal.create(raw, StringType)
       }
   }
 
@@ -943,7 +982,7 @@ private[sql] object ParquetRelation2 extends Logging {
     }
 
     literals.map { case l @ Literal(_, dataType) =>
-      Literal(Cast(l, desiredType).eval(), desiredType)
+      Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
   }
 }

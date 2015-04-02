@@ -50,7 +50,16 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.HttpBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
-              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast")
+              "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
+          ) ++ Seq(
+            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+            // the stage class is defined as private[spark]
+            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
+          ) ++ Seq(
+            // SPARK-6510 Add a Graph#minus method acting as Set#difference
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
           )
 
         case v if v.startsWith("1.3") =>
