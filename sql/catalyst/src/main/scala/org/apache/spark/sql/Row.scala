@@ -257,6 +257,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
+  // TODO(davies): This is not the right default implementation, we use Int as Date internally
   def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**

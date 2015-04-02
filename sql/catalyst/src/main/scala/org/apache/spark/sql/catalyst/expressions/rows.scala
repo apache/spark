@@ -37,6 +37,7 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  // TODO(davies): add setDate() and setDecimal()
 }
 
 /**
@@ -120,6 +121,8 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
       case utf8: UTF8String => utf8.toString
     }
   }
+
+  // TODO(davies): add getDate and getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
