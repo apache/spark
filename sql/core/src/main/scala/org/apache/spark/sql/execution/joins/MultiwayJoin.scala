@@ -145,6 +145,8 @@ trait CompactBufferBuilder extends java.io.Serializable {
       buffer
     }
   }
+
+  def correlated = false
 }
 
 object CompactBufferBuilder {
@@ -175,17 +177,24 @@ class HashedBufferBuilder(relation: HashedRelation) extends CompactBufferBuilder
   def build = buffer
 }
 
+// Correlated buffer builder is backward-correlated, which mean it requires
+// the previous join result entry has been computed
+// e.g. SELECT ... FROM a JOIN b ON a.key = b.key JOIN c ON b.value = c.value
+// We need the b.value in the entry has been computed, and then we can get the
+// buffer for relation "c", when iterating over the whole join series.
 class CorrelatedBufferBuilder(key: Projection, relation: HashedRelation) extends CompactBufferBuilder {
   @transient
   var input: Row = _
   def withLeft(input: Row): this.type = {
-    this.input = input
+    this.input = key(input)
     this
   }
 
   def build: CompactBuffer[Row] = {
     handleNullBuffer(relation.get(input))
   }
+
+  override def correlated = true
 }
 
 class ConstantBufferBuilder(row: Row) extends CompactBufferBuilder {
@@ -199,11 +208,11 @@ class ConstantBufferBuilder(row: Row) extends CompactBufferBuilder {
 }
 
 trait MultiwayJoin {
-  def joinFilters: Array[JoinFilter]
+  def joinFilters: Seq[JoinFilter]
 
   def childrenOutputs: Seq[Seq[Attribute]]
 
-  def output = childrenOutputs.reduce(_ ++ _)
+  val output = childrenOutputs.reduce(_ ++ _)
 
   private[this] val NULL_ROWS = Array.tabulate(childrenOutputs.length) { idx =>
     new ConstantBufferBuilder(Row(Array.fill[Any](childrenOutputs(idx).length)(null): _*))
@@ -232,8 +241,10 @@ trait MultiwayJoin {
       i += 1
 
       val currentBuilder = bufs(i)
+
       partial = joinCondition.joinType match {
-        case Inner if currentBuilder.isInstanceOf[CorrelatedBufferBuilder] =>
+        // Only Inner and LeftSemi join can support the correlated buffer builder
+        case Inner if currentBuilder.correlated =>
           product2(partial, currentBuilder.asInstanceOf[CorrelatedBufferBuilder], i)
 
         case Inner =>
@@ -242,6 +253,21 @@ trait MultiwayJoin {
             createBase(EMPTY_ROW.build, i)
           } else {
             product2(partial, buffer, i)
+          }
+
+        case LeftSemi if currentBuilder.correlated =>
+          // For semi join, we only need one element from the table on the right
+          // to verify a row exists.
+          product2LeftSemiJoin(partial, currentBuilder.asInstanceOf[CorrelatedBufferBuilder], i)
+
+        case LeftSemi =>
+          // For semi join, we only need one element from the table on the right
+          // to verify a row exists.
+          val buffer = currentBuilder.build
+          if (partial.hasNext == false || buffer.size == 0) {
+            createBase(EMPTY_ROW.build, i)
+          } else {
+            product2LeftSemiJoin(partial, buffer, i)
           }
 
         case FullOuter =>
@@ -276,20 +302,6 @@ trait MultiwayJoin {
             product2RightOuterJoin(partial, buffer, i)
           }
 
-        case LeftSemi if currentBuilder.isInstanceOf[CorrelatedBufferBuilder] =>
-          // For semi join, we only need one element from the table on the right
-          // to verify a row exists.
-          product2LeftSemiJoin(partial, currentBuilder.asInstanceOf[CorrelatedBufferBuilder], i)
-
-        case LeftSemi =>
-          // For semi join, we only need one element from the table on the right
-          // to verify a row exists.
-          val buffer = currentBuilder.build
-          if (partial.hasNext == false || buffer.size == 0) {
-            createBase(EMPTY_ROW.build, i)
-          } else {
-            product2LeftSemiJoin(partial, buffer, i)
-          }
       }
     }
     partial
@@ -315,7 +327,8 @@ trait MultiwayJoin {
   }
 
   private[this] def product2(left: Iterator[MultiJoinedRow], right: CorrelatedBufferBuilder, pos: Int): Iterator[MultiJoinedRow] = {
-    (for (l <- left; r <- right.withLeft(l).build.iterator) yield {
+    (for (l <- left;
+          r <- right.withLeft(l).build.iterator) yield {
       l.withNewTable(pos, r)
     }).filter(predicate(_, pos - 1))
   }

@@ -38,8 +38,8 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 @AlphaComponent
 case class DimensionJoin(
-    keys: Array[JoinKey],
-    joinFilters: Array[JoinFilter],
+    keys: Seq[JoinKey],
+    filters: Seq[JoinFilter],
     children: Seq[SparkPlan])
   extends SparkPlan with MultiwayJoin {
 
@@ -52,8 +52,17 @@ case class DimensionJoin(
     }
   }
 
+  // bind the join filter with the join intermediate output
+  val joinFilters = filters.map { f =>
+    f.copy(joinType = f.joinType, filter = BindReferences.bindReference(f.filter, output))
+  }
+
   private def joinKey(tblIdx: Int): Seq[Expression] = {
     if (tblIdx == 0) keys(0).leftKeys else keys(tblIdx - 1).rightkeys
+  }
+
+  private def correlatedJoinKey(tblIdx: Int): Seq[Expression] = {
+    if (tblIdx == 0) keys(0).rightkeys else keys(tblIdx - 1).leftKeys
   }
 
   private def streamPlan = children(0)
@@ -68,6 +77,9 @@ case class DimensionJoin(
 
   @transient protected lazy val keyGenerators: Array[Projection] =
     Array.tabulate(children.size)(i => newProjection(joinKey(i), children(i).output))
+
+  @transient protected lazy val correlatedJeyGenerators: Array[Projection] =
+    Array.tabulate(children.size)(i => newProjection(correlatedJoinKey(i), output))
 
   @transient
   private val broadcastFuture = future {
@@ -99,8 +111,8 @@ case class DimensionJoin(
           iteratorBuilder = new IteratorBufferBuilder()
           iteratorBuilder
         } else {
-          val keyProjection = newProjection(keys(i - 1).leftKeys, output)
-          new CorrelatedBufferBuilder(newProjection(keys(i - 1).leftKeys, output), relations(i))
+          val keyProjection = correlatedJeyGenerators(i)
+          new CorrelatedBufferBuilder(keyProjection, relations(i))
         }
       }
 

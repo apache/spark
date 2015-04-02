@@ -21,7 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.joins._
@@ -96,7 +96,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             build.contains(0) == false && // the left-most is the only fact relation
             !joinFilters.exists(f => f.joinType != LeftSemi && f.joinType != Inner) => // only inner and left semi join supported
         // only a single fact relation
-        DimensionJoin(joinKeys.toArray, joinFilters.toArray, children.map(child => planLater(child))) :: Nil
+        DimensionJoin(joinKeys, joinFilters, children.map(child => planLater(child))) :: Nil
       case _ => Nil
     }
   }

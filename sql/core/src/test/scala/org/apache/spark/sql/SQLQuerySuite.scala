@@ -1099,4 +1099,98 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
+
+  test("JOIN OPTIMIZATION START SCHEMA") {
+    Seq(1,2,3).map(i => (i, i.toString)).toDF("a", "b").registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM df x JOIN df y ON x.a = y.a JOIN df z ON y.b = z.b
+        """.stripMargin),
+      Row(1, 1, 1) :: Row(2, 2, 2) :: Row(3, 3, 3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM df x JOIN df y ON x.a = y.a JOIN df z ON x.b = z.b
+        """.stripMargin),
+      Row(1, 1, 1) :: Row(2, 2, 2) :: Row(3, 3, 3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM df x JOIN df y ON x.a = y.a JOIN df z ON x.a = z.a
+        """.stripMargin),
+      Row(1, 1, 1) :: Row(2, 2, 2) :: Row(3, 3, 3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM df x JOIN df y ON x.a = y.a AND y.a > 2 JOIN df z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(3, 3, 3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, z.a FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 2 JOIN df z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(3, 3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, z.a FROM df x LEFT SEMI JOIN df y ON x.a = y.a AND y.a > 1 JOIN df z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(2, 2) :: Row(3, 3) :: Nil)
+  }
+
+  test("JOIN OPTIMIZATION START SCHEMA with Null Value") {
+    Seq(1,2,3).map(i => (i, i.toString)).toDF("a", "b").registerTempTable("x")
+    Seq(1,2).map(i => (i, i.toString)).toDF("a", "b").registerTempTable("y")
+    Seq(2,3).map(i => (i, i.toString)).toDF("a", "b").registerTempTable("z")
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM x JOIN y ON x.a = y.a JOIN z ON y.b = z.b
+        """.stripMargin),
+      Row(2, 2, 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM x JOIN y ON x.a = y.a JOIN z ON x.b = z.b
+        """.stripMargin),
+      Row(2, 2, 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM x JOIN y ON x.a = y.a JOIN z ON x.a = z.a
+        """.stripMargin),
+      Row(2, 2, 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, y.a, z.a FROM x JOIN y ON x.a = y.a AND y.a < 3 JOIN z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(2, 2, 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, z.a FROM x LEFT SEMI JOIN y ON x.a = y.a AND x.a >= 2 JOIN z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(2, 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          SELECT x.a, z.a FROM x LEFT SEMI JOIN y ON x.a = y.a AND y.a > 1 JOIN z ON x.a = z.a AND z.a > 1
+        """.stripMargin),
+      Row(2, 2) :: Nil)
+  }
 }
