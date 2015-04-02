@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{UTF8String, StringType}
 
 
 private[hive] trait HiveStrategies {
@@ -131,7 +131,10 @@ private[hive] trait HiveStrategies {
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
-                inputData(i) = partitionValues(i)
+                inputData(i) = partitionValues(i) match {
+                  case s: String => UTF8String(s)
+                  case other => other
+                }
                 i += 1
               }
               pruningCondition(inputData)

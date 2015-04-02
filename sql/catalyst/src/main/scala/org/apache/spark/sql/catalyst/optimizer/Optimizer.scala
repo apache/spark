@@ -209,7 +209,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
         case equalTo(pattern) =>
           EqualTo(l, Literal(pattern))
         case _ =>
-          Like(l, Literal(utf, StringType))
+          Like(l, Literal.create(utf, StringType))
       }
   }
 }

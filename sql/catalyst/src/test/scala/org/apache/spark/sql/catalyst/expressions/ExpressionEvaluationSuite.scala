@@ -1054,7 +1054,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       checkEvaluation(Sqrt(d), expected, row)
     }
 
-    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, new create_row(Array[Any](null)))
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(Array[Any](null)))
     checkEvaluation(Sqrt(-1), null, EmptyRow)
     checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
