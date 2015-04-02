@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.util.GroupMappingServiceProvider
 import org.scalatest.FunSuite
 
 import org.apache.spark.util.Utils
@@ -39,7 +40,7 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.checkUIViewPermissions("user3") === false)
   }
 
-  test("set security with api") {
+  test("set security view acls") {
     val conf = new SparkConf
     conf.set("spark.ui.view.acls", "user1,user2")
     val securityManager = new SecurityManager(conf);
@@ -60,6 +61,31 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.checkUIViewPermissions("user7") === true)
     assert(securityManager.checkUIViewPermissions("user8") === false)
     assert(securityManager.checkUIViewPermissions(null) === true)
+  }
+
+  test("set security view acls for group") {
+    val conf = new SparkConf
+    conf.set("spark.security.group.acls.enable", "true")
+    conf.set("spark.ui.view.acls", "user3|group1")
+    conf.set("spark.security.groupMappingProvider", "org.apache.spark.TestGroupsMapping")
+    val securityManager = new SecurityManager(conf);
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+
+    assert(securityManager.checkUIViewPermissions("user1") === true)
+    assert(securityManager.checkUIViewPermissions("user2") === true)
+    assert(securityManager.checkUIViewPermissions("user3") === true)
+    assert(securityManager.checkUIViewPermissions("user4") === false)
+    assert(securityManager.checkUIViewPermissions(null) === true)
+
+    securityManager.setViewAcls(Set("user5"), "|group1,group2")
+    assert(securityManager.checkUIViewPermissions("user1") === true)
+    assert(securityManager.checkUIViewPermissions("user2") === true)
+    assert(securityManager.checkUIViewPermissions("user3") === true)
+    assert(securityManager.checkUIViewPermissions("user4") === true)
+    assert(securityManager.checkUIViewPermissions("user5") === true)
+    assert(securityManager.checkUIViewPermissions(null) === true)
+
   }
 
   test("set security modify acls") {
@@ -83,6 +109,22 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.checkModifyPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user7") === true)
     assert(securityManager.checkModifyPermissions("user8") === false)
+    assert(securityManager.checkModifyPermissions(null) === true)
+  }
+
+  test("set security modify acls for group") {
+    val conf = new SparkConf
+    conf.set("spark.security.group.acls.enable", "true")
+    conf.set("spark.modify.acls", "user3|group1")
+    conf.set("spark.security.groupMappingProvider", "org.apache.spark.TestGroupsMapping")
+    val securityManager = new SecurityManager(conf);
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+
+    assert(securityManager.checkModifyPermissions("user1") === true)
+    assert(securityManager.checkModifyPermissions("user2") === true)
+    assert(securityManager.checkModifyPermissions("user3") === true)
+    assert(securityManager.checkModifyPermissions("user4") === false)
     assert(securityManager.checkModifyPermissions(null) === true)
   }
 
@@ -125,6 +167,32 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.checkUIViewPermissions("user3") === false)
     assert(securityManager.checkUIViewPermissions(null) === true)
 
+  }
+
+  test("set security admin acls for group") {
+    val conf = new SparkConf
+    conf.set("spark.security.group.acls.enable", "true")
+    conf.set("spark.security.groupMappingProvider", "org.apache.spark.TestGroupsMapping")
+    conf.set("spark.admin.acls", "|group1")
+    conf.set("spark.ui.view.acls", "user3")
+    conf.set("spark.modify.acls", "user4")
+
+    val securityManager = new SecurityManager(conf);
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+
+    assert(securityManager.checkModifyPermissions("user1") === true)
+    assert(securityManager.checkModifyPermissions("user2") === true)
+    assert(securityManager.checkModifyPermissions("user4") === true)
+    assert(securityManager.checkModifyPermissions("user3") === false)
+    assert(securityManager.checkModifyPermissions("user5") === false)
+    assert(securityManager.checkModifyPermissions(null) === true)
+    assert(securityManager.checkUIViewPermissions("user1") === true)
+    assert(securityManager.checkUIViewPermissions("user2") === true)
+    assert(securityManager.checkUIViewPermissions("user3") === true)
+    assert(securityManager.checkUIViewPermissions("user4") === false)
+    assert(securityManager.checkUIViewPermissions("user5") === false)
+    assert(securityManager.checkUIViewPermissions(null) === true)
   }
 
   test("ssl on setup") {
@@ -175,5 +243,18 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.hostnameVerifier.isDefined === false)
   }
 
+}
+
+/* The provider is just for test */
+class TestGroupsMapping extends GroupMappingServiceProvider {
+  def getGroups(user: String):List[String] = {
+    user match {
+      case "user1" => List("group1")
+      case "user2" => List("group1")
+      case "user3" => List("group2")
+      case "user4" => List("group2")
+      case _ => List()
+    }
+  }
 }
 
