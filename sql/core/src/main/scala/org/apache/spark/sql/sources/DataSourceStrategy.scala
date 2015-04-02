@@ -53,7 +53,7 @@ private[sql] object DataSourceStrategy extends Strategy {
         (a, _) => t.buildScan(a)) :: Nil
 
     case l @ LogicalRelation(t: TableScan) =>
-      execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
+      createPhysicalRDD(l.relation, l.output, t.buildScan()) :: Nil
 
     case i @ logical.InsertIntoTable(
       l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
@@ -102,18 +102,27 @@ private[sql] object DataSourceStrategy extends Strategy {
         projectList.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
 
-      val scan =
-        execution.PhysicalRDD(
-          projectList.map(_.toAttribute),
+      val scan = createPhysicalRDD(relation.relation, projectList.map(_.toAttribute),
           scanBuilder(requestedColumns, pushedFilters))
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
 
-      val scan =
-        execution.PhysicalRDD(requestedColumns, scanBuilder(requestedColumns, pushedFilters))
+      val scan = createPhysicalRDD(relation.relation, requestedColumns,
+        scanBuilder(requestedColumns, pushedFilters))
       execution.Project(projectList, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
+  }
+
+  private[this] def createPhysicalRDD(relation: BaseRelation,
+                                      output: Seq[Attribute],
+                                      rdd: RDD[Row]) = {
+    val converted = if (relation.needConversion) {
+      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+    } else {
+      rdd
+    }
+    execution.PhysicalRDD(output, converted)
   }
 
   /**

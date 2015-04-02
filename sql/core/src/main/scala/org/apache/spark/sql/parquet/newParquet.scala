@@ -404,6 +404,9 @@ private[sql] case class ParquetRelation2(
       file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
+  // Skip type conversion
+  override val needConversion: Boolean = false
+
   // TODO Should calculate per scan size
   // It's common that a query only scans a fraction of a large Parquet file.  Returning size of the
   // whole Parquet file disables some optimizations in this case (e.g. broadcast join).

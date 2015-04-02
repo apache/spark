@@ -341,7 +341,9 @@ private[hive] trait HiveInspectors {
    */
   protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
     case _: JavaHiveVarcharObjectInspector =>
-      (o: Any) => new HiveVarchar(o.asInstanceOf[UTF8String].toString, o.asInstanceOf[String].size)
+      (o: Any) =>
+        val s = o.asInstanceOf[UTF8String].toString
+        new HiveVarchar(s, s.size)
 
     case _: JavaHiveDecimalObjectInspector =>
       (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)

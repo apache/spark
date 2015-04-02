@@ -355,6 +355,7 @@ private[sql] class JDBCRDD(
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
             case LongConversion       => mutableRow.setLong(i, rs.getLong(pos))
+            // TODO(davies): use getBytes for better performance
             case StringConversion     => mutableRow.setString(i, rs.getString(pos))
             case TimestampConversion  => mutableRow.update(i, rs.getTimestamp(pos))
             case BinaryConversion     => mutableRow.update(i, rs.getBytes(pos))

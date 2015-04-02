@@ -40,10 +40,6 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
   val defaultPartitionName = "__NULL__"
 
-  def create_row(values: Any*): Row = {
-    new GenericRow(values.map(Literal.convertToUTF8String).toArray)
-  }
-
   test("column type inference") {
     def check(raw: String, literal: Literal): Unit = {
       assert(inferPartitionColumnValue(raw, defaultPartitionName) === literal)
@@ -111,7 +107,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         StructType(Seq(
           StructField("a", IntegerType),
           StructField("b", StringType))),
-        Seq(Partition(create_row(10, "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+        Seq(Partition(Row(10, "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
@@ -121,8 +117,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", FloatType),
           StructField("b", StringType))),
         Seq(
-          Partition(create_row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(create_row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
@@ -132,8 +128,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", IntegerType),
           StructField("b", StringType))),
         Seq(
-          Partition(create_row(10, "20"), s"hdfs://host:9000/path/a=10/b=20"),
-          Partition(create_row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+          Partition(Row(10, "20"), s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
@@ -143,8 +139,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", FloatType),
           StructField("b", StringType))),
         Seq(
-          Partition(create_row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
-          Partition(create_row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+          Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(Row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
   }
 
   test("read partitioned table - normal case") {
@@ -167,7 +163,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield create_row(i, i.toString, pi, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -175,21 +171,21 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
             _ <- Seq("foo", "bar")
-          } yield create_row(i, pi))
+          } yield Row(i, pi))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield create_row(i, i.toString, 1, ps))
+          } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield create_row(i, i.toString, pi, "foo"))
+          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }
@@ -214,7 +210,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield create_row(i, pi, i.toString, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -222,21 +218,21 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
             _ <- Seq("foo", "bar")
-          } yield create_row(i, pi))
+          } yield Row(i, pi))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield create_row(i, 1, i.toString, ps))
+          } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield create_row(i, pi, i.toString, "foo"))
+          } yield Row(i, pi, i.toString, "foo"))
       }
     }
   }
@@ -268,21 +264,21 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield create_row(i, i.toString, pi, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE pi IS NULL"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield create_row(i, i.toString, null, ps))
+          } yield Row(i, i.toString, null, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
-          } yield create_row(i, i.toString, pi, null))
+          } yield Row(i, i.toString, pi, null))
       }
     }
   }
@@ -313,14 +309,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield create_row(i, pi, i.toString, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield create_row(i, pi, i.toString, null))
+          } yield Row(i, pi, i.toString, null))
       }
     }
   }
@@ -340,7 +336,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       withTempTable("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
-          (1 to 10).map(i => create_row(i, null, 1)) ++ (1 to 10).map(i => create_row(i, i.toString, 2)))
+          (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
       }
     }
   }
