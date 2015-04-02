@@ -43,6 +43,9 @@ private[mllib] object StripePartitioner {
 
 private[mllib] class StripePartitioner2
 
+/**
+ * Local matrix
+ */
 private[mllib] class XSparseMatrix(
     ) extends Matrix {
 }
