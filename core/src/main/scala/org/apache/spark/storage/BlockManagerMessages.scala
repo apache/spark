@@ -52,7 +52,8 @@ private[spark] object BlockManagerMessages {
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
-      sender: ActorRef)
+      sender: ActorRef,
+      subDirs: Array[String])
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(
@@ -109,4 +110,6 @@ private[spark] object BlockManagerMessages {
     extends ToBlockManagerMaster
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
+
+  case class GetLocalDirsPath(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 }

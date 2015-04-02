@@ -64,6 +64,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(conf).when(blockManager).conf
 
     // Make sure blockManager.getBlockData would return the blocks
     val localBlocks = Map[BlockId, ManagedBuffer](
@@ -71,7 +72,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
       ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer]))
     localBlocks.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId), meq(localBmId))
     }
 
     // Make sure remote blocks would return
@@ -97,7 +98,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       48 * 1024 * 1024)
 
     // 3 local blocks fetched in initialization
-    verify(blockManager, times(3)).getBlockData(any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
 
     for (i <- 0 until 5) {
       assert(iterator.hasNext, s"iterator should have 5 elements but actually has $i elements")
@@ -114,7 +115,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
 
     // 3 local blocks, and 2 remote blocks
     // (but from the same block manager so one call to fetchBlocks)
-    verify(blockManager, times(3)).getBlockData(any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
     verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any())
   }
 
@@ -122,6 +123,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(conf).when(blockManager).conf
 
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
@@ -185,6 +187,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(conf).when(blockManager).conf
 
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)

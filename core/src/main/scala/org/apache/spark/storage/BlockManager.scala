@@ -202,7 +202,8 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(
+      blockManagerId, maxMemory, slaveActor, diskBlockManager.getLocalDirsPath())
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -265,7 +266,8 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(
+      blockManagerId, maxMemory, slaveActor, diskBlockManager.getLocalDirsPath())
     reportAllBlocks()
   }
 
@@ -295,13 +297,18 @@ private[spark] class BlockManager(
     }
   }
 
-  /**
-   * Interface to get local block data. Throws an exception if the block cannot be found or
-   * cannot be read successfully.
-   */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    getBlockData(blockId, blockManagerId)
+  }
+
+  /**
+   * Interface to get other executor's block data as the same node as blockManagerId.
+   * Throws an exception if the block cannot be found or cannot be read successfully.
+   */
+  override def getBlockData(blockId: BlockId, blockManagerId: BlockManagerId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockManager.getBlockData(
+        blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
         .asInstanceOf[Option[ByteBuffer]]

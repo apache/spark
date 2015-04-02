@@ -35,7 +35,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     "spark.storage.memoryMapThreshold", 2 * 1024L * 1024L)
 
   override def getSize(blockId: BlockId): Long = {
-    diskManager.getFile(blockId.name).length
+    diskManager.getFile(blockId).length
   }
 
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
@@ -129,7 +129,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId)
     getBytes(file, 0, file.length)
   }
 
@@ -152,7 +152,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   }
 
   override def remove(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId)
     // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
     // is different from blockId.name. So the file returns here will not be exist, thus we avoid to
     // delete the whole consolidated file by mistake.
@@ -164,7 +164,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   }
 
   override def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId)
     file.exists()
   }
 }
