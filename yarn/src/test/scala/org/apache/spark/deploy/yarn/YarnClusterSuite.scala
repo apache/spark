@@ -123,6 +123,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
     hadoopConfDir = new File(tempDir, Client.HADOOP_CONF_DIR)
     assert(hadoopConfDir.mkdir())
+    File.createTempFile("token", ".txt", hadoopConfDir)
   }
 
   override def afterAll() {

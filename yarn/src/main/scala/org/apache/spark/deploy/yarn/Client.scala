@@ -17,15 +17,17 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
+import com.google.common.io.Files
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
@@ -277,10 +279,10 @@ private[spark] class Client(
 
     // Distribute the Hadoop config files. These are only really used by the AM, since executors
     // will use the configuration object broadcast by the driver. But this is the easiest way to
-    // make sure the files are available for the AM. The files are placed in a subdirectory so
-    // that they do not clash with other user files. This directory is then added to the classpath
-    // of all processes (both the AM and all the executors), just to make sure that everybody is
-    // using the same default config.
+    // make sure the files are available for the AM. The files are zipped and added to the job as
+    // an archive, so that YARN will explode it when distributing to the AM. This directory is then
+    // added to the classpath of all processes (both the AM and all the executors), just to make
+    // sure that everybody is using the same default config.
     //
     // This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
     // shows up in the classpath before YARN_CONF_DIR.
@@ -301,15 +303,26 @@ private[spark] class Client(
       }
     }
 
-    val hadoopConfPath = new Path(dst, HADOOP_CONF_DIR)
-    fs.mkdirs(hadoopConfPath)
+    if (!hadoopConfFiles.isEmpty) {
+      val hadoopConfArchive = File.createTempFile(HADOOP_CONF_DIR, ".jar",
+        new File(Utils.getLocalDir(sparkConf)))
+      require(addDistributedUri(hadoopConfArchive.toURI()))
 
-    hadoopConfFiles.foreach { case (name, file) =>
-      if (addDistributedUri(file.toURI())) {
-        val destPath = copyFileToRemote(hadoopConfPath, new Path(file.toURI()), replication)
-        distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.FILE,
-          HADOOP_CONF_DIR + Path.SEPARATOR + name, statCache)
+      val hadoopConfStream = new ZipOutputStream(new FileOutputStream(hadoopConfArchive))
+      try {
+        hadoopConfStream.setLevel(0)
+        hadoopConfFiles.foreach { case (name, file) =>
+          hadoopConfStream.putNextEntry(new ZipEntry(name))
+          Files.copy(file, hadoopConfStream)
+          hadoopConfStream.closeEntry()
+        }
+      } finally {
+        hadoopConfStream.close()
       }
+
+      val destPath = copyFileToRemote(dst, new Path(hadoopConfArchive.toURI()), replication)
+      distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
+        HADOOP_CONF_DIR, statCache)
     }
 
     /**
@@ -731,7 +744,7 @@ object Client extends Logging {
   val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
 
   // Subdirectory where the user's hadoop config files are written in the app staging dir.
-  val HADOOP_CONF_DIR = "__hadoop_conf_dir__"
+  val HADOOP_CONF_DIR = "__hadoop_conf__"
 
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this
