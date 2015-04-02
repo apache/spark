@@ -1113,7 +1113,10 @@ private[spark] object SerDe extends Serializable {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
+          obj match {
+            case list: JArrayList[_] => list.asScala
+            case arr: Array[_] => arr
+          }
         } else {
           Seq(obj)
         }
