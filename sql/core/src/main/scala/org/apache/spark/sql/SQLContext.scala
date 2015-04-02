@@ -394,7 +394,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
+    val catalystRows = rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
 
