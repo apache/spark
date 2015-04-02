@@ -197,7 +197,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.waitForCompletion</code></td>
+  <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td>true</td>
   <td>
   Whether to wait for application to complete in cluster mode. If set this to true, client process will enter a loop to track application's status.
