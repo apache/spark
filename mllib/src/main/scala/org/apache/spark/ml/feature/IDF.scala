@@ -40,6 +40,20 @@ private[feature] trait IDFParams extends Params with HasInputCol with HasOutputC
   def setMinDocFreq(value: Int): this.type = {
     set(minDocFreq, value)
   }
+
+  /**
+   * Validate and transform the input schema.
+   */
+  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val inputType = schema(map(inputCol)).dataType
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input column ${map(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains(map(outputCol)),
+      s"Output column ${map(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
+    StructType(outputFields)
+  }
 }
 
 /**
@@ -66,14 +80,7 @@ class IDF extends Estimator[IDFModel] with IDFParams {
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val inputType = schema(map(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${map(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains(map(outputCol)),
-      s"Output column ${map(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema, paramMap)
   }
 }
 
@@ -97,18 +104,11 @@ class IDFModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val idf = udf((v: Vector) => { idfModel.transform(v) } : Vector)
+    val idf = udf((v: Vector) => { idfModel.transform(v) })
     dataset.withColumn(map(outputCol), idf(col(map(inputCol))))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val inputType = schema(map(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${map(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains(map(outputCol)),
-      s"Output column ${map(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema, paramMap)
   }
 }
