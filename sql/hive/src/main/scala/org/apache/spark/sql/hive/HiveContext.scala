@@ -181,7 +181,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val tableFullName =
             relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
 
-          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          catalog.synchronized {
+            catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          }
         }
       case otherRelation =>
         throw new UnsupportedOperationException(
