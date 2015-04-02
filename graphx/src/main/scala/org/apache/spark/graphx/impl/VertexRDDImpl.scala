@@ -103,6 +103,31 @@ class VertexRDDImpl[VD] private[graphx] (
   override def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
+  override def minus(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
+    minus(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
+  }
+
+  override def minus (other: VertexRDD[VD]): VertexRDD[VD] = {
+    other match {
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
+        this.withPartitionsRDD[VD](
+          partitionsRDD.zipPartitions(
+            other.partitionsRDD, preservesPartitioning = true) {
+            (thisIter, otherIter) =>
+              val thisPart = thisIter.next()
+              val otherPart = otherIter.next()
+              Iterator(thisPart.minus(otherPart))
+          })
+      case _ =>
+        this.withPartitionsRDD[VD](
+          partitionsRDD.zipPartitions(
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
+            (partIter, msgs) => partIter.map(_.minus(msgs))
+          }
+        )
+    }
+  }
+
   override def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
     diff(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
   }
