@@ -1631,6 +1631,32 @@
     </profile>
 
     <profile>
+      <id>hadoop-2.5</id>
+      <properties>
+        <hadoop.version>2.5.2</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.3</jets3t.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+        <commons.math3.version>3.1.1</commons.math3.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.6</id>
+      <properties>
+        <hadoop.version>2.6.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.3</jets3t.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+        <commons.math3.version>3.1.1</commons.math3.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
+      </properties>
+    </profile>
+
+    <profile>
       <id>yarn</id>
       <modules>
         <module>yarn</module>
