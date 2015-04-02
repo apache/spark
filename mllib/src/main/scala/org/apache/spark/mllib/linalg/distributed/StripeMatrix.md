@@ -41,9 +41,28 @@ Class StripeMatrix
 
   7. Operation functions
     * def transpose: StripeMatrix
-    * def transpose(rowsPerStripe: Int): StripeMatrix
-      
-	  (stripeIndex, XXXMatrix)
+	
+      (rowStripeIndex, rowStripeMatrix)  flapMap by splitting rowStripeMatrix =>  [(colStripeIndex1, colBlockMatrix1), ..., (colStripeIndexN, colBlockMatrixN)]  reduceByKey by transposing and catenating colBlockMatrix => (colStripeIndex, T(colBlockMatrix1)::T(colBlockMatrix2)::...::T(colBlockMatrixN))
+    
+	* def transpose(rowsPerStripe: Int): StripeMatrix
+    * def add(other: StripeMatrix): StripeMatrix
+	
+      (rowStripeIndex, rowStripeMatrix1), (rowStripeIndex, rowStripeMatrix2)  cogroup based on the same partitioner =>  (rowStripeIndex, (rowStripeMatrix1, rowStripeMatrix2))  map by adding two local matrices =>  (rowStripeIndex, rowStripeMatrix1 + rowStripeMatrix2)
+	
+    * def multiply(other: StripeMatrix): StripeMatrix
+	
+      * get the look-up table of the left matrix
 	  
-    * def add
-    * def multiply
+        (rowStripeIndex, rowStripeMatrixLeft)  map =>  (rowStripeIndex, RS2CLookup)   transpose =>   (colStripeIndex, RS2CLookup)
+		
+	  * send the right matrix
+	  
+        (colStripeIndexLeft, RS2CLookup), (rowStripeIndexRight, rowStripeMatrixRight)  cogroup =>  (colStripeIndexLeft, (RS2CLookup, rowStripeMatrixRight))  flapMap by splitting RS2CLookup and reducing rowStripeMatrixRight =>  [(rowStripeIndexLeft1, (colStripeIndexLeft, reducedrowStripeMatrixRight1)), ..., (rowStripeIndexLeftN, (colStripeIndexLeft, reducedrowStripeMatrixRightN))]
+	  
+	  * multiply the left matrix
+	  
+        How to reuse the previous partitioner on rowStripeIndex for the one on (rowStripeIndex, colStripeIndex)
+	
+Class XXXMatrix
+----------------
+	
