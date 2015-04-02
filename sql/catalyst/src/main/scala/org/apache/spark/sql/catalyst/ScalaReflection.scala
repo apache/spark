@@ -72,6 +72,11 @@ trait ScalaReflection {
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
     case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
+    case (r: Row, structType: StructType) =>
+      new GenericRow(
+        r.toSeq.zip(structType.fields).map { case (elem, field) =>
+          convertToCatalyst(elem, field.dataType)
+        }.toArray)
     case (other, _) => other
   }
 
