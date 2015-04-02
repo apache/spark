@@ -392,9 +392,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema, needsConversion = true)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val catalystRows = rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    val catalystRows = if (needsConversion) {
+      rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    } else {
+      rowRDD
+    }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }

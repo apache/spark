@@ -904,7 +904,8 @@ class DataFrame private[sql](
    */
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions), schema)
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
+      schema, needsConversion = false)
   }
 
   /**

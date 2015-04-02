@@ -122,7 +122,8 @@ private[sql] class DefaultSource
       val df =
         sqlContext.createDataFrame(
           data.queryExecution.toRdd,
-          data.schema.asNullable)
+          data.schema.asNullable,
+          needsConversion = false)
       val createdRelation =
         createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
       createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
