@@ -1201,7 +1201,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       CreateArray(children.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
-      Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
+      Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
     case Token("TOK_FUNCTION", Token(COALESCE(), Nil) :: list) => Coalesce(list.map(nodeToExpr))
@@ -1213,9 +1213,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedFunction(name, UnresolvedStar(None) :: Nil)
 
     /* Literals */
-    case Token("TOK_NULL", Nil) => Literal(null, NullType)
-    case Token(TRUE(), Nil) => Literal(true, BooleanType)
-    case Token(FALSE(), Nil) => Literal(false, BooleanType)
+    case Token("TOK_NULL", Nil) => Literal.create(null, NullType)
+    case Token(TRUE(), Nil) => Literal.create(true, BooleanType)
+    case Token(FALSE(), Nil) => Literal.create(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
 
@@ -1226,21 +1226,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       try {
         if (ast.getText.endsWith("L")) {
           // Literal bigint.
-          v = Literal(ast.getText.substring(0, ast.getText.length() - 1).toLong, LongType)
+          v = Literal.create(ast.getText.substring(0, ast.getText.length() - 1).toLong, LongType)
         } else if (ast.getText.endsWith("S")) {
           // Literal smallint.
-          v = Literal(ast.getText.substring(0, ast.getText.length() - 1).toShort, ShortType)
+          v = Literal.create(ast.getText.substring(0, ast.getText.length() - 1).toShort, ShortType)
         } else if (ast.getText.endsWith("Y")) {
           // Literal tinyint.
-          v = Literal(ast.getText.substring(0, ast.getText.length() - 1).toByte, ByteType)
+          v = Literal.create(ast.getText.substring(0, ast.getText.length() - 1).toByte, ByteType)
         } else if (ast.getText.endsWith("BD") || ast.getText.endsWith("D")) {
           // Literal decimal
           val strVal = ast.getText.stripSuffix("D").stripSuffix("B")
           v = Literal(Decimal(strVal))
         } else {
-          v = Literal(ast.getText.toDouble, DoubleType)
-          v = Literal(ast.getText.toLong, LongType)
-          v = Literal(ast.getText.toInt, IntegerType)
+          v = Literal.create(ast.getText.toDouble, DoubleType)
+          v = Literal.create(ast.getText.toLong, LongType)
+          v = Literal.create(ast.getText.toInt, IntegerType)
         }
       } catch {
         case nfe: NumberFormatException => // Do nothing

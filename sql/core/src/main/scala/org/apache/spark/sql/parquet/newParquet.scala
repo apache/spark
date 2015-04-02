@@ -872,9 +872,9 @@ private[sql] object ParquetRelation2 extends Logging {
    *   PartitionValues(
    *     Seq("a", "b", "c"),
    *     Seq(
-   *       Literal(42, IntegerType),
-   *       Literal("hello", StringType),
-   *       Literal(3.14, FloatType)))
+   *       Literal.create(42, IntegerType),
+   *       Literal.create("hello", StringType),
+   *       Literal.create(3.14, FloatType)))
    * }}}
    */
   private[parquet] def parsePartition(
@@ -953,15 +953,16 @@ private[sql] object ParquetRelation2 extends Logging {
       raw: String,
       defaultPartitionName: String): Literal = {
     // First tries integral types
-    Try(Literal(Integer.parseInt(raw), IntegerType))
-      .orElse(Try(Literal(JLong.parseLong(raw), LongType)))
+    Try(Literal.create(Integer.parseInt(raw), IntegerType))
+      .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
       // Then falls back to fractional types
-      .orElse(Try(Literal(JFloat.parseFloat(raw), FloatType)))
-      .orElse(Try(Literal(JDouble.parseDouble(raw), DoubleType)))
-      .orElse(Try(Literal(new JBigDecimal(raw), DecimalType.Unlimited)))
+      .orElse(Try(Literal.create(JFloat.parseFloat(raw), FloatType)))
+      .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
+      .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
       // Then falls back to string
       .getOrElse {
-        if (raw == defaultPartitionName) Literal(null, NullType) else Literal(raw, StringType)
+        if (raw == defaultPartitionName) Literal.create(null, NullType)
+        else Literal.create(raw, StringType)
       }
   }
 
@@ -980,7 +981,7 @@ private[sql] object ParquetRelation2 extends Logging {
     }
 
     literals.map { case l @ Literal(_, dataType) =>
-      Literal(Cast(l, desiredType).eval(), desiredType)
+      Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
   }
 }
