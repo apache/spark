@@ -26,9 +26,12 @@ trait FunctionRegistry {
 
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
-  def lookupFunction(name: String, children: Seq[Expression]): Expression
-
   def caseSensitive: Boolean
+
+  def lookupFunction(
+      name: String,
+      children: Seq[Expression],
+      distinct: Boolean = false): Expression
 }
 
 trait OverrideFunctionRegistry extends FunctionRegistry {
@@ -39,8 +42,13 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
     functionBuilders.put(name, builder)
   }
 
-  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
+  abstract override def lookupFunction(
+      name: String,
+      children: Seq[Expression],
+      distinct: Boolean = false): Expression = {
+    functionBuilders.get(name)
+      .map(_(children))
+      .getOrElse(super.lookupFunction(name, children, distinct))
   }
 }
 
@@ -51,7 +59,10 @@ class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistr
     functionBuilders.put(name, builder)
   }
 
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def lookupFunction(
+      name: String,
+      children: Seq[Expression],
+      distinct: Boolean = false): Expression = {
     functionBuilders(name)(children)
   }
 }
@@ -65,7 +76,10 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  def lookupFunction(
+      name: String,
+      children: Seq[Expression],
+      distinct: Boolean = false): Expression = {
     throw new UnsupportedOperationException
   }
 

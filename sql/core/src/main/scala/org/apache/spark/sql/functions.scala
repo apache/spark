@@ -127,7 +127,7 @@ object functions {
    *
    * @group agg_funcs
    */
-  def sumDistinct(e: Column): Column = SumDistinct(e.expr)
+  def sumDistinct(e: Column): Column = Sum(e.expr, true)
 
   /**
    * Aggregate function: returns the sum of distinct values in the expression.
@@ -177,7 +177,7 @@ object functions {
    *
    * @group agg_funcs
    */
-  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
+  def approxCountDistinct(e: Column): Column = CountDistinct(e.expr :: Nil) // TODO
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -191,7 +191,7 @@ object functions {
    *
    * @group agg_funcs
    */
-  def approxCountDistinct(e: Column, rsd: Double): Column = ApproxCountDistinct(e.expr, rsd)
+  def approxCountDistinct(e: Column, rsd: Double): Column = CountDistinct(e.expr :: Nil) // TODO
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.

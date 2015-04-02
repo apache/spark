@@ -145,11 +145,12 @@ package object dsl {
     }
 
     def sum(e: Expression): Expression = Sum(e)
-    def sumDistinct(e: Expression): Expression = SumDistinct(e)
+    def sumDistinct(e: Expression): Expression = Sum(e, true)
     def count(e: Expression): Expression = Count(e)
-    def countDistinct(e: Expression*): Expression = CountDistinct(e)
-    def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      ApproxCountDistinct(e, rsd)
+    def countDistinct(e: Expression) = CountDistinct(e :: Nil)
+    def countDistinct(e: Expression*) = CountDistinct(e)
+    // TODO we don't support approximate, will convert it into Count
+    def approxCountDistinct(e: Expression, rsd: Double = 0.05) = CountDistinct(e :: Nil)
     def avg(e: Expression): Expression = Average(e)
     def first(e: Expression): Expression = First(e)
     def last(e: Expression): Expression = Last(e)
@@ -161,6 +162,7 @@ package object dsl {
     def abs(e: Expression): Expression = Abs(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
+
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)

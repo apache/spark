@@ -77,4 +77,6 @@ package object expressions  {
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
+
+  type AggrBuffer = GenericMutableRow
 }

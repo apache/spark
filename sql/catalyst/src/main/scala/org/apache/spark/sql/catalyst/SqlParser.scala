@@ -271,15 +271,18 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val function: Parser[Expression] =
     ( SUM   ~> "(" ~> expression             <~ ")" ^^ { case exp => Sum(exp) }
-    | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
+    | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => Sum(exp, true) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
     | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
     | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
-      { case exps => CountDistinct(exps) }
+     { case exps => CountDistinct(exps) }
+    | COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) }
+    // TODO approximate is not supported, will convert into COUNT
     | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
-      { case exp => ApproxCountDistinct(exp) }
+      { case exp => CountDistinct(exp :: Nil) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
-      { case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble) }
+      // TODO approximate s.toDouble
+      { case s ~ _ ~ _ ~ _ ~ _ ~ e => CountDistinct(e :: Nil) }
     | FIRST ~ "(" ~> expression <~ ")" ^^ { case exp => First(exp) }
     | LAST  ~ "(" ~> expression <~ ")" ^^ { case exp => Last(exp) }
     | AVG   ~ "(" ~> expression <~ ")" ^^ { case exp => Average(exp) }

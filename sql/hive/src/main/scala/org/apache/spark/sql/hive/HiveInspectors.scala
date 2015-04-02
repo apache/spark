@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
@@ -29,6 +30,15 @@ import org.apache.spark.sql.types._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+
+private[hive] trait HiveUDAFMode {
+  def toHiveMode(m: Mode) = m match {
+    case PARTIAL1 => GenericUDAFEvaluator.Mode.PARTIAL1
+    case PARTIAL2 => GenericUDAFEvaluator.Mode.PARTIAL2
+    case FINAL => GenericUDAFEvaluator.Mode.FINAL
+    case COMPLETE => GenericUDAFEvaluator.Mode.COMPLETE
+  }
+}
 
 /**
  * 1. The Underlying data type in catalyst and in Hive

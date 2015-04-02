@@ -43,24 +43,27 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
-    val planned = HashAggregation(query).head
-    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
+    val query = testData.groupBy('value).agg(count('key)).queryExecution.sparkPlan
+    val preshuffles = query.collect { case n: AggregatePreShuffle => n }
+    val postshuffles = query.collect { case n: AggregatePostShuffle => n }
 
-    assert(aggregations.size === 2)
+    assert(preshuffles.size === 1)
+    assert(preshuffles.size === 1)
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
-    val planned = HashAggregation(query)
-    assert(planned.nonEmpty)
+    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.sparkPlan
+    // TODO currently only reducer side aggregation support for DISTINCT
+    val shuffles = query.collect { case n: DistinctAggregate => n }
+    assert(shuffles.size === 1)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
-    val planned = HashAggregation(query)
-    assert(planned.nonEmpty)
+    testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.sparkPlan
+    // TODO currently only reducer side aggregation support for DISTINCT
+    val shuffles = query.collect { case n: DistinctAggregate => n }
+    assert(shuffles.size === 1)
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {

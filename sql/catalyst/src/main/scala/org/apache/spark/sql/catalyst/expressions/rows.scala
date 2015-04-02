@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.types.{StructType, NativeType}
 
-
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
  * a value through a primitive function implicitly marks that column as not null.
@@ -28,7 +27,6 @@ trait MutableRow extends Row {
   def setNullAt(i: Int): Unit
 
   def update(ordinal: Int, value: Any)
-
   def setInt(ordinal: Int, value: Int)
   def setLong(ordinal: Int, value: Long)
   def setDouble(ordinal: Int, value: Double)
@@ -37,6 +35,21 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+
+  final def setByte(ordinal: Int, value: Int) { setByte(ordinal, value.asInstanceOf[Byte]) }
+  final def setShort(ordinal: Int, value: Int) { setByte(ordinal, value.asInstanceOf[Short]) }
+
+  final def update(bound: BoundReference, value: Any) { update(bound.ordinal, value) }
+  final def setInt(bound: BoundReference, value: Int) { setInt(bound.ordinal, value) }
+  final def setLong(bound: BoundReference, value: Long) { setLong(bound.ordinal, value) }
+  final def setDouble(bound: BoundReference, value: Double) { setDouble(bound.ordinal, value) }
+  final def setBoolean(bound: BoundReference, value: Boolean) { setBoolean(bound.ordinal, value) }
+  final def setShort(bound: BoundReference, value: Int) { setShort(bound.ordinal, value) }
+  final def setShort(bound: BoundReference, value: Short) { setShort(bound.ordinal, value) }
+  final def setByte(bound: BoundReference, value: Byte) { setByte(bound.ordinal, value) }
+  final def setByte(bound: BoundReference, value: Int) { setByte(bound.ordinal, value) }
+  final def setFloat(bound: BoundReference, value: Float) { setFloat(bound.ordinal, value) }
+  final def setString(bound: BoundReference, value: String) { setString(bound.ordinal, value) }
 }
 
 /**
