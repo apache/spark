@@ -44,10 +44,12 @@ private[parquet] object SparkRowReadSupport {
 }
 
 private[parquet] class SparkRowReadSupport extends ReadSupport[Row] with Logging {
+  import SparkRowReadSupport._
+
   override def init(context: InitContext): ReadContext = {
     val conf = context.getConfiguration
-    val maybeRequestedSchema = Option(conf.get(SparkRowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
-    val maybeRowSchema = Option(conf.get(SparkRowReadSupport.SPARK_ROW_SCHEMA))
+    val maybeRequestedSchema = Option(conf.get(SPARK_ROW_REQUESTED_SCHEMA))
+    val maybeRowSchema = Option(conf.get(SPARK_ROW_SCHEMA))
 
     val fullParquetSchema = context.getFileSchema
     val parquetRequestedSchema =
@@ -58,8 +60,8 @@ private[parquet] class SparkRowReadSupport extends ReadSupport[Row] with Logging
 
     val metadata =
       Map.empty[String, String] ++
-        maybeRequestedSchema.map(SparkRowReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
-        maybeRowSchema.map(SparkRowReadSupport.SPARK_ROW_SCHEMA -> _)
+        maybeRequestedSchema.map(SPARK_ROW_REQUESTED_SCHEMA -> _) ++
+        maybeRowSchema.map(SPARK_ROW_SCHEMA -> _)
 
     new ReadContext(parquetRequestedSchema, metadata)
   }
@@ -75,8 +77,8 @@ private[parquet] class SparkRowReadSupport extends ReadSupport[Row] with Logging
     val parquetRequestedSchema = readContext.getRequestedSchema
     val metadata = readContext.getReadSupportMetadata
 
-    val maybeSparkSchema = Option(metadata.get(SparkRowReadSupport.SPARK_METADATA_KEY))
-    val maybeSparkRequestedSchema = Option(metadata.get(SparkRowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
+    val maybeSparkSchema = Option(metadata.get(SPARK_METADATA_KEY))
+    val maybeSparkRequestedSchema = Option(metadata.get(SPARK_ROW_REQUESTED_SCHEMA))
 
     val sparkSchema =
       maybeSparkRequestedSchema
@@ -107,13 +109,19 @@ private[parquet] class SparkRowRecordMaterializer(
     sparkSchema: StructType)
   extends RecordMaterializer[Row] {
 
-  private val rootConverter = new CatalystStructConverter(parquetSchema, sparkSchema, NoopUpdater)
+  private val rootConverter = new CatalystRowConverter(parquetSchema, sparkSchema, NoopUpdater)
 
   override def getCurrentRecord: Row = rootConverter.currentRow
 
   override def getRootConverter: GroupConverter = rootConverter
 }
 
+/**
+ * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
+ * corresponding parent container. For example, a converter for a `Struct` field may set converted
+ * values to a [[MutableRow]]; or a converter for array element may append converted values to an
+ * [[ArrayBuffer]].
+ */
 private[parquet] trait ParentContainerUpdater {
   def set(value: Any): Unit = ()
   def setBoolean(value: Boolean): Unit = set(value)
@@ -125,27 +133,45 @@ private[parquet] trait ParentContainerUpdater {
   def setDouble(value: Double): Unit = set(value)
 }
 
+/** A no-op updater used for root converter (who doesn't have a parent). */
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
-private[parquet] class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
-  override def set(value: Any): Unit = row(ordinal) = value
-  override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
-  override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
-  override def setShort(value: Short): Unit = row.setShort(ordinal, value)
-  override def setInt(value: Int): Unit = row.setInt(ordinal, value)
-  override def setLong(value: Long): Unit = row.setLong(ordinal, value)
-  override def setDouble(value: Double): Unit = row.setDouble(ordinal, value)
-  override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
-}
-
-private[parquet] class CatalystStructConverter(
+/**
+ * This Parquet converter converts Parquet records to Spark SQL rows.
+ *
+ * @param parquetType Parquet type of Parquet records
+ * @param sparkType A Spark SQL struct type that corresponds to the Parquet record type
+ * @param updater An updater which takes care of the converted row object
+ */
+private[parquet] class CatalystRowConverter(
     parquetType: GroupType,
     sparkType: StructType,
     updater: ParentContainerUpdater)
   extends GroupConverter {
 
+  /**
+   * Updater used together with [[CatalystRowConverter]].
+   *
+   * @constructor Constructs a [[RowUpdater]] which sets converted filed values to the `ordinal`-th
+   *              cell in `row`.
+   */
+  private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
+    override def set(value: Any): Unit = row(ordinal) = value
+    override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
+    override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
+    override def setShort(value: Short): Unit = row.setShort(ordinal, value)
+    override def setInt(value: Int): Unit = row.setInt(ordinal, value)
+    override def setLong(value: Long): Unit = row.setLong(ordinal, value)
+    override def setDouble(value: Double): Unit = row.setDouble(ordinal, value)
+    override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
+  }
+
+  /**
+   * Represents the converted row object once an entire Parquet record is converted.
+   */
   val currentRow = new SpecificMutableRow(sparkType.map(_.dataType))
 
+  // Converters for each field.
   private val fieldConverters: Array[Converter] = {
     parquetType.getFields.zip(sparkType).zipWithIndex.map {
       case ((parquetFieldType, sparkField), ordinal) =>
@@ -165,6 +191,10 @@ private[parquet] class CatalystStructConverter(
     }
   }
 
+  /**
+   * Creates a converter for the given Parquet type `parquetType` and Spark SQL data type
+   * `sparkType`. Converted values are handled by `updater`.
+   */
   private def newConverter(
       parquetType: Type,
       sparkType: DataType,
@@ -213,7 +243,7 @@ private[parquet] class CatalystStructConverter(
         new CatalystMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new CatalystStructConverter(parquetType.asGroupType(), t, updater)
+        new CatalystRowConverter(parquetType.asGroupType(), t, updater)
 
       case t: UserDefinedType[_] =>
         val sparkTypeForUDT = t.sqlType
@@ -230,6 +260,7 @@ private[parquet] class CatalystStructConverter(
   // Other converters
   /////////////////////////////////////////////////////////////////////////////
 
+  /** Parquet converter for Parquet primitive types. */
   private final class CatalystPrimitiveConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
@@ -241,6 +272,9 @@ private[parquet] class CatalystStructConverter(
     override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
   }
 
+  /**
+   * Parquet converter for strings. A dictionary is used to avoid unnecessary string decoding cost.
+   */
   private final class CatalystStringConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
@@ -261,7 +295,11 @@ private[parquet] class CatalystStructConverter(
     override def addBinary(value: Binary): Unit = updater.set(value.toStringUsingUTF8)
   }
 
-  // TODO Handle decimals stored as INT32 and INT64
+  /**
+   * Parquet converter for decimals.
+   *
+   * @todo Handle decimals stored as INT32 and INT64
+   */
   private final class CatalystDecimalConverter(
       decimalType: DecimalType,
       updater: ParentContainerUpdater)
@@ -292,6 +330,7 @@ private[parquet] class CatalystStructConverter(
     }
   }
 
+  /** Parquet converter for arrays. */
   private final class CatalystArrayConverter(
       parquetSchema: GroupType,
       sparkSchema: ArrayType,
@@ -349,6 +388,7 @@ private[parquet] class CatalystStructConverter(
     }
   }
 
+  /** Parquet converter for maps */
   private final class CatalystMapConverter(
       parquetType: GroupType,
       sparkType: MapType,
@@ -372,6 +412,7 @@ private[parquet] class CatalystStructConverter(
 
     override def start(): Unit = currentMap.clear()
 
+    /** Parquet converter for key-value pairs within the map. */
     private final class KeyValueConverter(
         parquetKeyType: Type,
         parquetValueType: Type,
@@ -384,10 +425,12 @@ private[parquet] class CatalystStructConverter(
       private var currentValue: Any = _
 
       private val converters = Array(
+        // Converter for keys
         newConverter(parquetKeyType, sparkKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
         }),
 
+        // Converter for values
         newConverter(parquetValueType, sparkValueType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
         }))

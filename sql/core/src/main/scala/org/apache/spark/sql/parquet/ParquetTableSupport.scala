@@ -38,7 +38,7 @@ private[parquet] class RowRecordMaterializer(parquetSchema: MessageType, attribu
   extends RecordMaterializer[Row] {
 
   private val rootConverter =
-    new CatalystStructConverter(parquetSchema, StructType.fromAttributes(attributes), NoopUpdater)
+    new CatalystRowConverter(parquetSchema, StructType.fromAttributes(attributes), NoopUpdater)
 
   override def getCurrentRecord: Row = rootConverter.currentRow
 
