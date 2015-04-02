@@ -18,7 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.impl.estimator.PredictionModel
 import org.apache.spark.ml.impl.tree._
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
@@ -26,13 +29,26 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
+/*
+   * @param categoricalFeatures  Map storing the arity of categorical features.
+   *          E.g., an entry (j -> k) indicates that feature j is categorical
+   *          with k categories indexed from 0: {0, 1, ..., k-1}.
+   *          (default = empty, i.e., all features are numerical)
+   * @param numClasses  Number of classes the label can take,
+   *                    indexed from 0: {0, 1, ..., numClasses-1}.
+   *                    (default = 2, i.e., binary classification)
+
+ */
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@AlphaComponent
 class DecisionTreeClassifier
   extends TreeClassifier[DecisionTreeClassificationModel]
   with DecisionTreeParams[DecisionTreeClassifier]
@@ -96,18 +112,30 @@ object DecisionTreeClassifier {
  * features.
  * @param rootNode  Root of the decision tree
  */
-class DecisionTreeClassificationModel(rootNode: Node)
-  extends DecisionTreeModel(rootNode) with Serializable with Saveable {
+class DecisionTreeClassificationModel(override val rootNode: Node)
+  extends PredictionModel[Vector, DecisionTreeClassificationModel]
+  with DecisionTreeModel with Serializable {
+
+  require(rootNode != null,
+    "DecisionTreeModel given null rootNode, but it requires a non-null rootNode.")
+
+  override protected def predict(features: Vector): Double = {
+    rootNode.predict(features)
+  }
+
+  override protected def copy(): DecisionTreeClassificationModel = ???
 
   override def toString: String = {
     s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
   }
 
+  /*
   override def save(sc: SparkContext, path: String): Unit = {
     this.toOld.save(sc, path)
   }
+  */
 
-  override protected def formatVersion: String = OldDecisionTreeModel.formatVersion
+  //override protected def formatVersion: String = OldDecisionTreeModel.formatVersion
 
   /** Convert to a model in the old API */
   private[ml] def toOld: OldDecisionTreeModel = {

@@ -17,54 +17,27 @@
 
 package org.apache.spark.ml.impl.tree
 
-import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.rdd.RDD
 
-
-/** Abstraction for prediction models which provides methods for batch prediction. */
-private[ml] abstract class PredictionModel extends Serializable {
-
-  /**
-   * Predict the label for a single data point
-   *
-   * @param features  feature vector for a single data point
-   * @return  prediction computed by this model
-   */
-  def predict(features: Vector): Double
-
-  /**
-   * Predict labels for an RDD of data points
-   *
-   * @param features  RDD of feature vectors for data points
-   * @return  RDD of predictions for each of the given data points
-   */
-  def predict(features: RDD[Vector]): RDD[Double] = {
-    features.map(predict)
-  }
-
-  /** Java-friendly version of batch [[predict()]] */
-  def predict(features: JavaRDD[Vector]): JavaDoubleRDD = {
-    JavaDoubleRDD.fromRDD(predict(features.rdd))
-  }
-}
 
 /**
+ * :: AlphaComponent ::
+ *
  * Abstraction for Decision Tree models.
- * @param rootNode  Root of the decision tree
+ *
+ * TODO: Add support for predicting probabilities and raw predictions
  */
-private[ml] abstract class DecisionTreeModel(val rootNode: Node)
-  extends PredictionModel with Serializable {
+@AlphaComponent
+private[ml] trait DecisionTreeModel {
 
-  require(rootNode != null,
-    "DecisionTreeModel given null rootNode, but it requires a non-null rootNode.")
+  /** Root of the decision tree */
+  def rootNode: Node
 
-  override def predict(features: Vector): Double = {
-    rootNode.predict(features)
-  }
+  //def predict(features: Vector): Double
 
   /** Number of nodes in tree, including leaf nodes. */
-  lazy val numNodes: Int = {
+  def numNodes: Int = {
     1 + rootNode.numDescendants
   }
 
@@ -90,10 +63,7 @@ private[ml] abstract class DecisionTreeModel(val rootNode: Node)
 }
 
 /** Abstraction for models which are ensembles of decision trees */
-private[ml] abstract class TreeEnsembleModel extends PredictionModel with Serializable {
-
-  // Note: We do not store the trees here since they are specialized to classification/regression,
-  // and this class is for both.
+private[ml] trait TreeEnsembleModel {
 
   /** Trees in this ensemble */
   def getTrees: Array[DecisionTreeModel]

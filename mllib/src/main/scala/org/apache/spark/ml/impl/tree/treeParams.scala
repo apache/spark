@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.impl.tree
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.impl.estimator.PredictorParams
+import org.apache.spark.ml.param.{IntParam, Param}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
@@ -26,12 +29,23 @@ import org.apache.spark.util.Utils
 
 
 /**
- * (private trait) Parameters for Decision Tree-based algorithms.
+ * :: DeveloperApi ::
+ * Parameters for Decision Tree-based algorithms.
  * @tparam M  Concrete class implementing this parameter trait
  */
-private[ml] trait DecisionTreeParams[M] {
+@DeveloperApi
+private[ml] trait DecisionTreeParams[M] extends PredictorParams {
 
-  protected var maxDepth: Int = 5
+  /**
+   * Maximum depth of the tree.
+   * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * (default = 5)
+   * @group param
+   */
+  val maxDepth: IntParam =
+    new IntParam(this, "maxDepth", "Maximum depth of the tree." +
+      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
+      Some(5))
 
   protected var maxBins: Int = 32
 
@@ -45,15 +59,10 @@ private[ml] trait DecisionTreeParams[M] {
 
   protected var checkpointInterval: Int = 10
 
-  /**
-   * Maximum depth of the tree.
-   * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * (default = 5)
-   * @group setParam
-   */
-  def setMaxDepth(maxDepth: Int): M = {
-    require(maxDepth >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $maxDepth")
-    this.maxDepth = maxDepth
+  /** @group setParam */
+  def setMaxDepth(value: Int): M = {
+    require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
+    set(maxDepth, value)
     this.asInstanceOf[M]
   }
 
@@ -63,7 +72,7 @@ private[ml] trait DecisionTreeParams[M] {
    * (default = 5)
    * @group getParam
    */
-  def getMaxDepth: Int = maxDepth
+  def getMaxDepth: Int = get(maxDepth)
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
