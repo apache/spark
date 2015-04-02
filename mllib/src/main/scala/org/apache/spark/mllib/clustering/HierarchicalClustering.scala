@@ -118,6 +118,8 @@ class HierarchicalClustering(
     this
   }
 
+  def getNumClusters: Int = this.numClusters
+
   /**
    * Sets the number of maximal iterations in each clustering step
    */
@@ -126,7 +128,7 @@ class HierarchicalClustering(
     this
   }
 
-  def getSubIterations(): Int = this.maxIterations
+  def getSubIterations: Int = this.maxIterations
 
   /**
    * Sets the number of maximum retries of each clustering step
@@ -136,7 +138,7 @@ class HierarchicalClustering(
     this
   }
 
-  def getMaxRetries(): Int = this.maxRetries
+  def getMaxRetries: Int = this.maxRetries
 
   /**
    * Sets the random seed
@@ -146,7 +148,7 @@ class HierarchicalClustering(
     this
   }
 
-  def getSeed(): Long = this.seed
+  def getSeed: Long = this.seed
 
   /**
    * Runs the hierarchical clustering algorithm
