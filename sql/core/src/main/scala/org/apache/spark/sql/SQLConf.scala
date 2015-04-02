@@ -193,10 +193,10 @@ private[sql] class SQLConf extends Serializable {
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
 
   /**
-   * Enable the multi-way join in optimization, false by default
+   * Enable the multi-way join in optimization, true by default
    */
   private[spark] def multiwayJoin: Boolean =
-    getConf(MULTIWAY_JOIN, "false").toBoolean
+    getConf(MULTIWAY_JOIN, "true").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
