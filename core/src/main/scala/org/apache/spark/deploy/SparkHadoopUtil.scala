@@ -21,12 +21,14 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.JobContext
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.UserGroupInformation
+
+import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
@@ -90,9 +92,6 @@ class SparkHadoopUtil extends Logging {
       conf.getAll.foreach { case (key, value) =>
         if (key.startsWith("spark.hadoop.")) {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
-        }
-        if (key.startsWith("spark.yarn.")) {
-          hadoopConf.set(key, value)
         }
       }
       val bufferSize = conf.get("spark.buffer.size", "65536")
