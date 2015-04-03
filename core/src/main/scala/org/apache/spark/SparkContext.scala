@@ -1136,7 +1136,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Return whether dynamically adjusting the amount of resources allocated to
    * this application is supported. This is currently only available for YARN.
    */
-  private[spark] def supportDynamicAllocation = 
+  private[spark] def supportDynamicAllocation =
     master.contains("yarn") || dynamicAllocationTesting
 
   /**
@@ -1400,6 +1400,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         env.metricsSystem.report()
         metadataCleaner.cancel()
         cleaner.foreach(_.stop())
+        executorAllocationManager.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
         listenerBus.stop()
