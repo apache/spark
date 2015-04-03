@@ -209,7 +209,7 @@ class ConstantBufferBuilder(row: Row) extends CompactBufferBuilder {
 }
 
 trait MultiwayJoin {
-  def joinFilters: Array[JoinFilter]
+  def joinFilters: Seq[JoinFilter]
 
   def childrenOutputs: Seq[Seq[Attribute]]
 

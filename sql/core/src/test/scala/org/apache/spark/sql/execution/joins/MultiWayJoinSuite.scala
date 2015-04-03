@@ -100,7 +100,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #1") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           Inner,
           GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
@@ -112,7 +112,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #2") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftOuter,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(3))))
@@ -128,7 +128,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #3") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftOuter,
           GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))))
@@ -142,7 +142,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #4") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           RightOuter,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
@@ -156,7 +156,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #5") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           RightOuter,
           GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
@@ -171,7 +171,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #6") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           FullOuter,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
@@ -186,7 +186,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #7") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           FullOuter,
           GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
@@ -201,7 +201,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #8") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftSemi,
           GreaterThan(BoundReference(2, IntegerType, true), Literal(5))))
@@ -215,7 +215,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #9") {
     val mwj = new TestMultiwayJoin() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftSemi,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(5))))
@@ -228,7 +228,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #10") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftOuter,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(5))),
@@ -247,7 +247,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #11") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftOuter,
           GreaterThan(BoundReference(0, IntegerType, true), Literal(5))),
@@ -266,7 +266,7 @@ class MultiWayJoinSuite extends FunSuite {
 
   test("Test multiway join #12") {
     val mwj = new TestMultiwayJoin2() {
-      var joinFilters = Array(
+      var joinFilters = Seq(
         JoinFilter(
           LeftOuter,
           GreaterThan(BoundReference(0, IntegerType, true), BoundReference(2, IntegerType, true))),

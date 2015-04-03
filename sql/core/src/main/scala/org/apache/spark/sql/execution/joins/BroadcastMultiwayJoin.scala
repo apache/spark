@@ -38,8 +38,8 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 @AlphaComponent
 case class DimensionJoin(
-    keys: Array[JoinKey],
-    filters: Array[JoinFilter],
+    keys: Seq[JoinKey],
+    filters: Seq[JoinFilter],
     children: Seq[SparkPlan])
   extends SparkPlan with MultiwayJoin {
 

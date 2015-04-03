@@ -101,9 +101,28 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         left match {
+          case logical.Project(list, _)
+            if list.exists(_.isInstanceOf[Alias]) =>
+            // TODO if the project list with alias, it most likely
+            // break the expression attribute reference chain in the multiway
+            // join tree, we don't support that yet, we probably need to do
+            // all of the expression substitution.
+            // A typical query like:
+            // SELECT subq.key1, z.value
+            //   FROM
+            //     (SELECT x.key as key1, x.value as value1, y.key as key2, y.value as value2
+            //       FROM src1 x JOIN src y ON (x.key = y.key)) subq
+            //     JOIN srcpart z ON (subq.key1 = z.key and z.ds='2008-04-08' and z.hr=11)
+            // order by subq.key1, z.value
+            Some(extractMultiJoin(left))
           case logical.Project(_, p: Join) =>
-            // Column pruning added by optimizer is not necessary here
-            // we will have a PROJECTION node on top of the MULTIWAY-JOIN node
+            // Most likely the column pruning added by optimizer,
+            // we don't need that now as we will add a PROJECT
+            // on top of the Multiway JOIN nodes.
+            // A typical query like:
+            // SELECT x.key, y.key, z.key FROM src x
+            //   INNER JOIN src y ON x.value=y.value AND x.value2 > y.value2
+            //   INNER JOIN src z ON x.value3=z.value3
             Some(extractMultiJoin(p))
           case _ => Some(extractMultiJoin(left))
         }
@@ -130,8 +149,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
          !joinFilters.exists(f => f.joinType != LeftSemi && f.joinType != Inner) =>
         // only inner and left semi join supported
         DimensionJoin(
-          joinKeys.toArray,
-          joinFilters.toArray,
+          joinKeys.toIndexedSeq,
+          joinFilters.toIndexedSeq,
           children.map(child => planLater(child))) :: Nil
       case _ => Nil
     }
