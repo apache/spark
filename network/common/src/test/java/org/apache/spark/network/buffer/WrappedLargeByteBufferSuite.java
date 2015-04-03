@@ -16,6 +16,7 @@
  */
 package org.apache.spark.network.buffer;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Random;
@@ -127,7 +128,14 @@ public class WrappedLargeByteBufferSuite {
       assertConsistent(b);
       assertSubArrayEquals(data, 0, into, offsetAndLength[0], offsetAndLength[1]);
     }
-    //TODO BufferUnderflowException
+
+    try {
+      b.rewind();
+      b.skip(400);
+      b.get(into, 0, 500);
+      fail("expected exception");
+    } catch (BufferUnderflowException bue) {
+    }
   }
 
   private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {

@@ -24,6 +24,13 @@ import java.util.List;
 public interface LargeByteBuffer {
     public byte get();
 
+    /**
+     * Bulk copy data from this buffer into the given array.  First checks there is sufficient
+     * data in this buffer; if not, throws a {@link java.nio.BufferUnderflowException}.
+     * @param dst
+     * @param offset
+     * @param length
+     */
     public void get(byte[] dst,int offset, int length);
 
     public LargeByteBuffer rewind();

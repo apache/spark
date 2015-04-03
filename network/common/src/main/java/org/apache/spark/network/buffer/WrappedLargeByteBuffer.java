@@ -19,6 +19,7 @@ package org.apache.spark.network.buffer;
 import sun.nio.ch.DirectBuffer;
 
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -55,6 +56,8 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public void get(byte[] dest, int offset, int length) {
+    if (length > remaining())
+      throw new BufferUnderflowException();
     int moved = 0;
     while (moved < length) {
       int toRead = Math.min(length - moved, currentBuffer.remaining());
