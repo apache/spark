@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.io.OutputStream
 import java.nio.ByteBuffer
 
-import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, WrappedLargeByteBuffer, LargeByteBuffer}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 private[spark]
@@ -43,7 +43,21 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   def pos: Int = _pos
 
   def largeBuffer: LargeByteBuffer = {
-    new WrappedLargeByteBuffer(output.toArrays.map{ByteBuffer.wrap})
+    // Merge the underlying arrays as much as possible
+    val totalSize = output.size
+    val maxChunk = LargeByteBufferHelper.DEFAULT_MAX_CHUNK
+    val chunksNeeded = ((totalSize + maxChunk -1) / maxChunk).toInt
+    val chunks = new Array[Array[Byte]](chunksNeeded)
+    var remaining = totalSize
+    var pos = 0
+    (0 until chunksNeeded).foreach{idx =>
+      val nextSize = math.min(maxChunk, remaining).toInt
+      chunks(idx) = new Array[Byte](nextSize)
+      output.slice(pos, pos + nextSize)
+      pos += nextSize
+      remaining -= nextSize
+    }
+    new WrappedLargeByteBuffer(chunks.map{ByteBuffer.wrap})
   }
 
   override def close(): Unit = {
