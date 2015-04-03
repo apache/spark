@@ -116,7 +116,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   override def refreshTable(databaseName: String, tableName: String): Unit = {
-    cachedDataSourceTables.refresh(QualifiedTableName(databaseName, tableName).toLowerCase)
+    // refresh table does not eagerly reload the cache. It just invalidate the cache.
+    // Next time when we use the table, it will be populated in the cache.
+    invalidateTable(databaseName, tableName)
   }
 
   def invalidateTable(databaseName: String, tableName: String): Unit = {
@@ -229,13 +231,42 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
-    val parquetOptions = Map(
-      ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json,
-      ParquetRelation2.MERGE_SCHEMA -> mergeSchema.toString)
 
     // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
     // serialize the Metastore schema to JSON and pass it as a data source option because of the
     // evil case insensitivity issue, which is reconciled within `ParquetRelation2`.
+    val parquetOptions = Map(
+      ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json,
+      ParquetRelation2.MERGE_SCHEMA -> mergeSchema.toString)
+    val tableIdentifier =
+      QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
+
+    def getCached(
+      tableIdentifier: QualifiedTableName,
+      pathsInMetastore: Seq[String],
+      schemaInMetastore: StructType,
+      partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
+      cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+        case null => None // Cache miss
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) =>
+          // If we have the same paths, same schema, and same partition spec,
+          // we will use the cached Parquet Relation.
+          val useCached =
+            parquetRelation.paths == pathsInMetastore &&
+            logical.schema.sameType(metastoreSchema) &&
+            parquetRelation.maybePartitionSpec == partitionSpecInMetastore
+
+          if (useCached) Some(logical) else None
+        case other =>
+          logWarning(
+            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} shold be stored " +
+              s"as Parquet. However, we are getting a ${other} from the metastore cache. " +
+              s"This cached entry will be invalidated.")
+          cachedDataSourceTables.invalidate(tableIdentifier)
+          None
+      }
+    }
+
     if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
@@ -248,10 +279,28 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val paths = partitions.map(_.path)
-      LogicalRelation(ParquetRelation2(paths, parquetOptions, None, Some(partitionSpec))(hive))
+
+      val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
+      val parquetRelation = cached.getOrElse {
+        val created =
+          LogicalRelation(ParquetRelation2(paths, parquetOptions, None, Some(partitionSpec))(hive))
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      parquetRelation
     } else {
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
-      LogicalRelation(ParquetRelation2(paths, parquetOptions)(hive))
+
+      val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
+      val parquetRelation = cached.getOrElse {
+        val created =
+          LogicalRelation(ParquetRelation2(paths, parquetOptions)(hive))
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      parquetRelation
     }
   }
 

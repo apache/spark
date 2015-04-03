@@ -26,8 +26,10 @@ import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.SaveMode
@@ -389,6 +391,116 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     }
 
     sql("DROP TABLE ms_convert")
+  }
+
+  test("Caching converted data source Parquet Relations") {
+    def checkCached(tableIdentifer: catalog.QualifiedTableName): Unit = {
+      // Converted test_parquet should be cached.
+      catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) match {
+        case null => fail("Converted test_parquet should be cached in the cache.")
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) => // OK
+        case other =>
+          fail(
+            "The cached test_parquet should be a Parquet Relation. " +
+              s"However, $other is returned form the cache.")
+      }
+    }
+
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+    sql("DROP TABLE IF EXISTS test_parquet_partitioned_cache_test")
+
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    var tableIdentifer = catalog.QualifiedTableName("default", "test_insert_parquet")
+
+    // First, make sure the converted test_parquet is not cached.
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    // Table lookup will make the table cached.
+    table("test_insert_parquet")
+    checkCached(tableIdentifer)
+    // For insert into non-partitioned table, we will do the conversion,
+    // so the converted test_insert_parquet should be cached.
+    invalidateTable("test_insert_parquet")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    sql(
+      """
+        |INSERT INTO TABLE test_insert_parquet
+        |select a, b from jt
+      """.stripMargin)
+    checkCached(tableIdentifer)
+    // Make sure we can read the data.
+    checkAnswer(
+      sql("select * from test_insert_parquet"),
+      sql("select a, b from jt").collect())
+    // Invalidate the cache.
+    invalidateTable("test_insert_parquet")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+
+    // Create a partitioned table.
+    sql(
+      """
+        |create table test_parquet_partitioned_cache_test
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (date string)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    tableIdentifer = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    sql(
+      """
+        |INSERT INTO TABLE test_parquet_partitioned_cache_test
+        |PARTITION (date='2015-04-01')
+        |select a, b from jt
+      """.stripMargin)
+    // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
+    // So, we expect it is not cached.
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    sql(
+      """
+        |INSERT INTO TABLE test_parquet_partitioned_cache_test
+        |PARTITION (date='2015-04-02')
+        |select a, b from jt
+      """.stripMargin)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+
+    // Make sure we can cache the partitioned table.
+    table("test_parquet_partitioned_cache_test")
+    checkCached(tableIdentifer)
+    // Make sure we can read the data.
+    checkAnswer(
+      sql("select STRINGField, date, intField from test_parquet_partitioned_cache_test"),
+      sql(
+        """
+          |select b, '2015-04-01', a FROM jt
+          |UNION ALL
+          |select b, '2015-04-02', a FROM jt
+        """.stripMargin).collect())
+
+    invalidateTable("test_parquet_partitioned_cache_test")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+
+    sql("DROP TABLE test_insert_parquet")
+    sql("DROP TABLE test_parquet_partitioned_cache_test")
   }
 }
 
