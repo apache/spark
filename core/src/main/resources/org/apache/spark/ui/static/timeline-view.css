@@ -139,10 +139,16 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
-.executor.application-timeline-object.added {
+.vis.timeline .item.executor.added {
   background-color: #D5DDF6;
 }
 
-.executor.application-timeline-object.removed {
+.vis.timeline .item.executor.removed {
   background-color: #EBCA59;
+}
+
+.vis.timeline .item.executor.selected {
+  border-color: #FFC200;
+  background-color: #FFF785;
+  z-index: 2;
 }
