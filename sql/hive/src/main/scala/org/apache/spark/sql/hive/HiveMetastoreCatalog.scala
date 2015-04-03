@@ -116,8 +116,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   override def refreshTable(databaseName: String, tableName: String): Unit = {
-    // refresh table does not eagerly reload the cache. It just invalidate the cache.
+    // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
+    // Since we also cache ParquetRealtions converted from Hive Parquet tables and
+    // adding converted ParquetRealtions into the cache is not defined in the load function
+    // of the cache (instead, we add the cache entry in convertToParquetRelation),
+    // it is better at here to invalidate the cache to avoid confusing waring logs from the
+    // cache loader (e.g. cannot find data source provider, which is only defined for
+    // data source table.).
     invalidateTable(databaseName, tableName)
   }
 
@@ -242,21 +248,27 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
 
     def getCached(
-      tableIdentifier: QualifiedTableName,
-      pathsInMetastore: Seq[String],
-      schemaInMetastore: StructType,
-      partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
+        tableIdentifier: QualifiedTableName,
+        pathsInMetastore: Seq[String],
+        schemaInMetastore: StructType,
+        partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
       cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => None // Cache miss
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) =>
+        case logical@LogicalRelation(parquetRelation: ParquetRelation2) =>
           // If we have the same paths, same schema, and same partition spec,
           // we will use the cached Parquet Relation.
           val useCached =
-            parquetRelation.paths == pathsInMetastore &&
+            parquetRelation.paths.toSet == pathsInMetastore.toSet &&
             logical.schema.sameType(metastoreSchema) &&
             parquetRelation.maybePartitionSpec == partitionSpecInMetastore
 
-          if (useCached) Some(logical) else None
+          if (useCached) {
+            Some(logical)
+          } else {
+            // If the cached relation is not updated, we invalidate it right away.
+            cachedDataSourceTables.invalidate(tableIdentifier)
+            None
+          }
         case other =>
           logWarning(
             s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} shold be stored " +
