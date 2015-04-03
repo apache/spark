@@ -16,12 +16,20 @@
  */
 package org.apache.spark.util
 
+import scala.util.Random
+
 import org.scalatest.{FunSuite, Matchers}
 
 class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
 
   test("merged buffers for < 2GB") {
-    pending
+    val out = new LargeByteBufferOutputStream(10)
+    val bytes = new Array[Byte](100)
+    Random.nextBytes(bytes)
+    out.write(bytes)
+
+    val buffer = out.largeBuffer
+    buffer.asByteBuffer()
   }
 
   test(" > 2GB .asByteBuffer appropriate exception") {
