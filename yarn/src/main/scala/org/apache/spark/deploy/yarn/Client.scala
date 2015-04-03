@@ -593,7 +593,7 @@ private[spark] class Client(
     throw new SparkException("While loop is depleted! This should never happen...")
   }
 
-  def formatReportDetails(report: ApplicationReport): String = {
+  private def formatReportDetails(report: ApplicationReport): String = {
     val details = Seq[(String, String)](
       ("client token", getClientToken(report)),
       ("diagnostics", report.getDiagnostics),
@@ -607,25 +607,27 @@ private[spark] class Client(
     )
 
     // Use more loggable format if value is null or empty
-     details.map { case (k, v) =>
+    details.map { case (k, v) =>
       val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
       s"\n\t $k: $newValue"
-     }.mkString("")
+    }.mkString("")
   }
 
   /**
-   * Submit an application to the ResourceManager and monitor its state.
-   * This continues until the application has exited for any reason.
+   * Submit an application to the ResourceManager.
+   * If set spark.yarn.submit.waitAppCompletion to true, it will stay alive
+   * reporting the application's status until the application has exited for any reason.
+   * Otherwise, the client process will exit after submission.
    * If the application finishes with a failed, killed, or undefined status,
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
     val appId = submitApplication()
     if (fireAndForget) {
-      logInfo("... polling ResourceManager for application state")
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+        logInfo(formatReportDetails(report))
         throw new SparkException(s"Application $appId finished with status: $state")
       }
       logInfo(s"Application report for $appId (state: $state)")
