@@ -176,9 +176,6 @@ private[sql] object DataSourceStrategy extends Strategy {
       case expressions.Contains(a: Attribute, Literal(v: String, StringType)) =>
         Some(sources.StringContains(a.name, v))
 
-      case p: expressions.Predicate =>
-        sys.error(s"Can't translate predicate $p to data source Filter")
-
       case _ => None
     }
 

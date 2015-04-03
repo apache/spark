@@ -225,6 +225,15 @@ class FilteredScanSuite extends DataSourceTest {
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8", 4)
   testPushDown("SELECT * FROM oneToTenFiltered WHERE NOT (a < 6)", 5)
 
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'", 1)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like 'C%'", 0)
+
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%D'", 1)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%d'", 0)
+
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'", 1)
+  testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0)
+
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
       val queryExecution = sql(sqlString).queryExecution

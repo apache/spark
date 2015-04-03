@@ -161,7 +161,6 @@ trait StringComparison {
   override type EvaluatedType = Any
 
   override def nullable: Boolean = left.nullable || right.nullable
-  override def dataType: DataType = BooleanType
 
   def compare(l: String, r: String): Boolean
 
