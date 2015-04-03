@@ -155,7 +155,7 @@ class KafkaRDD[
         .dropWhile(_.offset < requestOffset)
     }
 
-    override def close() = consumer.close()
+    override def close(): Unit = consumer.close()
 
     override def getNext(): R = {
       if (iter == null || !iter.hasNext) {
@@ -207,7 +207,7 @@ object KafkaRDD {
       fromOffsets: Map[TopicAndPartition, Long],
       untilOffsets: Map[TopicAndPartition, LeaderOffset],
       messageHandler: MessageAndMetadata[K, V] => R
-  ): KafkaRDD[K, V, U, T, R] = {
+    ): KafkaRDD[K, V, U, T, R] = {
     val leaders = untilOffsets.map { case (tp, lo) =>
         tp -> (lo.host, lo.port)
     }.toMap
