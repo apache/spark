@@ -56,8 +56,7 @@ public interface LargeByteBuffer {
      * get the entire contents of this as one ByteBuffer, if possible.  The returned ByteBuffer
      * will always have the position set 0, and the limit set to the end of the data.  Each
      * call will return a new ByteBuffer, but will not require copying the data (eg., it will
-     * use ByteBuffer#duplicate()). Updates to the ByteBuffer will be reflected in this
-     * LargeByteBuffer.
+     * use ByteBuffer#duplicate()).  The returned byte buffer and this may or may not share data.
      *
      * @return
      * @throws BufferTooLargeException if this buffer is too large to fit in one {@link ByteBuffer}

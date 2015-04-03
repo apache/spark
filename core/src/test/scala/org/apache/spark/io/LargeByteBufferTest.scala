@@ -37,7 +37,6 @@ class LargeByteBufferTest extends FunSuite with Matchers {
     val nRead = rawIn.read(arr, 0, 500)
     nRead should be (200)
     (0 until 200).foreach{idx =>
-      println(idx)
       arr(idx) should be (idx.toByte)
     }
 

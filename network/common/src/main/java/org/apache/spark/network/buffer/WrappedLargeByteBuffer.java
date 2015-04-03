@@ -74,7 +74,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   private void updateCurrentBuffer() {
-    //TODO fix end condition
     while (currentBuffer != null && !currentBuffer.hasRemaining()) {
       currentBufferIdx += 1;
       currentBuffer = currentBufferIdx < underlying.length ? underlying[currentBufferIdx] : null;
@@ -82,8 +81,21 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
-  public LargeByteBuffer put(LargeByteBuffer bytes) {
-    throw new RuntimeException("not yet implemented");
+  public LargeByteBuffer put(LargeByteBuffer from) {
+    if (remaining() < from.remaining()) {
+      throw new IllegalArgumentException("not enough space to copy byte buffer: need " +
+        from.remaining() + ", only have " + remaining());
+    }
+    while (from.remaining() > 0) {
+      int toRead = (int) Math.min(from.remaining(), currentBuffer.remaining());
+      // TODO the extra copy is really sad :(
+      byte[] buff = new byte[toRead];
+      from.get(buff, 0, buff.length);
+      currentBuffer.put(buff);
+      _pos += toRead;
+      updateCurrentBuffer();
+    }
+    return this;
   }
 
   @Override
@@ -94,6 +106,31 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   @Override
   public LargeByteBuffer position(long newPosition) {
     //XXX check range?
+    if (_pos > newPosition) {
+      long toMove = _pos - newPosition;
+      // move backwards -- set the position to 0 of every buffer's we go back
+      if (currentBuffer != null) {
+        currentBufferIdx += 1;
+      }
+      while (toMove > 0) {
+        currentBufferIdx -= 1;
+        currentBuffer = underlying[currentBufferIdx];
+        int thisMove = (int) Math.min(toMove, currentBuffer.position());
+        currentBuffer.position(currentBuffer.position() - thisMove);
+        toMove -= thisMove;
+      }
+    } else {
+      long toMove = newPosition - _pos;
+      // move forwards-- set the position to the end of every buffer as we go forwards
+      currentBufferIdx -= 1;
+      while (toMove > 0) {
+        currentBufferIdx += 1;
+        currentBuffer = underlying[currentBufferIdx];
+        int thisMove = (int) Math.min(toMove, currentBuffer.remaining());
+        currentBuffer.position(currentBuffer.position() + thisMove);
+        toMove -= thisMove;
+      }
+    }
     _pos = newPosition;
     return this;
   }
@@ -131,7 +168,10 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
-  public ByteBuffer asByteBuffer() {
+  public ByteBuffer asByteBuffer() throws BufferTooLargeException {
+    if (underlying.length > 1) {
+      throw new BufferTooLargeException(size());
+    }
     return underlying[0];
   }
 
