@@ -64,7 +64,7 @@ class ExecutorRunnable(
     nmClient = NMClient.createNMClient()
     nmClient.init(yarnConf)
     nmClient.start()
-    startContainer
+    startContainer()
   }
 
   def startContainer(): java.util.Map[String, ByteBuffer] = {
