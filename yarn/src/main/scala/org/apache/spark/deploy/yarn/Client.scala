@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.net.{URI, InetAddress, UnknownHostException}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
@@ -26,7 +26,6 @@ import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
-
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
@@ -37,7 +36,7 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
-import org.apache.hadoop.util.StringUtils
+import org.apache.hadoop.util.{ShutdownHookManager, StringUtils}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -46,8 +45,7 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SecurityManager, SparkException, Logging}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -112,6 +110,16 @@ private[spark] class Client(
     // Finally, submit and monitor the application
     logInfo(s"Submitting application ${appId.getId} to ResourceManager")
     yarnClient.submitApplication(appContext)
+
+    // In YARN Cluster mode, AM is not killed when the client is terminated by default.
+    // But if spark.yarn.force.shutdown.am is set true, AM is force shutdown.
+    if (isClusterMode && sparkConf.getBoolean("spark.yarn.am.force.shutdown", false)) {
+      val shutdownHook = new Runnable {
+        override def run() { yarnClient.killApplication(appId) }
+      }
+      ShutdownHookManager.get().addShutdownHook(shutdownHook, 0)
+    }
+
     appId
   }
 
