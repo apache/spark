@@ -18,6 +18,9 @@
 import os
 import shutil
 import sys
+import tarfile
+import tempfile
+import uuid
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
@@ -65,9 +68,9 @@ class SparkContext(object):
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 requirementsFile=None, environment=None, batchSize=0,
-                 serializer=PickleSerializer(), conf=None, gateway=None,
-                 jsc=None, profiler_cls=BasicProfiler):
+                 environment=None, batchSize=0, serializer=PickleSerializer(),
+                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler,
+                 requirementsFile=None):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -79,8 +82,6 @@ class SparkContext(object):
         :param pyFiles: Collection of .zip or .py files to send to the cluster
                and add to PYTHONPATH.  These can be paths on the local file
                system or HDFS, HTTP, HTTPS, or FTP URLs.
-        :param requirementsFile: Pip requirements file to send dependencies
-               to the cluster and add to PYTHONPATH.
         :param environment: A dictionary of environment variables to set on
                worker nodes.
         :param batchSize: The number of Python objects represented as a single
@@ -94,6 +95,8 @@ class SparkContext(object):
         :param jsc: The JavaSparkContext instance (optional).
         :param profiler_cls: A class of custom Profiler used to do profiling
                (default is pyspark.profiler.BasicProfiler).
+        :param requirementsFile: Pip requirements file to send dependencies
+               to the cluster and add to PYTHONPATH.
 
 
         >>> from pyspark.context import SparkContext
@@ -107,15 +110,15 @@ class SparkContext(object):
         self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
-            self._do_init(master, appName, sparkHome, pyFiles, requirementsFile, environment,
-                    batchSize, serializer, conf, jsc, profiler_cls)
+            self._do_init(master, appName, sparkHome, pyFiles, environment,
+                    batchSize, serializer, conf, jsc, profiler_cls, requirementsFile)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
-    def _do_init(self, master, appName, sparkHome, pyFiles, requirementsFile, environment,
-                batchSize, serializer, conf, jsc, profiler_cls):
+    def _do_init(self, master, appName, sparkHome, pyFiles,  environment,
+                batchSize, serializer, conf, jsc, profiler_cls, requirementsFile):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -723,18 +726,15 @@ class SparkContext(object):
         on thie SparkContext in the future. An ImportError will be thrown if
         a module in the file can't be downloaded.
         See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
+        Raises ImportError if the requirement can't be found
         """
-        import importlib
         import pip
-        import tarfile
-        import tempfile
-        import uuid
         tar_dir = tempfile.mkdtemp()
         try:
             for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
                 if not req.check_if_exists():
                     pip.main(['install', req.req.__str__()])
-                mod = importlib.import_module(req.name) # Can throw ImportError
+                mod = __import__(req.name)
                 mod_path = mod.__path__[0]
                 tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
                 tar = tarfile.open(tar_path, "w:gz")

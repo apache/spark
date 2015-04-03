@@ -43,7 +43,6 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -1549,6 +1548,17 @@ class ContextTests(unittest.TestCase):
             self.assertNotEqual(SparkContext._active_spark_context, None)
             sc.stop()
         self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_requiriements_file(self):
+        import pip
+        with tempfile.NamedTemporaryFile() as temp:
+            temp.write('simplejson\nquadkey>0.0.4\nsix==1.8.0')
+            pip.main(['install', 'quadkey>0.0.4'])
+            with SparkContext(requirementsFile=temp.name) as sc:
+                import quadkey
+                qks = sc.parallelize([(0,0),(1,1),(2,2)]) \
+                        .map(lambda pair: quadkey.from_geo(pair, 1).key)
+                self.assertSequenceEqual(['3','1','1'], qks.collect())
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
