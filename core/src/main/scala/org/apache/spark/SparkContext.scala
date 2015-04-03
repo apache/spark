@@ -23,7 +23,7 @@ import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
@@ -97,10 +97,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   val startTime = System.currentTimeMillis()
 
-  @volatile private var stopped: Boolean = false
+  private val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private def assertNotStopped(): Unit = {
-    if (stopped) {
+    if (stopped.get()) {
       throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
     }
   }
@@ -203,7 +203,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * ------------------------------------------------------------------------------------- */
 
   private var _conf: SparkConf = _
-  private var _eventLogDir: Option[String] = None
+  private var _eventLogDir: Option[URI] = None
   private var _eventLogCodec: Option[String] = None
   private var _env: SparkEnv = _
   private var _metadataCleaner: MetadataCleaner = _
@@ -244,7 +244,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
-  private[spark] def eventLogDir: Option[String] = _eventLogDir
+  private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
   // Generate the random name for a temp folder in Tachyon
@@ -370,7 +370,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _eventLogDir =
       if (isEventLogEnabled) {
-        Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
+        val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
+          .stripSuffix("/")
+        Some(Utils.resolveURI(unresolvedDir))
       } else {
         None
       }
@@ -456,7 +458,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _schedulerBackend = sched
     _taskScheduler = ts
     _heartbeatReceiver = env.actorSystem.actorOf(
-      Props(new HeartbeatReceiver(this, taskScheduler)), "HeartbeatReceiver")
+      Props(new HeartbeatReceiver(this)), "HeartbeatReceiver")
     _dagScheduler = new DAGScheduler(this)
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -1466,46 +1468,46 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     addedJars.clear()
   }
 
-  /** Shut down the SparkContext. */
+  // Shut down the SparkContext.
   def stop() {
-    SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      if (!stopped) {
-        stopped = true
-        postApplicationEnd()
-        _ui.foreach(_.stop())
-        if (env != null) {
-          env.metricsSystem.report()
-        }
-        if (metadataCleaner != null) {
-          metadataCleaner.cancel()
-        }
-        _cleaner.foreach(_.stop())
-        _executorAllocationManager.foreach(_.stop())
-        if (_dagScheduler != null) {
-          _dagScheduler.stop()
-          _dagScheduler = null
-        }
-        if (_listenerBusStarted) {
-          listenerBus.stop()
-          _listenerBusStarted = false
-        }
-        _eventLogger.foreach(_.stop())
-        if (env != null) {
-          env.actorSystem.stop(_heartbeatReceiver)
-        }
-        _progressBar.foreach(_.stop())
-        _taskScheduler = null
-        // TODO: Cache.stop()?
-        if (_env != null) {
-          _env.stop()
-          SparkEnv.set(null)
-        }
-        logInfo("Successfully stopped SparkContext")
-        SparkContext.clearActiveContext()
-      } else {
-        logInfo("SparkContext already stopped")
-      }
+    // Use the stopping variable to ensure no contention for the stop scenario.
+    // Still track the stopped variable for use elsewhere in the code.
+    if (!stopped.compareAndSet(false, true)) {
+      logInfo("SparkContext already stopped.")
+      return
     }
+
+    postApplicationEnd()
+    _ui.foreach(_.stop())
+    if (env != null) {
+      env.metricsSystem.report()
+    }
+    if (metadataCleaner != null) {
+      metadataCleaner.cancel()
+    }
+    _cleaner.foreach(_.stop())
+    _executorAllocationManager.foreach(_.stop())
+    if (_dagScheduler != null) {
+      _dagScheduler.stop()
+      _dagScheduler = null
+    }
+    if (_listenerBusStarted) {
+      listenerBus.stop()
+      _listenerBusStarted = false
+    }
+    _eventLogger.foreach(_.stop())
+    if (env != null) {
+      env.actorSystem.stop(_heartbeatReceiver)
+    }
+    _progressBar.foreach(_.stop())
+    _taskScheduler = null
+    // TODO: Cache.stop()?
+    if (_env != null) {
+      _env.stop()
+      SparkEnv.set(null)
+    }
+    SparkContext.clearActiveContext()
+    logInfo("Successfully stopped SparkContext")
   }
 
 
@@ -1567,7 +1569,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    if (stopped) {
+    if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
