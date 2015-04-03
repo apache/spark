@@ -1472,7 +1472,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (!stopped) {
         stopped = true
         postApplicationEnd()
-<<<<<<< HEAD
         _ui.foreach(_.stop())
         if (env != null) {
           env.metricsSystem.report()
@@ -1496,20 +1495,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         }
         _progressBar.foreach(_.stop())
         _taskScheduler = null
-=======
-        ui.foreach(_.stop())
-        env.metricsSystem.report()
-        metadataCleaner.cancel()
-        cleaner.foreach(_.stop())
-        executorAllocationManager.foreach(_.stop())
-        dagScheduler.stop()
-        dagScheduler = null
-        listenerBus.stop()
-        eventLogger.foreach(_.stop())
-        env.actorSystem.stop(heartbeatReceiver)
-        progressBar.foreach(_.stop())
-        taskScheduler = null
->>>>>>> master
         // TODO: Cache.stop()?
         if (_env != null) {
           _env.stop()
