@@ -46,7 +46,6 @@ class LogisticRegression
   with LogisticRegressionParams {
 
   setRegParam(0.1)
-  setFitIntercept(true)
   setMaxIter(100)
   setThreshold(0.5)
 

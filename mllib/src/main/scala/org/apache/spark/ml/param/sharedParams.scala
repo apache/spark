@@ -112,7 +112,7 @@ private[ml] trait HasFitIntercept extends Params {
    * @group param
    */
   val fitIntercept: BooleanParam =
-    new BooleanParam(this, "fitIntercept", "indicates whether to fit an intercept term")
+    new BooleanParam(this, "fitIntercept", "indicates whether to fit an intercept term", Some(true))
 
   /** @group getParam */
   def getFitIntercept: Boolean = get(fitIntercept)

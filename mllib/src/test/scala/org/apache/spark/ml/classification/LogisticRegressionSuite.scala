@@ -56,14 +56,14 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.getPredictionCol == "prediction")
     assert(model.getRawPredictionCol == "rawPrediction")
     assert(model.getProbabilityCol == "probability")
-    assert(model.intercept != 0.0)
+    assert(model.intercept !== 0.0)
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
     val lr = new LogisticRegression
     lr.setFitIntercept(false)
     val model = lr.fit(dataset)
-    assert(model.intercept == 0.0)
+    assert(model.intercept === 0.0)
   }
 
   test("logistic regression with setters") {
