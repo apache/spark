@@ -832,9 +832,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val notMapped = diskStoreNotMapped.getBytes(blockId).get
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
+    assert(notMapped.nioBuffers().get(0).getClass.getName.endsWith("HeapByteBuffer"),
       "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
+    assert(mapped.nioBuffers().get(0).isInstanceOf[MappedByteBuffer],
+      "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: LargeByteBuffer): Array[Byte] = {
       val array = new Array[Byte](in.remaining().toInt)
@@ -1248,7 +1249,17 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       bytes
     })
     assert(result.size === 10000)
-    assert(result.data === Right(bytes))
+    assert(result.data.isRight)
+    assertEquivalentByteBufs(result.data.right.get, bytes)
     assert(result.droppedBlocks === Nil)
+  }
+
+  def assertEquivalentByteBufs(exp: LargeByteBuffer, act: LargeByteBuffer): Unit = {
+    assert(exp.size() === act.size())
+    val expBytes = new Array[Byte](exp.size().toInt)
+    exp.get(expBytes, 0, exp.size().toInt)
+    val actBytes = new Array[Byte](act.size().toInt)
+    act.get(actBytes, 0, act.size().toInt)
+    assert(expBytes === actBytes)
   }
 }
