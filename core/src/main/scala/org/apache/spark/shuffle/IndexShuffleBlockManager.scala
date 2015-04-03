@@ -26,6 +26,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 
 import IndexShuffleBlockManager.NOOP_REDUCE_ID
 
@@ -78,16 +79,15 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
-    try {
+    Utils.tryWithSafeFinally {
       // We take in lengths of each block, need to convert it to offsets.
       var offset = 0L
       out.writeLong(offset)
-
       for (length <- lengths) {
         offset += length
         out.writeLong(offset)
       }
-    } finally {
+    } {
       out.close()
     }
   }

@@ -356,11 +356,14 @@ private[spark] object MapOutputTracker extends Logging {
   def serializeMapStatuses(statuses: Array[MapStatus]): Array[Byte] = {
     val out = new ByteArrayOutputStream
     val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
-    // Since statuses can be modified in parallel, sync on it
-    statuses.synchronized {
-      objOut.writeObject(statuses)
+    Utils.tryWithSafeFinally {
+      // Since statuses can be modified in parallel, sync on it
+      statuses.synchronized {
+        objOut.writeObject(statuses)
+      }
+    } {
+      objOut.close()
     }
-    objOut.close()
     out.toByteArray
   }
 

@@ -204,7 +204,7 @@ private[sql] object ResolvedDataSource {
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
-    def className = clazz.getCanonicalName
+    def className: String = clazz.getCanonicalName
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
