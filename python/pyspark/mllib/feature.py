@@ -143,7 +143,7 @@ class StandardScalerModel(JavaVectorTransformer):
     def setWithStd(self, withStd):
         """
         Setter of the boolean which decides
-        whether it uses mean or not
+        whether it uses std or not
         """
         self.call("setWithStd", withStd)
         return self

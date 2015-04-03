@@ -456,7 +456,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     /**
      * Setter of the boolean which decides
-     * whether it uses mean or not
+     * whether it uses std or not
      * @param withStd
      * @return
      */
