@@ -37,7 +37,7 @@ object AbsoluteError extends Loss {
    * Method to calculate the gradients for the gradient boosting calculation for least
    * absolute error calculation.
    * The gradient with respect to F(x) is: sign(F(x) - y)
-   * @param prediction Predicted point
+   * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
    */

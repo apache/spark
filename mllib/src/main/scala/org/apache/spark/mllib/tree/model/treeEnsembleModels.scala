@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
@@ -142,8 +143,7 @@ class GradientBoostedTreesModel(
 
     (1 until numIterations).map { nTree =>
       predictionAndError = GradientBoostedTreesModel.updatePredictionError(
-        remappedData, predictionAndError, broadcastWeights.value(nTree),
-        broadcastTrees.value(nTree), loss)
+        remappedData, predictionAndError, nTree, broadcastWeights, broadcastTrees, loss)
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
@@ -157,49 +157,54 @@ class GradientBoostedTreesModel(
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
-   * Method to compute initial error and prediction as a RDD for the first
+   * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
-   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param Training data.
    * @param initTreeWeight: learning rate assigned to the first tree.
-   * @param initTree: first DecisionTreeModel
-   * @param loss: evaluation metric
+   * @param initTree: first DecisionTreeModel.
+   * @param loss: evaluation metric.
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
-      initTree: DecisionTreeModel, loss: Loss): RDD[(Double, Double)] = {
-    data.map { i =>
-      val pred = initTreeWeight * initTree.predict(i.features)
-      val error = loss.computeError(pred, i.label)
+      initTree: DecisionTreeModel,
+      loss: Loss): RDD[(Double, Double)] = {
+    data.map { lp =>
+      val pred = initTreeWeight * initTree.predict(lp.features)
+      val error = loss.computeError(pred, lp.label)
       (pred, error)
     }
   }
 
   /**
-   * Method to update a zipped predictionError RDD
+   * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
-   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param training data.
    * @param predictionAndError: predictionError RDD
-   * @param currentTreeWeight: learning rate.
-   * @param currentTree: first DecisionTree
-   * @param loss: evaluation metric
+   * @param nTree: tree index.
+   * @param TreeWeights: Broadcasted learning rates.
+   * @param Trees: Broadcasted trees.
+   * @param loss: evaluation metric.
    * @return a RDD with each element being a zip of the prediction and error
-   *         corresponing to each sample.
+   *         corresponding to each sample.
    */
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
-    currentTreeWeight: Double,
-    currentTree: DecisionTreeModel,
+    nTree: Int,
+    TreeWeights: Broadcast[Array[Double]],
+    Trees: Broadcast[Array[DecisionTreeModel]],
     loss: Loss): RDD[(Double, Double)] = {
 
     data.zip(predictionAndError).mapPartitions { iter =>
+      val currentTreeWeight = TreeWeights.value(nTree)
+      val currentTree = Trees.value(nTree)
       iter.map {
-        case (point, (pred, error)) => {
-          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-          val newError = loss.computeError(newPred, point.label)
+        case (lp, (pred, error)) => {
+          val newPred = pred + currentTree.predict(lp.features) * currentTreeWeight
+          val newError = loss.computeError(newPred, lp.label)
           (newPred, newError)
         }
       }

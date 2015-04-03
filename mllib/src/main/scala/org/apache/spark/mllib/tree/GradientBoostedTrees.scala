@@ -157,7 +157,7 @@ object GradientBoostedTrees extends Logging {
       validationInput: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy,
       validate: Boolean): GradientBoostedTreesModel = {
-
+    val sc = input.sparkContext
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -166,8 +166,8 @@ object GradientBoostedTrees extends Logging {
 
     // Initialize gradient boosting parameters
     val numIterations = boostingStrategy.numIterations
-    val baseLearners = new Array[DecisionTreeModel](numIterations)
-    val baseLearnerWeights = new Array[Double](numIterations)
+    val baseLearners = sc.broadcast(new Array[DecisionTreeModel](numIterations))
+    val baseLearnerWeights = sc.broadcast(new Array[Double](numIterations))
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     // Prepare strategy for individual trees, which use regression with variance impurity.
@@ -192,25 +192,26 @@ object GradientBoostedTrees extends Logging {
     // Initialize tree
     timer.start("building tree 0")
     val firstTreeModel = new DecisionTree(treeStrategy).run(data)
-    baseLearners(0) = firstTreeModel
-    baseLearnerWeights(0) = 1.0
+    val firstTreeWeight = 1.0
+    baseLearners.value(0) = firstTreeModel
+    baseLearnerWeights.value(0) = firstTreeWeight
     val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
 
     var predError: RDD[(Double, Double)] = GradientBoostedTreesModel.
-      computeInitialPredictionAndError(input, 1.0, firstTreeModel, loss)
+      computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
     logDebug("error of gbt = " + predError.values.mean())
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
     var validatePredError: RDD[(Double, Double)] = GradientBoostedTreesModel.
-      computeInitialPredictionAndError(validationInput, 1.0, firstTreeModel, loss)
+      computeInitialPredictionAndError(validationInput, firstTreeWeight, firstTreeModel, loss)
     var bestValidateError = if (validate) validatePredError.values.mean() else 0.0
     var bestM = 1
 
-    // psuedo-residual for second iteration
-    data = predError.zip(input).map {
-      case ((pred, _), point) =>  LabeledPoint(loss.gradient(pred, point.label), point.features)
+    // pseudo-residual for second iteration
+    data = predError.zip(input).map { case ((pred, _), point) =>
+      LabeledPoint(-loss.gradient(pred, point.label), point.features)
     }
 
     var m = 1
@@ -222,17 +223,18 @@ object GradientBoostedTrees extends Logging {
       val model = new DecisionTree(treeStrategy).run(data)
       timer.stop(s"building tree $m")
       // Create partial model
-      baseLearners(m) = model
+      baseLearners.value(m) = model
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
-      baseLearnerWeights(m) = learningRate
+      baseLearnerWeights.value(m) = learningRate
       // Note: A model of type regression is used since we require raw prediction
       val partialModel = new GradientBoostedTreesModel(
-        Regression, baseLearners.slice(0, m + 1), baseLearnerWeights.slice(0, m + 1))
+        Regression, baseLearners.value.slice(0, m + 1),
+        baseLearnerWeights.value.slice(0, m + 1))
 
       predError = GradientBoostedTreesModel.updatePredictionError(
-        input, predError, learningRate, model, loss)
+        input, predError, m, baseLearnerWeights, baseLearners, loss)
       logDebug("error of gbt = " + predError.values.mean())
 
       if (validate) {
@@ -242,21 +244,21 @@ object GradientBoostedTrees extends Logging {
         // We want the model returned corresponding to the best validation error.
 
         validatePredError = GradientBoostedTreesModel.updatePredictionError(
-          validationInput, validatePredError, learningRate, model, loss)
+          validationInput, validatePredError, m, baseLearnerWeights, baseLearners, loss)
         val currentValidateError = validatePredError.values.mean()
         if (bestValidateError - currentValidateError < validationTol) {
           return new GradientBoostedTreesModel(
             boostingStrategy.treeStrategy.algo,
-            baseLearners.slice(0, bestM),
-            baseLearnerWeights.slice(0, bestM))
+            baseLearners.value.slice(0, bestM),
+            baseLearnerWeights.value.slice(0, bestM))
         } else if (currentValidateError < bestValidateError) {
             bestValidateError = currentValidateError
             bestM = m + 1
         }
       }
       // Update data with pseudo-residuals
-      data = predError.zip(input).map {
-        case ((pred, _), point) =>  LabeledPoint(-loss.gradient(pred, point.label), point.features)
+      data = predError.zip(input).map { case ((pred, _), point) =>
+        LabeledPoint(-loss.gradient(pred, point.label), point.features)
       }
       m += 1
     }
@@ -268,11 +270,11 @@ object GradientBoostedTrees extends Logging {
     if (validate) {
       new GradientBoostedTreesModel(
         boostingStrategy.treeStrategy.algo,
-        baseLearners.slice(0, bestM),
-        baseLearnerWeights.slice(0, bestM))
+        baseLearners.value.slice(0, bestM),
+        baseLearnerWeights.value.slice(0, bestM))
     } else {
       new GradientBoostedTreesModel(
-        boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
+        boostingStrategy.treeStrategy.algo, baseLearners.value, baseLearnerWeights.value)
     }
   }
 

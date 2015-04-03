@@ -39,14 +39,13 @@ object LogLoss extends Loss {
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
    * classification
    * The gradient with respect to F(x) is: - 4 y / (1 + exp(2 y F(x)))
-   * @param prediction Predicted point
+   * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
    */
   override def gradient(prediction: Double, label: Double): Double = {
     - 4.0 * label / (1.0 + math.exp(2.0 * label * prediction))
   }
-
 
   override def computeError(prediction: Double, label: Double): Double = {
     val margin = 2.0 * label * prediction

@@ -37,7 +37,7 @@ object SquaredError extends Loss {
    * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
    * The gradient with respect to F(x) is: - 2 (y - F(x))
-   * @param prediction Predicted point
+   * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
    */
