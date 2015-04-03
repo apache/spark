@@ -56,11 +56,12 @@ trait ScalaReflection {
     case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
-    case (s: Array[_], arrayType: ArrayType) => if (arrayType.elementType.isPrimitive) {
-      s.toSeq
-    } else {
-      s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
-    }
+    case (s: Array[_], arrayType: ArrayType) =>
+      if (arrayType.elementType.isPrimitive) {
+        s.toSeq
+      } else {
+        s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
+      }
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
     }
@@ -72,12 +73,31 @@ trait ScalaReflection {
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
     case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
+    case (s: String, _) => UTF8String(s)
     case (r: Row, structType: StructType) =>
       new GenericRow(
         r.toSeq.zip(structType.fields).map { case (elem, field) =>
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (other, _) => other
+  }
+
+  /**
+   *  Converts Scala objects to catalyst rows / types.
+   *  Note: This should be called before do evaluation on Row
+   *        (It does not support UDT)
+   */
+  def convertToCatalyst(a: Any): Any = a match {
+    case s: String => UTF8String(s)
+    case d: java.sql.Date => DateUtils.fromJavaDate(d)
+    case d: BigDecimal => Decimal(d)
+    case d: java.math.BigDecimal => Decimal(d)
+    case seq: Seq[Any] => seq.map(convertToCatalyst)
+    case r: Row => Row(r.toSeq.map(convertToCatalyst): _*)
+    case arr: Array[Any] => arr.toSeq.map(convertToCatalyst).toArray
+    case m: Map[Any, Any] =>
+      m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
+    case other => other
   }
 
   /** Converts Catalyst types used internally in rows to standard Scala types */
@@ -91,6 +111,7 @@ trait ScalaReflection {
     case (r: Row, s: StructType) => convertRowToScala(r, s)
     case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
     case (i: Int, DateType) => DateUtils.toJavaDate(i)
+    case (s: UTF8String, StringType) => s.toString()
     case (other, _) => other
   }
 
@@ -193,6 +214,7 @@ trait ScalaReflection {
     // The data type can be determined without ambiguity.
     case obj: BooleanType.JvmType => BooleanType
     case obj: BinaryType.JvmType => BinaryType
+    case obj: String => StringType
     case obj: StringType.JvmType => StringType
     case obj: ByteType.JvmType => ByteType
     case obj: ShortType.JvmType => ShortType

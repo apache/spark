@@ -216,10 +216,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val $primitiveTerm: ${termForType(dataType)} = $value
          """.children
 
-      case expressions.Literal(value: String, dataType) =>
+      case expressions.Literal(value: UTF8String, dataType) =>
         q"""
           val $nullTerm = ${value == null}
-          val $primitiveTerm: ${termForType(dataType)} = $value
+          val $primitiveTerm: ${termForType(dataType)} =
+            org.apache.spark.sql.types.UTF8String(${value.toString})
          """.children
 
       case expressions.Literal(value: Int, dataType) =>
@@ -243,11 +244,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             if($nullTerm)
               ${defaultPrimitive(StringType)}
             else
-              new String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
+              org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
         """.children
 
       case Cast(child @ DateType(), StringType) =>
-        child.castOrNull(c => q"org.apache.spark.sql.types.DateUtils.toString($c)", StringType)
+        child.castOrNull(c =>
+          q"""org.apache.spark.sql.types.UTF8String(
+                org.apache.spark.sql.types.DateUtils.toString($c))""",
+          StringType)
 
       case Cast(child @ NumericType(), IntegerType) =>
         child.castOrNull(c => q"$c.toInt", IntegerType)
@@ -272,7 +276,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             if($nullTerm)
               ${defaultPrimitive(StringType)}
             else
-              ${eval.primitiveTerm}.toString
+              org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.toString)
         """.children
 
       case EqualTo(e1, e2) =>
@@ -573,7 +577,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val localLogger = log
         val localLoggerTree = reify { localLogger }
         q"""
-          $localLoggerTree.debug(${e.toString} + ": " +  (if($nullTerm) "null" else $primitiveTerm))
+          $localLoggerTree.debug(
+            ${e.toString} + ": " + (if ($nullTerm) "null" else $primitiveTerm.toString))
         """ :: Nil
       } else {
         Nil
@@ -584,6 +589,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
+      case StringType => q"$inputRow($ordinal).asInstanceOf[org.apache.spark.sql.types.UTF8String]"
       case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
     }
@@ -595,6 +601,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       ordinal: Int,
       value: TermName) = {
     dataType match {
+      case StringType => q"$destinationRow.update($ordinal, $value)"
       case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
       case _ => q"$destinationRow.update($ordinal, $value)"
     }
@@ -618,13 +625,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "Double"
     case FloatType => "Float"
     case BooleanType => "Boolean"
-    case StringType => "String"
+    case StringType => "org.apache.spark.sql.types.UTF8String"
   }
 
   protected def defaultPrimitive(dt: DataType) = dt match {
     case BooleanType => ru.Literal(Constant(false))
     case FloatType => ru.Literal(Constant(-1.0.toFloat))
-    case StringType => ru.Literal(Constant("<uninit>"))
+    case StringType =>  q"""org.apache.spark.sql.types.UTF8String("<uninit>")"""
     case ShortType => ru.Literal(Constant(-1.toShort))
     case LongType => ru.Literal(Constant(-1L))
     case ByteType => ru.Literal(Constant(-1.toByte))

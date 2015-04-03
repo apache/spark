@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
 /**
@@ -44,14 +43,6 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
 
     val actual = plan(inputRow)
     val expectedRow = new GenericRow(Array[Any](expected))
-    if (actual.hashCode() != expectedRow.hashCode()) {
-      fail(
-        s"""
-          |Mismatched hashCodes for values: $actual, $expectedRow
-          |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
-          |${evaluated.code.mkString("\n")}
-        """.stripMargin)
-    }
     if (actual != expectedRow) {
       val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
