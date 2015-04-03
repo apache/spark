@@ -510,6 +510,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.permissions</code></td>
+  <td>770</td>
+  <td>
+    What permissions to set on event log files. Same permissions are used for created directories
+    and event log files.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
