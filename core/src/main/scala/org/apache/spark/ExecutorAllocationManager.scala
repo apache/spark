@@ -17,10 +17,12 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{Executors, TimeUnit}
+
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{SystemClock, Clock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -129,6 +131,10 @@ private[spark] class ExecutorAllocationManager(
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
 
+  // Executor that handles the scheduling task.
+  private val executor = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("spark-dynamic-executor-allocation"))
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -173,32 +179,24 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Register for scheduler callbacks to decide when to add and remove executors.
+   * Register for scheduler callbacks to decide when to add and remove executors, and start
+   * the scheduling task.
    */
   def start(): Unit = {
     listenerBus.addListener(listener)
-    startPolling()
+
+    val scheduleTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(schedule())
+    }
+    executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
 
   /**
-   * Start the main polling thread that keeps track of when to add and remove executors.
+   * Stop the allocation manager.
    */
-  private def startPolling(): Unit = {
-    val t = new Thread {
-      override def run(): Unit = {
-        while (true) {
-          try {
-            schedule()
-          } catch {
-            case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
-          }
-          Thread.sleep(intervalMillis)
-        }
-      }
-    }
-    t.setName("spark-dynamic-executor-allocation")
-    t.setDaemon(true)
-    t.start()
+  def stop(): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(10, TimeUnit.SECONDS)
   }
 
   /**

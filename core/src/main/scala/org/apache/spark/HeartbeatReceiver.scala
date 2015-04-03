@@ -37,6 +37,12 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
+/**
+ * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
+ * created.
+ */
+private[spark] case object TaskSchedulerIsSet
+
 private[spark] case object ExpireDeadHosts 
     
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
@@ -44,8 +50,10 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
+private[spark] class HeartbeatReceiver(sc: SparkContext)
   extends Actor with ActorLogReceive with Logging {
+
+  private var scheduler: TaskScheduler = null
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new mutable.HashMap[String, Long]
@@ -71,12 +79,22 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   }
   
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
-    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      val unknownExecutor = !scheduler.executorHeartbeatReceived(
-        executorId, taskMetrics, blockManagerId)
-      val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
-      executorLastSeen(executorId) = System.currentTimeMillis()
-      sender ! response
+    case TaskSchedulerIsSet =>
+      scheduler = sc.taskScheduler
+    case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
+      if (scheduler != null) {
+        val unknownExecutor = !scheduler.executorHeartbeatReceived(
+          executorId, taskMetrics, blockManagerId)
+        val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+        executorLastSeen(executorId) = System.currentTimeMillis()
+        sender ! response
+      } else {
+        // Because Executor will sleep several seconds before sending the first "Heartbeat", this
+        // case rarely happens. However, if it really happens, log it and ask the executor to
+        // register itself again.
+        logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
+        sender ! HeartbeatResponse(reregisterBlockManager = true)
+      }
     case ExpireDeadHosts =>
       expireDeadHosts()
   }
