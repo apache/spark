@@ -22,7 +22,7 @@ The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.
 All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`, `pyspark` shell, or `sparkR` shell.
 
 
-## Starting Point: `SQLContext`
+## Starting Point: SQLContext
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -1054,7 +1054,7 @@ SELECT * FROM parquetTable
 
 </div>
 
-### Partition discovery
+### Partition Discovery
 
 Table partitioning is a common optimization approach used in systems like Hive.  In a partitioned
 table, data are usually stored in different directories, with partitioning column values encoded in
@@ -1108,7 +1108,7 @@ can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, w
 `true`. When type inference is disabled, string type will be used for the partitioning columns.
 
 
-### Schema merging
+### Schema Merging
 
 Like ProtocolBuffer, Avro, and Thrift, Parquet also supports schema evolution.  Users can start with
 a simple schema, and gradually add more columns to the schema as needed.  In this way, users may end
@@ -1202,6 +1202,70 @@ printSchema(df3)
 # |-- double: int (nullable = true)
 # |-- triple: int (nullable = true)
 # |-- key : int (nullable = true)
+{% endhighlight %}
+
+</div>
+
+</div>
+
+### Hive metastore Parquet table conversion
+
+When reading from and writing to Hive metastore Parquet tables, Spark SQL will try to use its own
+Parquet support instead of Hive SerDe for better performance. This behavior is controlled by the
+`spark.sql.hive.convertMetastoreParquet` configuration, and is turned on by default.
+
+#### Hive/Parquet Schema Reconciliation
+
+There are two key differences between Hive and Parquet from the perspective of table schema
+processing.
+
+1. Hive is case insensitive, while Parquet is not
+1. Hive considers all columns nullable, while nullability in Parquet is significant
+
+Due to this reason, we must reconcile Hive metastore schema with Parquet schema when converting a
+Hive metastore Parquet table to a Spark SQL Parquet table.  The reconciliation rules are:
+
+1. Fields that have the same name in both schema must have the same data type regardless of
+   nullability.  The reconciled field should have the data type of the Parquet side, so that
+   nullability is respected.
+
+1. The reconciled schema contains exactly those fields defined in Hive metastore schema.
+
+   - Any fields that only appear in the Parquet schema are dropped in the reconciled schema.
+   - Any fileds that only appear in the Hive metastore schema are added as nullable field in the
+     reconciled schema.
+
+#### Metadata Refreshing
+
+Spark SQL caches Parquet metadata for better performance.  When Hive metastore Parquet table
+conversion is enabled, metadata of those converted tables are also cached.  If these tables are
+updated by Hive or other external tools, you need to refresh them manually to ensure consistent
+metadata.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// sqlContext is an existing HiveContext
+sqlContext.refreshTable("my_table")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// sqlContext is an existing HiveContext
+sqlContext.refreshTable("my_table")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+REFRESH TABLE my_table;
 {% endhighlight %}
 
 </div>
