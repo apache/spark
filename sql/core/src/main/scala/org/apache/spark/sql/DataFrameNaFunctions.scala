@@ -231,11 +231,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param col list of columns to apply the value replacement
+   * @param cols list of columns to apply the value replacement
    * @param replacement value replacement map, as explained above
    */
-  def replace[T](col: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
-    replace(col.toSeq, replacement.toMap)
+  def replace[T](cols: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
+    replace(cols.toSeq, replacement.toMap)
   }
 
   /**
@@ -277,10 +277,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed");
    * }}}
    *
-   * @param col list of columns to apply the value replacement
+   * @param cols list of columns to apply the value replacement
    * @param replacement value replacement map, as explained above
    */
-  def replace[T](col: Seq[String], replacement: Map[T, T]): DataFrame = replace0(col, replacement)
+  def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = replace0(cols, replacement)
 
   private def replace0[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
     if (replacement.isEmpty || cols.isEmpty) {
