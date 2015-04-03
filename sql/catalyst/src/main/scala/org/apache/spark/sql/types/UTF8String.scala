@@ -44,7 +44,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
    * Update the UTF8String with Array[Byte], which should be encoded in UTF-8
    */
   def set(bytes: Array[Byte]): UTF8String = {
-    this.bytes = bytes.clone()
+    this.bytes = bytes
     this
   }
 
