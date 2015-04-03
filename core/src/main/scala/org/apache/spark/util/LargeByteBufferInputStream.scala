@@ -23,7 +23,7 @@ import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.storage.BlockManager
 
 /**
- * Reads data from a LargeByteBuffer, and optionally cleans it up using BlockManager.dispose()
+ * Reads data from a LargeByteBuffer, and optionally cleans it up using buffer.dispose()
  * at the end of the stream (e.g. to close a memory-mapped file).
  */
 private[spark]
@@ -68,12 +68,12 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
   }
 
   /**
-   * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().
+   * Clean up the buffer, and potentially dispose of it
    */
   private def cleanUp() {
     if (buffer != null) {
       if (dispose) {
-        BlockManager.dispose(buffer)
+        buffer.dispose()
       }
       buffer = null
     }

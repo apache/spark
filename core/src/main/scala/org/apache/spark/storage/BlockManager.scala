@@ -865,7 +865,7 @@ private[spark] class BlockManager(
       }
     }
 
-    BlockManager.dispose(bytesAfterPut)
+    bytesAfterPut.dispose()
 
     if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
@@ -1264,12 +1264,6 @@ private[spark] object BlockManager extends Logging {
       if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
         buffer.asInstanceOf[DirectBuffer].cleaner().clean()
       }
-    }
-  }
-
-  def dispose(buffer: LargeByteBuffer): Unit = {
-    if (buffer != null) {
-      buffer.nioBuffers().asScala.foreach { buf => dispose(buf)}
     }
   }
 
