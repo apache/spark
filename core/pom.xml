@@ -279,7 +279,7 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
-      <version>0.6.2</version>
+      <version>0.6.3</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.httpcomponents</groupId>
