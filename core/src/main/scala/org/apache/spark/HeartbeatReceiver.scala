@@ -85,10 +85,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         executorLastSeen(executorId) = System.currentTimeMillis()
         sender ! response
       } else {
-        // Because Executor will sleep several seconds then send the first "Heartbeat", this case
-        // rarely happens. However, if it really happens, log it and ask the executor to register
-        // itself again.
-        logWarning(s"Dropping $heartbeat because TaskScheduler has not been ready yet")
+        // Because Executor will sleep several seconds before sending the first "Heartbeat", this
+        // case rarely happens. However, if it really happens, log it and ask the executor to
+        // register itself again.
+        logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
         sender ! HeartbeatResponse(reregisterBlockManager = true)
       }
     case ExpireDeadHosts =>

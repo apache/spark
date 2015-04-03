@@ -357,7 +357,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   executorEnvs("SPARK_USER") = sparkUser
 
   // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
-  // retrieve "HeartbeatReceiver" in the constructor.
+  // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(this)), "HeartbeatReceiver")
 
