@@ -17,6 +17,7 @@
 package org.apache.spark.network.buffer;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Random;
 
 import org.junit.Test;
@@ -27,7 +28,7 @@ public class WrappedLargeByteBufferSuite {
 
   byte[] data = new byte[500];
   {
-    new Random().nextBytes(data);
+    new Random(1234).nextBytes(data);
   }
 
   private WrappedLargeByteBuffer testDataBuf() {
@@ -116,9 +117,26 @@ public class WrappedLargeByteBufferSuite {
     }
   }
 
-//  @Test
-//  public void get() {
-//    fail("pending");
-//  }
+  @Test
+  public void get() {
+    WrappedLargeByteBuffer b = testDataBuf();
+    byte[] into = new byte[500];
+    for (int[] offsetAndLength: new int[][]{{0, 200}, {10,10}, {300, 20}, {30, 100}}) {
+      b.rewind();
+      b.get(into, offsetAndLength[0], offsetAndLength[1]);
+      assertConsistent(b);
+      assertSubArrayEquals(data, 0, into, offsetAndLength[0], offsetAndLength[1]);
+    }
+    //TODO BufferUnderflowException
+  }
+
+  private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {
+    byte[] expCopy = new byte[length];
+    byte[] actCopy = new byte[length];
+    System.arraycopy(exp, expOffset, expCopy, 0, length);
+    System.arraycopy(act, actOffset, actCopy, 0, length);
+    assertArrayEquals(expCopy, actCopy);
+  }
+
 
 }
