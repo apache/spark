@@ -43,10 +43,13 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
    */
   private var position = chunkSize
 
+  var size: Long = 0L
+
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()
     chunks(lastChunkIndex)(position) = b.toByte
     position += 1
+    size += 1
   }
 
   override def write(bytes: Array[Byte], off: Int, len: Int): Unit = {
@@ -58,6 +61,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
       written += thisBatch
       position += thisBatch
     }
+    size += len
   }
 
   @inline
@@ -91,4 +95,41 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
       ret
     }
   }
+
+  /**
+   * get a copy of the data between the two endpoints
+   */
+  def slice(start: Long, until: Long): Array[Byte] = {
+    require((until - start) < Integer.MAX_VALUE, "max slice length = Integer.MAX_VALUE")
+    var chunkStart = 0L
+    var chunkIdx = 0
+    var foundStart = false
+    val length = (until - start).toInt
+    val result = new Array[Byte](length)
+    while (!foundStart) {
+      val nextSize = chunkStart + chunks(chunkIdx).size
+      if (nextSize > start) {
+        foundStart = true
+      }
+      else {
+        chunkStart = nextSize
+        chunkIdx += 1
+      }
+    }
+
+    var remaining = length
+    var pos = 0
+    var offsetInChunk = (start - chunkStart).toInt
+    while (remaining > 0) {
+      val lenToCopy = math.min(remaining, chunks(chunkIdx).size - offsetInChunk)
+      System.arraycopy(chunks(chunkIdx), offsetInChunk, result, pos, lenToCopy)
+      chunkIdx += 1
+      offsetInChunk = 0
+      pos += lenToCopy
+      remaining -= lenToCopy
+    }
+    result
+  }
+
+
 }
