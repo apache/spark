@@ -365,7 +365,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
 
-  heartbeatReceiver ! RegisterTaskScheduler(taskScheduler)
+  heartbeatReceiver ! TaskSchedulerIsSet
 
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {

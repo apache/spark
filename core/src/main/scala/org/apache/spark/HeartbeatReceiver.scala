@@ -37,7 +37,11 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
-private[spark] case class RegisterTaskScheduler(scheduler: TaskScheduler)
+/**
+ * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
+ * created.
+ */
+private[spark] case object TaskSchedulerIsSet
 
 private[spark] case object ExpireDeadHosts 
     
@@ -75,8 +79,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   }
   
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
-    case RegisterTaskScheduler(scheduler) =>
-      this.scheduler = scheduler
+    case TaskSchedulerIsSet =>
+      scheduler = sc.taskScheduler
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
         val unknownExecutor = !scheduler.executorHeartbeatReceived(
