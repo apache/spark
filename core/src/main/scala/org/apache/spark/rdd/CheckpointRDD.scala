@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
 
@@ -112,8 +113,11 @@ private[spark] object CheckpointRDD extends Logging {
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
-    serializeStream.writeAll(iterator)
-    serializeStream.close()
+    Utils.tryWithSafeFinally {
+      serializeStream.writeAll(iterator)
+    } {
+      serializeStream.close()
+    }
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {

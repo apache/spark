@@ -614,9 +614,9 @@ private[spark] object PythonRDD extends Logging {
         try {
           val sock = serverSocket.accept()
           val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          try {
+          Utils.tryWithSafeFinally {
             writeIteratorToStream(items, out)
-          } finally {
+          } {
             out.close()
           }
         } catch {
@@ -862,9 +862,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     val file = File.createTempFile("broadcast", "", dir)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
-    try {
+    Utils.tryWithSafeFinally {
       Utils.copyStream(in, out)
-    } finally {
+    } {
       out.close()
     }
   }
