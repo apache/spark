@@ -62,6 +62,8 @@ object TestHive
 class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
+
+
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
@@ -367,8 +369,17 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
         SELECT title, air_date, doctor FROM episodes
       """.cmd
-      )
+      ),
+    TestTable("person",
+      ("CREATE TABLE person(name string, age int, data array<INT>) " +
+        "ROW FORMAT DELIMITED FIELDS  TERMINATED BY ',' " +
+        "COLLECTION ITEMS TERMINATED BY ':'").cmd,
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/person.txt")}' INTO TABLE person".cmd
+    )
+
   )
+
+
 
   hiveQTestUtilTables.foreach(registerTestTable)
 

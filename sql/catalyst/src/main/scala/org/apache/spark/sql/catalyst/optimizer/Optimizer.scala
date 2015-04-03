@@ -171,8 +171,23 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
+    case gen@Generate(generator: Explode, isJoin, isOuter, alias, child) =>
+      val allReferences = gen.references ++ gen.parentReferences
+      val pruneProject = prunedChild(child, allReferences)
+      Generate(generator, isJoin, isOuter, alias, pruneProject)
+
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
+
+    case plan =>
+      plan.children.foreach { c =>
+        c match {
+          case gen@Generate(generator: Explode, isJoin, isOuter, alias, child) =>
+            gen.parentReferences = plan.references;
+          case _ => // nothing
+        }
+      }
+      plan
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
