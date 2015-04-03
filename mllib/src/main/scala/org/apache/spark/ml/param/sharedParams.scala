@@ -108,7 +108,7 @@ private[ml] trait HasProbabilityCol extends Params {
 
 private[ml] trait HasFitIntercept extends Params {
   /**
-   * param for fitting the intercept term
+   * param for fitting the intercept term, defaults to true
    * @group param
    */
   val fitIntercept: BooleanParam =
