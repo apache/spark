@@ -19,6 +19,9 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
+import breeze.stats.distributions.{Multinomial => BrzMultinomial}
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
@@ -41,37 +44,48 @@ object NaiveBayesSuite {
 
   // Generate input of the form Y = (theta * x).argmax()
   def generateNaiveBayesInput(
-      pi: Array[Double],            // 1XC
-      theta: Array[Array[Double]],  // CXD
-      nPoints: Int,
-      seed: Int): Seq[LabeledPoint] = {
+    pi: Array[Double],            // 1XC
+    theta: Array[Array[Double]],  // CXD
+    nPoints: Int,
+    seed: Int,
+    modelType: String = "Multinomial",
+    sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
-
     val _pi = pi.map(math.pow(math.E, _))
     val _theta = theta.map(row => row.map(math.pow(math.E, _)))
 
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
-      val xi = Array.tabulate[Double](D) { j =>
-        if (rnd.nextDouble() < _theta(y)(j)) 1 else 0
+      val xi = modelType match {
+        case "Bernoulli" => Array.tabulate[Double] (D) { j =>
+            if (rnd.nextDouble () < _theta(y)(j) ) 1 else 0
+        }
+        case "Multinomial" =>
+          val mult = BrzMultinomial(BDV(_theta(y)))
+          val emptyMap = (0 until D).map(x => (x, 0.0)).toMap
+          val counts = emptyMap ++ mult.sample(sample).groupBy(x => x).map {
+            case (index, reps) => (index, reps.size.toDouble)
+          }
+          counts.toArray.sortBy(_._1).map(_._2)
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"NaiveBayesSuite found unknown ModelType: $modelType")
       }
 
       LabeledPoint(y, Vectors.dense(xi))
     }
   }
 
-  private val smallPi = Array(0.5, 0.3, 0.2).map(math.log)
+  /** Bernoulli NaiveBayes with binary labels, 3 features */
+  private val binaryBernoulliModel = new NaiveBayesModel(labels = Array(0.0, 1.0),
+    pi = Array(0.2, 0.8), theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)),
+    "Bernoulli")
 
-  private val smallTheta = Array(
-    Array(0.91, 0.03, 0.03, 0.03), // label 0
-    Array(0.03, 0.91, 0.03, 0.03), // label 1
-    Array(0.03, 0.03, 0.91, 0.03)  // label 2
-  ).map(_.map(math.log))
-
-  /** Binary labels, 3 features */
-  private val binaryModel = new NaiveBayesModel(labels = Array(0.0, 1.0), pi = Array(0.2, 0.8),
-    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)))
+  /** Multinomial NaiveBayes with binary labels, 3 features */
+  private val binaryMultinomialModel = new NaiveBayesModel(labels = Array(0.0, 1.0),
+    pi = Array(0.2, 0.8), theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)),
+    "Multinomial")
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
@@ -85,6 +99,24 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     assert(numOfPredictions < input.length / 5)
   }
 
+  def validateModelFit(
+      piData: Array[Double],
+      thetaData: Array[Array[Double]],
+      model: NaiveBayesModel) = {
+    def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
+      (d1 - d2).abs <= precision
+    }
+    val modelIndex = (0 until piData.length).zip(model.labels.map(_.toInt))
+    for (i <- modelIndex) {
+      assert(closeFit(math.exp(piData(i._2)), math.exp(model.pi(i._1)), 0.05))
+    }
+    for (i <- modelIndex) {
+      for (j <- 0 until thetaData(i._2).length) {
+        assert(closeFit(math.exp(thetaData(i._2)(j)), math.exp(model.theta(i._1)(j)), 0.05))
+      }
+    }
+  }
+
   test("get, set params") {
     val nb = new NaiveBayes()
     nb.setLambda(2.0)
@@ -93,19 +125,53 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     assert(nb.getLambda === 3.0)
   }
 
-  test("Naive Bayes") {
-    val nPoints = 10000
+  test("Naive Bayes Multinomial") {
+    val nPoints = 1000
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
 
-    val pi = NaiveBayesSuite.smallPi
-    val theta = NaiveBayesSuite.smallTheta
-
-    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 42, "Multinomial")
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD)
+    val model = NaiveBayes.train(testRDD, 1.0, "Multinomial")
+    validateModelFit(pi, theta, model)
 
-    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17)
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 17, "Multinomial")
+    val validationRDD = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("Naive Bayes Bernoulli") {
+    val nPoints = 10000
+    val pi = Array(0.5, 0.3, 0.2).map(math.log)
+    val theta = Array(
+      Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
+      Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
+      Array(0.02, 0.02, 0.60, 0.02,  0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
+    ).map(_.map(math.log))
+
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 45, "Bernoulli")
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli")
+    validateModelFit(pi, theta, model)
+
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 20, "Bernoulli")
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -142,19 +208,41 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("model save/load") {
-    val model = NaiveBayesSuite.binaryModel
+  test("model save/load: 2.0 to 2.0") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).map {
+      model =>
+        // Save model, load it back, and compare.
+        try {
+          model.save(sc, path)
+          val sameModel = NaiveBayesModel.load(sc, path)
+          assert(model.labels === sameModel.labels)
+          assert(model.pi === sameModel.pi)
+          assert(model.theta === sameModel.theta)
+          assert(model.modelType === sameModel.modelType)
+        } finally {
+          Utils.deleteRecursively(tempDir)
+        }
+    }
+  }
+
+  test("model save/load: 1.0 to 2.0") {
+    val model = NaiveBayesSuite.binaryMultinomialModel
 
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    // Save model, load it back, and compare.
+    // Save model as version 1.0, load it back, and compare.
     try {
-      model.save(sc, path)
+      val data = NaiveBayesModel.SaveLoadV1_0.Data(model.labels, model.pi, model.theta)
+      NaiveBayesModel.SaveLoadV1_0.save(sc, path, data)
       val sameModel = NaiveBayesModel.load(sc, path)
       assert(model.labels === sameModel.labels)
       assert(model.pi === sameModel.pi)
       assert(model.theta === sameModel.theta)
+      assert(model.modelType === "Multinomial")
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -172,8 +260,8 @@ class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
         LabeledPoint(random.nextInt(2), Vectors.dense(Array.fill(n)(random.nextDouble())))
       }
     }
-    // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
+    // If we serialize data directly in the task closure, the size of the serialized task
+    // would be greater than 1MB and hence Spark would throw an error.
     val model = NaiveBayes.train(examples)
     val predictions = model.predict(examples.map(_.features))
   }

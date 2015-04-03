@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.net.URI
 import java.util.jar.{JarEntry, JarOutputStream}
-import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLException
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -228,7 +228,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     try {
       server.initialize()
 
-      intercept[SSLHandshakeException] {
+      intercept[SSLException] {
         fileTransferTest(server)
       }
     } finally {

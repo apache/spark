@@ -89,7 +89,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
         scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
-          "timed out after ${now - lastSeenMs} ms"))
+          s"timed out after ${now - lastSeenMs} ms"))
         if (sc.supportDynamicAllocation) {
           sc.killExecutor(executorId)
         }

@@ -80,7 +80,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved: Boolean =
     childrenResolved &&
-    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+    left.output.zip(right.output).forall { case (l,r) => l.dataType == r.dataType }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
@@ -287,7 +287,10 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case object NoRelation extends LeafNode {
+/**
+ * A relation with one row. This is used in "SELECT ..." without a from clause.
+ */
+case object OneRowRelation extends LeafNode {
   override def output: Seq[Attribute] = Nil
 
   /**
