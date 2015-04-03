@@ -816,9 +816,7 @@ object Client extends Logging {
       }
     }
     addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
-    if (sparkConf.getBoolean("spark.yarn.includeClusterHadoopClasspath", true)) {
-      populateHadoopClasspath(conf, env)
-    }
+    populateHadoopClasspath(conf, env)
     sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
   }
 
