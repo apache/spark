@@ -39,7 +39,6 @@ function drawApplicationTimeline(groupArray, eventObjArray) {
 function drawJobTimeline(groupArray, eventObjArray) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
-
   var container = $('#job-timeline')[0];
   var options = {
     groupOrder: function(a, b) {
@@ -61,8 +60,6 @@ function drawJobTimeline(groupArray, eventObjArray) {
 function drawTaskAssignmentTimeline(groupArray, eventObjArray) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
-
-  //var container = document.getElementById('task-assignment-timeline');
   var container = $("#task-assignment-timeline")[0]
   var options = {
     groupOrder: function(a, b) {
