@@ -134,7 +134,7 @@ class LRonGraphX(
   }
 
   private def backward(q: VertexRDD[VD]): VertexRDD[Double] = {
-    val multiplier = samples.innerJoin(q) { case (_, y, m) =>
+    val multiplier = samples.innerJoin(q) { (_, y, m) =>
       (1.0 / (1.0 + math.exp(m))) - y
     }
     GraphImpl(multiplier, dataSet.edges).aggregateMessages[Double](ctx => {
@@ -152,13 +152,14 @@ class LRonGraphX(
   // Updater for L1 regularized problems
   private def updateWeight(delta: VertexRDD[Double], iter: Int): Graph[VD, ED] = {
     val thisIterStepSize = if (useAdaGrad) stepSize else stepSize / sqrt(iter)
+    val thisIterL1StepSize = stepSize / sqrt(iter)
     val newVertices = dataSet.vertices.leftJoin(delta) { (_, attr, gradient) =>
       gradient match {
         case Some(gard) => {
           var weight = attr
           weight -= thisIterStepSize * gard
           if (regParam > 0.0 && weight != 0.0) {
-            val shrinkageVal = regParam * thisIterStepSize
+            val shrinkageVal = regParam * thisIterL1StepSize
             weight = signum(weight) * max(0.0, abs(weight) - shrinkageVal)
           }
           assert(!weight.isNaN)
@@ -182,7 +183,7 @@ class LRonGraphX(
     else {
       deltaSum
     }
-    delta.innerJoin(gradient) { case (_, gradSum, grad) =>
+    delta.innerJoin(gradient) { (_, gradSum, grad) =>
       val newGradSum = gradSum * rho + pow(grad, 2)
       val newGrad = grad * gamma / (epsilon + sqrt(newGradSum))
       (newGradSum, newGrad)
