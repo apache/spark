@@ -313,7 +313,7 @@ private[spark] object Utils extends Logging {
                  transferToEnabled: Boolean = false): Long =
   {
     var count = 0L
-    try {
+    tryWithSafeFinally {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
         && transferToEnabled) {
         // When both streams are File stream, use transferTo to improve copy performance.
@@ -353,7 +353,7 @@ private[spark] object Utils extends Logging {
         }
       }
       count
-    } finally {
+    } {
       if (closeStreams) {
         try {
           in.close()
@@ -1211,6 +1211,44 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: IOException => throw e
       case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code, then a finally block, but if exceptions happen in
+   * the finally block, do not suppress the original exception.
+   *
+   * This is primarily an issue with `finally { out.close() }` blocks, where
+   * close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * fail as well. This would then suppress the original/likely more meaningful
+   * exception from the original `out.write` call.
+   */
+  def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
+    // It would be nice to find a method on Try that did this
+    var originalThrowable: Throwable = null
+    try {
+      block
+    } catch {
+      case t: Throwable =>
+        // Purposefully not using NonFatal, because even fatal exceptions
+        // we don't want to have our finallyBlock suppress
+        originalThrowable = t
+        throw originalThrowable
+    } finally {
+      try {
+        finallyBlock
+      } catch {
+        case t: Throwable =>
+          if (originalThrowable != null) {
+            // We could do originalThrowable.addSuppressed(t), but it's
+            // not available in JDK 1.6.
+            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
+            throw originalThrowable
+          } else {
+            throw t
+          }
+      }
     }
   }
 
@@ -2074,7 +2112,7 @@ private[spark] class RedirectThread(
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      try {
+      Utils.tryWithSafeFinally {
         val buf = new Array[Byte](1024)
         var len = in.read(buf)
         while (len != -1) {
@@ -2082,7 +2120,7 @@ private[spark] class RedirectThread(
           out.flush()
           len = in.read(buf)
         }
-      } finally {
+      } {
         if (propagateEof) {
           out.close()
         }

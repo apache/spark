@@ -728,25 +728,19 @@ private[spark] class ExternalSorter[K, V, C](
       // this simple we spill out the current in-memory collection so that everything is in files.
       spillToPartitionFiles(if (aggregator.isDefined) map else buffer)
       partitionWriters.foreach(_.commitAndClose())
-      var out: FileOutputStream = null
-      var in: FileInputStream = null
+      val out = new FileOutputStream(outputFile, true)
       val writeStartTime = System.nanoTime
-      try {
-        out = new FileOutputStream(outputFile, true)
+      util.Utils.tryWithSafeFinally {
         for (i <- 0 until numPartitions) {
-          in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          val size = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
-          in.close()
-          in = null
-          lengths(i) = size
+          val in = new FileInputStream(partitionWriters(i).fileSegment().file)
+          util.Utils.tryWithSafeFinally {
+            lengths(i) = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
+          } {
+            in.close()
+          }
         }
-      } finally {
-        if (out != null) {
-          out.close()
-        }
-        if (in != null) {
-          in.close()
-        }
+      } {
+        out.close()
         context.taskMetrics.shuffleWriteMetrics.foreach(
           _.incShuffleWriteTime(System.nanoTime - writeStartTime))
       }
