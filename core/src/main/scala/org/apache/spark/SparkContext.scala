@@ -227,9 +227,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val appName = conf.get("spark.app.name")
 
   private[spark] val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
-  private[spark] val eventLogDir: Option[String] = {
+  private[spark] val eventLogDir: Option[URI] = {
     if (isEventLogEnabled) {
-      Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
+      val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
+        .stripSuffix("/")
+      Some(Utils.resolveURI(unresolvedDir))
     } else {
       None
     }
