@@ -77,17 +77,6 @@ class DirectKafkaInputDStream[
 
   protected var currentOffsets = fromOffsets
 
-
-
-  protected def maxMessagesPerPartition: Option[Int] = {
-    val rate = directRateLimiter.getEffectiveRate
-    if (rate > 0)
-
-      Some(rate / fromOffsets.size)
-    else
-      None
-  }
-
   @tailrec
   protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
     val o = kc.getLatestLeaderOffsets(currentOffsets.keySet)
@@ -109,7 +98,7 @@ class DirectKafkaInputDStream[
   // limits the maximum number of messages per partition
   protected def clamp(
     leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
-    maxMessagesPerPartition.map { mmp =>
+    directRateLimiter.maxMessages.map(_ / fromOffsets.size).map { mmp =>
       leaderOffsets.map { case (tp, lo) =>
         tp -> lo.copy(offset = Math.min(currentOffsets(tp) + mmp, lo.offset))
       }

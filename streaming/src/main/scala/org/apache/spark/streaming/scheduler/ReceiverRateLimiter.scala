@@ -19,31 +19,31 @@ import org.apache.spark.streaming.receiver.UpdatedDynamicRate
   * per second that each receiver will accept.
   *
   */
-private[streaming]trait ReceiverRateLimiter extends Serializable {
+private[streaming]
+abstract class ReceiverRateLimiter extends Serializable {
   self: RateLimiter =>
-
-  val defaultRate = streamingContext.conf
-    .getInt("spark.streaming.receiver.maxRate", 0).toDouble
 
   private val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
   private var lastSyncTime = System.nanoTime
   private var messagesWrittenSinceSync = 0L
 
-  private val dynamicRateUpdater = new StreamingListener {
-    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-      val processedRecords = batchCompleted.batchInfo.receivedBlockInfo.get(streamId)
-        .map(r => r.map(_.numRecords).sum)
-        .getOrElse(0L)
-      val processedTimeInMs = batchCompleted.batchInfo.processingDelay.getOrElse(
-        throw new IllegalStateException("Illegal status: cannot get the processed time"))
+  if (isDriver) {
+    val dynamicRateUpdater = new StreamingListener {
+      override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+        val processedRecords = batchCompleted.batchInfo.receivedBlockInfo.get(streamId)
+          .map(r => r.map(_.numRecords).sum)
+          .getOrElse(0L)
+        val processedTimeInMs = batchCompleted.batchInfo.processingDelay.getOrElse(
+          throw new IllegalStateException("Illegal status: cannot get the processed time"))
 
-      computeEffectiveRate(processedRecords, processedTimeInMs)
-      updateDynamicRate(
-        streamingContext.scheduler.receiverTracker.receiverInfo(streamId).actor)
+        computeEffectiveRate(processedRecords, processedTimeInMs)
+        updateDynamicRate(
+          streamingContext.scheduler.receiverTracker.receiverInfo(streamId).actor)
+      }
     }
-  }
 
-  streamingContext.addStreamingListener(dynamicRateUpdater)
+    streamingContext.addStreamingListener(dynamicRateUpdater)
+  }
 
   def streamId: Int
 
@@ -51,7 +51,7 @@ private[streaming]trait ReceiverRateLimiter extends Serializable {
 
   def updateDynamicRate(receiver: ActorRef): Unit
 
-  def remoteUpdateDynamicRate(updatedRate: Int): Unit
+  def remoteUpdateDynamicRate(updatedRate: Double): Unit
 
    @tailrec
   final def waitToPush(): Unit = {
@@ -92,8 +92,9 @@ private[streaming]
 class FixedReceiverRateLimiter(
     val isDriver: Boolean,
     val streamId: Int,
+    val defaultRate: Double,
     @transient val streamingContext: StreamingContext = null)
-  extends FixedRateLimiter with Logging with ReceiverRateLimiter {
+  extends ReceiverRateLimiter with Logging with FixedRateLimiter {
 
   if (isDriver) assert(streamingContext != null)
 
@@ -101,7 +102,7 @@ class FixedReceiverRateLimiter(
     assert(isDriver)
   }
 
-  def remoteUpdateDynamicRate(updatedRate: Int): Unit = {
+  def remoteUpdateDynamicRate(updatedRate: Double): Unit = {
     assert(!isDriver)
   }
 }
@@ -109,24 +110,19 @@ class FixedReceiverRateLimiter(
 class DynamicReceiverRateLimiter(
     val isDriver: Boolean,
     val streamId: Int,
+    val defaultRate: Double,
+    val slowStartInitialRate: Double,
     @transient val streamingContext: StreamingContext = null)
-  extends DynamicRateLimiter with Logging with ReceiverRateLimiter {
+  extends ReceiverRateLimiter with Logging with DynamicRateLimiter {
 
   if (isDriver) assert(streamingContext != null)
-
-  def slideDurationInMs: Long = {
-    assert(isDriver)
-    streamingContext.graph.batchDuration.milliseconds
-  }
-
-  override def effectiveRate: Double = dynamicRate
 
   def updateDynamicRate(receiver: ActorRef): Unit = {
     assert(isDriver)
     receiver ! UpdatedDynamicRate(effectiveRate)
   }
 
-  def remoteUpdateDynamicRate(updatedRate: Int): Unit = {
+  def remoteUpdateDynamicRate(updatedRate: Double): Unit = {
     assert(!isDriver)
     dynamicRate = updatedRate
   }
