@@ -14,15 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.io
+package org.apache.spark.util
 
-import java.io.{ObjectInputStream, ObjectOutputStream}
+import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.network.buffer.WrappedLargeByteBuffer
-import org.apache.spark.util.{LargeByteBufferInputStream, LargeByteBufferOutputStream}
-import org.scalatest.{Matchers, FunSuite}
 
-class LargeByteBufferTest extends FunSuite with Matchers {
+class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
+
+  test("read from large buffers") {
+    pending
+  }
+
+  test("dispose") {
+    pending
+  }
 
   test("io stream roundtrip") {
 
@@ -30,9 +36,11 @@ class LargeByteBufferTest extends FunSuite with Matchers {
     (0 until 200).foreach{idx => out.write(idx)}
     out.close()
 
-    out.largeBuffer.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
+    val lb = out.largeBuffer(128)
+    //just make sure that we test reading from multiple chunks
+    lb.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
 
-    val rawIn = new LargeByteBufferInputStream(out.largeBuffer)
+    val rawIn = new LargeByteBufferInputStream(lb)
     val arr = new Array[Byte](500)
     val nRead = rawIn.read(arr, 0, 500)
     nRead should be (200)
@@ -41,5 +49,6 @@ class LargeByteBufferTest extends FunSuite with Matchers {
     }
 
   }
+
 
 }

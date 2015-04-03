@@ -41,9 +41,13 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   }
 
   def largeBuffer: LargeByteBuffer = {
+    largeBuffer(LargeByteBufferHelper.DEFAULT_MAX_CHUNK)
+  }
+
+  //exposed for testing
+  private[util] def largeBuffer(maxChunk: Int): LargeByteBuffer = {
     // Merge the underlying arrays as much as possible
     val totalSize = output.size
-    val maxChunk = LargeByteBufferHelper.DEFAULT_MAX_CHUNK
     val chunksNeeded = ((totalSize + maxChunk -1) / maxChunk).toInt
     val chunks = new Array[Array[Byte]](chunksNeeded)
     var remaining = totalSize
