@@ -251,12 +251,14 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericRow(newValues)
   }
 
-  override def update(ordinal: Int, value: Any): Unit = value match {
-    case null => setNullAt(ordinal)
-    case s: String =>
+  override def update(ordinal: Int, value: Any) {
+    if (value == null) {
+      setNullAt(ordinal)
+    } else {
       // for tests
-      throw new Exception("String should be converted into UTF8String")
-    case other => values(ordinal).update(value)
+      assert(!value.isInstanceOf[String], "String should be converted into UTF8String")
+      values(ordinal).update(value)
+    }
   }
 
   override def setString(ordinal: Int, value: String): Unit = update(ordinal, UTF8String(value))
