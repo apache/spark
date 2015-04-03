@@ -19,12 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.ml.feature.FeatureTests.DataSet
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
-private case class DataSet(features: Vector)
 
 class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
 
