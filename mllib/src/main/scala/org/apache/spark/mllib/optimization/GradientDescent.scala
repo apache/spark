@@ -31,7 +31,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[mllib](private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0
@@ -132,29 +132,29 @@ object GradientDescent extends Logging {
    * spark map-reduce in each iteration.
    *
    * @param data - Input data for SGD. RDD of the set of data examples, each of
-   *               the form (label, [feature values]).
+   *             the form (label, [feature values]).
    * @param gradient - Gradient object (used to compute the gradient of the loss function of
-   *                   one single data example)
+   *                 one single data example)
    * @param updater - Updater function to actually perform a gradient step in a given direction.
    * @param stepSize - initial step size for the first step
    * @param numIterations - number of iterations that SGD should be run.
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
-   *                            one iteration of SGD. Default value 1.0.
+   *                          one iteration of SGD. Default value 1.0.
    *
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the
    *         stochastic loss computed for every iteration.
    */
   def runMiniBatchSGD(
-      data: RDD[(Double, Vector)],
-      gradient: Gradient,
-      updater: Updater,
-      stepSize: Double,
-      numIterations: Int,
-      regParam: Double,
-      miniBatchFraction: Double,
-      initialWeights: Vector): (Vector, Array[Double]) = {
+    data: RDD[(Double, Vector)],
+    gradient: Gradient,
+    updater: Updater,
+    stepSize: Double,
+    numIterations: Int,
+    regParam: Double,
+    miniBatchFraction: Double,
+    initialWeights: Vector): (Vector, Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -202,6 +202,7 @@ object GradientDescent extends Logging {
          * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
+        println(s"loss $i: ${lossSum / miniBatchSize + regVal}")
         stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
         val update = updater.compute(
           weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
