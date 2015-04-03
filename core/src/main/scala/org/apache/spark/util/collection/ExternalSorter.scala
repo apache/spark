@@ -664,6 +664,8 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
+   * Exposed for testing purposes.
+   *
    * Return an iterator over all the data written to this object, grouped by partition and
    * aggregated by the requested aggregator. For each partition we then have an iterator over its
    * contents, and these are expected to be accessed in order (you can't "skip ahead" to one
@@ -673,7 +675,7 @@ private[spark] class ExternalSorter[K, V, C](
    * For now, we just merge all the spilled files in once pass, but this can be modified to
    * support hierarchical merging.
    */
-  def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
+   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
     val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
     if (spills.isEmpty && partitionWriters == null) {
@@ -726,25 +728,19 @@ private[spark] class ExternalSorter[K, V, C](
       // this simple we spill out the current in-memory collection so that everything is in files.
       spillToPartitionFiles(if (aggregator.isDefined) map else buffer)
       partitionWriters.foreach(_.commitAndClose())
-      var out: FileOutputStream = null
-      var in: FileInputStream = null
+      val out = new FileOutputStream(outputFile, true)
       val writeStartTime = System.nanoTime
-      try {
-        out = new FileOutputStream(outputFile, true)
+      util.Utils.tryWithSafeFinally {
         for (i <- 0 until numPartitions) {
-          in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          val size = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
-          in.close()
-          in = null
-          lengths(i) = size
+          val in = new FileInputStream(partitionWriters(i).fileSegment().file)
+          util.Utils.tryWithSafeFinally {
+            lengths(i) = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
+          } {
+            in.close()
+          }
         }
-      } finally {
-        if (out != null) {
-          out.close()
-        }
-        if (in != null) {
-          in.close()
-        }
+      } {
+        out.close()
         context.taskMetrics.shuffleWriteMetrics.foreach(
           _.incShuffleWriteTime(System.nanoTime - writeStartTime))
       }
@@ -781,7 +777,7 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Read a partition file back as an iterator (used in our iterator method)
    */
-  def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
+  private def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
     if (writer.isOpen) {
       writer.commitAndClose()
     }

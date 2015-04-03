@@ -15,17 +15,41 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.network;
 
-import org.apache.spark.scheduler.MapStatus
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
-/**
- * Obtained inside a map task to write out records to the shuffle system.
- */
-private[spark] trait ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
-  def write(records: Iterator[_ <: Product2[K, V]]): Unit
+public class ByteArrayWritableChannel implements WritableByteChannel {
 
-  /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean): Option[MapStatus]
+  private final byte[] data;
+  private int offset;
+
+  public ByteArrayWritableChannel(int size) {
+    this.data = new byte[size];
+    this.offset = 0;
+  }
+
+  public byte[] getData() {
+    return data;
+  }
+
+  @Override
+  public int write(ByteBuffer src) {
+    int available = src.remaining();
+    src.get(data, offset, available);
+    offset += available;
+    return available;
+  }
+
+  @Override
+  public void close() {
+
+  }
+
+  @Override
+  public boolean isOpen() {
+    return true;
+  }
+
 }
