@@ -181,12 +181,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val tableFullName =
             relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
 
-          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          catalog.synchronized {
+            catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+          }
         }
       case otherRelation =>
-        throw new NotImplementedError(
-          s"Analyze has only implemented for Hive tables, " +
-            s"but $tableName is a ${otherRelation.nodeName}")
+        throw new UnsupportedOperationException(
+          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
     }
   }
 
