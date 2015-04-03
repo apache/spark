@@ -80,6 +80,10 @@ private[spark] object JettyUtils extends Logging {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
         }
       }
+      // SPARK-5983 ensure TRACE is not supported
+      protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+      }
     }
   }
 
@@ -118,6 +122,10 @@ private[spark] object JettyUtils extends Logging {
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
         response.sendRedirect(newUrl)
+      }
+      // SPARK-5983 ensure TRACE is not supported
+      protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
       }
     }
     createServletHandler(srcPath, servlet, basePath)

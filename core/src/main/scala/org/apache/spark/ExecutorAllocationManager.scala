@@ -17,9 +17,12 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{Executors, TimeUnit}
+
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -123,10 +126,14 @@ private[spark] class ExecutorAllocationManager(
   private val intervalMillis: Long = 100
 
   // Clock used to schedule when executors should be added and removed
-  private var clock: Clock = new RealClock
+  private var clock: Clock = new SystemClock()
 
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
+
+  // Executor that handles the scheduling task.
+  private val executor = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("spark-dynamic-executor-allocation"))
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -172,32 +179,24 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Register for scheduler callbacks to decide when to add and remove executors.
+   * Register for scheduler callbacks to decide when to add and remove executors, and start
+   * the scheduling task.
    */
   def start(): Unit = {
     listenerBus.addListener(listener)
-    startPolling()
+
+    val scheduleTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(schedule())
+    }
+    executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
 
   /**
-   * Start the main polling thread that keeps track of when to add and remove executors.
+   * Stop the allocation manager.
    */
-  private def startPolling(): Unit = {
-    val t = new Thread {
-      override def run(): Unit = {
-        while (true) {
-          try {
-            schedule()
-          } catch {
-            case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
-          }
-          Thread.sleep(intervalMillis)
-        }
-      }
-    }
-    t.setName("spark-dynamic-executor-allocation")
-    t.setDaemon(true)
-    t.start()
+  def stop(): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(10, TimeUnit.SECONDS)
   }
 
   /**
@@ -587,29 +586,4 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
-}
-
-/**
- * An abstract clock for measuring elapsed time.
- */
-private trait Clock {
-  def getTimeMillis: Long
-}
-
-/**
- * A clock backed by a monotonically increasing time source.
- * The time returned by this clock does not correspond to any notion of wall-clock time.
- */
-private class RealClock extends Clock {
-  override def getTimeMillis: Long = System.nanoTime / (1000 * 1000)
-}
-
-/**
- * A clock that allows the caller to customize the time.
- * This is used mainly for testing.
- */
-private class TestClock(startTimeMillis: Long) extends Clock {
-  private var time: Long = startTimeMillis
-  override def getTimeMillis: Long = time
-  def tick(ms: Long): Unit = { time += ms }
 }

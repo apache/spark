@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -49,7 +50,7 @@ case class GeneratedAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[Distribution] =
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
@@ -60,9 +61,9 @@ case class GeneratedAggregate(
       }
     }
 
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
@@ -92,7 +93,7 @@ case class GeneratedAggregate(
           }
 
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal(null, calcType)
+        val initialValue = Literal.create(null, calcType)
 
         // Coalasce avoids double calculation...
         // but really, common sub expression elimination would be better....
@@ -136,13 +137,13 @@ case class GeneratedAggregate(
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
+                Literal.create(null, a.dataType),
                 Cast(Divide(
                   Cast(currentSum, DecimalType.Unlimited),
                   Cast(currentCount, DecimalType.Unlimited)), a.dataType))
             case _ =>
               If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
+                Literal.create(null, a.dataType),
                 Divide(Cast(currentSum, a.dataType), Cast(currentCount, a.dataType)))
           }
 
@@ -155,7 +156,7 @@ case class GeneratedAggregate(
 
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
-        val initialValue = Literal(null, expr.dataType)
+        val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
 
         AggregateEvaluation(
@@ -271,9 +272,9 @@ case class GeneratedAggregate(
           private[this] val resultIterator = buffers.entrySet.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
 
-          def hasNext = resultIterator.hasNext
+          def hasNext: Boolean = resultIterator.hasNext
 
-          def next() = {
+          def next(): Row = {
             val currentGroup = resultIterator.next()
             resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
           }

@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
-
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
@@ -58,11 +56,16 @@ class DataFrameSuite extends QueryTest {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString === "[key: int]")
+    assert(testData("key").toString === "key")
+    assert($"test".toString === "test")
   }
 
-  test("incomputable toString") {
-    assert($"test".toString === "test")
+  test("rename nested groupby") {
+    val df = Seq((1,(1,1))).toDF()
+
+    checkAnswer(
+      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      Row(1, 1) :: Nil)
   }
 
   test("invalid plan toString, debug mode") {
@@ -89,6 +92,11 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("empty data frame") {
+    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(TestSQLContext.emptyDataFrame.count() === 0)
+  }
+
   test("head and take") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
@@ -113,6 +121,17 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("self join with aliases") {
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
   test("explode") {
     val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
     val df2 =
@@ -133,6 +152,12 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
       testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("selectExpr with alias") {
+    checkAnswer(
+      testData.selectExpr("key as k").select("k"),
+      testData.select("key").collect().toSeq)
   }
 
   test("filterExpr") {
@@ -239,6 +264,10 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
 
     checkAnswer(
+      testData2.orderBy(asc("a"), desc("b")),
+      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+
+    checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
       Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
 
@@ -251,20 +280,20 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
 
     checkAnswer(
-      arrayData.toDF.orderBy('data.getItem(0).asc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
+      arrayData.toDF().orderBy('data.getItem(0).asc),
+      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.toDF.orderBy('data.getItem(0).desc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
+      arrayData.toDF().orderBy('data.getItem(0).desc),
+      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.toDF.orderBy('data.getItem(1).asc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
+      arrayData.toDF().orderBy('data.getItem(1).asc),
+      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.toDF.orderBy('data.getItem(1).desc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+      arrayData.toDF().orderBy('data.getItem(1).desc),
+      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
@@ -273,11 +302,11 @@ class DataFrameSuite extends QueryTest {
       testData.take(10).toSeq)
 
     checkAnswer(
-      arrayData.toDF.limit(1),
+      arrayData.toDF().limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
     checkAnswer(
-      mapData.toDF.limit(1),
+      mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
@@ -410,8 +439,8 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("addColumn") {
-    val df = testData.toDF.withColumn("newCol", col("key") + 1)
+  test("withColumn") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
       df,
       testData.collect().map { case Row(key: Int, value: String) =>
@@ -420,8 +449,8 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
   }
 
-  test("renameColumn") {
-    val df = testData.toDF.withColumn("newCol", col("key") + 1)
+  test("withColumnRenamed") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
     checkAnswer(
       df,
@@ -431,9 +460,65 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("apply on query results (SPARK-5462)") {
-    val df = testData.sqlContext.sql("select key from testData")
-    checkAnswer(df("key"), testData.select('key).collect().toSeq)
+  test("describe") {
+    val describeTestData = Seq(
+      ("Bob",   16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy",   24, 180)).toDF("name", "age", "height")
+
+    val describeResult = Seq(
+      Row("count",   4,               4),
+      Row("mean",    33.0,            178.0),
+      Row("stddev",  16.583123951777, 10.0),
+      Row("min",     16,              164),
+      Row("max",     60,              192))
+
+    val emptyDescribeResult = Seq(
+      Row("count",   0,    0),
+      Row("mean",    null, null),
+      Row("stddev",  null, null),
+      Row("min",     null, null),
+      Row("max",     null, null))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+
+    val describeTwoCols = describeTestData.describe("age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeTwoCols, describeResult)
+
+    val describeAllCols = describeTestData.describe()
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeAllCols, describeResult)
+
+    val describeOneCol = describeTestData.describe("age")
+    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+
+    val describeNoCol = describeTestData.select("name").describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+
+    val emptyDescription = describeTestData.limit(0).describe()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
+  test("apply on query results (SPARK-5462)") {
+    val df = testData.sqlContext.sql("select key from testData")
+    checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
+  }
+
+  ignore("show") {
+    // This test case is intended ignored, but to make sure it compiles correctly
+    testData.select($"*").show()
+    testData.select($"*").show(1000)
+  }
+
+  test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
+    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val df = TestSQLContext.createDataFrame(rowRDD, schema)
+    df.rdd.collect()
+  }
 }

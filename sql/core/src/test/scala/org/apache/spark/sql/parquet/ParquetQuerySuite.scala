@@ -68,7 +68,7 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
       val selfJoin = sql("SELECT * FROM t x JOIN t y WHERE x._1 = y._1")
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
-      assertResult(4, "Field count mismatche")(queryOutput.size)
+      assertResult(4, "Field count mismatches")(queryOutput.size)
       assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }

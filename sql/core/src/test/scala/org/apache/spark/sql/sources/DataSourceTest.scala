@@ -30,9 +30,12 @@ abstract class DataSourceTest extends QueryTest with BeforeAndAfter {
     override protected[sql] lazy val analyzer: Analyzer =
       new Analyzer(catalog, functionRegistry, caseSensitive = false) {
         override val extendedResolutionRules =
-          PreWriteCheck(catalog) ::
           PreInsertCastAndRename ::
           Nil
+
+        override val extendedCheckRules = Seq(
+          sources.PreWriteCheck(catalog)
+        )
       }
   }
 }

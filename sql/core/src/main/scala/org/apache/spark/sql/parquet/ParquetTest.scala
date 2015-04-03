@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
@@ -34,7 +33,7 @@ import org.apache.spark.util.Utils
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-trait ParquetTest {
+private[sql] trait ParquetTest {
   val sqlContext: SQLContext
 
   import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
@@ -67,8 +66,9 @@ trait ParquetTest {
    * @todo Probably this method should be moved to a more general place
    */
   protected def withTempPath(f: File => Unit): Unit = {
-    val file = util.getTempFilePath("parquetTest").getCanonicalFile
-    try f(file) finally if (file.exists()) Utils.deleteRecursively(file)
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path) finally Utils.deleteRecursively(path)
   }
 
   /**
@@ -99,7 +99,7 @@ trait ParquetTest {
    * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
     withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
@@ -120,8 +120,8 @@ trait ParquetTest {
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
-    withParquetRDD(data) { rdd =>
-      sqlContext.registerRDDAsTable(rdd, tableName)
+    withParquetDataFrame(data) { df =>
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }
@@ -129,6 +129,11 @@ trait ParquetTest {
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
     data.toDF().save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
+  }
+
+  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
+      df: DataFrame, path: File): Unit = {
+    df.save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
   }
 
   protected def makePartitionDir(

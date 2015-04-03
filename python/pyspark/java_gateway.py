@@ -38,10 +38,8 @@ def launch_gateway():
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
-        submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
-        submit_args = submit_args if submit_args is not None else ""
-        submit_args = shlex.split(submit_args)
-        command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
+        submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+        command = [os.path.join(SPARK_HOME, script)] + shlex.split(submit_args)
 
         # Start a socket that will be used by PythonGatewayServer to communicate its port to us
         callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,7 +56,6 @@ def launch_gateway():
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            env["IS_SUBPROCESS"] = "1"  # tell JVM to exit after python exits
             proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
         else:
             # preexec_fn not supported on Windows

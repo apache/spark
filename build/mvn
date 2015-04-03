@@ -21,6 +21,8 @@
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
+# Options used during compilation
+_COMPILE_JVM_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has
@@ -136,6 +138,7 @@ cd "${_CALLING_DIR}"
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running or just installed, start it
 if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
+  export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   ${ZINC_BIN} -shutdown
   ${ZINC_BIN} -start -port ${ZINC_PORT} \
     -scala-compiler "${SCALA_COMPILER}" \
@@ -143,7 +146,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
 fi
 
 # Set any `mvn` options if not already present
-export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"}
+export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 # Last, call the `mvn` command as usual
 ${MVN_BIN} "$@"

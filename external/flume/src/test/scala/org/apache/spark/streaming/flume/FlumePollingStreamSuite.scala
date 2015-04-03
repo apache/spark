@@ -34,10 +34,9 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging {
 
@@ -54,7 +53,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
 
   def beforeFunction() {
     logInfo("Using manual clock")
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
   }
 
   before(beforeFunction())
@@ -236,7 +235,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
         tx.commit()
         tx.close()
         Thread.sleep(500) // Allow some time for the events to reach
-        clock.addToTime(batchDuration.milliseconds)
+        clock.advance(batchDuration.milliseconds)
       }
       null
     }

@@ -19,7 +19,9 @@
 Fuller unit tests for Python MLlib.
 """
 
+import os
 import sys
+import tempfile
 import array as pyarray
 
 from numpy import array, array_equal
@@ -34,11 +36,14 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, Vectors, Matrices
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.feature import Word2Vec
+from pyspark.mllib.feature import IDF
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -132,6 +137,13 @@ class VectorTests(PySparkTestCase):
         for ind in [4, -5, 7.8]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
 
+    def test_matrix_indexing(self):
+        mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
+        expected = [[0, 6], [1, 8], [4, 10]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat[i, j], expected[i][j])
+
 
 class ListTests(PySparkTestCase):
 
@@ -195,7 +207,8 @@ class ListTests(PySparkTestCase):
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
-        from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
+        from pyspark.mllib.tree import DecisionTree, DecisionTreeModel, RandomForest,\
+            RandomForestModel, GradientBoostedTrees, GradientBoostedTreesModel
         data = [
             LabeledPoint(0.0, [1, 0, 0]),
             LabeledPoint(1.0, [0, 1, 1]),
@@ -204,6 +217,8 @@ class ListTests(PySparkTestCase):
         ]
         rdd = self.sc.parallelize(data)
         features = [p.features.tolist() for p in data]
+
+        temp_dir = tempfile.mkdtemp()
 
         lr_model = LogisticRegressionWithSGD.train(rdd)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
@@ -231,6 +246,11 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
+        dt_model_dir = os.path.join(temp_dir, "dt")
+        dt_model.save(self.sc, dt_model_dir)
+        same_dt_model = DecisionTreeModel.load(self.sc, dt_model_dir)
+        self.assertEqual(same_dt_model.toDebugString(), dt_model.toDebugString())
+
         rf_model = RandomForest.trainClassifier(
             rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
@@ -238,12 +258,27 @@ class ListTests(PySparkTestCase):
         self.assertTrue(rf_model.predict(features[2]) <= 0)
         self.assertTrue(rf_model.predict(features[3]) > 0)
 
+        rf_model_dir = os.path.join(temp_dir, "rf")
+        rf_model.save(self.sc, rf_model_dir)
+        same_rf_model = RandomForestModel.load(self.sc, rf_model_dir)
+        self.assertEqual(same_rf_model.toDebugString(), rf_model.toDebugString())
+
         gbt_model = GradientBoostedTrees.trainClassifier(
             rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
+
+        gbt_model_dir = os.path.join(temp_dir, "gbt")
+        gbt_model.save(self.sc, gbt_model_dir)
+        same_gbt_model = GradientBoostedTreesModel.load(self.sc, gbt_model_dir)
+        self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
+
+        try:
+            os.removedirs(temp_dir)
+        except OSError:
+            pass
 
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
@@ -297,6 +332,13 @@ class ListTests(PySparkTestCase):
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
+
+        try:
+            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+        except ValueError:
+            self.fail()
 
 
 class StatTests(PySparkTestCase):
@@ -587,6 +629,60 @@ class ChiSqTestTests(PySparkTestCase):
         chi = Statistics.chiSqTest(self.sc.parallelize(sparse_data))
         self.assertEqual(len(chi), num_cols)
         self.assertIsNotNone(chi[1000])
+
+
+class SerDeTest(PySparkTestCase):
+    def test_to_java_object_rdd(self):  # SPARK-6660
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        self.assertEqual(_to_java_object_rdd(data).count(), 10)
+
+
+class FeatureTest(PySparkTestCase):
+    def test_idf_model(self):
+        data = [
+            Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
+            Vectors.dense([1, 3, 0, 1, 3, 0, 0, 2, 0, 0, 1]),
+            Vectors.dense([1, 4, 1, 0, 0, 4, 9, 0, 1, 2, 0]),
+            Vectors.dense([2, 1, 0, 3, 0, 0, 5, 0, 2, 3, 9])
+        ]
+        model = IDF().fit(self.sc.parallelize(data, 2))
+        idf = model.idf()
+        self.assertEqual(len(idf), 11)
+
+
+class Word2VecTests(PySparkTestCase):
+    def test_word2vec_setters(self):
+        data = [
+            ["I", "have", "a", "pen"],
+            ["I", "like", "soccer", "very", "much"],
+            ["I", "live", "in", "Tokyo"]
+        ]
+        model = Word2Vec() \
+            .setVectorSize(2) \
+            .setLearningRate(0.01) \
+            .setNumPartitions(2) \
+            .setNumIterations(10) \
+            .setSeed(1024) \
+            .setMinCount(3)
+        self.assertEquals(model.vectorSize, 2)
+        self.assertTrue(model.learningRate < 0.02)
+        self.assertEquals(model.numPartitions, 2)
+        self.assertEquals(model.numIterations, 10)
+        self.assertEquals(model.seed, 1024)
+        self.assertEquals(model.minCount, 3)
+
+    def test_word2vec_get_vectors(self):
+        data = [
+            ["a", "b", "c", "d", "e", "f", "g"],
+            ["a", "b", "c", "d", "e", "f"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "b", "c", "d"],
+            ["a", "b", "c"],
+            ["a", "b"],
+            ["a"]
+        ]
+        model = Word2Vec().fit(self.sc.parallelize(data))
+        self.assertEquals(len(model.getVectors()), 3)
 
 if __name__ == "__main__":
     if not _have_scipy:

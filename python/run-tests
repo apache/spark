@@ -75,6 +75,7 @@ function run_mllib_tests() {
     echo "Run mllib tests ..."
     run_test "pyspark/mllib/classification.py"
     run_test "pyspark/mllib/clustering.py"
+    run_test "pyspark/mllib/evaluation.py"
     run_test "pyspark/mllib/feature.py"
     run_test "pyspark/mllib/linalg.py"
     run_test "pyspark/mllib/rand.py"

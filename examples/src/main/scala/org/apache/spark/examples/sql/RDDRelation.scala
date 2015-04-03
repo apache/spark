@@ -34,7 +34,7 @@ object RDDRelation {
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext.implicits._
 
-    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDF
+    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDF()
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
     df.registerTempTable("records")

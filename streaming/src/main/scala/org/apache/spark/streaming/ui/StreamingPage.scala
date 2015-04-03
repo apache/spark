@@ -32,7 +32,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   extends WebUIPage("") with Logging {
 
   private val listener = parent.listener
-  private val startTime = Calendar.getInstance().getTime()
+  private val startTime = System.currentTimeMillis()
   private val emptyCell = "-"
 
   /** Render the page */
@@ -47,7 +47,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Generate basic stats of the streaming program */
   private def generateBasicStats(): Seq[Node] = {
-    val timeSinceStart = System.currentTimeMillis() - startTime.getTime
+    val timeSinceStart = System.currentTimeMillis() - startTime
     <ul class ="unstyled">
       <li>
         <strong>Started at: </strong> {startTime.toString}

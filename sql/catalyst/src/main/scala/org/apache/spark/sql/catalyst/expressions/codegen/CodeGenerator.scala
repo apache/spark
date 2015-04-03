@@ -91,7 +91,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val startTime = System.nanoTime()
           val result = create(in)
           val endTime = System.nanoTime()
-          def timeMs = (endTime - startTime).toDouble / 1000000
+          def timeMs: Double = (endTime - startTime).toDouble / 1000000
           logInfo(s"Code generated expression $in in $timeMs ms")
           result
         }
@@ -121,7 +121,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * @param nullTerm A term that holds a boolean value representing whether the expression evaluated
    *                 to null.
    * @param primitiveTerm A term for a possible primitive value of the result of the evaluation. Not
-   *                      valid if `nullTerm` is set to `false`.
+   *                      valid if `nullTerm` is set to `true`.
    * @param objectTerm A possibly boxed version of the result of evaluating this expression.
    */
   protected case class EvaluatedExpression(
@@ -259,7 +259,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         child.castOrNull(c => q"$c.toDouble", DoubleType)
 
       case Cast(child @ NumericType(), FloatType) =>
-        child.castOrNull(c => q"$c.toFloat", IntegerType)
+        child.castOrNull(c => q"$c.toFloat", FloatType)
 
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
@@ -626,7 +626,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case FloatType => ru.Literal(Constant(-1.0.toFloat))
     case StringType => ru.Literal(Constant("<uninit>"))
     case ShortType => ru.Literal(Constant(-1.toShort))
-    case LongType => ru.Literal(Constant(1L))
+    case LongType => ru.Literal(Constant(-1L))
     case ByteType => ru.Literal(Constant(-1.toByte))
     case DoubleType => ru.Literal(Constant(-1.toDouble))
     case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"

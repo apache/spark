@@ -23,7 +23,7 @@ import scala.util.parsing.combinator.RegexParsers
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{ShowTablesCommand, UncacheTableCommand, CacheTableCommand, SetCommand}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.types.StringType
 
 
@@ -57,6 +57,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
   protected val AS      = Keyword("AS")
   protected val CACHE   = Keyword("CACHE")
+  protected val CLEAR   = Keyword("CLEAR")
   protected val IN      = Keyword("IN")
   protected val LAZY    = Keyword("LAZY")
   protected val SET     = Keyword("SET")
@@ -74,9 +75,11 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
 
   private lazy val uncache: Parser[LogicalPlan] =
-    UNCACHE ~ TABLE ~> ident ^^ {
-      case tableName => UncacheTableCommand(tableName)
-    }
+    ( UNCACHE ~ TABLE ~> ident ^^ {
+        case tableName => UncacheTableCommand(tableName)
+      }
+    | CLEAR ~ CACHE ^^^ ClearCacheCommand
+    )
 
   private lazy val set: Parser[LogicalPlan] =
     SET ~> restInput ^^ {

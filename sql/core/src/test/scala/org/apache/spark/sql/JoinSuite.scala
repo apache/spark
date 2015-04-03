@@ -34,14 +34,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.analyzed
+    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val rdd = sql(sqlString)
-    val physical = rdd.queryExecution.sparkPlan
+    val df = sql(sqlString)
+    val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: ShuffledHashJoin => j
       case j: HashOuterJoin => j
@@ -109,7 +109,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.analyzed
+    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
@@ -410,8 +410,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left semi join") {
-    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
-    checkAnswer(rdd,
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::
         Row(2, 1) ::

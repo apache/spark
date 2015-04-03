@@ -48,7 +48,7 @@ trait Saveable {
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
-   *              This directory and any intermediate directory will be created if needed.
+   *              If the directory already exists, this method throws an exception.
    */
   def save(sc: SparkContext, path: String): Unit
 
@@ -110,7 +110,7 @@ private[mllib] object Loader {
       assert(loadedFields.contains(field.name), s"Unable to parse model data." +
         s"  Expected field with name ${field.name} was missing in loaded schema:" +
         s" ${loadedFields.mkString(", ")}")
-      assert(loadedFields(field.name) == field.dataType,
+      assert(loadedFields(field.name).sameType(field.dataType),
         s"Unable to parse model data.  Expected field $field but found field" +
           s" with different type: ${loadedFields(field.name)}")
     }

@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.util.Utils
 
 class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   def runCliWithin(
@@ -38,8 +38,10 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
       queriesAndExpectedAnswers: (String, String)*) {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
-    val warehousePath = getTempFilePath("warehouse")
-    val metastorePath = getTempFilePath("metastore")
+    val warehousePath = Utils.createTempDir()
+    warehousePath.delete()
+    val metastorePath = Utils.createTempDir()
+    metastorePath.delete()
     val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
 
     val command = {

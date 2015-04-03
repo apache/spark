@@ -21,8 +21,7 @@ import java.net.URLClassLoader
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, TestUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException, TestUtils}
 
 class MutableURLClassLoaderSuite extends FunSuite {
 

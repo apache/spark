@@ -316,6 +316,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     testReduceByWindow(false);
   }
 
+  @SuppressWarnings("unchecked")
   private void testReduceByWindow(boolean withInverse) {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3),
@@ -684,6 +685,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Long> transformed1 = ssc.transform(
       listOfDStreams1,
       new Function2<List<JavaRDD<?>>, Time, JavaRDD<Long>>() {
+        @Override
         public JavaRDD<Long> call(List<JavaRDD<?>> listOfRDDs, Time time) {
           Assert.assertEquals(2, listOfRDDs.size());
           return null;
@@ -697,6 +699,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2,
       new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
+        @Override
         public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
           Assert.assertEquals(3, listOfRDDs.size());
           JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
@@ -1829,6 +1832,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     return expected;
   }
 
+  @SuppressWarnings("unchecked")
   // SPARK-5795: no logic assertions, just testing that intended API invocations compile
   private void compileSaveAsJavaAPI(JavaPairDStream<LongWritable,Text> pds) {
     pds.saveAsNewAPIHadoopFiles(
