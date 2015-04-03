@@ -27,7 +27,7 @@ private[spark]
 class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   extends OutputStream {
 
-  val output = new ByteArrayChunkOutputStream(chunkSize)
+  private[util] val output = new ByteArrayChunkOutputStream(chunkSize)
 
   private var _pos = 0
 
@@ -40,8 +40,6 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
     _pos += len
   }
 
-  def pos: Int = _pos
-
   def largeBuffer: LargeByteBuffer = {
     // Merge the underlying arrays as much as possible
     val totalSize = output.size
@@ -52,8 +50,7 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
     var pos = 0
     (0 until chunksNeeded).foreach{idx =>
       val nextSize = math.min(maxChunk, remaining).toInt
-      chunks(idx) = new Array[Byte](nextSize)
-      output.slice(pos, pos + nextSize)
+      chunks(idx) = output.slice(pos, pos + nextSize)
       pos += nextSize
       remaining -= nextSize
     }

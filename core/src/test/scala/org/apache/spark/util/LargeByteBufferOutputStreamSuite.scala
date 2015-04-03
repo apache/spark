@@ -29,11 +29,20 @@ class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
     out.write(bytes)
 
     val buffer = out.largeBuffer
-    buffer.asByteBuffer()
-  }
+    buffer.position() should be (0)
+    buffer.size() should be (100)
+    val nioBuffer = buffer.asByteBuffer()
+    nioBuffer.position() should be (0)
+    nioBuffer.capacity() should be (100)
+    nioBuffer.limit() should be (100)
 
-  test(" > 2GB .asByteBuffer appropriate exception") {
-    pending
+    val read = new Array[Byte](100)
+    buffer.get(read, 0, 100)
+    read should be (bytes)
+
+    buffer.rewind()
+    nioBuffer.get(read)
+    read should be (bytes)
   }
 
 }
