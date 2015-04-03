@@ -15,10 +15,6 @@
  * limitations under the License.
  */
 
-.vis.timeline div.content {
-  width: 100%;
-}
-
 div#application-timeline, div#job-timeline {
   margin-bottom: 30px;
 }
@@ -67,73 +63,78 @@ div#application-timeline, div#job-timeline {
   width: 100%;
   height: 19px;
 }
-.task.task-assignment-timeline-object.succeeded {
+
+.vis.timeline div.content {
+  width: 100%;
+}
+
+.vis.timeline .item.task.succeeded {
   background-color: #D5DDF6;
 }
 
-.task.task-assignment-timeline-object.failed {
+.vis.timeline .item.task.failed {
   background-color: #FF5475;
 }
 
-.task.task-assignment-timeline-object.running {
+.vis.timeline .item.task.running {
   background-color: #FDFFCA;
 }
 
-.stage.job-timeline-object.succeeded {
+.vis.timeline .item.stage.succeeded {
   background-color: #D5DDF6;
 }
 
-.stage.job-timeline-object.succeeded.selected {
+.vis.timeline .item.stage.succeeded.selected {
    background-color: #D5DDF6;
    border-color: #97B0F8;
    z-index: auto;
 }
 
-.stage.job-timeline-object.failed {
+.vis.timeline .item.stage.failed {
    background-color: #FF5475;
 }
 
-.stage.job-timeline-object.failed.selected {
+.vis.timeline .item.stage.failed.selected {
    background-color: #FF5475;
    border-color: #97B0F8;
    z-index: auto;
 }
 
-.stage.job-timeline-object.running {
+.vis.timeline .item.stage.running {
    background-color: #FDFFCA;
 }
 
-.stage.job-timeline-object.running.selected {
+.vis.timeline .item.stage.running.selected {
    background-color: #FDFFCA;
    border-color: #97B0F8;
    z-index: auto;
 }
 
-.job.application-timeline-object.succeeded {
+.vis.timeline .item.job.succeeded {
   background-color: #D5DDF6;
 }
 
-.job.application-timeline-object.succeeded.selected {
+.vis.timeline .item.job.succeeded.selected {
    background-color: #D5DDF6;
    border-color: #97B0F8;
    z-index: auto;
 }
 
-.job.application-timeline-object.failed {
+.vis.timeline .item.job.failed {
    background-color: #FF5475;
 }
 
-.job.application-timeline-object.failed.selected {
+.vis.timeline .item.job.failed.selected {
    background-color: #FF5475;
    border-color: #97B0F8;
    z-index: auto;
 }
 
-.job.application-timeline-object.running {
+.vis.timeline .item.job.running {
    background-color: #FDFFCA;
 }
 
-.job.application-timeline-object.running.selected {
+.vis.timeline .item.job.running.selected {
    background-color: #FDFFCA;
    border-color: #97B0F8;
    z-index: auto;

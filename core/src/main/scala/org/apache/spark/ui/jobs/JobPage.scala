@@ -131,7 +131,6 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           |]
         """.stripMargin
 
-
     val eventArrayAsStr =
       (stageEventJsonAsStrSeq ++ executorsJsonAsStrSeq).mkString("[", ",", "]")
 
@@ -141,7 +140,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         <span>Zoom Lock</span>
       </div>
     </div> ++
-    <div id="job-timeline"></div>
+    <div id="job-timeline"></div> ++
     <script type="text/javascript">
       {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr});")}
     </script>
