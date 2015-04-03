@@ -864,7 +864,9 @@ private[spark] class BlockManager(
       }
     }
 
-    bytesAfterPut.dispose()
+    if (bytesAfterPut != null) {
+      bytesAfterPut.dispose()
+    }
 
     if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
