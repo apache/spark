@@ -67,10 +67,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
-        val table = synchronized {
+        val table = HiveMetastoreCatalog.this.synchronized {
           client.getTable(in.database, in.name)
         }
-        val userSpecifiedSchema =
+
+        def schemaStringFromParts: Option[String] = {
           Option(table.getProperty("spark.sql.sources.schema.numParts")).map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>
               val part = table.getProperty(s"spark.sql.sources.schema.part.${index}")
@@ -82,10 +83,19 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
               part
             }
-            // Stick all parts back to a single schema string in the JSON representation
-            // and convert it back to a StructType.
-            DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+            // Stick all parts back to a single schema string.
+            parts.mkString
           }
+        }
+
+        // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
+        // After SPARK-6024, we removed this flag.
+        // Although we are not using spark.sql.sources.schema any more, we need to still support.
+        val schemaString =
+          Option(table.getProperty("spark.sql.sources.schema")).orElse(schemaStringFromParts)
+
+        val userSpecifiedSchema =
+          schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
@@ -173,12 +183,16 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   def lookupRelation(
       tableIdentifier: Seq[String],
-      alias: Option[String]): LogicalPlan = synchronized {
+      alias: Option[String]): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = try client.getTable(databaseName, tblName) catch {
+    val table = try {
+      synchronized {
+        client.getTable(databaseName, tblName)
+      }
+    } catch {
       case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
         throw new NoSuchTableException
     }
@@ -200,7 +214,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
-          HiveShim.getAllPartitionsOf(client, table).toSeq
+          synchronized {
+            HiveShim.getAllPartitionsOf(client, table).toSeq
+          }
         } else {
           Nil
         }

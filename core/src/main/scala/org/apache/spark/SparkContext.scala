@@ -433,6 +433,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
+    override protected def initialValue(): Properties = new Properties()
   }
 
   /**
@@ -474,9 +475,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Spark fair scheduler pool.
    */
   def setLocalProperty(key: String, value: String) {
-    if (localProperties.get() == null) {
-      localProperties.set(new Properties())
-    }
     if (value == null) {
       localProperties.get.remove(key)
     } else {

@@ -605,7 +605,6 @@ private[spark] object PythonRDD extends Logging {
    */
   private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1)
-    serverSocket.setReuseAddress(true)
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
 

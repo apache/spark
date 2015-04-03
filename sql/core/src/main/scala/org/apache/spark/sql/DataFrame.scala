@@ -903,8 +903,9 @@ class DataFrame private[sql](
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    val repartitioned = queryExecution.toRdd.map(_.copy()).repartition(numPartitions)
-    DataFrame(sqlContext, LogicalRDD(schema.toAttributes, repartitioned)(sqlContext))
+    sqlContext.createDataFrame(
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
+      schema, needsConversion = false)
   }
 
   /**

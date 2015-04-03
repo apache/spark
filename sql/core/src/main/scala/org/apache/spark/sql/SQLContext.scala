@@ -392,33 +392,24 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
-    // schema differs from the existing schema on any field data type.
-    def needsConversion(dt: DataType): Boolean = dt match {
-      case StringType => true
-      case DateType => true
-      case DecimalType() => true
-      case dt: ArrayType => needsConversion(dt.elementType)
-      case dt: MapType => needsConversion(dt.keyType) || needsConversion(dt.valueType)
-      case dt: StructType => !dt.fields.forall(f => !needsConversion(f.dataType))
-      case other => false
-    }
-    val convertedRdd = if (needsConversion(schema)) {
-      RDDConversions.rowToRowRdd(rowRDD, schema)
-    } else {
-      rowRDD
-    }
-    DataFrame(this, LogicalRDD(schema.toAttributes, convertedRdd)(self))
+    createDataFrame(rowRDD, schema, needsConversion = true)
   }
 
   /**
-   * An internal API to apply a new schema on existing DataFrame without do the
-   * conversion for Rows.
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
    */
-  private[sql] def createDataFrame(df: DataFrame, schema: StructType): DataFrame = {
+  private[sql]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    DataFrame(this, LogicalRDD(schema.toAttributes, df.queryExecution.toRdd)(self))
+    val catalystRows = if (needsConversion) {
+      rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    } else {
+      rowRDD
+    }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
   }
 
   /**
@@ -627,7 +618,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**
@@ -656,7 +647,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**

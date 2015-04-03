@@ -70,15 +70,15 @@ trait ScalaReflection {
         p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
           convertToCatalyst(elem, field.dataType)
         }.toArray)
+    case (d: BigDecimal, _) => Decimal(d)
+    case (d: java.math.BigDecimal, _) => Decimal(d)
+    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
+    case (s: String, _) => UTF8String(s)
     case (r: Row, structType: StructType) =>
       new GenericRow(
         r.toSeq.zip(structType.fields).map { case (elem, field) =>
           convertToCatalyst(elem, field.dataType)
         }.toArray)
-    case (d: BigDecimal, _) => Decimal(d)
-    case (d: java.math.BigDecimal, _) => Decimal(d)
-    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
-    case (s: String, _) => UTF8String(s)
     case (other, _) => other
   }
 
