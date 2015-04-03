@@ -473,7 +473,6 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
     // So, we expect it is not cached.
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
@@ -481,7 +480,6 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |select a, b from jt
       """.stripMargin)
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")
