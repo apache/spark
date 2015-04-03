@@ -861,7 +861,7 @@ private[hive] case class MetastoreRelation
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 
-  override def newInstance() = {
+  override def newInstance(): MetastoreRelation = {
     MetastoreRelation(databaseName, tableName, alias)(table, partitions)(sqlContext)
   }
 }
