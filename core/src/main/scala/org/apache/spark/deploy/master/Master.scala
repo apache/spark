@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.io.FileNotFoundException
-import java.net.URLEncoder
+import java.net.{URI, URLEncoder}
 import java.text.SimpleDateFormat
 import java.util.Date
 
