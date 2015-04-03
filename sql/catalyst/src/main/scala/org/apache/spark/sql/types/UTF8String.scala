@@ -30,7 +30,7 @@ import java.util.Arrays
 
 final class UTF8String extends Ordered[UTF8String] with Serializable {
 
-  private var bytes: Array[Byte] = _
+  private[this] var bytes: Array[Byte] = _
 
   /**
    * Update the UTF8String with String.
@@ -48,6 +48,12 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     this
   }
 
+  @inline
+  private[this] def numOfBytes(b: Byte): Int = {
+    val offset = (b & 0xFF) - 192
+    if (offset >= 0) UTF8String.tailBytesOfUTF8(offset) else 1
+  }
+
   /**
    * Return the number of code points in it.
    *
@@ -57,11 +63,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     var len = 0
     var i: Int = 0
     while (i < bytes.length) {
-      val b = bytes(i) & 0xFF
-      i += 1
-      if (b >= 192) {
-        i += UTF8String.tailBytesOfUTF8(b - 192)
-      }
+      i += numOfBytes(bytes(i))
       len += 1
     }
     len
@@ -84,35 +86,47 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     var c = 0
     var i: Int = 0
     while (c < start && i < bytes.length) {
-      val b = bytes(i) & 0xFF
-      i += 1
-      if (b >= 192) {
-        i += UTF8String.tailBytesOfUTF8(b - 192)
-      }
+      i += numOfBytes(bytes(i))
       c += 1
     }
     var j = i
     while (c < until && j < bytes.length) {
-      val b = bytes(j) & 0xFF
-      j += 1
-      if (b >= 192) {
-        j += UTF8String.tailBytesOfUTF8(b - 192)
-      }
+      j += numOfBytes(bytes(j))
       c += 1
     }
     UTF8String(Arrays.copyOfRange(bytes, i, j))
   }
 
   def contains(sub: UTF8String): Boolean = {
-    bytes.containsSlice(sub.bytes)
+    val b = sub.getBytes
+    if (b.length == 0) {
+      return true
+    }
+    var i: Int = 0
+    while (i <= bytes.length - b.length) {
+      // In worst case, it's O(N*K), but should works fine with SQL
+      if (bytes(i) == b(0) && Arrays.equals(Arrays.copyOfRange(bytes, i, i + b.length), b)) {
+        return true
+      }
+      i += 1
+    }
+    false
   }
 
   def startsWith(prefix: UTF8String): Boolean = {
-    bytes.startsWith(prefix.bytes)
+    val b = prefix.getBytes
+    if (b.length > bytes.length) {
+      return false
+    }
+    Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b)
   }
 
   def endsWith(suffix: UTF8String): Boolean = {
-    bytes.endsWith(suffix.bytes)
+    val b = suffix.getBytes
+    if (b.length > bytes.length) {
+      return false
+    }
+    Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b)
   }
 
   def toUpperCase(): UTF8String = {
@@ -133,12 +147,13 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   override def compare(other: UTF8String): Int = {
     var i: Int = 0
-    while (i < bytes.length && i < other.bytes.length) {
-      val res = bytes(i).compareTo(other.bytes(i))
+    val b = other.getBytes
+    while (i < bytes.length && i < b.length) {
+      val res = bytes(i).compareTo(b(i))
       if (res != 0) return res
       i += 1
     }
-    bytes.length - other.bytes.length
+    bytes.length - b.length
   }
 
   override def compareTo(other: UTF8String): Int = {
@@ -147,7 +162,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   override def equals(other: Any): Boolean = other match {
     case s: UTF8String =>
-      Arrays.equals(bytes, s.bytes)
+      Arrays.equals(bytes, s.getBytes)
     case s: String =>
       // fail fast
       bytes.length >= s.length && length() == s.length && toString() == s
@@ -163,10 +178,12 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 object UTF8String {
   // number of tailing bytes in a UTF8 sequence for a code point
   // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
-  private[types] val tailBytesOfUTF8: Array[Int] = Array(1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
-    3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5)
+  private[types] val tailBytesOfUTF8: Array[Int] = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    5, 5, 5, 5,
+    6, 6, 6, 6)
 
   /**
    * Create a UTF-8 String from String
