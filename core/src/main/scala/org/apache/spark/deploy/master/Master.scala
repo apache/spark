@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.io.FileNotFoundException
-import java.net.URLEncoder
+import java.net.{URI, URLEncoder}
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -755,7 +755,7 @@ private[master] class Master(
         }
       
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+          new URI(eventLogDir), app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
           EventLoggingListener.IN_PROGRESS))
