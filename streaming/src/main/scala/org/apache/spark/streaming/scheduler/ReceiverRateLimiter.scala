@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.TimeUnit._
@@ -20,7 +37,7 @@ import org.apache.spark.streaming.receiver.UpdatedDynamicRate
   *
   */
 private[streaming]
-abstract class ReceiverRateLimiter extends Serializable {
+abstract class ReceiverRateLimiter extends Serializable with Logging {
   self: RateLimiter =>
 
   private val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
@@ -37,8 +54,9 @@ abstract class ReceiverRateLimiter extends Serializable {
           throw new IllegalStateException("Illegal status: cannot get the processed time"))
 
         computeEffectiveRate(processedRecords, processedTimeInMs)
-        updateDynamicRate(
-          streamingContext.scheduler.receiverTracker.receiverInfo(streamId).actor)
+        streamingContext.scheduler.receiverTracker.receiverInfo.get(streamId).foreach {
+          r => updateDynamicRate(r.actor)
+        }
       }
     }
 
@@ -49,8 +67,16 @@ abstract class ReceiverRateLimiter extends Serializable {
 
   def streamingContext: StreamingContext
 
+  /**
+   * Send the current updated effective rate to executor side
+   * @param receiver the ActorRef of remote receiver
+   */
   def updateDynamicRate(receiver: ActorRef): Unit
 
+  /**
+   * Update the effective rate on executor side, this function is called executor side.
+   * @param updatedRate the updated effective rate
+   */
   def remoteUpdateDynamicRate(updatedRate: Double): Unit
 
    @tailrec
@@ -64,7 +90,7 @@ abstract class ReceiverRateLimiter extends Serializable {
     }
   }
 
-  private def computeWaitTime(effectiveRate: Double): Long = {
+  protected def computeWaitTime(effectiveRate: Double): Long = {
     val now = System.nanoTime
     val elapsedNanosecs = math.max(now - lastSyncTime, 1)
     val receiveRate = messagesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs
@@ -83,7 +109,13 @@ abstract class ReceiverRateLimiter extends Serializable {
       val targetTimeInMillis = (messagesWrittenSinceSync * 1000 / effectiveRate).toInt
       val elapsedTimeInMillis = elapsedNanosecs / 1000000
       val sleepTimeInMillis = targetTimeInMillis - elapsedTimeInMillis
-      if (sleepTimeInMillis > 0L) sleepTimeInMillis else 0L
+      if (sleepTimeInMillis > 0L) {
+        logTrace(s"Current rate $effectiveRate cannot catch up with receive rate $receiveRate, " +
+          s"sleep for $sleepTimeInMillis ms")
+        sleepTimeInMillis
+      } else {
+        0L
+      }
     }
   }
 }
@@ -94,8 +126,7 @@ class FixedReceiverRateLimiter(
     val streamId: Int,
     val defaultRate: Double,
     @transient val streamingContext: StreamingContext = null)
-  extends ReceiverRateLimiter with Logging with FixedRateLimiter {
-
+  extends ReceiverRateLimiter with FixedRateLimiter {
   if (isDriver) assert(streamingContext != null)
 
   def updateDynamicRate(receiver: ActorRef): Unit = {
@@ -113,8 +144,7 @@ class DynamicReceiverRateLimiter(
     val defaultRate: Double,
     val slowStartInitialRate: Double,
     @transient val streamingContext: StreamingContext = null)
-  extends ReceiverRateLimiter with Logging with DynamicRateLimiter {
-
+  extends ReceiverRateLimiter with DynamicRateLimiter {
   if (isDriver) assert(streamingContext != null)
 
   def updateDynamicRate(receiver: ActorRef): Unit = {

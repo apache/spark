@@ -110,9 +110,9 @@ class DirectKafkaInputDStream[
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
-    val processedOffsets = untilOffsets.values.map(_.offset).sum
-      - currentOffsets.values.sum
-    directRateLimiter.updateProcessedRecords(validTime, processedOffsets)
+    val sumUntilOffsets = untilOffsets.values.map(_.offset).sum
+    val sumCurrentOffsets = currentOffsets.values.sum
+    directRateLimiter.updateProcessedRecords(validTime, sumUntilOffsets - sumCurrentOffsets)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)
