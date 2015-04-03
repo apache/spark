@@ -59,7 +59,7 @@ class ExecutorRunnable(
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   lazy val env = prepareEnvironment(container)
 
-  def run(): Unit = {
+  override def run(): Unit = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
     nmClient.init(yarnConf)
