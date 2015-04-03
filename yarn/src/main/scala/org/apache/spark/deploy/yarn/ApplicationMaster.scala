@@ -193,6 +193,8 @@ private[spark] class ApplicationMaster(
       finalStatus = status
       finalMsg = msg
       finished = true
+      allocator.removeContainerRequests()
+      allocator.releaseAssignedContainers()
       if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
         logDebug("shutting down reporter thread")
         reporterThread.interrupt()
