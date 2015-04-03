@@ -240,10 +240,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
-  def master = _conf.get("spark.master")
-  def appName = _conf.get("spark.app.name")
+  def master: String = _conf.get("spark.master")
+  def appName: String = _conf.get("spark.app.name")
 
-  private[spark] def isEventLogEnabled = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
   private[spark] def eventLogDir: Option[String] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
@@ -251,7 +251,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Add a timestamp as the suffix here to make it more safe
   val tachyonFolderName = "spark-" + randomUUID.toString()
 
-  def isLocal = (master == "local" || master.startsWith("local["))
+  def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
