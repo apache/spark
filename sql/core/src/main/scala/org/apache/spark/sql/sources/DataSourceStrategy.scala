@@ -173,7 +173,7 @@ private[sql] object DataSourceStrategy extends Strategy {
       case expressions.EndsWith(a: Attribute, Literal(v: String, StringType)) =>
         Some(sources.StringEndsWith(a.name, v))
 
-      case expressions.EndsWith(a: Attribute, Literal(v: String, StringType)) =>
+      case expressions.Contains(a: Attribute, Literal(v: String, StringType)) =>
         Some(sources.StringContains(a.name, v))
 
       case _ => None

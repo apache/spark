@@ -111,7 +111,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   test("3VL Not") {
     notTrueTable.foreach {
       case (v, answer) =>
-        checkEvaluation(!Literal(v, BooleanType), answer)
+        checkEvaluation(!Literal.create(v, BooleanType), answer)
     }
   }
 
@@ -155,7 +155,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     test(s"3VL $name") {
       truthTable.foreach {
         case (l,r,answer) =>
-          val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
+          val expr = op(Literal.create(l, BooleanType), Literal.create(r, BooleanType))
           checkEvaluation(expr, answer)
       }
     }
@@ -175,12 +175,12 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(Divide(Literal(1), Literal(0)), null)
     checkEvaluation(Divide(Literal(1.0), Literal(0.0)), null)
     checkEvaluation(Divide(Literal(0.0), Literal(0.0)), null)
-    checkEvaluation(Divide(Literal(0), Literal(null, IntegerType)), null)
-    checkEvaluation(Divide(Literal(1), Literal(null, IntegerType)), null)
-    checkEvaluation(Divide(Literal(null, IntegerType), Literal(0)), null)
-    checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
-    checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
-    checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(0), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(1), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Divide(Literal.create(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
   test("Remainder") {
@@ -190,12 +190,12 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(Remainder(Literal(1), Literal(0)), null)
     checkEvaluation(Remainder(Literal(1.0), Literal(0.0)), null)
     checkEvaluation(Remainder(Literal(0.0), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(0), Literal(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal(1), Literal(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(0)), null)
-    checkEvaluation(Remainder(Literal(null, DoubleType), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(1)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(0), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(1), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Remainder(Literal.create(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
   test("INSET") {
@@ -222,14 +222,14 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(MaxOf(1L, 2L), 2L)
     checkEvaluation(MaxOf(2L, 1L), 2L)
 
-    checkEvaluation(MaxOf(Literal(null, IntegerType), 2), 2)
-    checkEvaluation(MaxOf(2, Literal(null, IntegerType)), 2)
+    checkEvaluation(MaxOf(Literal.create(null, IntegerType), 2), 2)
+    checkEvaluation(MaxOf(2, Literal.create(null, IntegerType)), 2)
   }
 
   test("LIKE literal Regular Expression") {
-    checkEvaluation(Literal(null, StringType).like("a"), null)
-    checkEvaluation(Literal("a", StringType).like(Literal(null, StringType)), null)
-    checkEvaluation(Literal(null, StringType).like(Literal(null, StringType)), null)
+    checkEvaluation(Literal.create(null, StringType).like("a"), null)
+    checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation("abdef" like "abdef", true)
     checkEvaluation("a_%b" like "a\\__b", true)
     checkEvaluation("addb" like "a_%b", true)
@@ -264,13 +264,13 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
     checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
 
-    checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation(Literal.create(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
 
   test("RLIKE literal Regular Expression") {
-    checkEvaluation(Literal(null, StringType) rlike "abdef", null)
-    checkEvaluation("abdef" rlike Literal(null, StringType), null)
-    checkEvaluation(Literal(null, StringType) rlike Literal(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) rlike "abdef", null)
+    checkEvaluation("abdef" rlike Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) rlike Literal.create(null, StringType), null)
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
 
@@ -381,7 +381,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(("abcdef" cast DoubleType).nullable === true)
     assert(("abcdef" cast FloatType).nullable === true)
 
-    checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
+    checkEvaluation(Cast(Literal.create(null, IntegerType), ShortType), null)
   }
 
   test("date") {
@@ -507,8 +507,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("array casting") {
-    val array = Literal(Seq("123", "abc", "", null), ArrayType(StringType, containsNull = true))
-    val array_notNull = Literal(Seq("123", "abc", ""), ArrayType(StringType, containsNull = false))
+    val array = Literal.create(Seq("123", "abc", "", null), ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "abc", ""), ArrayType(StringType, containsNull = false))
 
     {
       val cast = Cast(array, ArrayType(IntegerType, containsNull = true))
@@ -556,10 +556,10 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("map casting") {
-    val map = Literal(
+    val map = Literal.create(
       Map("a" -> "123", "b" -> "abc", "c" -> "", "d" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
-    val map_notNull = Literal(
+    val map_notNull = Literal.create(
       Map("a" -> "123", "b" -> "abc", "c" -> ""),
       MapType(StringType, StringType, valueContainsNull = false))
 
@@ -617,14 +617,14 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("struct casting") {
-    val struct = Literal(
+    val struct = Literal.create(
       Row("123", "abc", "", null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true),
         StructField("d", StringType, nullable = true))))
-    val struct_notNull = Literal(
+    val struct_notNull = Literal.create(
       Row("123", "abc", ""),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
@@ -712,7 +712,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   test("complex casting") {
-    val complex = Literal(
+    val complex = Literal.create(
       Row(
         Seq("123", "abc", ""),
         Map("a" -> "123", "b" -> "abc", "c" -> ""),
@@ -755,30 +755,30 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(c2.isNull, true, row)
     checkEvaluation(c2.isNotNull, false, row)
 
-    checkEvaluation(Literal(1, ShortType).isNull, false)
-    checkEvaluation(Literal(1, ShortType).isNotNull, true)
+    checkEvaluation(Literal.create(1, ShortType).isNull, false)
+    checkEvaluation(Literal.create(1, ShortType).isNotNull, true)
 
-    checkEvaluation(Literal(null, ShortType).isNull, true)
-    checkEvaluation(Literal(null, ShortType).isNotNull, false)
+    checkEvaluation(Literal.create(null, ShortType).isNull, true)
+    checkEvaluation(Literal.create(null, ShortType).isNotNull, false)
 
     checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
-    checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
-    checkEvaluation(Coalesce(Literal(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
+    checkEvaluation(Coalesce(Literal.create(null, StringType) :: Nil), null, row)
+    checkEvaluation(Coalesce(Literal.create(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
 
-    checkEvaluation(If(c3, Literal("a", StringType), Literal("b", StringType)), "a", row)
+    checkEvaluation(If(c3, Literal.create("a", StringType), Literal.create("b", StringType)), "a", row)
     checkEvaluation(If(c3, c1, c2), "^Ba*n", row)
     checkEvaluation(If(c4, c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(null, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(true, BooleanType), c1, c2), "^Ba*n", row)
-    checkEvaluation(If(Literal(false, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(false, BooleanType),
-      Literal("a", StringType), Literal("b", StringType)), "b", row)
+    checkEvaluation(If(Literal.create(null, BooleanType), c2, c1), "^Ba*n", row)
+    checkEvaluation(If(Literal.create(true, BooleanType), c1, c2), "^Ba*n", row)
+    checkEvaluation(If(Literal.create(false, BooleanType), c2, c1), "^Ba*n", row)
+    checkEvaluation(If(Literal.create(false, BooleanType),
+      Literal.create("a", StringType), Literal.create("b", StringType)), "b", row)
 
     checkEvaluation(c1 in (c1, c2), true, row)
     checkEvaluation(
-      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType)), true, row)
+      Literal.create("^Ba*n", StringType) in (Literal.create("^Ba*n", StringType)), true, row)
     checkEvaluation(
-      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType), c2), true, row)
+      Literal.create("^Ba*n", StringType) in (Literal.create("^Ba*n", StringType), c2), true, row)
   }
 
   test("case when") {
@@ -793,9 +793,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(CaseWhen(Seq(c1, c4, c6)), "c", row)
     checkEvaluation(CaseWhen(Seq(c2, c4, c6)), "c", row)
     checkEvaluation(CaseWhen(Seq(c3, c4, c6)), "a", row)
-    checkEvaluation(CaseWhen(Seq(Literal(null, BooleanType), c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(Literal(false, BooleanType), c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(Literal(true, BooleanType), c4, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq(Literal.create(null, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal.create(false, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal.create(true, BooleanType), c4, c6)), "a", row)
 
     checkEvaluation(CaseWhen(Seq(c3, c4, c2, c5, c6)), "a", row)
     checkEvaluation(CaseWhen(Seq(c2, c4, c3, c5, c6)), "b", row)
@@ -841,17 +841,17 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
     checkEvaluation(GetItem(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
-    checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
-    checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
+    checkEvaluation(GetItem(Literal.create(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(GetItem(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
     checkEvaluation(GetItem(BoundReference(3, typeMap, true),
-      Literal(null, StringType)), null, row)
+      Literal.create(null, StringType)), null, row)
 
     checkEvaluation(GetItem(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
-    checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
-    checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
+    checkEvaluation(GetItem(Literal.create(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(GetItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
     checkEvaluation(GetItem(BoundReference(4, typeArray, true),
-      Literal(null, IntegerType)), null, row)
+      Literal.create(null, IntegerType)), null, row)
 
     def quickBuildGetField(expr: Expression, fieldName: String) = {
       expr.dataType match {
@@ -864,7 +864,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     def quickResolve(u: UnresolvedGetField) = quickBuildGetField(u.child, u.fieldName)
 
     checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(quickBuildGetField(Literal(null, typeS), "a"), null, row)
+    checkEvaluation(quickBuildGetField(Literal.create(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
@@ -874,8 +874,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
     assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
-    assert(quickBuildGetField(Literal(null, typeS), "a").nullable === true)
-    assert(quickBuildGetField(Literal(null, typeS_notNullable), "a").nullable === true)
+    assert(quickBuildGetField(Literal.create(null, typeS), "a").nullable === true)
+    assert(quickBuildGetField(Literal.create(null, typeS_notNullable), "a").nullable === true)
 
     checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
     checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
@@ -890,13 +890,13 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val c4 = 'a.int.at(3)
 
     checkEvaluation(UnaryMinus(c1), -1, row)
-    checkEvaluation(UnaryMinus(Literal(100, IntegerType)), -100)
+    checkEvaluation(UnaryMinus(Literal.create(100, IntegerType)), -100)
 
     checkEvaluation(Add(c1, c4), null, row)
     checkEvaluation(Add(c1, c2), 3, row)
-    checkEvaluation(Add(c1, Literal(null, IntegerType)), null, row)
-    checkEvaluation(Add(Literal(null, IntegerType), c2), null, row)
-    checkEvaluation(Add(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(Add(c1, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(Add(Literal.create(null, IntegerType), c2), null, row)
+    checkEvaluation(Add(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(-c1, -1, row)
     checkEvaluation(c1 + c2, 3, row)
@@ -914,12 +914,12 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val c4 = 'a.double.at(3)
 
     checkEvaluation(UnaryMinus(c1), -1.1, row)
-    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0)
+    checkEvaluation(UnaryMinus(Literal.create(100.0, DoubleType)), -100.0)
     checkEvaluation(Add(c1, c4), null, row)
     checkEvaluation(Add(c1, c2), 3.1, row)
-    checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
-    checkEvaluation(Add(Literal(null, DoubleType), c2), null, row)
-    checkEvaluation(Add(Literal(null, DoubleType), Literal(null, DoubleType)), null, row)
+    checkEvaluation(Add(c1, Literal.create(null, DoubleType)), null, row)
+    checkEvaluation(Add(Literal.create(null, DoubleType), c2), null, row)
+    checkEvaluation(Add(Literal.create(null, DoubleType), Literal.create(null, DoubleType)), null, row)
 
     checkEvaluation(-c1, -1.1, row)
     checkEvaluation(c1 + c2, 3.1, row)
@@ -940,9 +940,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
     checkEvaluation(LessThan(c1, c4), null, row)
     checkEvaluation(LessThan(c1, c2), true, row)
-    checkEvaluation(LessThan(c1, Literal(null, IntegerType)), null, row)
-    checkEvaluation(LessThan(Literal(null, IntegerType), c2), null, row)
-    checkEvaluation(LessThan(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(LessThan(c1, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(LessThan(Literal.create(null, IntegerType), c2), null, row)
+    checkEvaluation(LessThan(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(c1 < c2, true, row)
     checkEvaluation(c1 <= c2, true, row)
@@ -954,8 +954,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(c1 <=> c4, false, row)
     checkEvaluation(c4 <=> c6, true, row)
     checkEvaluation(c3 <=> c5, true, row)
-    checkEvaluation(Literal(true) <=> Literal(null, BooleanType), false, row)
-    checkEvaluation(Literal(null, BooleanType) <=> Literal(true), false, row)
+    checkEvaluation(Literal(true) <=> Literal.create(null, BooleanType), false, row)
+    checkEvaluation(Literal.create(null, BooleanType) <=> Literal(true), false, row)
   }
 
   test("StringComparison") {
@@ -966,17 +966,17 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(c1 contains "b", true, row)
     checkEvaluation(c1 contains "x", false, row)
     checkEvaluation(c2 contains "b", null, row)
-    checkEvaluation(c1 contains Literal(null, StringType), null, row)
+    checkEvaluation(c1 contains Literal.create(null, StringType), null, row)
 
     checkEvaluation(c1 startsWith "a", true, row)
     checkEvaluation(c1 startsWith "b", false, row)
     checkEvaluation(c2 startsWith "a", null, row)
-    checkEvaluation(c1 startsWith Literal(null, StringType), null, row)
+    checkEvaluation(c1 startsWith Literal.create(null, StringType), null, row)
 
     checkEvaluation(c1 endsWith "c", true, row)
     checkEvaluation(c1 endsWith "b", false, row)
     checkEvaluation(c2 endsWith "b", null, row)
-    checkEvaluation(c1 endsWith Literal(null, StringType), null, row)
+    checkEvaluation(c1 endsWith Literal.create(null, StringType), null, row)
   }
 
   test("Substring") {
@@ -985,54 +985,54 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val s = 'a.string.at(0)
 
     // substring from zero position with less-than-full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)), "ex", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(2, IntegerType)), "ex", row)
+    checkEvaluation(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)), "ex", row)
+    checkEvaluation(Substring(s, Literal.create(1, IntegerType), Literal.create(2, IntegerType)), "ex", row)
 
     // substring from zero position with full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(7, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(7, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(0, IntegerType), Literal.create(7, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(1, IntegerType), Literal.create(7, IntegerType)), "example", row)
 
     // substring from zero position with greater-than-full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(100, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(100, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(0, IntegerType), Literal.create(100, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(1, IntegerType), Literal.create(100, IntegerType)), "example", row)
 
     // substring from nonzero position with less-than-full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(2, IntegerType)), "xa", row)
+    checkEvaluation(Substring(s, Literal.create(2, IntegerType), Literal.create(2, IntegerType)), "xa", row)
 
     // substring from nonzero position with full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(6, IntegerType)), "xample", row)
+    checkEvaluation(Substring(s, Literal.create(2, IntegerType), Literal.create(6, IntegerType)), "xample", row)
 
     // substring from nonzero position with greater-than-full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(100, IntegerType)), "xample", row)
+    checkEvaluation(Substring(s, Literal.create(2, IntegerType), Literal.create(100, IntegerType)), "xample", row)
 
     // zero-length substring (within string bounds)
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(0, IntegerType)), "", row)
+    checkEvaluation(Substring(s, Literal.create(0, IntegerType), Literal.create(0, IntegerType)), "", row)
 
     // zero-length substring (beyond string bounds)
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), "", row)
+    checkEvaluation(Substring(s, Literal.create(100, IntegerType), Literal.create(4, IntegerType)), "", row)
 
     // substring(null, _, _) -> null
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Substring(s, Literal.create(100, IntegerType), Literal.create(4, IntegerType)), null, new GenericRow(Array[Any](null)))
 
     // substring(_, null, _) -> null
-    checkEvaluation(Substring(s, Literal(null, IntegerType), Literal(4, IntegerType)), null, row)
+    checkEvaluation(Substring(s, Literal.create(null, IntegerType), Literal.create(4, IntegerType)), null, row)
 
     // substring(_, _, null) -> null
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(Substring(s, Literal.create(100, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     // 2-arg substring from zero position
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(0, IntegerType), Literal.create(Integer.MAX_VALUE, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal.create(1, IntegerType), Literal.create(Integer.MAX_VALUE, IntegerType)), "example", row)
 
     // 2-arg substring from nonzero position
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
+    checkEvaluation(Substring(s, Literal.create(2, IntegerType), Literal.create(Integer.MAX_VALUE, IntegerType)), "xample", row)
 
     val s_notNull = 'a.string.notNull.at(0)
 
-    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
-    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable === false)
+    assert(Substring(s_notNull, Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable === true)
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)
@@ -1050,7 +1050,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       checkEvaluation(Sqrt(d), expected, row)
     }
 
-    checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, new GenericRow(Array[Any](null)))
     checkEvaluation(Sqrt(-1), null, EmptyRow)
     checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
@@ -1064,22 +1064,22 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
     checkEvaluation(BitwiseAnd(c1, c4), null, row)
     checkEvaluation(BitwiseAnd(c1, c2), 0, row)
-    checkEvaluation(BitwiseAnd(c1, Literal(null, IntegerType)), null, row)
-    checkEvaluation(BitwiseAnd(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(c1, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(BitwiseOr(c1, c4), null, row)
     checkEvaluation(BitwiseOr(c1, c2), 3, row)
-    checkEvaluation(BitwiseOr(c1, Literal(null, IntegerType)), null, row)
-    checkEvaluation(BitwiseOr(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(c1, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(BitwiseXor(c1, c4), null, row)
     checkEvaluation(BitwiseXor(c1, c2), 3, row)
-    checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
-    checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(c1, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(BitwiseNot(c4), null, row)
     checkEvaluation(BitwiseNot(c1), -2, row)
-    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseNot(Literal.create(null, IntegerType)), null, row)
 
     checkEvaluation(c1 & c2, 0, row)
     checkEvaluation(c1 | c2, 3, row)
