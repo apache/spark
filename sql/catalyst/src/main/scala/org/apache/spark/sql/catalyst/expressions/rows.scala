@@ -224,6 +224,7 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
             n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case n: NativeType if order.direction == Descending =>
             n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case other => sys.error(s"Type $other does not support ordered operations")
         }
         if (comparison != 0) return comparison
       }
