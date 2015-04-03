@@ -37,17 +37,23 @@ class LRonGraphXSuite extends FunSuite with LocalClusterSparkContext with Matche
 
     //    val dataSetFile = s"/input/lbs/recommend/kdda/*"
     //    val dataSetFile = s"/input/lbs/recommend/url_combined/*"
+    //    val dataSetFile = "/input/lbs/recommend/trainingset/*"
     //    val dataSet = MLUtils.loadLibSVMFile(sc, dataSetFile).repartition(72)
 
-    val trainSet = dataSet
-    val stepSize = 1e-1
+
+    val stepSize = 0.1
     val numIterations = 1000
-    val regParam = 0.0
-    LRonGraphX.train(trainSet, numIterations, stepSize, regParam)
+    val regParam = 1e-2
+    val trainSet = dataSet.cache()
+    LRonGraphX.train(trainSet, numIterations, stepSize, regParam, true)
+
 
     //    val trainSet = dataSet.map(t => {
     //      LabeledPoint(if (t.label > 0) 1 else 0, t.features)
     //    }).cache()
+    //    LogisticRegressionWithSGD.train(trainSet, numIterations)
+
+
     //    val algorithm = new LogisticRegressionWithLBFGS()
     //    algorithm.optimizer.setNumIterations(1000).setUpdater(new L1Updater()).setRegParam(regParam)
     //    algorithm.run(trainSet)

@@ -34,14 +34,16 @@ class LRonGraphX(
   @transient var dataSet: Graph[VD, ED],
   val stepSize: Double,
   val regParam: Double,
+  val useAdaGrad: Boolean,
   @transient var storageLevel: StorageLevel) extends Serializable with Logging {
 
   def this(
     input: RDD[(VertexId, LabeledPoint)],
     stepSize: Double = 1e-4,
     regParam: Double = 0.0,
+    useAdaGrad: Boolean,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK) {
-    this(initializeDataSet(input, storageLevel), stepSize, regParam, storageLevel)
+    this(initializeDataSet(input, storageLevel), stepSize, regParam, useAdaGrad, storageLevel)
   }
 
   if (dataSet.vertices.getStorageLevel == StorageLevel.NONE) {
@@ -49,6 +51,7 @@ class LRonGraphX(
   }
 
   @transient private var innerIter = 1
+  @transient private var deltaSum: VertexRDD[Double] = null
   lazy val numFeatures: Long = features.count()
   lazy val numSamples: Long = samples.count()
 
@@ -67,20 +70,33 @@ class LRonGraphX(
     for (iter <- 1 to iterations) {
       val previousDataSet = dataSet
       logInfo(s"Start train (Iteration $iter/$iterations)")
-      val q = forward()
-      q.persist(storageLevel)
-      println(s"train (Iteration $iter/$iterations) Log likelihood : ${logLikelihood(q)}")
-      val delta = backward(q)
-      delta.persist(storageLevel)
-      dataSet = updateWeight(delta, iter)
-      dataSet = checkpoint(dataSet)
-      dataSet.persist(storageLevel)
+      val margin = forward()
+      margin.setName(s"margin-$iter").persist(storageLevel)
+      println(s"train (Iteration $iter/$iterations) cost : ${error(margin)}")
+      var gradient = backward(margin)
+      gradient.setName(s"gradient-$iter").persist(storageLevel)
 
-      dataSet.vertices.count()
-      dataSet.edges.count()
-      q.unpersist(blocking = false)
-      delta.unpersist(blocking = false)
+      if (useAdaGrad) {
+        val delta = adaGrad(deltaSum, gradient, 1, 1e-2, 1 - 1e-2)
+        delta.setName(s"delta-$iter").persist(storageLevel).count()
+
+        gradient.unpersist(blocking = false)
+        gradient = delta.mapValues(_._2).setName(s"gradient-$iter").persist(storageLevel)
+        gradient.count()
+
+        if (deltaSum != null) deltaSum.unpersist(blocking = false)
+        deltaSum = delta.mapValues(_._1).setName(s"deltaSum-$iter").persist(storageLevel)
+        deltaSum.count()
+      }
+
+      dataSet = updateWeight(gradient, iter)
+      dataSet.persist(storageLevel)
+      dataSet = checkpoint(dataSet, deltaSum)
+      dataSet.vertices.setName(s"vertices-$iter").count()
+      dataSet.edges.setName(s"edges-$iter").count()
       previousDataSet.unpersist(blocking = false)
+      margin.unpersist(blocking = false)
+      gradient.unpersist(blocking = false)
       logInfo(s"End train (Iteration $iter/$iterations)")
       innerIter += 1
     }
@@ -95,30 +111,17 @@ class LRonGraphX(
     new LogisticRegressionModel(new SDV(featureData), 0.0)
   }
 
-  def error(q: VertexRDD[VD]): Double = {
-    samples.join(q).map { case (_, (y, q)) =>
+  private def error(q: VertexRDD[VD]): Double = {
+    samples.join(q).map { case (_, (y, margin)) =>
       if (y > 0.0) {
-        MLUtils.log1pExp(q)
+        MLUtils.log1pExp(margin)
       } else {
-        val margin = math.log((1.0 / q) - 1)
-        MLUtils.log1pExp(q) - margin
+        MLUtils.log1pExp(margin) - margin
       }
     }.reduce(_ + _) / numSamples
   }
 
-  def logLikelihood(q: VertexRDD[VD]): Double = {
-    samples.join(q).map { case (_, (y, q)) =>
-      val score = q
-      val label = if (y > 0.0) 1.0 else 0.0
-      if (label == 1.0) {
-        math.log(score)
-      } else {
-        math.log(1 - score)
-      }
-    }.reduce(_ + _) / numSamples
-  }
-
-  def forward(): VertexRDD[VD] = {
+  private def forward(): VertexRDD[VD] = {
     dataSet.aggregateMessages[Double](ctx => {
       // val sampleId = ctx.dstId
       // val featureId = ctx.srcId
@@ -127,41 +130,34 @@ class LRonGraphX(
       val z = -w * x
       assert(!z.isNaN)
       ctx.sendToDst(z)
-    }, _ + _, TripletFields.Src).mapValues { z =>
-      val q = 1.0 / (1.0 + exp(z))
-      // if (q.isInfinite || q.isNaN || q == 0.0) println(z)
-      assert(q != 0.0)
-      q
-    }
+    }, _ + _, TripletFields.Src)
   }
 
-  def backward(q: VertexRDD[VD]): VertexRDD[Double] = {
-    dataSet.outerJoinVertices(q) { (_, label, qv) =>
-      (label, qv.getOrElse(0.0))
-    }.aggregateMessages[Double](ctx => {
+  private def backward(q: VertexRDD[VD]): VertexRDD[Double] = {
+    val multiplier = samples.innerJoin(q) { case (_, y, m) =>
+      (1.0 / (1.0 + math.exp(m))) - y
+    }
+    GraphImpl(multiplier, dataSet.edges).aggregateMessages[Double](ctx => {
       // val sampleId = ctx.dstId
       // val featureId = ctx.srcId
       val x = ctx.attr
-      val y = ctx.dstAttr._1
-      val q = ctx.dstAttr._2
-      val multiplier = q - y
-      val gradient = multiplier * x
-      ctx.sendToSrc(gradient)
+      val m = ctx.dstAttr
+      val grad = x * m
+      ctx.sendToSrc(grad)
     }, _ + _, TripletFields.Dst).mapValues { gradient =>
       gradient / numSamples
     }
   }
 
   // Updater for L1 regularized problems
-  def updateWeight(delta: VertexRDD[Double], iter: Int): Graph[VD, ED] = {
-    val thisIterStepSize = stepSize / sqrt(iter)
-    // val thisIterStepSize = stepSize
+  private def updateWeight(delta: VertexRDD[Double], iter: Int): Graph[VD, ED] = {
+    val thisIterStepSize = if (useAdaGrad) stepSize else stepSize / sqrt(iter)
     val newVertices = dataSet.vertices.leftJoin(delta) { (_, attr, gradient) =>
       gradient match {
         case Some(gard) => {
           var weight = attr
           weight -= thisIterStepSize * gard
-          if (regParam > 0.0) {
+          if (regParam > 0.0 && weight != 0.0) {
             val shrinkageVal = regParam * thisIterStepSize
             weight = signum(weight) * max(0.0, abs(weight) - shrinkageVal)
           }
@@ -174,7 +170,26 @@ class LRonGraphX(
     GraphImpl(newVertices, dataSet.edges)
   }
 
-  private def checkpoint(corpus: Graph[VD, ED]): Graph[VD, ED] = {
+  private def adaGrad(
+    deltaSum: VertexRDD[Double],
+    gradient: VertexRDD[Double],
+    gamma: Double,
+    epsilon: Double,
+    rho: Double): VertexRDD[(Double, Double)] = {
+    val delta = if (deltaSum == null) {
+      gradient.mapValues(t => 0.0)
+    }
+    else {
+      deltaSum
+    }
+    delta.innerJoin(gradient) { case (_, gradSum, grad) =>
+      val newGradSum = gradSum * rho + pow(grad, 2)
+      val newGrad = grad * gamma / (epsilon + sqrt(newGradSum))
+      (newGradSum, newGrad)
+    }
+  }
+
+  private def checkpoint(corpus: Graph[VD, ED], delta: VertexRDD[Double]): Graph[VD, ED] = {
     if (innerIter % 10 == 0 && corpus.edges.sparkContext.getCheckpointDir.isDefined) {
       logInfo(s"start checkpoint")
       corpus.checkpoint()
@@ -182,6 +197,7 @@ class LRonGraphX(
       val newCorpus = GraphImpl(newVertices, corpus.edges)
       newCorpus.checkpoint()
       logInfo(s"end checkpoint")
+      if (delta != null) delta.checkpoint()
       newCorpus
     } else {
       corpus
@@ -197,25 +213,16 @@ object LRonGraphX {
     input: RDD[LabeledPoint],
     numIterations: Int,
     stepSize: Double,
-    regParam: Double): LogisticRegressionModel = {
-    train(input, numIterations, 0, stepSize, regParam)
-  }
-
-  def train(
-    input: RDD[LabeledPoint],
-    numIterations: Int,
-    numFeatures: Int,
-    stepSize: Double,
     regParam: Double,
+    useAdaGrad: Boolean = false,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK): LogisticRegressionModel = {
     val data = input.zipWithIndex().map { case (LabeledPoint(label, features), id) =>
       val newLabel = if (label > 0.0) 1.0 else 0.0
       (id, LabeledPoint(newLabel, features))
     }
-    val lr = new LRonGraphX(data, stepSize, regParam, storageLevel)
+    val lr = new LRonGraphX(data, stepSize, regParam, useAdaGrad, storageLevel)
     lr.run(numIterations)
     val model = lr.saveModel()
-    data.unpersist()
     model
   }
 
@@ -249,8 +256,8 @@ object LRonGraphX {
     // dataSet = dataSet.partitionBy(PartitionStrategy.EdgePartition2D)
 
     dataSet.outerJoinVertices(vertices) { (vid, data, deg) =>
-      // deg.getOrElse(Utils.random.nextGaussian() * 1e-2)
-      deg.getOrElse(0)
+      deg.getOrElse(Utils.random.nextGaussian() * 1e-2)
+      // deg.getOrElse(0)
     }
   }
 
