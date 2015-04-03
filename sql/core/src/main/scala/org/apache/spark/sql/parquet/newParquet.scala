@@ -269,7 +269,7 @@ private[sql] case class ParquetRelation2(
       val baseStatuses = paths.distinct.map { p =>
         val fs = FileSystem.get(URI.create(p), sparkContext.hadoopConfiguration)
         val path = new Path(p)
-        val qualified = path.makeQualified(fs)
+        val qualified = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
         if (!fs.exists(qualified) && maybeSchema.isDefined) {
           fs.mkdirs(qualified)
