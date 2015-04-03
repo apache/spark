@@ -1040,7 +1040,7 @@ for (teenName in collect(teenNames)) {
 
 {% highlight python %}
 # sqlContext is an existing HiveContext
-sqlContext.refreshTable("my_table")
+sqlContext.sql("REFRESH TABLE my_table")
 {% endhighlight %}
 
 </div>
