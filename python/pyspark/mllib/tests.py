@@ -631,6 +631,25 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertIsNotNone(chi[1000])
 
 
+class SerDeTest(PySparkTestCase):
+    def test_to_java_object_rdd(self):  # SPARK-6660
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        self.assertEqual(_to_java_object_rdd(data).count(), 10)
+
+
+class FeatureTest(PySparkTestCase):
+    def test_idf_model(self):
+        data = [
+            Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
+            Vectors.dense([1, 3, 0, 1, 3, 0, 0, 2, 0, 0, 1]),
+            Vectors.dense([1, 4, 1, 0, 0, 4, 9, 0, 1, 2, 0]),
+            Vectors.dense([2, 1, 0, 3, 0, 0, 5, 0, 2, 3, 9])
+        ]
+        model = IDF().fit(self.sc.parallelize(data, 2))
+        idf = model.idf()
+        self.assertEqual(len(idf), 11)
+
+
 class Word2VecTests(PySparkTestCase):
     def test_word2vec_setters(self):
         data = [
@@ -638,12 +657,12 @@ class Word2VecTests(PySparkTestCase):
             ["I", "like", "soccer", "very", "much"],
             ["I", "live", "in", "Tokyo"]
         ]
-        model = Word2Vec()\
-            .setVectorSize(2)\
-            .setLearningRate(0.01)\
-            .setNumPartitions(2)\
-            .setNumIterations(10)\
-            .setSeed(1024)\
+        model = Word2Vec() \
+            .setVectorSize(2) \
+            .setLearningRate(0.01) \
+            .setNumPartitions(2) \
+            .setNumIterations(10) \
+            .setSeed(1024) \
             .setMinCount(3)
         self.assertEquals(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
@@ -664,26 +683,6 @@ class Word2VecTests(PySparkTestCase):
         ]
         model = Word2Vec().fit(self.sc.parallelize(data))
         self.assertEquals(len(model.getVectors()), 3)
-
-
-class SerDeTest(PySparkTestCase):
-    def test_to_java_object_rdd(self):  # SPARK-6660
-        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
-        self.assertEqual(_to_java_object_rdd(data).count(), 10)
-
-
-class FeatureTest(PySparkTestCase):
-    def test_idf_model(self):
-        data = [
-            Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
-            Vectors.dense([1, 3, 0, 1, 3, 0, 0, 2, 0, 0, 1]),
-            Vectors.dense([1, 4, 1, 0, 0, 4, 9, 0, 1, 2, 0]),
-            Vectors.dense([2, 1, 0, 3, 0, 0, 5, 0, 2, 3, 9])
-        ]
-        model = IDF().fit(self.sc.parallelize(data, 2))
-        idf = model.idf()
-        self.assertEqual(len(idf), 11)
-
 
 if __name__ == "__main__":
     if not _have_scipy:
