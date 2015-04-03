@@ -77,7 +77,7 @@ public class SaslIntegrationSuite {
     conf = new TransportConf(new SystemPropertyConfigProvider());
     context = new TransportContext(conf, new TestRpcHandler());
 
-    TransportServerBootstrap bootstrap = new SaslServerBootstrap(secretKeyHolder);
+    TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf, secretKeyHolder);
     server = context.createServer(Arrays.asList(bootstrap));
   }
 

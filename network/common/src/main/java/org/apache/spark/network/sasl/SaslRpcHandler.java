@@ -28,6 +28,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.
@@ -49,10 +50,17 @@ class SaslRpcHandler extends RpcHandler {
   /** The client channel. */
   private final Channel channel;
 
+  private final TransportConf conf;
+
   private SparkSaslServer saslServer;
   private boolean isComplete;
 
-  SaslRpcHandler(Channel channel, RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
+  SaslRpcHandler(
+      TransportConf conf,
+      Channel channel,
+      RpcHandler delegate,
+      SecretKeyHolder secretKeyHolder) {
+    this.conf = conf;
     this.channel = channel;
     this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
@@ -88,7 +96,7 @@ class SaslRpcHandler extends RpcHandler {
       isComplete = true;
       if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("Enabling encryption for channel {}", client);
-        channel.pipeline().addFirst("saslEncryption", new SaslEncryptionHandler(saslServer));
+        SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
         saslServer = null;
       } else {
         saslServer.dispose();

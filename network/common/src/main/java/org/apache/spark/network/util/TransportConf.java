@@ -105,4 +105,12 @@ public class TransportConf {
   public int portMaxRetries() {
     return conf.getInt("spark.port.maxRetries", 16);
   }
+
+  /**
+   * Maximum number of bytes to be encrypted at a time when SASL encryption is enabled.
+   */
+  public int maxSaslEncryptedBlockSize() {
+    return conf.getInt("spark.network.sasl.max_encrypted_block_size_kb", 64) * 1024;
+  }
+
 }

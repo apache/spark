@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -79,7 +78,11 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
       }
 
       if (encrypt) {
-        setupEncryption(saslClient, channel);
+        if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslClient.getNegotiatedProperty(Sasl.QOP))) {
+          throw new RuntimeException(
+            new SaslException("Encryption requests by negotiated non-encrypted connection."));
+        }
+        SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         saslClient = null;
         logger.debug("Channel {} configured for SASL encryption.", client);
       }
@@ -93,14 +96,6 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         }
       }
     }
-  }
-
-  private void setupEncryption(SparkSaslClient client, Channel channel) {
-    if (!SparkSaslServer.QOP_AUTH_CONF.equals(client.getNegotiatedProperty(Sasl.QOP))) {
-      throw new RuntimeException(
-        new SaslException("Encryption requests by negotiated non-encrypted connection."));
-    }
-    channel.pipeline().addFirst("saslEncryption", new SaslEncryptionHandler(client));
   }
 
 }

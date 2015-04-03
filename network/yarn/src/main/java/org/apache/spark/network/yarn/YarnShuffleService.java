@@ -109,7 +109,7 @@ public class YarnShuffleService extends AuxiliaryService {
     List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       secretManager = new ShuffleSecretManager();
-      bootstraps.add(new SaslServerBootstrap(secretManager));
+      bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
     }
 
     int port = conf.getInt(

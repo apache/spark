@@ -52,7 +52,12 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
     if (enabled) {
       require(server == null, "Shuffle server already started")
       logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
-      val bootstraps = if (useSasl) Seq(new SaslServerBootstrap(securityManager)) else Seq()
+      val bootstraps =
+        if (useSasl) {
+          Seq(new SaslServerBootstrap(transportConf, securityManager))
+        } else {
+          Seq()
+        }
       server = transportContext.createServer(port, bootstraps)
     }
   }

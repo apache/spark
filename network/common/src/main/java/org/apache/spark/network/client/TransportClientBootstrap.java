@@ -30,5 +30,5 @@ import io.netty.channel.Channel;
  */
 public interface TransportClientBootstrap {
   /** Performs the bootstrapping operation, throwing an exception on failure. */
-  public void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
+  void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
 }
