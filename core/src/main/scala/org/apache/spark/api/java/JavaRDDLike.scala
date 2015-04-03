@@ -18,8 +18,8 @@
 package org.apache.spark.api.java
 
 import java.{lang => jl}
-import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
