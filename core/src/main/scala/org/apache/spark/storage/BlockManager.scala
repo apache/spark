@@ -517,7 +517,7 @@ private[spark] class BlockManager(
               throw new BlockException(
                 blockId, s"Block $blockId not found on disk, though it should be")
           }
-          assert(0 == bytes.position())
+          assert(0L == bytes.position())
 
           if (!level.useMemory) {
             // If the block shouldn't be stored in memory, we can just return it
@@ -538,10 +538,9 @@ private[spark] class BlockManager(
                 // If the file size is bigger than the free memory, OOM will happen. So if we cannot
                 // put it into MemoryStore, copyForMemory should not be created. That's why this
                 // action is put into a `() => ByteBuffer` and created lazily.
-                val copyForMemory = LargeByteBufferHelper.allocate(bytes.size)
-                copyForMemory.put(bytes)
+                bytes.deepCopy()
               })
-              bytes.position(0L)
+              bytes.rewind()
             }
             if (!asBlockResult) {
               return Some(bytes)
@@ -796,7 +795,7 @@ private[spark] class BlockManager(
           case ArrayValues(array) =>
             blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
-            bytes.position(0L)
+            bytes.rewind()
             blockStore.putBytes(blockId, bytes, putLevel)
         }
         size = result.size
@@ -1216,7 +1215,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: LargeByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
-    bytes.position(0);
+    bytes.rewind()
     val stream = wrapForCompression(blockId, new LargeByteBufferInputStream(bytes, true))
     serializer.newInstance().deserializeStream(stream).asIterator
   }

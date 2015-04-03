@@ -50,18 +50,18 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
     } else {
       val amountToGet = math.min(buffer.remaining(), length).toInt
       buffer.get(dest, offset, amountToGet)
+      //TODO should be a cleanup check here -- need tests
       amountToGet
     }
   }
 
   override def skip(bytes: Long): Long = {
     if (buffer != null) {
-      val amountToSkip = math.min(bytes, buffer.remaining).toInt
-      buffer.position(buffer.position + amountToSkip)
+      val skipped = buffer.skip(bytes)
       if (buffer.remaining() == 0) {
         cleanUp()
       }
-      amountToSkip
+      skipped
     } else {
       0L
     }

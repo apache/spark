@@ -26,14 +26,22 @@ public interface LargeByteBuffer {
 
     public void get(byte[] dst,int offset, int length);
 
-    public LargeByteBuffer position(long position);
+    public LargeByteBuffer rewind();
+
+    /**
+     * return a deep copy of this, with a copy of all the data.
+     * The returned buffer will have position == 0.  The position
+     * of this buffer will change from the copy.
+     * @return
+     */
+    public LargeByteBuffer deepCopy();
+
+    public long skip(long n);
 
     public long position();
 
     /** doesn't copy data, just copies references & offsets */
     public LargeByteBuffer duplicate();
-
-    public LargeByteBuffer put(LargeByteBuffer bytes);
 
     public long remaining();
 

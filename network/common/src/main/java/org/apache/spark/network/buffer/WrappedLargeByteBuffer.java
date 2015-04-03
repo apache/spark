@@ -66,6 +66,35 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
+  public LargeByteBuffer rewind() {
+    while (currentBufferIdx > 0) {
+      if (currentBuffer != null) {
+        currentBuffer.rewind();
+      }
+      currentBufferIdx -= 1;
+      currentBuffer = underlying[currentBufferIdx];
+    }
+    currentBuffer.rewind();
+    _pos = 0;
+    return this;
+  }
+
+  @Override
+  public WrappedLargeByteBuffer deepCopy() {
+    ByteBuffer[] dataCopy = new ByteBuffer[underlying.length];
+    for (int i = 0; i < underlying.length; i++) {
+      ByteBuffer b = underlying[i];
+      dataCopy[i] = ByteBuffer.allocate(b.capacity());
+      int originalPosition = b.position();
+      b.position(0);
+      dataCopy[i].put(b);
+      dataCopy[i].position(0);
+      b.position(originalPosition);
+    }
+    return new WrappedLargeByteBuffer(dataCopy);
+  }
+
+  @Override
   public byte get() {
     byte r = currentBuffer.get();
     _pos += 1;
@@ -81,33 +110,15 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @Override
-  public LargeByteBuffer put(LargeByteBuffer from) {
-    if (remaining() < from.remaining()) {
-      throw new IllegalArgumentException("not enough space to copy byte buffer: need " +
-        from.remaining() + ", only have " + remaining());
-    }
-    while (from.remaining() > 0) {
-      int toRead = (int) Math.min(from.remaining(), currentBuffer.remaining());
-      // TODO the extra copy is really sad :(
-      byte[] buff = new byte[toRead];
-      from.get(buff, 0, buff.length);
-      currentBuffer.put(buff);
-      _pos += toRead;
-      updateCurrentBuffer();
-    }
-    return this;
-  }
-
-  @Override
   public long position() {
     return _pos;
   }
 
   @Override
-  public LargeByteBuffer position(long newPosition) {
-    //XXX check range?
-    if (_pos > newPosition) {
-      long toMove = _pos - newPosition;
+  public long skip(long n) {
+    if (n < 0) {
+      final long moveTotal = Math.min(-n, _pos);
+      long toMove = moveTotal;
       // move backwards -- set the position to 0 of every buffer's we go back
       if (currentBuffer != null) {
         currentBufferIdx += 1;
@@ -119,8 +130,11 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
         currentBuffer.position(currentBuffer.position() - thisMove);
         toMove -= thisMove;
       }
-    } else {
-      long toMove = newPosition - _pos;
+      _pos -= moveTotal;
+      return -moveTotal;
+    } else if (n > 0) {
+      final long moveTotal = Math.min(n, remaining());
+      long toMove = moveTotal;
       // move forwards-- set the position to the end of every buffer as we go forwards
       currentBufferIdx -= 1;
       while (toMove > 0) {
@@ -130,9 +144,11 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
         currentBuffer.position(currentBuffer.position() + thisMove);
         toMove -= thisMove;
       }
+      _pos += moveTotal;
+      return moveTotal;
+    } else {
+      return 0;
     }
-    _pos = newPosition;
-    return this;
   }
 
   @Override

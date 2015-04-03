@@ -40,7 +40,6 @@ public class WrappedLargeByteBufferSuite {
     return new WrappedLargeByteBuffer(bufs);
   }
 
-
   @Test
   public void asByteBuffer() throws BufferTooLargeException {
     //test that it works when buffer is small, and the right error when buffer is big
@@ -52,70 +51,74 @@ public class WrappedLargeByteBufferSuite {
     for (int i = 0; i < 2; i++) {
       bufs[i] = ByteBuffer.allocate(10);
     }
-    LargeByteBuffer multiBuf = new WrappedLargeByteBuffer(bufs);
     try {
-      multiBuf.asByteBuffer();
+      new WrappedLargeByteBuffer(bufs).asByteBuffer();
       fail("expected an exception");
     } catch (BufferTooLargeException btl) {
     }
   }
 
   @Test
-  public void position() {
-    WrappedLargeByteBuffer buf = testDataBuf();
+  public void deepCopy() {
+    WrappedLargeByteBuffer b = testDataBuf();
     //intentionally move around sporadically
-    for(int p: new int[]{10,475, 0, 19, 58, 499, 498, 32, 234, 378}) {
-      checkBytesAt(buf, p);
+    for (int initialPosition: new int[]{10,475, 0, 19, 58, 499, 498, 32, 234, 378}) {
+      b.rewind();
+      b.skip(initialPosition);
+      WrappedLargeByteBuffer copy = b.deepCopy();
+      assertEquals(0, copy.position());
+      assertConsistent(copy);
+      assertConsistent(b);
+      assertEquals(b.size(), copy.size());
+      assertEquals(initialPosition, b.position());
+      byte[] copyData = new byte[500];
+      copy.get(copyData, 0, 500);
+      assertArrayEquals(data, copyData);
     }
-  }
-
-  private void checkBytesAt(WrappedLargeByteBuffer buf, int position) {
-    buf.position(position);
-    assertEquals(position, buf.position());
-    int remaining = 500 - position;
-    assertEquals(remaining, buf.remaining());
-    byte[] dataCopy = new byte[remaining];
-    System.arraycopy(data, position, dataCopy, 0, remaining);
-    byte[] bufCopy = new byte[remaining];
-    buf.get(bufCopy, 0, remaining);
-    assertArrayEquals(dataCopy, bufCopy);
-    buf.position(position); //go back to this position for the next set of tests
   }
 
   @Test
-  public void putLargeByteBuffer() {
-    //copy from smaller chunks into larger ones
-
-    ByteBuffer[] to = new ByteBuffer[2];
-    for (int i = 0; i < 2; i++) {
-      to[i] = ByteBuffer.wrap(new byte[300]);
-    }
-    LargeByteBuffer fromBuf = testDataBuf();
-    LargeByteBuffer toBuf = new WrappedLargeByteBuffer(to);
-
-    toBuf.put(fromBuf);
-
-    assertEquals(fromBuf.size(), toBuf.position());
-    toBuf.position(0L);
-    byte[] toDataCopy = new byte[500];
-    toBuf.get(toDataCopy, 0, 500);
-    assertArrayEquals(data, toDataCopy);
-  }
-
-  @Test
-  public void putLargeByteBufferException() {
-    WrappedLargeByteBuffer dataBuf = testDataBuf();
-    ByteBuffer[] to = new ByteBuffer[2];
-    for (int i = 0; i < 2; i++) {
-      to[i] = ByteBuffer.wrap(new byte[300]);
-    }
-    LargeByteBuffer toBuf = new WrappedLargeByteBuffer(to);
-    toBuf.put(dataBuf);
-    dataBuf.position(0);
-    try {
-      toBuf.put(dataBuf);
-      fail("expected an exception");
-    } catch (IllegalArgumentException iae) {
+  public void skipAndGet() {
+    WrappedLargeByteBuffer b = testDataBuf();
+    int position = 0;
+    for (int move: new int[]{20, 50, 100, 0, -80, 0, 200, -175, 500, 0, -1000, 0}) {
+      long moved = b.skip(move);
+      assertConsistent(b);
+      long expMoved = move > 0 ? Math.min(move, 500 - position) : Math.max(move, -position);
+      position += moved;
+      assertEquals(expMoved, moved);
+      assertEquals(position, b.position());
+      byte[] copyData = new byte[500 - position];
+      b.get(copyData, 0, 500 - position);
+      assertConsistent(b);
+      byte[] dataSubset = new byte[500 - position];
+      System.arraycopy(data, position, dataSubset, 0, 500 - position);
+      assertArrayEquals(dataSubset, copyData);
+      b.rewind();
+      assertConsistent(b);
+      b.skip(position);
+      assertConsistent(b);
     }
   }
+
+  private void assertConsistent(WrappedLargeByteBuffer buffer) {
+    long pos = buffer.position();
+    long bufferStartPos = 0;
+    for (ByteBuffer p: buffer.nioBuffers()) {
+      if (pos < bufferStartPos) {
+        assertEquals(0, p.position());
+      } else if (pos < bufferStartPos + p.capacity()) {
+        assertEquals(pos - bufferStartPos, p.position());
+      } else {
+        assertEquals(p.capacity(), p.position());
+      }
+      bufferStartPos += p.capacity();
+    }
+  }
+
+//  @Test
+//  public void get() {
+//    fail("pending");
+//  }
+
 }

@@ -92,7 +92,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
-    bytes.position(0L)
+    bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
@@ -113,7 +113,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     size: Long,
     _bytes: () => LargeByteBuffer): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
-    lazy val bytes = _bytes().duplicate().position(0L)
+    lazy val bytes = _bytes().duplicate().rewind()
     val putAttempt = tryToPut(blockId, () => bytes, size, deserialized = false)
     val data =
       if (putAttempt.success) {
