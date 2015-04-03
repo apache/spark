@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.lang
+import java.{lang => jl}
 import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
@@ -94,7 +94,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * of the original partition.
    */
   def mapPartitionsWithIndex[R](
-      f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
+      f: JFunction2[jl.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
     new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
         preservesPartitioning)(fakeClassTag))(fakeClassTag)
@@ -130,8 +130,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMapToDouble(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     import scala.collection.JavaConverters._
-    def fn: (T) => Iterable[lang.Double] = (x: T) => f.call(x).asScala
-    new JavaDoubleRDD(rdd.flatMap(fn).map((x: java.lang.Double) => x.doubleValue()))
+    def fn: (T) => Iterable[jl.Double] = (x: T) => f.call(x).asScala
+    new JavaDoubleRDD(rdd.flatMap(fn).map((x: jl.Double) => x.doubleValue()))
   }
 
   /**
@@ -171,10 +171,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD.
    */
   def mapPartitionsToDouble(f: DoubleFlatMapFunction[java.util.Iterator[T]]): JavaDoubleRDD = {
-    def fn: (Iterator[T]) => Iterator[lang.Double] = {
+    def fn: (Iterator[T]) => Iterator[jl.Double] = {
       (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
     }
-    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: java.lang.Double) => x.doubleValue()))
+    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: jl.Double) => x.doubleValue()))
   }
 
   /**
@@ -193,7 +193,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def mapPartitionsToDouble(f: DoubleFlatMapFunction[java.util.Iterator[T]],
       preservesPartitioning: Boolean): JavaDoubleRDD = {
-    def fn: (Iterator[T]) => Iterator[lang.Double] = {
+    def fn: (Iterator[T]) => Iterator[jl.Double] = {
       (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
     }
     new JavaDoubleRDD(rdd.mapPartitions(fn, preservesPartitioning)
@@ -456,8 +456,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
-  def countByValue(): java.util.Map[T, java.lang.Long] =
-    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
+  def countByValue(): java.util.Map[T, jl.Long] =
+    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new jl.Long(x._2)))))
 
   /**
    * (Experimental) Approximate version of countByValue().
