@@ -522,7 +522,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       new Word2VecModel(word2VecMap)
     }
 
-    def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]) = {
+    def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
 
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
