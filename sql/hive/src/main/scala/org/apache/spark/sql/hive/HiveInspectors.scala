@@ -242,7 +242,7 @@ private[hive] trait HiveInspectors {
     case poi: WritableConstantStringObjectInspector =>
       UTF8String(poi.getWritableConstantValue.toString)
     case poi: WritableConstantHiveVarcharObjectInspector =>
-      poi.getWritableConstantValue.getHiveVarchar.getValue
+      UTF8String(poi.getWritableConstantValue.getHiveVarchar.getValue)
     case poi: WritableConstantHiveDecimalObjectInspector =>
       HiveShim.toCatalystDecimal(
         PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
@@ -285,10 +285,13 @@ private[hive] trait HiveInspectors {
     case pi: PrimitiveObjectInspector => pi match {
       // We think HiveVarchar is also a String
       case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
-        hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue
-      case hvoi: HiveVarcharObjectInspector => hvoi.getPrimitiveJavaObject(data).getValue
+        UTF8String(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
+      case hvoi: HiveVarcharObjectInspector =>
+        UTF8String(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
         UTF8String(x.getPrimitiveWritableObject(data).toString)
+      case x: StringObjectInspector =>
+        UTF8String(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
       case x: BooleanObjectInspector if x.preferWritable() => x.get(data)
       case x: FloatObjectInspector if x.preferWritable() => x.get(data)

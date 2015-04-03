@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
@@ -121,14 +122,13 @@ case class ScriptTransformation(
           if (outputSerde == null) {
             val prevLine = curLine
             curLine = reader.readLine()
- 
             if (!ioschema.schemaLess) {
-              new GenericRow(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              new GenericRow(ScalaReflection.convertToCatalyst(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
                 .asInstanceOf[Array[Any]])
             } else {
-              new GenericRow(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+              new GenericRow(ScalaReflection.convertToCatalyst(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
                 .asInstanceOf[Array[Any]])
             }
           } else {

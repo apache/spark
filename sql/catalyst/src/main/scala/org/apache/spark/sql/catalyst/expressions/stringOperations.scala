@@ -261,6 +261,10 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
         case s: UTF8String =>
           val (st, end) = slicePos(start, length, () => s.length)
           s.slice(st, end)
+        case other =>
+          val s = other.toString
+          val (st, end) = slicePos(start, length, () => s.length)
+          UTF8String(s.slice(st, end))
       }
     }
   }

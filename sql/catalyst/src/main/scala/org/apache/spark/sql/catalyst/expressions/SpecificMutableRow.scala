@@ -175,12 +175,16 @@ final class MutableString extends MutableValue {
   override def boxed: Any = if (isNull) null else value
   override def update(v: Any): Unit = {
     isNull = false
-    value = v.asInstanceOf[UTF8String]
+    if (value == null) {
+      value = v.asInstanceOf[UTF8String]
+    } else {
+      value.set(v.asInstanceOf[UTF8String].getBytes)
+    }
   }
   override def copy(): MutableString = {
     val newCopy = new MutableString
     newCopy.isNull = isNull
-    newCopy.value = value
+    newCopy.value = value.clone()
     newCopy.asInstanceOf[MutableString]
   }
 }
@@ -217,7 +221,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case DoubleType => new MutableDouble
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
-        // TODO(davies): Enable this
+        // TODO(davies): enable this
         // case StringType => new MutableString
         case _ => new MutableAny
       }.toArray)
@@ -249,11 +253,13 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def update(ordinal: Int, value: Any): Unit = value match {
     case null => setNullAt(ordinal)
-    case s: String => update(ordinal, UTF8String(s))
+    case s: String =>
+      // for tests
+      throw new Exception("String should be converted into UTF8String")
     case other => values(ordinal).update(value)
   }
 
-  override def setString(ordinal: Int, value: String): Unit = update(ordinal, value)
+  override def setString(ordinal: Int, value: String): Unit = update(ordinal, UTF8String(value))
 
   override def getString(ordinal: Int): String = apply(ordinal).toString
 

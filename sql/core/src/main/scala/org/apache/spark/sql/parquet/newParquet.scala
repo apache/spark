@@ -45,7 +45,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
@@ -528,7 +528,8 @@ private[sql] case class ParquetRelation2(
 
       baseRDD.mapPartitionsWithInputSplit { case (split: ParquetInputSplit, iterator) =>
         val partValues = selectedPartitions.collectFirst {
-          case p if split.getPath.getParent.toString == p.path => p.values
+          case p if split.getPath.getParent.toString == p.path =>
+            ScalaReflection.convertToCatalyst(p.values).asInstanceOf[Row]
         }.get
 
         val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
