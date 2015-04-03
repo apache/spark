@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
+/**
+ * A writable channel that stores the written data in a byte array in memory.
+ */
 public class ByteArrayWritableChannel implements WritableByteChannel {
 
   private final byte[] data;
@@ -27,19 +30,30 @@ public class ByteArrayWritableChannel implements WritableByteChannel {
 
   public ByteArrayWritableChannel(int size) {
     this.data = new byte[size];
-    this.offset = 0;
   }
 
   public byte[] getData() {
     return data;
   }
 
+  public int length() {
+    return offset;
+  }
+
+  /** Resets the channel so that writing to it will overwrite the existing buffer. */
+  public void reset() {
+    offset = 0;
+  }
+
+  /**
+   * Reads from the given buffer into the internal byte array.
+   */
   @Override
   public int write(ByteBuffer src) {
-    int available = src.remaining();
-    src.get(data, offset, available);
-    offset += available;
-    return available;
+    int toTransfer = Math.min(src.remaining(), data.length - offset);
+    src.get(data, offset, toTransfer);
+    offset += toTransfer;
+    return toTransfer;
   }
 
   @Override

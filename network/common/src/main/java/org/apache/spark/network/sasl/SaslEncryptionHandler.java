@@ -33,6 +33,7 @@ import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.util.ReferenceCountUtil;
 
+import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -58,7 +59,6 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
    */
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    ctx.channel().pipeline().remove("muxer");
     ctx.channel().pipeline()
       .addFirst("saslDecryption", new DecryptionHandler())
       .addFirst("saslFrameDecoder", NettyUtils.createFrameDecoder());
@@ -67,21 +67,15 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
     throws Exception {
-    @SuppressWarnings("unchecked")
-    List<Object> in = (List<Object>) msg;
-    List<Object> encrypted = Lists.newArrayListWithExpectedSize(in.size() * 2);
     synchronized (lock) {
-      for (Object o : in) {
-        try {
-          encryptOrDecrypt(o, encrypted, true);
-        } finally {
-          ReferenceCountUtil.release(msg);
-        }
+      ByteBuf encrypted;
+      try {
+        encrypted = encryptOrDecrypt(msg, true);
+      } finally {
+        ReferenceCountUtil.release(msg);
       }
-      for (int i = 0; i < encrypted.size() - 1; i++) {
-        ctx.write(encrypted.get(i), ctx.voidPromise());
-      }
-      ctx.write(encrypted.get(encrypted.size() - 1), promise);
+      ctx.write(Unpooled.copyLong(8 + encrypted.readableBytes()), ctx.voidPromise());
+      ctx.write(encrypted, promise);
     }
   }
 
@@ -91,7 +85,7 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
     ctx.close(promise);
   }
 
-  private void encryptOrDecrypt(Object msg, List<Object> out, boolean encrypt) throws Exception {
+  private ByteBuf encryptOrDecrypt(Object msg, boolean encrypt) throws Exception {
     byte[] data;
     int offset;
     int length;
@@ -110,7 +104,9 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
       FileRegion region = (FileRegion) msg;
       length = Ints.checkedCast(region.count());
       ByteArrayWritableChannel bc = new ByteArrayWritableChannel(length);
-      region.transferTo(bc, 0);
+      while (region.count() > region.transfered()) {
+        region.transferTo(bc, region.transfered());
+      }
       data = bc.getData();
       offset = 0;
     } else {
@@ -120,12 +116,10 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
     byte[] dest;
     if (encrypt) {
       dest = backend.wrap(data, offset, length);
-      out.add(Unpooled.copyLong(8 + dest.length));
     } else {
       dest = backend.unwrap(data, offset, length);
     }
-
-    out.add(Unpooled.wrappedBuffer(dest));
+    return Unpooled.wrappedBuffer(dest);
   }
 
   private class DecryptionHandler extends MessageToMessageDecoder<ByteBuf> {
@@ -133,42 +127,7 @@ class SaslEncryptionHandler extends ChannelOutboundHandlerAdapter {
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out)
       throws Exception {
-      encryptOrDecrypt(msg, out, false);
-    }
-
-  }
-
-  private static class ByteArrayWritableChannel implements WritableByteChannel {
-
-    private final byte[] data;
-    private int offset;
-
-    ByteArrayWritableChannel(int size) {
-      this.data = new byte[size];
-      this.offset = 0;
-    }
-
-    byte[] getData() {
-      Preconditions.checkState(offset == data.length, "Missing data!");
-      return data;
-    }
-
-    @Override
-    public int write(ByteBuffer src) {
-      int available = src.remaining();
-      src.get(data, offset, available);
-      offset += available;
-      return available;
-    }
-
-    @Override
-    public void close() {
-
-    }
-
-    @Override
-    public boolean isOpen() {
-      return true;
+      out.add(encryptOrDecrypt(msg, false));
     }
 
   }
