@@ -163,7 +163,13 @@ private class RandomForest (
     val baggedInput
       = BaggedPoint.convertToBaggedRDD(treeInput,
           strategy.subsamplingRate, numTrees,
-          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
+          withReplacement, seed)
+
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      baggedInput.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      baggedInput.persist(input.getStorageLevel)
+    }
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
