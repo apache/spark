@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * Overrides our expression evaluation tests to use generated code on mutable rows.
@@ -42,7 +43,15 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
     }
 
     val actual = plan(inputRow)
-    val expectedRow = new GenericRow(Array[Any](expected))
+    val expectedRow = new GenericRow(Array[Any](ScalaReflection.convertToCatalyst(expected)))
+    if (actual.hashCode() != expectedRow.hashCode()) {
+      fail(
+        s"""
+          |Mismatched hashCodes for values: $actual, $expectedRow
+          |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
+          |${evaluated.code.mkString("\n")}
+        """.stripMargin)
+    }
     if (actual != expectedRow) {
       val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
