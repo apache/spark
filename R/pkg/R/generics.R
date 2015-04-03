@@ -134,6 +134,10 @@ setGeneric("minimum", function(x) { standardGeneric("minimum") })
 #' @export
 setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 
+#' @rdname foreach
+#' @export
+setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
+
 #' @rdname name
 #' @export
 setGeneric("name", function(x) { standardGeneric("name") })
