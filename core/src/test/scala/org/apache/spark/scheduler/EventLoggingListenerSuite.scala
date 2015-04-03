@@ -61,7 +61,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
   test("Verify log file exist") {
     // Verify logging directory exists
     val conf = getLoggingConf(testDirPath)
-    val eventLogger = new EventLoggingListener("test", testDirPath.toUri().toString(), conf)
+    val eventLogger = new EventLoggingListener("test", testDirPath.toUri(), conf)
     eventLogger.start()
 
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
@@ -122,14 +122,6 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
         "a fine:mind$dollar{bills}.1", Some("lz4")))
   }
 
-  test("SPARK-6688: logger should always use resolved URIs") {
-    val conf = getLoggingConf(testDirPath)
-      .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
-    val eventLogger = new EventLoggingListener("test", testDirPath.toUri().getPath(), conf)
-    eventLogger.start()
-    eventLogger.stop()
-  }
-
   /* ----------------- *
    * Actual test logic *
    * ----------------- */
@@ -148,7 +140,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
-    val eventLogger = new EventLoggingListener(logName, testDirPath.toUri().toString(), conf)
+    val eventLogger = new EventLoggingListener(logName, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey")
@@ -184,7 +176,10 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
   private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
+    // Set defaultFS to something that would cause an exception, to make sure we don't run
+    // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
+      .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
     val sc = new SparkContext("local-cluster[2,2,512]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get

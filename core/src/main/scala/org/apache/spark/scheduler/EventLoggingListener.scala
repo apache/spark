@@ -47,17 +47,16 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
-    unresolvedLogBaseDir: String,
+    logBaseDir: URI,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
+  def this(appId: String, logBaseDir: URI, sparkConf: SparkConf) =
     this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
-  private val logBaseDir = Utils.resolveURI(unresolvedLogBaseDir)
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)

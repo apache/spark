@@ -755,7 +755,7 @@ private[master] class Master(
         }
       
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          new URI(eventLogDir), app.id, app.desc.eventLogCodec)
+          eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
           EventLoggingListener.IN_PROGRESS))
