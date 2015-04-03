@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{URI, InetAddress, UnknownHostException}
+import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
+
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
@@ -45,7 +46,8 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
-import org.apache.spark.{SparkConf, SparkContext, SecurityManager, SparkException, Logging}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -112,10 +114,16 @@ private[spark] class Client(
     yarnClient.submitApplication(appContext)
 
     // In YARN Cluster mode, AM is not killed when the client is terminated by default.
-    // But if spark.yarn.force.shutdown.am is set true, AM is force shutdown.
+    // But if spark.yarn.am.force.shutdown is set true, AM is force shutdown.
     if (isClusterMode && sparkConf.getBoolean("spark.yarn.am.force.shutdown", false)) {
       val shutdownHook = new Runnable {
-        override def run() { yarnClient.killApplication(appId) }
+        override def run() {
+          val report = getApplicationReport(appId)
+          if (report.getYarnApplicationState == YarnApplicationState.ACCEPTED ||
+              report.getYarnApplicationState == YarnApplicationState.RUNNING) {
+            yarnClient.killApplication(appId)
+          }
+        }
       }
       ShutdownHookManager.get().addShutdownHook(shutdownHook, 0)
     }
