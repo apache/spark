@@ -22,6 +22,7 @@ import org.apache.mesos.Protos.SlaveID
 
 /**
  * Tracks all the launched or running drivers in the Mesos cluster scheduler.
+ * This class is not thread-safe, and we expect the caller to handle synchronizing state.
  * @param state Persistence engine to store tasks state.
  */
 private[mesos] class LaunchedDrivers(state: MesosClusterPersistenceEngine) {
@@ -51,19 +52,14 @@ private[mesos] class LaunchedDrivers(state: MesosClusterPersistenceEngine) {
   def contains(submissionId: String): Boolean = drivers.contains(submissionId)
 
   def remove(submissionId: String): Option[MesosClusterTaskState] = {
-    if (pendingRecover.contains(submissionId)) {
-      pendingRecover.remove(submissionId)
-    }
-
+    pendingRecover.remove(submissionId)
     val removedState = drivers.remove(submissionId)
     state.expunge(submissionId)
     removedState
   }
 
   def set(submissionId: String, newState: MesosClusterTaskState): Unit = {
-    if (pendingRecover.contains(newState.taskId.getValue)) {
-      pendingRecover.remove(newState.taskId.getValue)
-    }
+    pendingRecover.remove(newState.taskId.getValue)
     drivers(submissionId) = newState
     state.persist(submissionId, newState)
   }

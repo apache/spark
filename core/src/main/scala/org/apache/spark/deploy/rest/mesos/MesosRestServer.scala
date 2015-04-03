@@ -20,14 +20,14 @@ package org.apache.spark.deploy.rest.mesos
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import scala.collection.mutable
-
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+
+import scala.collection.mutable
 
 
 /**
@@ -44,9 +44,12 @@ private[spark] class MesosRestServer(
     val masterConf: SparkConf,
     scheduler: MesosClusterScheduler)
   extends RestServer {
-  val submitRequestServlet = new MesosSubmitRequestServlet(scheduler, masterConf)
-  val killRequestServlet = new MesosKillRequestServlet(scheduler, masterConf)
-  val statusRequestServlet = new MesosStatusRequestServlet(scheduler, masterConf)
+  def submitRequestServlet: SubmitRequestServlet =
+    new MesosSubmitRequestServlet(scheduler, masterConf)
+  def killRequestServlet: KillRequestServlet =
+    new MesosKillRequestServlet(scheduler, masterConf)
+  def statusRequestServlet: StatusRequestServlet =
+    new MesosStatusRequestServlet(scheduler, masterConf)
 }
 
 private[mesos] class MesosSubmitRequestServlet(
@@ -56,7 +59,7 @@ private[mesos] class MesosSubmitRequestServlet(
 
   private val DEFAULT_SUPERVISE = false
   private val DEFAULT_MEMORY = 512 // mb
-  private val DEFAULT_CORES = 1
+  private val DEFAULT_CORES = 1.0
 
   /**
    * Build a driver description from the fields specified in the submit request.
@@ -113,11 +116,11 @@ private[mesos] class MesosSubmitRequestServlet(
       mainClass, appArgs, environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
-    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
+    val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
 
     new MesosDriverDescription(
       appResource, actualDriverMemory, actualDriverCores,
-      actualSuperviseDriver, command, schedulerProperties)
+      actualSuperviseDriver, command, schedulerProperties.toMap)
   }
 
   protected override def handleSubmit(

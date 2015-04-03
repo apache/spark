@@ -24,8 +24,6 @@ import org.apache.spark.{LocalSparkContext, SparkConf}
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 
-import scala.collection.mutable
-
 class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with MockitoSugar {
   def createCommand: Command = {
     new Command(
@@ -42,13 +40,12 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     val response =
       scheduler.submitDriver(
         new MesosDriverDescription("jar", 1000, 1, true,
-          createCommand, new mutable.HashMap[String, String]()))
+          createCommand, Map[String, String]()))
     assert(response.success)
 
     val response2 =
       scheduler.submitDriver(new MesosDriverDescription(
-        "jar", 1000, 1, true, createCommand,
-        new mutable.HashMap[String, String]()))
+        "jar", 1000, 1, true, createCommand, Map[String, String]()))
     assert(response2.success)
 
     val state = scheduler.getState()
@@ -65,9 +62,7 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     scheduler.recoverState
     val response =
       scheduler.submitDriver(
-        new MesosDriverDescription(
-          "jar", 1000, 1, true, createCommand,
-          new mutable.HashMap[String, String]()))
+        new MesosDriverDescription("jar", 1000, 1, true, createCommand, Map[String, String]()))
     assert(response.success)
 
     val killResponse = scheduler.killDriver(response.submissionId)

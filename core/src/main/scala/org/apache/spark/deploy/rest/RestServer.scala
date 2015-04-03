@@ -51,14 +51,14 @@ private[spark] abstract class RestServer extends Logging {
   val host: String
   val requestedPort: Int
   val masterConf: SparkConf
-  val submitRequestServlet: SubmitRequestServlet
-  val killRequestServlet: KillRequestServlet
-  val statusRequestServlet: StatusRequestServlet
+  def submitRequestServlet: SubmitRequestServlet
+  def killRequestServlet: KillRequestServlet
+  def statusRequestServlet: StatusRequestServlet
 
   private var _server: Option[Server] = None
 
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
-  protected val baseContext = s"/$RestServer.PROTOCOL_VERSION/submissions"
+  protected val baseContext = s"/${RestServer.PROTOCOL_VERSION}/submissions"
   protected val contextToServlet = Map[String, RestServlet](
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,

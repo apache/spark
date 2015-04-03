@@ -41,7 +41,7 @@ import org.apache.spark.deploy.master.DriverState._
 class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   private val client = new RestClient
   private var actorSystem: Option[ActorSystem] = None
-  private var server: Option[StandaloneRestServer] = None
+  private var server: Option[RestServer] = None
 
   override def afterEach() {
     actorSystem.foreach(_.shutdown())
@@ -400,9 +400,9 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val fakeMasterRef = _actorSystem.actorOf(Props(makeFakeMaster))
     val _server =
       if (faulty) {
-        new FaultyStandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new FaultyStandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
       } else {
-        new StandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
       }
     val port = _server.start()
     // set these to clean them up after every test
@@ -561,19 +561,15 @@ private class SmarterMaster extends Actor {
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
-    host: String,
-    requestedPort: Int,
+    val host: String,
+    val requestedPort: Int,
+    val masterConf: SparkConf,
     masterActor: ActorRef,
-    masterUrl: String,
-    masterConf: SparkConf)
-  extends StandaloneRestServer(host, requestedPort, masterActor, masterUrl, masterConf) {
-
-  protected override val contextToServlet = Map[String, RestServlet](
-    s"$baseContext/create/*" -> new MalformedSubmitServlet,
-    s"$baseContext/kill/*" -> new InvalidKillServlet,
-    s"$baseContext/status/*" -> new ExplodingStatusServlet,
-    "/*" -> new ErrorServlet
-  )
+    masterUrl: String)
+  extends RestServer {
+  def submitRequestServlet: SubmitRequestServlet = new MalformedSubmitServlet
+  def killRequestServlet: KillRequestServlet = new InvalidKillServlet
+  def statusRequestServlet: StatusRequestServlet = new ExplodingStatusServlet
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet extends StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf) {

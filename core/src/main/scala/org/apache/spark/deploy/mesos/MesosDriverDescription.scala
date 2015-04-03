@@ -19,8 +19,6 @@ package org.apache.spark.deploy.mesos
 
 import java.util.Date
 
-import scala.collection.mutable
-
 import org.apache.spark.deploy.Command
 
 /**
@@ -34,13 +32,13 @@ import org.apache.spark.deploy.Command
  * @param command The command to launch the driver.
  * @param schedulerProperties Extra properties to pass the Mesos scheduler
  */
-private[spark] class MesosDriverDescription(
+private[spark] case class MesosDriverDescription(
     val jarUrl: String,
     val mem: Int,
-    val cores: Int,
+    val cores: Double,
     val supervise: Boolean,
     val command: Command,
-    val schedulerProperties: mutable.HashMap[String, String])
+    val schedulerProperties: Map[String, String])
   extends Serializable {
 
   var submissionId: Option[String] = None

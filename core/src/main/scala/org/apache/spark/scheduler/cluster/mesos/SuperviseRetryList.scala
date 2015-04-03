@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * Tracks the retry state of a driver, which includes the next time it should be scheduled
  * and necessary information to do exponential backoff.
+ * This class is not thread-safe, and we expect the caller to handle synchronizing state.
  * @param submission Driver submission.
  * @param lastFailureStatus Last Task status when it failed.
  * @param retries Number of times it has retried.
@@ -38,7 +39,8 @@ private[spark] case class RetryState(
     retries: Int,
     nextRetry: Date,
     waitTime: Int) extends Serializable {
-  def copy() = new RetryState(submission, lastFailureStatus, retries, nextRetry, waitTime)
+  def copy(): RetryState =
+    new RetryState(submission, lastFailureStatus, retries, nextRetry, waitTime)
 }
 
 /**

@@ -30,7 +30,7 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = parent.scheduler.getState()
-    val queuedHeaders = Seq("DriverID", "Submit Date", "Description")
+    val queuedHeaders = Seq("DriverID", "Submit Date", "Main Class", "Driver resources")
     val driverHeaders = queuedHeaders ++
       Seq("Start Date", "Mesos Slave ID", "State")
     val retryHeaders = Seq("DriverID", "Submit Date", "Description") ++
@@ -61,6 +61,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       <td>{submission.submissionId}</td>
       <td>{submission.submissionDate}</td>
       <td>{submission.command.mainClass}</td>
+      <td>cpus: {submission.cores}, mem: {submission.mem}</td>
     </tr>
   }
 
@@ -91,21 +92,22 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       return ""
     }
     val sb = new StringBuilder
-    sb.append(s"State: ${status.get.getState}")
+    val s = status.get
+    sb.append(s"State: ${s.getState}")
     if (status.get.hasMessage) {
-      sb.append(s", Message: ${status.get.getMessage}")
+      sb.append(s", Message: ${s.getMessage}")
     }
     if (status.get.hasHealthy) {
-      sb.append(s", Healthy: ${status.get.getHealthy}")
+      sb.append(s", Healthy: ${s.getHealthy}")
     }
     if (status.get.hasSource) {
-      sb.append(s", Source: ${status.get.getSource}")
+      sb.append(s", Source: ${s.getSource}")
     }
     if (status.get.hasReason) {
-      sb.append(s", Reason: ${status.get.getReason}")
+      sb.append(s", Reason: ${s.getReason}")
     }
     if (status.get.hasTimestamp) {
-      sb.append(s", Time: ${status.get.getTimestamp}")
+      sb.append(s", Time: ${s.getTimestamp}")
     }
     sb.toString()
   }

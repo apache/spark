@@ -45,21 +45,23 @@ import org.apache.spark.deploy.ClientArguments._
  *
  * @param host the address this server should bind to
  * @param requestedPort the port this server will attempt to bind to
+ * @param masterConf the conf used by the Master
  * @param masterActor reference to the Master actor to which requests can be sent
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
- * @param masterConf the conf used by the Master
  */
 private[deploy] class StandaloneRestServer(
     val host: String,
     val requestedPort: Int,
+    val masterConf: SparkConf,
     masterActor: ActorRef,
-    masterUrl: String,
-    val masterConf: SparkConf)
+    masterUrl: String)
   extends RestServer {
-
-  val submitRequestServlet = new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
-  val killRequestServlet = new StandaloneKillRequestServlet(masterActor, masterConf)
-  val statusRequestServlet = new StandaloneStatusRequestServlet(masterActor, masterConf)
+  def submitRequestServlet: SubmitRequestServlet =
+    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
+  def killRequestServlet: KillRequestServlet =
+    new StandaloneKillRequestServlet(masterActor, masterConf)
+  def statusRequestServlet: StatusRequestServlet =
+    new StandaloneStatusRequestServlet(masterActor, masterConf)
 }
 
 /**

@@ -329,20 +329,34 @@ private[spark] class MesosClusterSchedulerDriver(
     options
   }
 
-  private class ResourceOffer(val offer: Offer, var cpu: Double, var mem: Double)
+  private class ResourceOffer(val offer: Offer, var cpu: Double, var mem: Double) {
+    override def toString(): String = {
+      s"Offer id: ${offer.getId.getValue}, cpu: $cpu, mem: $mem"
+    }
+  }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
+    def printOffers(offers: Iterable[ResourceOffer]): String = {
+      val builder = new StringBuilder()
+      offers.foreach { o =>
+        builder.append(o).append("\n")
+      }
+      builder.toString()
+    }
+
     val currentOffers = offers.map { o =>
       new ResourceOffer(
         o,
         getResource(o.getResourcesList, "cpus"),
         getResource(o.getResourcesList, "mem"))
     }
+    logTrace(s"Received offers from Mesos: ${printOffers(currentOffers)}")
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
+
     def scheduleTasks(
         taskFunc: () => (Option[MesosDriverDescription], Option[RetryState]),
-        scheduledCallback: (String) => Unit) {
+        scheduledCallback: (String) => Unit): Unit = {
       var nextItem = taskFunc()
       // TODO: We should not stop scheduling at the very first task
       // that cannot be scheduled. Instead we should exhaust the
@@ -352,11 +366,14 @@ private[spark] class MesosClusterSchedulerDriver(
         val (submission, retryState) = (nextItem._1.get, nextItem._2)
         val driverCpu = submission.cores
         val driverMem = submission.mem
+        logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem")
         val offerOption = currentOffers.find { o =>
           o.cpu >= driverCpu && o.mem >= driverMem
         }
 
         if (offerOption.isEmpty) {
+          logDebug(s"Unable to find offer to launch driver id: ${submission.submissionId.get}," +
+              s"cpu: $driverCpu, mem: $driverMem")
           return
         }
 
@@ -371,9 +388,10 @@ private[spark] class MesosClusterSchedulerDriver(
           .setName("mem").setType(Value.Type.SCALAR)
           .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
         val commandInfo = buildCommand(submission)
+        val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()
           .setTaskId(taskId)
-          .setName(s"driver for ${submission.command.mainClass}")
+          .setName(s"Driver for $appName")
           .setSlaveId(offer.offer.getSlaveId)
           .setCommand(commandInfo)
           .addResources(cpuResource)
@@ -387,6 +405,9 @@ private[spark] class MesosClusterSchedulerDriver(
           tasks(offer.offer.getId)
         }
         queuedTasks += taskInfo
+        logTrace(s"Using offer ${offer.offer.getId.getValue} to launch driver " +
+          submission.submissionId.get)
+
         launchedDrivers.set(
           submission.submissionId.get,
           new MesosClusterTaskState(submission, taskId, offer.offer.getSlaveId,

@@ -26,6 +26,7 @@ import org.apache.spark.deploy.mesos.MesosDriverDescription
  * This queue automatically stores the state after each pop/push
  * so it can be recovered later.
  * This queue is also bounded and rejects offers when it's full.
+ * This class is not thread-safe, and we expect the caller to handle synchronizing state.
  * @param state Mesos state abstraction to fetch persistent state.
  */
 private[mesos] class DriverQueue(state: MesosClusterPersistenceEngine, capacity: Int) {
@@ -42,7 +43,7 @@ private[mesos] class DriverQueue(state: MesosClusterPersistenceEngine, capacity:
     count = queue.size
   }
 
-  def isFull = count >= capacity
+  def isFull: Boolean = count >= capacity
 
   def size: Int = count
 

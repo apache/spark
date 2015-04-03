@@ -30,9 +30,9 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /*
  * A dispatcher that is responsible for managing and launching drivers, and is intended to
- * be used for Mesos cluster mode. The dispatcher ls launched by the user in the cluster,
+ * be used for Mesos cluster mode. The dispatcher is launched by the user in the cluster,
  * which it launches a [[MesosRestServer]] for listening for driver requests, and launches a
- * [[MesoClusterScheduler]] to launch these drivers in the Mesos cluster.
+ * [[MesosClusterScheduler]] to launch these drivers in the Mesos cluster.
  *
  * A typical new driver lifecycle is the following:
  *
@@ -141,7 +141,7 @@ private[mesos] object MesosClusterDispatcher extends spark.Logging {
 
     propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-    def parse(args: List[String]): Unit = args match {
+    private def parse(args: List[String]): Unit = args match {
       case ("--host" | "-h") :: value :: tail =>
         Utils.checkHost(value, "Please use hostname " + value)
         host = value
