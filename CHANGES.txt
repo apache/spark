@@ -1,6 +1,734 @@
 Spark Change Log
 ----------------
 
+Release 1.3.1
+
+  [SQL] Use path.makeQualified in newParquet.
+  Yin Huai <yhuai@databricks.com>
+  2015-04-04 23:26:10 +0800
+  Commit: eb57d4f, github.com/apache/spark/pull/5353
+
+  [SPARK-6700] disable flaky test
+  Davies Liu <davies@databricks.com>
+  2015-04-03 15:22:21 -0700
+  Commit: 3366af6, github.com/apache/spark/pull/5356
+
+  [SPARK-6688] [core] Always use resolved URIs in EventLoggingListener.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-04-03 11:54:31 -0700
+  Commit: f17a2fe, github.com/apache/spark/pull/5340
+
+  [SPARK-6575][SQL] Converted Parquet Metastore tables no longer cache metadata
+  Yin Huai <yhuai@databricks.com>
+  2015-04-03 14:40:36 +0800
+  Commit: 0c1b78b, github.com/apache/spark/pull/5339
+
+  [SPARK-6621][Core] Fix the bug that calling EventLoop.stop in EventLoop.onReceive/onError/onStart doesn't call onStop
+  zsxwing <zsxwing@gmail.com>
+  2015-04-02 22:54:30 -0700
+  Commit: ac705aa, github.com/apache/spark/pull/5280
+
+  [SPARK-6345][STREAMING][MLLIB] Fix for training with prediction
+  freeman <the.freeman.lab@gmail.com>
+  2015-04-02 21:37:44 -0700
+  Commit: d21f779, github.com/apache/spark/pull/5037
+
+  [CORE] The descriptionof jobHistory config should be spark.history.fs.logDirectory
+  KaiXinXiaoLei <huleilei1@huawei.com>
+  2015-04-02 20:24:31 -0700
+  Commit: 17ab6b0, github.com/apache/spark/pull/5332
+
+  [SPARK-6575][SQL] Converted Parquet Metastore tables no longer cache metadata
+  Yin Huai <yhuai@databricks.com>
+  2015-04-02 20:23:08 -0700
+  Commit: 0c1c0fb, github.com/apache/spark/pull/5339
+
+  [SPARK-6650] [core] Stop ExecutorAllocationManager when context stops.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-04-02 19:48:55 -0700
+  Commit: 0ef46b2, github.com/apache/spark/pull/5311
+
+  [SPARK-6686][SQL] Use resolved output instead of names for toDF rename
+  Michael Armbrust <michael@databricks.com>
+  2015-04-02 18:30:55 -0700
+  Commit: 2927af1, github.com/apache/spark/pull/5337
+
+  [SPARK-6672][SQL] convert row to catalyst in createDataFrame(RDD[Row], ...)
+  Xiangrui Meng <meng@databricks.com>
+  2015-04-02 17:57:01 +0800
+  Commit: c2694bb, github.com/apache/spark/pull/5329
+
+  [SPARK-6618][SPARK-6669][SQL] Lock Hive metastore client correctly.
+  Yin Huai <yhuai@databricks.com>, Michael Armbrust <michael@databricks.com>
+  2015-04-02 16:46:50 -0700
+  Commit: e6ee95c, github.com/apache/spark/pull/5333
+
+  [Minor] [SQL] Follow-up of PR #5210
+  Cheng Lian <lian@databricks.com>
+  2015-04-02 16:15:34 -0700
+  Commit: 4f1fe3f, github.com/apache/spark/pull/5219
+
+  [SPARK-6655][SQL] We need to read the schema of a data source table stored in spark.sql.sources.schema property
+  Yin Huai <yhuai@databricks.com>
+  2015-04-02 16:02:31 -0700
+  Commit: aecec07, github.com/apache/spark/pull/5313
+
+  [SQL] Throw UnsupportedOperationException instead of NotImplementedError
+  Michael Armbrust <michael@databricks.com>
+  2015-04-02 16:01:03 -0700
+  Commit: 78ba245, github.com/apache/spark/pull/5315
+
+  SPARK-6414: Spark driver failed with NPE on job cancelation
+  Hung Lin <hung.lin@gmail.com>
+  2015-04-02 14:01:43 -0700
+  Commit: 58e2b3f, github.com/apache/spark/pull/5124
+
+  [SPARK-6079] Use index to speed up StatusTracker.getJobIdsForGroup()
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-25 17:40:00 -0700
+  Commit: a6664dc, github.com/apache/spark/pull/4830
+
+  [SPARK-6667] [PySpark] remove setReuseAddress
+  Davies Liu <davies@databricks.com>
+  2015-04-02 12:18:33 -0700
+  Commit: ee2bd70, github.com/apache/spark/pull/5324
+
+  Revert "[SPARK-6618][SQL] HiveMetastoreCatalog.lookupRelation should use fine-grained lock"
+  Cheng Lian <lian@databricks.com>
+  2015-04-02 12:59:38 +0800
+  Commit: 1160cc9
+
+  [SQL] SPARK-6658: Update DataFrame documentation to refer to correct types
+  Michael Armbrust <michael@databricks.com>
+  2015-04-01 18:00:07 -0400
+  Commit: 223dd3f
+
+  [SPARK-6578] Small rewrite to make the logic more clear in MessageWithHeader.transferTo.
+  Reynold Xin <rxin@databricks.com>
+  2015-04-01 18:36:06 -0700
+  Commit: d697b76, github.com/apache/spark/pull/5319
+
+  [SPARK-6660][MLLIB] pythonToJava doesn't recognize object arrays
+  Xiangrui Meng <meng@databricks.com>
+  2015-04-01 18:17:07 -0700
+  Commit: 0d1e476, github.com/apache/spark/pull/5318
+
+  [SPARK-6553] [pyspark] Support functools.partial as UDF
+  ksonj <kson@siberie.de>
+  2015-04-01 17:23:57 -0700
+  Commit: 98f72df, github.com/apache/spark/pull/5206
+
+  [SPARK-6642][MLLIB] use 1.2 lambda scaling and remove addImplicit from NormalEquation
+  Xiangrui Meng <meng@databricks.com>
+  2015-04-01 16:47:18 -0700
+  Commit: bc04fa2, github.com/apache/spark/pull/5314
+
+  [SPARK-6578] [core] Fix thread-safety issue in outbound path of network library.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-04-01 16:06:11 -0700
+  Commit: 1c31ebd, github.com/apache/spark/pull/5234
+
+  [SPARK-6657] [Python] [Docs] fixed python doc build warnings
+  Joseph K. Bradley <joseph@databricks.com>
+  2015-04-01 15:15:47 -0700
+  Commit: e347a7a, github.com/apache/spark/pull/5317
+
+  [SPARK-6651][MLLIB] delegate dense vector arithmetics to the underlying numpy array
+  Xiangrui Meng <meng@databricks.com>
+  2015-04-01 13:29:04 -0700
+  Commit: f50d95a, github.com/apache/spark/pull/5312
+
+  SPARK-6626 [DOCS]: Corrected Scala:TwitterUtils parameters
+  jayson <jayson@ziprecruiter.com>
+  2015-04-01 11:12:55 +0100
+  Commit: 7d029cb, github.com/apache/spark/pull/5295
+
+  [Doc] Improve Python DataFrame documentation
+  Reynold Xin <rxin@databricks.com>
+  2015-03-31 18:31:36 -0700
+  Commit: e527b35, github.com/apache/spark/pull/5287
+
+  [SPARK-6614] OutputCommitCoordinator should clear authorized committer only after authorized committer fails, not after any failure
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-31 16:18:39 -0700
+  Commit: c4c982a, github.com/apache/spark/pull/5276
+
+  [SPARK-6633][SQL] Should be "Contains" instead of "EndsWith" when constructing sources.StringContains
+  Liang-Chi Hsieh <viirya@gmail.com>
+  2015-03-31 13:18:07 -0700
+  Commit: d851646, github.com/apache/spark/pull/5299
+
+  [SPARK-5371][SQL] Propagate types after function conversion, before futher resolution
+  Michael Armbrust <michael@databricks.com>
+  2015-03-31 11:34:29 -0700
+  Commit: 5a957fe, github.com/apache/spark/pull/5278
+
+  [SPARK-6145][SQL] fix ORDER BY on nested fields
+  Michael Armbrust <michael@databricks.com>
+  2015-03-31 11:23:18 -0700
+  Commit: 045228f, github.com/apache/spark/pull/5189
+
+  [SPARK-6575] [SQL] Adds configuration to disable schema merging while converting metastore Parquet tables
+  Cheng Lian <lian@databricks.com>
+  2015-03-31 11:21:15 -0700
+  Commit: 778c876, github.com/apache/spark/pull/5231
+
+  [SPARK-6555] [SQL] Overrides equals() and hashCode() for MetastoreRelation
+  Cheng Lian <lian@databricks.com>
+  2015-03-31 11:18:25 -0700
+  Commit: 9ebefb1, github.com/apache/spark/pull/5289
+
+  [SPARK-6618][SQL] HiveMetastoreCatalog.lookupRelation should use fine-grained lock
+  Yin Huai <yhuai@databricks.com>
+  2015-03-31 16:28:40 +0800
+  Commit: fd600ce, github.com/apache/spark/pull/5281
+
+  [SPARK-6623][SQL] Alias DataFrame.na.drop and DataFrame.na.fill in Python.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-31 00:25:23 -0700
+  Commit: cf651a4, github.com/apache/spark/pull/5284
+
+  [SPARK-6625][SQL] Add common string filters to data sources.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-31 00:19:51 -0700
+  Commit: a97d4e6, github.com/apache/spark/pull/5285
+
+  [SPARK-6119][SQL] DataFrame support for missing data handling
+  Reynold Xin <rxin@databricks.com>
+  2015-03-30 20:47:10 -0700
+  Commit: 67c885e, github.com/apache/spark/pull/5274
+
+  [SPARK-6369] [SQL] Uses commit coordinator to help committing Hive and Parquet tables
+  Cheng Lian <lian@databricks.com>
+  2015-03-31 07:48:37 +0800
+  Commit: fedbfc7, github.com/apache/spark/pull/5139
+
+  [SPARK-6603] [PySpark] [SQL] add SQLContext.udf and deprecate inferSchema() and applySchema
+  Davies Liu <davies@databricks.com>
+  2015-03-30 15:47:00 -0700
+  Commit: 30e7c63, github.com/apache/spark/pull/5273
+
+  [SPARK-6592][SQL] fix filter for scaladoc to generate API doc for Row class under catalyst dir
+  CodingCat <zhunansjtu@gmail.com>
+  2015-03-30 11:54:44 -0700
+  Commit: f9d4efa, github.com/apache/spark/pull/5252
+
+  [SPARK-6571][MLLIB] use wrapper in MatrixFactorizationModel.load
+  Xiangrui Meng <meng@databricks.com>
+  2015-03-28 15:08:05 -0700
+  Commit: 93a7166, github.com/apache/spark/pull/5243
+
+  [SPARK-6595][SQL] MetastoreRelation should be a MultiInstanceRelation
+  Michael Armbrust <michael@databricks.com>
+  2015-03-30 22:24:12 +0800
+  Commit: c411530, github.com/apache/spark/pull/5251
+
+  [SPARK-6558] Utils.getCurrentUserName returns the full principal name instead of login name
+  Thomas Graves <tgraves@apache.org>
+  2015-03-29 12:43:30 +0100
+  Commit: f8132de, github.com/apache/spark/pull/5229
+
+  [SPARK-5750][SPARK-3441][SPARK-5836][CORE] Added documentation explaining shuffle
+  Ilya Ganelin <ilya.ganelin@capitalone.com>, Ilya Ganelin <ilganeli@gmail.com>
+  2015-03-30 11:52:02 +0100
+  Commit: 1c59a4b, github.com/apache/spark/pull/5074
+
+  [spark-sql] a better exception message than "scala.MatchError" for unsupported types in Schema creation
+  Eran Medan <ehrann.mehdan@gmail.com>
+  2015-03-30 00:02:52 -0700
+  Commit: 4859c40, github.com/apache/spark/pull/5235
+
+  [HOTFIX] Build break due to NoRelation cherry-pick.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-29 12:07:28 -0700
+  Commit: 6181366
+
+  [DOC] Improvements to Python docs.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-28 23:59:27 -0700
+  Commit: 3db0844, github.com/apache/spark/pull/5238
+
+  [SPARK-6538][SQL] Add missing nullable Metastore fields when merging a Parquet schema
+  Adam Budde <budde@amazon.com>
+  2015-03-28 09:14:09 +0800
+  Commit: 5e04f45, github.com/apache/spark/pull/5214
+
+  [SPARK-6564][SQL] SQLContext.emptyDataFrame should contain 0 row, not 1 row
+  Reynold Xin <rxin@databricks.com>
+  2015-03-27 14:56:57 -0700
+  Commit: 7006858, github.com/apache/spark/pull/5226
+
+  [SPARK-6544][build] Increment Avro version from 1.7.6 to 1.7.7
+  Dean Chen <deanchen5@gmail.com>
+  2015-03-27 14:32:51 +0000
+  Commit: fefd49f, github.com/apache/spark/pull/5193
+
+  [SPARK-6574] [PySpark] fix sql example
+  Davies Liu <davies@databricks.com>
+  2015-03-27 11:42:26 -0700
+  Commit: b902a95, github.com/apache/spark/pull/5230
+
+  [SPARK-6550][SQL] Use analyzed plan in DataFrame
+  Michael Armbrust <michael@databricks.com>
+  2015-03-27 11:40:00 -0700
+  Commit: bc75189, github.com/apache/spark/pull/5217
+
+  [SPARK-6341][mllib] Upgrade breeze from 0.11.1 to 0.11.2
+  Yu ISHIKAWA <yuu.ishikawa@gmail.com>
+  2015-03-27 00:15:02 -0700
+  Commit: b318858, github.com/apache/spark/pull/5222
+
+  [DOCS][SQL] Fix JDBC example
+  Michael Armbrust <michael@databricks.com>
+  2015-03-26 14:51:46 -0700
+  Commit: 54d92b5, github.com/apache/spark/pull/5192
+
+  [SPARK-6554] [SQL] Don't push down predicates which reference partition column(s)
+  Cheng Lian <lian@databricks.com>
+  2015-03-26 13:11:37 -0700
+  Commit: 3d54578, github.com/apache/spark/pull/5210
+
+  [SPARK-6117] [SQL] Improvements to DataFrame.describe()
+  Reynold Xin <rxin@databricks.com>
+  2015-03-26 12:26:13 -0700
+  Commit: 28e3a1e, github.com/apache/spark/pull/5201
+
+  [SPARK-6117] [SQL] add describe function to DataFrame for summary statis...
+  azagrebin <azagrebin@gmail.com>
+  2015-03-26 00:25:04 -0700
+  Commit: 84735c3, github.com/apache/spark/pull/5073
+
+  SPARK-6480 [CORE] histogram() bucket function is wrong in some simple edge cases
+  Sean Owen <sowen@cloudera.com>
+  2015-03-26 15:00:23 +0000
+  Commit: aa2d157, github.com/apache/spark/pull/5148
+
+  [SPARK-6491] Spark will put the current working dir to the CLASSPATH
+  guliangliang <guliangliang@qiyi.com>
+  2015-03-26 13:28:56 +0000
+  Commit: 5b5f0e2, github.com/apache/spark/pull/5156
+
+  [SQL][SPARK-6471]: Metastore schema should only be a subset of parquet schema to support dropping of columns using replace columns
+  Yash Datta <Yash.Datta@guavus.com>
+  2015-03-26 21:13:38 +0800
+  Commit: 836c921, github.com/apache/spark/pull/5141
+
+  [SPARK-6465][SQL] Fix serialization of GenericRowWithSchema using kryo
+  Michael Armbrust <michael@databricks.com>
+  2015-03-26 18:46:57 +0800
+  Commit: 8254996, github.com/apache/spark/pull/5191
+
+  [SPARK-6536] [PySpark] Column.inSet() in Python
+  Davies Liu <davies@databricks.com>
+  2015-03-26 00:01:24 -0700
+  Commit: 0ba7599, github.com/apache/spark/pull/5190
+
+  [SPARK-6463][SQL] AttributeSet.equal should compare size
+  sisihj <jun.hejun@huawei.com>, Michael Armbrust <michael@databricks.com>
+  2015-03-25 19:21:54 -0700
+  Commit: 9edb34f, github.com/apache/spark/pull/5194
+
+  [SPARK-6450] [SQL] Fixes metastore Parquet table conversion
+  Cheng Lian <lian@databricks.com>
+  2015-03-25 17:40:19 -0700
+  Commit: 0cd4748, github.com/apache/spark/pull/5183
+
+  [SPARK-6409][SQL] It is not necessary that avoid old inteface of hive, because this will make some UDAF can not work.
+  DoingDone9 <799203320@qq.com>
+  2015-03-25 11:11:52 -0700
+  Commit: 4efa6c5, github.com/apache/spark/pull/5131
+
+  SPARK-6063 MLlib doesn't pass mvn scalastyle check due to UTF chars in LDAModel.scala
+  Michael Griffiths <msjgriffiths@gmail.com>, Griffiths, Michael (NYC-RPM) <michael.griffiths@reprisemedia.com>
+  2015-02-28 14:47:39 +0000
+  Commit: 6791f42, github.com/apache/spark/pull/4815
+
+  [SPARK-6496] [MLLIB] GeneralizedLinearAlgorithm.run(input, initialWeights) should initialize numFeatures
+  Yanbo Liang <ybliang8@gmail.com>
+  2015-03-25 17:05:56 +0000
+  Commit: 2be4255, github.com/apache/spark/pull/5167
+
+  [DOCUMENTATION]Fixed Missing Type Import in Documentation
+  Bill Chambers <wchambers@ischool.berkeley.edu>, anabranch <wac.chambers@gmail.com>
+  2015-03-24 22:24:35 -0700
+  Commit: 8e4e2e3, github.com/apache/spark/pull/5179
+
+  [SPARK-6469] Improving documentation on YARN local directories usage
+  Christophe Préaud <christophe.preaud@kelkoo.com>
+  2015-03-24 17:05:49 -0700
+  Commit: 6af9408, github.com/apache/spark/pull/5165
+
+  [SPARK-3570] Include time to open files in shuffle write time.
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2015-03-24 16:29:40 -0700
+  Commit: e4db5a3, github.com/apache/spark/pull/4550
+
+  [SPARK-6088] Correct how tasks that get remote results are shown in UI.
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2015-03-24 16:26:43 -0700
+  Commit: de8b2d4, github.com/apache/spark/pull/4839
+
+  [SPARK-6428][SQL] Added explicit types for all public methods in catalyst
+  Reynold Xin <rxin@databricks.com>
+  2015-03-24 16:03:55 -0700
+  Commit: 586e0d9, github.com/apache/spark/pull/5162
+
+  [SPARK-6209] Clean up connections in ExecutorClassLoader after failing to load classes (master branch PR)
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-24 14:38:20 -0700
+  Commit: dcf56aa, github.com/apache/spark/pull/4944
+
+  [SPARK-6458][SQL] Better error messages for invalid data sources
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 14:10:56 -0700
+  Commit: f48c16d, github.com/apache/spark/pull/5158
+
+  [SPARK-6376][SQL] Avoid eliminating subqueries until optimization
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 14:08:20 -0700
+  Commit: df671bc, github.com/apache/spark/pull/5160
+
+  [SPARK-6375][SQL] Fix formatting of error messages.
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 13:22:46 -0700
+  Commit: 92bf888, github.com/apache/spark/pull/5155
+
+  Revert "[SPARK-5680][SQL] Sum function on all null values, should return zero"
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 12:32:25 -0700
+  Commit: 930b667
+
+  [SPARK-6054][SQL] Fix transformations of TreeNodes that hold StructTypes
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 12:28:01 -0700
+  Commit: c699e2b, github.com/apache/spark/pull/5157
+
+  [SPARK-6437][SQL] Use completion iterator to close external sorter
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 12:10:30 -0700
+  Commit: c0101d3, github.com/apache/spark/pull/5161
+
+  [SPARK-6459][SQL] Warn when constructing trivially true equals predicate
+  Michael Armbrust <michael@databricks.com>
+  2015-03-24 12:09:02 -0700
+  Commit: f0141ca, github.com/apache/spark/pull/5163
+
+  [SPARK-5955][MLLIB] add checkpointInterval to ALS
+  Xiangrui Meng <meng@databricks.com>
+  2015-03-20 15:02:57 -0400
+  Commit: bc92a2e, github.com/apache/spark/pull/5076
+
+  [ML][docs][minor] Define LabeledDocument/Document classes in CV example
+  Peter Rudenko <petro.rudenko@gmail.com>
+  2015-03-24 16:33:38 +0000
+  Commit: 4ff5771, github.com/apache/spark/pull/5135
+
+  [SPARK-5559] [Streaming] [Test] Remove oppotunity we met flakiness when running FlumeStreamSuite
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2015-03-24 16:13:25 +0000
+  Commit: 8722369, github.com/apache/spark/pull/4337
+
+  Update the command to use IPython notebook
+  Cong Yue <yuecong1104@gmail.com>
+  2015-03-24 12:56:13 +0000
+  Commit: e545143, github.com/apache/spark/pull/5111
+
+  [SPARK-6452] [SQL] Checks for missing attributes and unresolved operator for all types of operator
+  Cheng Lian <lian@databricks.com>
+  2015-03-24 01:12:11 -0700
+  Commit: 6f10142, github.com/apache/spark/pull/5129
+
+  [SPARK-6124] Support jdbc connection properties in OPTIONS part of the query
+  Volodymyr Lyubinets <vlyubin@gmail.com>
+  2015-03-23 17:00:27 -0700
+  Commit: 04b2078, github.com/apache/spark/pull/4859
+
+  [SPARK-6397][SQL] Check the missingInput simply
+  Yadong Qi <qiyadong2010@gmail.com>
+  2015-03-23 18:16:49 +0800
+  Commit: a29f493, github.com/apache/spark/pull/5132
+
+  [SPARK-4985] [SQL] parquet support for date type
+  Daoyuan Wang <daoyuan.wang@intel.com>
+  2015-03-23 11:46:16 +0800
+  Commit: 60b9b96, github.com/apache/spark/pull/3822
+
+  [SPARK-6337][Documentation, SQL]Spark 1.3 doc fixes
+  vinodkc <vinod.kc.in@gmail.com>
+  2015-03-22 20:00:08 +0000
+  Commit: 857e8a6, github.com/apache/spark/pull/5112
+
+  SPARK-6454 [DOCS] Fix links to pyspark api
+  Kamil Smuga <smugakamil@gmail.com>, stderr <smugakamil@gmail.com>
+  2015-03-22 15:56:25 +0000
+  Commit: 3ba295f, github.com/apache/spark/pull/5120
+
+  [SPARK-6408] [SQL] Fix JDBCRDD filtering string literals
+  ypcat <ypcat6@gmail.com>, Pei-Lun Lee <pllee@appier.com>
+  2015-03-22 15:49:13 +0800
+  Commit: e60fbf6, github.com/apache/spark/pull/5087
+
+  [SPARK-6428][SQL] Added explicit type for all public methods for Hive module
+  Reynold Xin <rxin@databricks.com>
+  2015-03-21 14:30:04 -0700
+  Commit: 0021d22, github.com/apache/spark/pull/5108
+
+  [SPARK-6428][SQL] Added explicit type for all public methods in sql/core
+  Reynold Xin <rxin@databricks.com>
+  2015-03-20 15:47:07 -0700
+  Commit: c964588, github.com/apache/spark/pull/5104
+
+  [SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.
+  Yin Huai <yhuai@databricks.com>
+  2015-03-21 13:27:53 -0700
+  Commit: 102daaf, github.com/apache/spark/pull/5078
+
+  [SPARK-5680][SQL] Sum function on all null values, should return zero
+  Venkata Ramana G <ramana.gollamudihuawei.com>, Venkata Ramana Gollamudi <ramana.gollamudi@huawei.com>
+  2015-03-21 13:24:24 -0700
+  Commit: 93975a3, github.com/apache/spark/pull/4466
+
+  [SPARK-5320][SQL]Add statistics method at NoRelation (override super).
+  x1- <viva008@gmail.com>
+  2015-03-21 13:22:34 -0700
+  Commit: cba6842, github.com/apache/spark/pull/5105
+
+  [SPARK-5821] [SQL] JSON CTAS command should throw error message when delete path failure
+  Yanbo Liang <ybliang8@gmail.com>, Yanbo Liang <yanbohappy@gmail.com>
+  2015-03-21 11:23:28 +0800
+  Commit: 8de90c7, github.com/apache/spark/pull/4610
+
+  [SPARK-6315] [SQL] Also tries the case class string parser while reading Parquet schema
+  Cheng Lian <lian@databricks.com>
+  2015-03-21 11:18:45 +0800
+  Commit: b75943f, github.com/apache/spark/pull/5034
+
+  [SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful
+  Yanbo Liang <ybliang8@gmail.com>
+  2015-03-21 10:53:04 +0800
+  Commit: df83e21, github.com/apache/spark/pull/5107
+
+  [SPARK-6421][MLLIB] _regression_train_wrapper does not test initialWeights correctly
+  lewuathe <lewuathe@me.com>
+  2015-03-20 17:18:18 -0400
+  Commit: aff9f8d, github.com/apache/spark/pull/5101
+
+  [SPARK-6286][Mesos][minor] Handle missing Mesos case TASK_ERROR
+  Jongyoul Lee <jongyoul@gmail.com>
+  2015-03-20 12:24:34 +0000
+  Commit: db812d9, github.com/apache/spark/pull/5088
+
+  [SPARK-6222][Streaming] Dont delete checkpoint data when doing pre-batch-start checkpoint
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-03-19 02:15:50 -0400
+  Commit: 03e263f, github.com/apache/spark/pull/5008
+
+  [SPARK-6325] [core,yarn] Do not change target executor count when killing executors.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-03-18 09:18:28 -0400
+  Commit: 1723f05, github.com/apache/spark/pull/5018
+
+  [SPARK-6286][minor] Handle missing Mesos case TASK_ERROR.
+  Iulian Dragos <jaguarul@gmail.com>
+  2015-03-18 09:15:33 -0400
+  Commit: ff0a7f4, github.com/apache/spark/pull/5000
+
+  [SPARK-6247][SQL] Fix resolution of ambiguous joins caused by new aliases
+  Michael Armbrust <michael@databricks.com>
+  2015-03-17 19:47:51 -0700
+  Commit: ba8352c, github.com/apache/spark/pull/5062
+
+  [SPARK-6383][SQL]Fixed compiler and errors in Dataframe examples
+  Tijo Thomas <tijoparacka@gmail.com>
+  2015-03-17 18:50:19 -0700
+  Commit: cee6d08, github.com/apache/spark/pull/5068
+
+  [SPARK-6366][SQL] In Python API, the default save mode for save and saveAsTable should be "error" instead of "append".
+  Yin Huai <yhuai@databricks.com>
+  2015-03-18 09:41:06 +0800
+  Commit: 3ea38bc, github.com/apache/spark/pull/5053
+
+  [SPARK-6330] [SQL] Add a test case for SPARK-6330
+  Pei-Lun Lee <pllee@appier.com>
+  2015-03-18 08:34:46 +0800
+  Commit: 9d88f0c, github.com/apache/spark/pull/5039
+
+  [SPARK-6336] LBFGS should document what convergenceTol means
+  lewuathe <lewuathe@me.com>
+  2015-03-17 12:11:57 -0700
+  Commit: 476c4e1, github.com/apache/spark/pull/5033
+
+  [SPARK-6365] jetty-security also needed for SPARK_PREPEND_CLASSES to work
+  Imran Rashid <irashid@cloudera.com>
+  2015-03-17 12:03:54 -0500
+  Commit: ac0e7cc, github.com/apache/spark/pull/5071
+
+  [SPARK-6313] Add config option to disable file locks/fetchFile cache to ...
+  nemccarthy <nathan@nemccarthy.me>
+  2015-03-17 09:33:11 -0700
+  Commit: febb123, github.com/apache/spark/pull/5036
+
+  [SPARK-3266] Use intermediate abstract classes to fix type erasure issues in Java APIs
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-17 09:18:57 -0700
+  Commit: 29e39e1, github.com/apache/spark/pull/5050
+
+  [SPARK-6331] Load new master URL if present when recovering streaming context from checkpoint
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-03-17 05:31:27 -0700
+  Commit: 95f8d1c, github.com/apache/spark/pull/5024
+
+  [SQL][docs][minor] Fixed sample code in SQLContext scaladoc
+  Lomig Mégard <lomig.megard@gmail.com>
+  2015-03-16 23:52:42 -0700
+  Commit: 426816b, github.com/apache/spark/pull/5051
+
+  [SPARK-6299][CORE] ClassNotFoundException in standalone mode when running groupByKey with class defined in REPL
+  Kevin (Sangwoo) Kim <sangwookim.me@gmail.com>
+  2015-03-16 23:49:23 -0700
+  Commit: 5c16ced, github.com/apache/spark/pull/5046
+
+  [SPARK-6077] Remove streaming tab while stopping StreamingContext
+  lisurprise <zhichao.li@intel.com>
+  2015-03-16 13:10:32 -0700
+  Commit: 47cce98, github.com/apache/spark/pull/4828
+
+  [SPARK-6330] Fix filesystem bug in newParquet relation
+  Volodymyr Lyubinets <vlyubin@gmail.com>
+  2015-03-16 12:13:18 -0700
+  Commit: 67fa6d1, github.com/apache/spark/pull/5020
+
+  SPARK-6245 [SQL] jsonRDD() of empty RDD results in exception
+  Sean Owen <sowen@cloudera.com>
+  2015-03-11 14:09:09 +0000
+  Commit: 684ff24, github.com/apache/spark/pull/4971
+
+  [SPARK-6300][Spark Core] sc.addFile(path) does not support the relative path.
+  DoingDone9 <799203320@qq.com>
+  2015-03-16 12:27:15 +0000
+  Commit: 724aab4, github.com/apache/spark/pull/4993
+
+  [SPARK-3619] Part 2. Upgrade to Mesos 0.21 to work around MESOS-1688
+  Jongyoul Lee <jongyoul@gmail.com>
+  2015-03-15 15:46:55 +0000
+  Commit: 43fcab0, github.com/apache/spark/pull/4361
+
+  [SPARK-6210] [SQL] use prettyString as column name in agg()
+  Davies Liu <davies@databricks.com>
+  2015-03-14 00:43:33 -0700
+  Commit: ad47563, github.com/apache/spark/pull/5006
+
+  [SPARK-6275][Documentation]Miss toDF() function in docs/sql-programming-guide.md
+  zzcclp <xm_zzc@sina.com>
+  2015-03-12 15:07:15 +0000
+  Commit: 3012781, github.com/apache/spark/pull/4977
+
+  [SPARK-6133] Make sc.stop() idempotent
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 15:09:57 -0800
+  Commit: a08588c, github.com/apache/spark/pull/4871
+
+  [SPARK-6132][HOTFIX] ContextCleaner InterruptedException should be quiet
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 20:49:45 -0800
+  Commit: 338bea7, github.com/apache/spark/pull/4882
+
+  [SPARK-6132] ContextCleaner race condition across SparkContexts
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 13:44:05 -0800
+  Commit: 3cdc8a3, github.com/apache/spark/pull/4869
+
+  [SPARK-6087][CORE] Provide actionable exception if Kryo buffer is not large enough
+  Lev Khomich <levkhomich@gmail.com>
+  2015-03-10 10:55:42 +0000
+  Commit: 9846790, github.com/apache/spark/pull/4947
+
+  [SPARK-6036][CORE] avoid race condition between eventlogListener and akka actor system
+  Zhang, Liye <liye.zhang@intel.com>
+  2015-02-26 23:11:43 -0800
+  Commit: f81611d, github.com/apache/spark/pull/4785
+
+  SPARK-4044 [CORE] Thriftserver fails to start when JAVA_HOME points to JRE instead of JDK
+  Sean Owen <sowen@cloudera.com>
+  2015-03-13 17:59:31 +0000
+  Commit: 4aa4132, github.com/apache/spark/pull/4981
+
+  SPARK-4300 [CORE] Race condition during SparkWorker shutdown
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 14:08:56 -0800
+  Commit: a3493eb, github.com/apache/spark/pull/4787
+
+  [SPARK-6194] [SPARK-677] [PySpark] fix memory leak in collect()
+  Davies Liu <davies@databricks.com>
+  2015-03-09 16:24:06 -0700
+  Commit: 170af49, github.com/apache/spark/pull/4923
+
+  SPARK-4704 [CORE] SparkSubmitDriverBootstrap doesn't flush output
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 12:56:54 -0800
+  Commit: dbee7e1, github.com/apache/spark/pull/4788
+
+  [SPARK-6278][MLLIB] Mention the change of objective in linear regression
+  Xiangrui Meng <meng@databricks.com>
+  2015-03-13 10:27:28 -0700
+  Commit: 214f681, github.com/apache/spark/pull/4978
+
+  [SPARK-5310] [SQL] [DOC] Parquet section for the SQL programming guide
+  Cheng Lian <lian@databricks.com>
+  2015-03-13 21:34:50 +0800
+  Commit: dc287f3, github.com/apache/spark/pull/5001
+
+  [mllib] [python] Add LassoModel to __all__ in regression.py
+  Joseph K. Bradley <joseph@databricks.com>
+  2015-03-12 16:46:29 -0700
+  Commit: 23069bd, github.com/apache/spark/pull/4970
+
+  [SPARK-6294] fix hang when call take() in JVM on PythonRDD
+  Davies Liu <davies@databricks.com>
+  2015-03-12 01:34:38 -0700
+  Commit: 850e694, github.com/apache/spark/pull/4987
+
+  [SPARK-6296] [SQL] Added equals to Column
+  Volodymyr Lyubinets <vlyubin@gmail.com>
+  2015-03-12 00:55:26 -0700
+  Commit: d9e141c, github.com/apache/spark/pull/4988
+
+  [SPARK-6128][Streaming][Documentation] Updates to Spark Streaming Programming Guide
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-03-11 18:48:21 -0700
+  Commit: bdc4682, github.com/apache/spark/pull/4956
+
+  [SPARK-6274][Streaming][Examples] Added examples streaming + sql examples.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-03-11 11:19:51 -0700
+  Commit: ac61466, github.com/apache/spark/pull/4975
+
+  [SPARK-5183][SQL] Update SQL Docs with JDBC and Migration Guide
+  Michael Armbrust <michael@databricks.com>
+  2015-03-10 18:13:09 -0700
+  Commit: edbcb6f, github.com/apache/spark/pull/4958
+
+  Minor doc: Remove the extra blank line in data types javadoc.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-10 17:25:04 -0700
+  Commit: 7295192, github.com/apache/spark/pull/4955
+
+  [SPARK-5310][Doc] Update SQL Programming Guide to include DataFrames.
+  Reynold Xin <rxin@databricks.com>
+  2015-03-09 16:16:16 -0700
+  Commit: bc53d3d, github.com/apache/spark/pull/4954
+
+  [Docs] Replace references to SchemaRDD with DataFrame
+  Reynold Xin <rxin@databricks.com>
+  2015-03-09 13:29:19 -0700
+  Commit: 5e58f76, github.com/apache/spark/pull/4952
+
+  Preparing development version 1.3.1-SNAPSHOT
+  Patrick Wendell <patrick@databricks.com>
+  2015-03-05 23:02:08 +0000
+  Commit: c152f9a
+
+
 Release 1.3.0
 
   [SQL] Make Strategies a public developer API
