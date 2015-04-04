@@ -405,11 +405,15 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
   }
 
-  def checkSpecialCharacters(schema: Seq[Attribute]) = {
+  private def checkSpecialCharacters(schema: Seq[Attribute]) = {
     // ,;{}()\n\t= and space character are special characters in Parquet schema
-    if (schema.exists(_.name.matches(".*[ ,;{}()\n\t=].*"))) {
-      sys.error("""Attribute name can not contain any character among " ,;{}()\n\t=".
-                   | Use Alias to rename attribute name""".stripMargin)
+    schema.map(_.name).foreach { name =>
+      if (name.matches(".*[ ,;{}()\n\t=].*")) {
+        sys.error(
+          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\n\t=".
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" "))
+      }
     }
   }
 
