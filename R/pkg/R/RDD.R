@@ -738,6 +738,7 @@ setMethod("take",
             index <- -1
             jrdd <- getJRDD(x)
             numPartitions <- numPartitions(x)
+            serializedModeRDD <- getSerializedMode(x)
 
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
@@ -756,12 +757,13 @@ setMethod("take",
               elems <- convertJListToRList(partition,
                                            flatten = TRUE,
                                            logicalUpperBound = size,
-                                           serializedMode = getSerializedMode(x))
-              # TODO: Check if this append is O(n^2)?
+                                           serializedMode = serializedModeRDD)
+
               resList <- append(resList, elems)
             }
             resList
           })
+
 
 #' First
 #'
@@ -1100,21 +1102,42 @@ takeOrderedElem <- function(x, num, ascending = TRUE) {
     if (num < length(part)) {
       # R limitation: order works only on primitive types!
       ord <- order(unlist(part, recursive = FALSE), decreasing = !ascending)
-      list(part[ord[1:num]])
+      part[ord[1:num]]
     } else {
-      list(part)
+      part
     }
   }
 
-  reduceFunc <- function(elems, part) {
-    newElems <- append(elems, part)
-    # R limitation: order works only on primitive types!
-    ord <- order(unlist(newElems, recursive = FALSE), decreasing = !ascending)
-    newElems[ord[1:num]]
-  }
-  
   newRdd <- mapPartitions(x, partitionFunc)
-  reduce(newRdd, reduceFunc)
+
+  resList <- list()
+  index <- -1
+  jrdd <- getJRDD(newRdd)
+  numPartitions <- numPartitions(newRdd)
+  serializedModeRDD <- getSerializedMode(newRdd)
+
+  while (TRUE) {
+    index <- index + 1
+
+    if (index >= numPartitions) {
+      ord <- order(unlist(resList, recursive = FALSE), decreasing = !ascending)
+      resList <- resList[ord[1:num]]
+      break
+    }
+
+    # a JList of byte arrays
+    partitionArr <- callJMethod(jrdd, "collectPartitions", as.list(as.integer(index)))
+    partition <- partitionArr[[1]]
+
+    # elems is capped to have at most `num` elements
+    elems <- convertJListToRList(partition,
+                                 flatten = TRUE,
+                                 logicalUpperBound = num,
+                                 serializedMode = serializedModeRDD)
+
+    resList <- append(resList, elems)
+  }
+  resList
 }
 
 #' Returns the first N elements from an RDD in ascending order.
