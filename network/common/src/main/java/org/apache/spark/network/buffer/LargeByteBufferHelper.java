@@ -52,17 +52,7 @@ public class LargeByteBufferHelper {
             long offset,
             long length
     ) throws IOException {
-        return mapFile(channel, mode, offset, length, DEFAULT_MAX_CHUNK);
-    }
-
-    //exposed for testing
-    static LargeByteBuffer mapFile(
-            FileChannel channel,
-            FileChannel.MapMode mode,
-            long offset,
-            long length,
-            int maxChunk
-    ) throws IOException {
+        int maxChunk = DEFAULT_MAX_CHUNK;
         ArrayList<Long> offsets = new ArrayList<Long>();
         long curOffset = offset;
         long end = offset + length;
