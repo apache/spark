@@ -82,17 +82,9 @@ private[spark] class AkkaRpcEnv private[akka] (
   /**
    * Retrieve the [[RpcEndpointRef]] of `endpoint`.
    */
-  override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = {
-    val endpointRef = endpointToRef.get(endpoint)
-    require(endpointRef != null, s"Cannot find RpcEndpointRef of ${endpoint} in ${this}")
-    endpointRef
-  }
+  override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToRef.get(endpoint)
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
-    setupThreadSafeEndpoint(name, endpoint)
-  }
-
-  override def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
     // Use lazy because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.

@@ -40,10 +40,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
-   * [[RpcEndpoint.self]].
-   *
-   * Note: This method won't return null. `IllegalArgumentException` will be thrown if calling this
-   * on a non-existent endpoint.
+   * [[RpcEndpoint.self]]. Return `null` if the corresponding [[RpcEndpointRef]] does not exist.
    */
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
@@ -57,20 +54,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * guarantee thread-safety.
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
-
-  /**
-   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] should
-   * make sure thread-safely sending messages to [[RpcEndpoint]].
-   *
-   * Thread-safety means processing of one message happens before processing of the next message by
-   * the same [[RpcEndpoint]]. In the other words, changes to internal fields of a [[RpcEndpoint]]
-   * are visible when processing the next message, and fields in the [[RpcEndpoint]] need not be
-   * volatile or equivalent.
-   *
-   * However, there is no guarantee that the same thread will be executing the same [[RpcEndpoint]]
-   * for different messages.
-   */
-  def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
    * Retrieve the [[RpcEndpointRef]] represented by `uri` asynchronously.
@@ -181,7 +164,7 @@ private[spark] trait RpcEnvFactory {
  * constructor onStart receive* onStop
  *
  * Note: `receive` can be called concurrently. If you want `receive` is thread-safe, please use
- * [[RpcEnv.setupThreadSafeEndpoint]]
+ * [[ThreadSafeRpcEndpoint]]
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
@@ -195,7 +178,7 @@ private[spark] trait RpcEndpoint {
 
   /**
    * The [[RpcEndpointRef]] of this [[RpcEndpoint]]. `self` will become valid when `onStart` is
-   * called.
+   * called. And `self` will become `null` when `onStop` is called.
    *
    * Note: Because before `onStart`, [[RpcEndpoint]] has not yet been registered and there is not
    * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called.
@@ -277,6 +260,19 @@ private[spark] trait RpcEndpoint {
     }
   }
 }
+
+/**
+ * A trait that requires RpcEnv thread-safely sending messages to it.
+ *
+ * Thread-safety means processing of one message happens before processing of the next message by
+ * the same [[ThreadSafeRpcEndpoint]]. In the other words, changes to internal fields of a
+ * [[ThreadSafeRpcEndpoint]] are visible when processing the next message, and fields in the
+ * [[ThreadSafeRpcEndpoint]] need not be volatile or equivalent.
+ *
+ * However, there is no guarantee that the same thread will be executing the same
+ * [[ThreadSafeRpcEndpoint]] for different messages.
+ */
+trait ThreadSafeRpcEndpoint extends RpcEndpoint
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
@@ -407,7 +403,8 @@ private[spark] object RpcAddress {
 }
 
 /**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure.
+ * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
+ * and can be called in any thread.
  */
 private[spark] trait RpcCallContext {
 

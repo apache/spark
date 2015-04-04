@@ -23,13 +23,9 @@ import java.util.concurrent.{TimeUnit, Executors}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
-
-import akka.pattern.ask
-import akka.util.Timeout
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
@@ -165,11 +161,8 @@ class DAGScheduler(
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
-    implicit val timeout = Timeout(600 seconds)
-
-    Await.result(
-      blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
-      timeout.duration).asInstanceOf[Boolean]
+    blockManagerMaster.driverEndpoint.askWithReply[Boolean](
+      BlockManagerHeartbeat(blockManagerId), 600 seconds)
   }
 
   // Called by TaskScheduler when an executor fails.
