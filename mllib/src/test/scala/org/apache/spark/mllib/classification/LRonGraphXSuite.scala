@@ -41,7 +41,11 @@ class LRonGraphXSuite extends FunSuite with LocalClusterSparkContext with Matche
     //    val dataSet = MLUtils.loadLibSVMFile(sc, dataSetFile).repartition(72)
 
 
-    val stepSize = 0.5
+    // val checkpoint = "/input/lbs/recommend/toona/als/checkpoint"
+    // sc.setCheckpointDir(checkpoint)
+
+
+    val stepSize = 0.6
     val numIterations = 1000
     val regParam = 1e-2
     val trainSet = dataSet.cache()

@@ -49,8 +49,13 @@ class LRonGraphX(
 
   @transient private var innerIter = 1
   @transient private val checkpointInterval = 10
+  @transient private var delta: VertexRDD[(Double, Double)] = null
   @transient private var deltaSum: VertexRDD[Double] = null
+  @transient private var multiplier: VertexRDD[Double] = null
+  @transient private var margin: VertexRDD[Double] = null
+  @transient private var gradient: VertexRDD[Double] = null
   @transient private var vertices = dataSet.vertices
+  @transient private var previousVertices = vertices
   @transient private val edges = dataSet.edges.asInstanceOf[EdgeRDDImpl[ED, _]]
     .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
 
@@ -81,22 +86,17 @@ class LRonGraphX(
   def run(iterations: Int): Unit = {
     for (iter <- 1 to iterations) {
       logInfo(s"Start train (Iteration $iter/$iterations)")
-      val previousVertices = dataSet.vertices
-      val margin = forward()
-      margin.setName(s"margin-$iter").persist(storageLevel)
+      previousVertices = dataSet.vertices
+      margin = forward(iter)
       println(s"train (Iteration $iter/$iterations) cost : ${error(margin)}")
-      var gradient = backward(margin)
+      gradient = backward(margin, iter)
       gradient = updateDeltaSum(gradient, iter)
 
       vertices = updateWeight(gradient, iter)
-      vertices.setName(s"vertices-$iter").persist(storageLevel)
-      checkpointVertices()
+      checkpoint()
       vertices.count()
       dataSet = GraphImpl(vertices, edges)
-
-      previousVertices.unpersist(blocking = false)
-      margin.unpersist(blocking = false)
-      gradient.unpersist(blocking = false)
+      unpersistVertices()
       logInfo(s"End train (Iteration $iter/$iterations)")
       innerIter += 1
     }
@@ -116,7 +116,7 @@ class LRonGraphX(
       gradient.setName(s"gradient-$iter").persist(storageLevel)
     }
     if (useAdaGrad) {
-      val delta = adaGrad(deltaSum, gradient, 1, 1e-2, 1 - 1e-2)
+      delta = adaGrad(deltaSum, gradient, 1, 1e-2, 1 - 1e-2)
       delta.setName(s"delta-$iter").persist(storageLevel).count()
 
       gradient.unpersist(blocking = false)
@@ -125,7 +125,6 @@ class LRonGraphX(
 
       if (deltaSum != null) deltaSum.unpersist(blocking = false)
       deltaSum = delta.mapValues(_._1).setName(s"deltaSum-$iter").persist(storageLevel)
-      checkpointDeltaSum()
       deltaSum.count()
       delta.unpersist(blocking = false)
 
@@ -149,7 +148,7 @@ class LRonGraphX(
     }.map(_._2).reduce(_ + _) / numSamples
   }
 
-  private def forward(): VertexRDD[VD] = {
+  private def forward(iter: Int): VertexRDD[VD] = {
     dataSet.aggregateMessages[Double](ctx => {
       // val sampleId = ctx.dstId
       // val featureId = ctx.srcId
@@ -158,17 +157,18 @@ class LRonGraphX(
       val z = -w * x
       assert(!z.isNaN)
       ctx.sendToDst(z)
-    }, _ + _, TripletFields.Src)
+    }, _ + _, TripletFields.Src).setName(s"margin-$iter").persist(storageLevel)
   }
 
-  private def backward(q: VertexRDD[VD]): VertexRDD[Double] = {
-    val multiplier = dataSet.vertices.leftJoin(q) { (_, y, margin) =>
+  private def backward(q: VertexRDD[VD], iter: Int): VertexRDD[Double] = {
+    multiplier = dataSet.vertices.leftJoin(q) { (_, y, margin) =>
       margin match {
         case Some(z) =>
           (1.0 / (1.0 + math.exp(z))) - y
         case _ => 0.0
       }
     }
+    multiplier.setName(s"multiplier-$iter").persist(storageLevel)
     GraphImpl(multiplier, dataSet.edges).aggregateMessages[Double](ctx => {
       // val sampleId = ctx.dstId
       // val featureId = ctx.srcId
@@ -183,7 +183,11 @@ class LRonGraphX(
 
   // Updater for L1 regularized problems
   private def updateWeight(delta: VertexRDD[Double], iter: Int): VertexRDD[Double] = {
-    val thisIterStepSize = if (useAdaGrad) stepSize else stepSize / sqrt(iter)
+    val thisIterStepSize = if (useAdaGrad) {
+      stepSize * min(iter / 11.0, 1.0)
+    } else {
+      stepSize / sqrt(iter)
+    }
     val thisIterL1StepSize = stepSize / sqrt(iter)
     dataSet.vertices.leftJoin(delta) { (_, attr, gradient) =>
       gradient match {
@@ -199,8 +203,7 @@ class LRonGraphX(
         }
         case None => attr
       }
-    }
-
+    }.setName(s"vertices-$iter").persist(storageLevel)
   }
 
   private def adaGrad(
@@ -222,18 +225,21 @@ class LRonGraphX(
     }
   }
 
-  private def checkpointVertices(): Unit = {
+  private def checkpoint(): Unit = {
     val sc = vertices.sparkContext
     if (innerIter % checkpointInterval == 0 && sc.getCheckpointDir.isDefined) {
       vertices.checkpoint()
+      edges.checkpoint()
+      if (deltaSum != null) deltaSum.checkpoint()
     }
   }
 
-  private def checkpointDeltaSum(): Unit = {
-    val sc = deltaSum.sparkContext
-    if (innerIter % checkpointInterval == 0 && sc.getCheckpointDir.isDefined) {
-      deltaSum.checkpoint()
-    }
+  private def unpersistVertices(): Unit = {
+    if (previousVertices != null) previousVertices.unpersist(blocking = false)
+    if (margin != null) margin.unpersist(blocking = false)
+    if (gradient != null) gradient.unpersist(blocking = false)
+    if (multiplier != null) multiplier.unpersist(blocking = false)
+    if (delta != null) delta.unpersist(blocking = false)
   }
 }
 
