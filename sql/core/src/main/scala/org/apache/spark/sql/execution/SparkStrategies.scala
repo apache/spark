@@ -146,7 +146,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         rewrittenAggregateExpressions.map(
           exp => exp match {
             case pname@Alias(CombineSetsAndCount(_), _) =>
-              cdExpression = cdExpression :+ Alias(Sum(pname.toAttribute), "distinctCount")()
+              cdExpression = cdExpression :+ Alias(SumZero(pname.toAttribute), "distinctCount")()
               i += 1
             case _ => i += 2
         })
