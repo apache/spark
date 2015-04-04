@@ -704,20 +704,20 @@ class DenseMatrix(Matrix):
 
 class SparseMatrix(object):
     """Sparse Matrix stored in CSC format."""
-    def __init__(self, numRows, numCols, indptr, indices, values):
+    def __init__(self, numRows, numCols, colPtrs, rowIndices, values):
         self.numRows = numRows
         self.numCols = numCols
-        if isinstance(indptr, basestring):
-            self.indptr = np.frombuffer(indptr, dtype=np.uint64)
+        if isinstance(colPtrs, basestring):
+            self.colPtrs = np.frombuffer(colPtrs, dtype=np.uint64)
         else:
-            self.indptr = np.asarray(indptr, dtype=np.uint64)
-        if self.indptr.size != numCols + 1:
-            raise ValueError("Expected indptr of size %d, got %d."
-                             % (numCols + 1, self.indptr.size))
-        if isinstance(indices, basestring):
-            self.indices = np.frombuffer(indices, dtype=np.uint64)
+            self.colPtrs = np.asarray(colPtrs, dtype=np.uint64)
+        if self.colPtrs.size != numCols + 1:
+            raise ValueError("Expected colPtrs of size %d, got %d."
+                             % (numCols + 1, self.colPtrs.size))
+        if isinstance(rowIndices, basestring):
+            self.rowIndices = np.frombuffer(rowIndices, dtype=np.uint64)
         else:
-            self.indices = np.asarray(indices, dtype=np.uint64)
+            self.rowIndices = np.asarray(rowIndices, dtype=np.uint64)
         if isinstance(values, basestring):
             self.values = np.frombuffer(values, dtype=np.float64)
         else:
@@ -725,8 +725,8 @@ class SparseMatrix(object):
 
     def __reduce__(self):
         return SparseMatrix, (
-            self.numRows, self.numCols, self.indptr.tostring(),
-            self.indices.tostring(), self.values.tostring()
+            self.numRows, self.numCols, self.colPtrs.tostring(),
+            self.rowIndices.tostring(), self.values.tostring()
         )
 
     def __getitem__(self, indices):
@@ -737,21 +737,21 @@ class SparseMatrix(object):
         if j >= self.numCols or j < 0:
             raise ValueError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
-        nz = self.indices[self.indptr[j]: self.indptr[j + 1]]
+        nz = self.rowIndices[self.colPtrs[j]: self.colPtrs[j + 1]]
         if nz.size == 0:
             return 0.0
         ind = np.searchsorted(nz, i)
         if i == nz[ind]:
-            return self.values[self.indptr[j]: self.indptr[j + 1]][ind]
+            return self.values[self.colPtrs[j]: self.colPtrs[j + 1]][ind]
         return 0.0
 
     def _densify_values(self):
         sparsearr = np.zeros(self.numRows * self.numCols, dtype=np.float64)
         offset = 0
-        for ptr in xrange(self.indptr.size - 1):
-            startptr = self.indptr[ptr]
-            endptr = self.indptr[ptr + 1]
-            sparsearr[offset + self.indices[startptr: endptr]] = \
+        for ptr in xrange(self.colPtrs.size - 1):
+            startptr = self.colPtrs[ptr]
+            endptr = self.colPtrs[ptr + 1]
+            sparsearr[offset + self.rowIndices[startptr: endptr]] = \
                 self.values[startptr: endptr]
             offset += self.numRows
         return sparsearr

@@ -149,8 +149,8 @@ class VectorTests(PySparkTestCase):
             3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
         self.assertEquals(sm1.numRows, 3)
         self.assertEquals(sm1.numCols, 4)
-        self.assertEquals(sm1.indptr.tolist(), [0, 2, 2, 4, 4])
-        self.assertEquals(sm1.indices.tolist(), [1, 2, 1, 2])
+        self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
+        self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
         self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
 
         # Test indexing
@@ -168,8 +168,8 @@ class VectorTests(PySparkTestCase):
         smnew = sm1.toDense().toSparse()
         self.assertEquals(sm1.numRows, smnew.numRows)
         self.assertEquals(sm1.numCols, smnew.numCols)
-        self.assertTrue(array_equal(sm1.indptr, smnew.indptr))
-        self.assertTrue(array_equal(sm1.indices, smnew.indices))
+        self.assertTrue(array_equal(sm1.colPtrs, smnew.colPtrs))
+        self.assertTrue(array_equal(sm1.rowIndices, smnew.rowIndices))
         self.assertTrue(array_equal(sm1.values, smnew.values))
 
 
