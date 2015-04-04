@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
@@ -31,8 +31,8 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.Utils
 
 /**
- * BlockManagerMasterEndpoint is an [[RpcEndpoint]] on the master node to track statuses of
- * all slaves' block managers.
+ * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
+ * of all slaves' block managers.
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -40,7 +40,7 @@ class BlockManagerMasterEndpoint(
     val isLocal: Boolean,
     conf: SparkConf,
     listenerBus: LiveListenerBus)
-  extends RpcEndpoint with Logging {
+  extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]

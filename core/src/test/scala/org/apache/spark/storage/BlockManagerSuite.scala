@@ -83,7 +83,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
-    master = new BlockManagerMaster(rpcEnv.setupThreadSafeEndpoint("blockmanager",
+    master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)

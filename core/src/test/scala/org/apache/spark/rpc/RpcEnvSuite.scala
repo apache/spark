@@ -340,7 +340,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     // If a RpcEnv implementation breaks the `receive` contract, hope this test can expose it
     for(i <- 0 until 100) {
       @volatile var result = 0
-      val endpointRef = env.setupThreadSafeEndpoint(s"receive-in-sequence-$i", new RpcEndpoint {
+      val endpointRef = env.setupEndpoint(s"receive-in-sequence-$i", new ThreadSafeRpcEndpoint {
         override val rpcEnv = env
 
         override def receive = {
@@ -473,7 +473,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("network events") {
     val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupThreadSafeEndpoint("network-events", new RpcEndpoint {
+    env.setupEndpoint("network-events", new ThreadSafeRpcEndpoint {
       override val rpcEnv = env
 
       override def receive = {

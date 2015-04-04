@@ -63,7 +63,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
-    blockManagerMaster = new BlockManagerMaster(rpcEnv.setupThreadSafeEndpoint("blockmanager",
+    blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
     blockManager = new BlockManager("bm", rpcEnv, blockManagerMaster, serializer,

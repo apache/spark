@@ -80,7 +80,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     // to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
 
-    master = new BlockManagerMaster(rpcEnv.setupThreadSafeEndpoint("blockmanager",
+    master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
     allStores.clear()
   }

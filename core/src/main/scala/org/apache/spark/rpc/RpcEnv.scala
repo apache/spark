@@ -56,20 +56,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
-   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] should
-   * make sure thread-safely sending messages to [[RpcEndpoint]].
-   *
-   * Thread-safety means processing of one message happens before processing of the next message by
-   * the same [[RpcEndpoint]]. In the other words, changes to internal fields of a [[RpcEndpoint]]
-   * are visible when processing the next message, and fields in the [[RpcEndpoint]] need not be
-   * volatile or equivalent.
-   *
-   * However, there is no guarantee that the same thread will be executing the same [[RpcEndpoint]]
-   * for different messages.
-   */
-  def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
-
-  /**
    * Retrieve the [[RpcEndpointRef]] represented by `uri` asynchronously.
    */
   def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef]
@@ -178,7 +164,7 @@ private[spark] trait RpcEnvFactory {
  * constructor onStart receive* onStop
  *
  * Note: `receive` can be called concurrently. If you want `receive` is thread-safe, please use
- * [[RpcEnv.setupThreadSafeEndpoint]]
+ * [[ThreadSafeRpcEndpoint]]
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
@@ -274,6 +260,19 @@ private[spark] trait RpcEndpoint {
     }
   }
 }
+
+/**
+ * A trait that requires RpcEnv thread-safely sending messages to it.
+ *
+ * Thread-safety means processing of one message happens before processing of the next message by
+ * the same [[ThreadSafeRpcEndpoint]]. In the other words, changes to internal fields of a
+ * [[ThreadSafeRpcEndpoint]] are visible when processing the next message, and fields in the
+ * [[ThreadSafeRpcEndpoint]] need not be volatile or equivalent.
+ *
+ * However, there is no guarantee that the same thread will be executing the same
+ * [[ThreadSafeRpcEndpoint]] for different messages.
+ */
+trait ThreadSafeRpcEndpoint extends RpcEndpoint
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.

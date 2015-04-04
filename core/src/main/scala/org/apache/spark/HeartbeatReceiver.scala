@@ -22,7 +22,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import scala.collection.mutable
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
 import org.apache.spark.util.Utils
@@ -45,7 +45,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
-  extends RpcEndpoint with Logging {
+  extends ThreadSafeRpcEndpoint with Logging {
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 

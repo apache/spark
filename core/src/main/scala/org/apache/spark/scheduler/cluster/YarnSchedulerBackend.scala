@@ -43,7 +43,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerEndpoint = rpcEnv.setupThreadSafeEndpoint(
+  private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
   private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
@@ -93,7 +93,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
   private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
-    extends RpcEndpoint with Logging {
+    extends ThreadSafeRpcEndpoint with Logging {
     private var amEndpoint: Option[RpcEndpointRef] = None
 
     private val askAmThreadPool =

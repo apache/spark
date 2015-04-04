@@ -40,7 +40,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
-  extends RpcEndpoint with ExecutorBackend with Logging {
+  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
@@ -173,7 +173,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Start the CoarseGrainedExecutorBackend endpoint.
       val sparkHostPort = hostname + ":" + boundPort
-      env.rpcEnv.setupThreadSafeEndpoint("Executor", new CoarseGrainedExecutorBackend(
+      env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))

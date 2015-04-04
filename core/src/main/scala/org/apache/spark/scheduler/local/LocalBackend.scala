@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.local
 import java.nio.ByteBuffer
 import java.util.concurrent.{Executors, TimeUnit}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcEndpoint}
+import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
@@ -45,7 +45,7 @@ private[spark] class LocalEndpoint(
     scheduler: TaskSchedulerImpl,
     executorBackend: LocalBackend,
     private val totalCores: Int)
-  extends RpcEndpoint with Logging {
+  extends ThreadSafeRpcEndpoint with Logging {
 
   private val reviveThread = Executors.newSingleThreadScheduledExecutor(
     Utils.namedThreadFactory("local-revive-thread"))
@@ -111,7 +111,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   var localEndpoint: RpcEndpointRef = null
 
   override def start() {
-    localEndpoint = SparkEnv.get.rpcEnv.setupThreadSafeEndpoint(
+    localEndpoint = SparkEnv.get.rpcEnv.setupEndpoint(
       "LocalBackendEndpoint", new LocalEndpoint(SparkEnv.get.rpcEnv, scheduler, this, totalCores))
   }
 

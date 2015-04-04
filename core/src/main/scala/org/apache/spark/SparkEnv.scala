@@ -296,15 +296,11 @@ object SparkEnv extends Logging {
     }
 
     def registerOrLookupEndpoint(
-        name: String, endpointCreator: => RpcEndpoint, threadSafe: Boolean = false):
+        name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
-        if (threadSafe) {
-          rpcEnv.setupThreadSafeEndpoint(name, endpointCreator)
-        } else {
-          rpcEnv.setupEndpoint(name, endpointCreator)
-        }
+        rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
       }
@@ -342,7 +338,7 @@ object SparkEnv extends Logging {
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus), threadSafe = true),
+      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus)),
       conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
