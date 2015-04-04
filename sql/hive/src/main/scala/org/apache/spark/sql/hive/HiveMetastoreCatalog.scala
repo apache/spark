@@ -271,7 +271,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           }
         case other =>
           logWarning(
-            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} shold be stored " +
+            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
               s"as Parquet. However, we are getting a ${other} from the metastore cache. " +
               s"This cached entry will be invalidated.")
           cachedDataSourceTables.invalidate(tableIdentifier)

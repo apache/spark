@@ -468,4 +468,15 @@ class SQLQuerySuite extends QueryTest {
       sql(s"DROP TABLE $tableName")
     }
   }
+  
+  test("SPARK-5203 union with different decimal precision") {
+    Seq.empty[(Decimal, Decimal)]
+      .toDF("d1", "d2")
+      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .registerTempTable("dn")
+
+    sql("select d from dn union all select d * 2 from dn")
+      .queryExecution.analyzed
+  }
+
 }

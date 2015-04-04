@@ -143,7 +143,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     }
   }
 
-  test("run Python application in yarn-cluster mode") {
+  // Enable this once fix SPARK-6700
+  ignore("run Python application in yarn-cluster mode") {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
     val pyFile = new File(tempDir, "test2.py")
