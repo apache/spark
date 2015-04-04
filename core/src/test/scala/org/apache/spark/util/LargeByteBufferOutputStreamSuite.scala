@@ -20,6 +20,8 @@ import scala.util.Random
 
 import org.scalatest.{FunSuite, Matchers}
 
+import org.apache.spark.network.buffer.WrappedLargeByteBuffer
+
 class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
 
   test("merged buffers for < 2GB") {
@@ -43,6 +45,23 @@ class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
     buffer.rewind()
     nioBuffer.get(read)
     read should be (bytes)
+  }
+
+  test("chunking") {
+    val out = new LargeByteBufferOutputStream(10)
+    val bytes = new Array[Byte](100)
+    Random.nextBytes(bytes)
+    out.write(bytes)
+
+    (10 to 100 by 10).foreach{chunkSize =>
+      val buffer = out.largeBuffer(chunkSize).asInstanceOf[WrappedLargeByteBuffer]
+      buffer.position() should be (0)
+      buffer.size() should be (100)
+      val read = new Array[Byte](100)
+      buffer.get(read, 0, 100)
+      read should be (bytes)
+    }
+
   }
 
 }
