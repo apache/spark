@@ -30,7 +30,7 @@ class Param(object):
 
     def __init__(self, parent, name, doc):
         if not isinstance(parent, Params):
-            raise ValueError("Parent must be a Params but got type %s." % type(parent).__name__)
+            raise TypeError("Parent must be a Params but got type %s." % type(parent))
         self.parent = parent
         self.name = str(name)
         self.doc = str(doc)
