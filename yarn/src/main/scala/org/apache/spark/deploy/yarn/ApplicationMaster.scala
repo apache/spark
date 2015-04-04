@@ -507,7 +507,7 @@ private[spark] class ApplicationMaster(
       override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
     extends RpcEndpoint with Logging {
 
-    override def onStart() = {
+    override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
     }
 
