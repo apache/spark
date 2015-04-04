@@ -34,6 +34,7 @@ class LargePartitionCachingSuite extends FunSuite with SharedSparkContext {
   }
 
   test("disk cache large partitions with replications") {
+    // TODO this should fail, but w/ sensible message
     pending
   }
 }

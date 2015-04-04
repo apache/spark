@@ -26,6 +26,10 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
     pending
   }
 
+  test("read from large mapped file") {
+    pending
+  }
+
   test("dispose") {
     pending
   }

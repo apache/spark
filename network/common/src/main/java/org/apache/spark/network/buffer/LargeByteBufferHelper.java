@@ -55,7 +55,8 @@ public class LargeByteBufferHelper {
         return mapFile(channel, mode, offset, length, DEFAULT_MAX_CHUNK);
     }
 
-    public static LargeByteBuffer mapFile(
+    //exposed for testing
+    static LargeByteBuffer mapFile(
             FileChannel channel,
             FileChannel.MapMode mode,
             long offset,

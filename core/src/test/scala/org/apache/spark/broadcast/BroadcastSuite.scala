@@ -181,6 +181,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 
   //ignored for now just because it needs a lot of memory
   ignore("large broadcast variable") {
+    // TODO this should fail, but with a sensible exception
     sc = new SparkContext("local", "test", httpConf)
     val bigArr = new Array[Long]((2.3e9 / 8).toInt)
     val bcArr = sc.broadcast(bigArr)

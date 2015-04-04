@@ -282,6 +282,14 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
   }
+
+  test("large shuffle") {
+    // TODO fail with sensible exception
+    //  note that this *could* succeed in local mode, b/c local shuffles actually don't
+    //  have a limit at 2GB.  BUT, we make them fail in any case, b/c its better to have
+    //  a consistent failure, and not have success depend on where tasks get scheduled
+    pending
+  }
 }
 
 object ShuffleSuite {
