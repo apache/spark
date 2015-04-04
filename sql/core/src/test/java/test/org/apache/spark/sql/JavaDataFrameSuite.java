@@ -82,6 +82,7 @@ public class JavaDataFrameSuite {
     df.agg(first("key"), sum("value"));
 
     df.groupBy().avg("key");
+    df.groupBy().stddev("key");
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
