@@ -16,22 +16,49 @@
  */
 package org.apache.spark.util
 
+import java.io.{FileInputStream, FileOutputStream, OutputStream, File}
+import java.nio.channels.FileChannel.MapMode
+
+import org.junit.Assert._
 import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.network.buffer.WrappedLargeByteBuffer
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, WrappedLargeByteBuffer}
 
 class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
 
-  test("read from large buffers") {
-    pending
-  }
-
   test("read from large mapped file") {
-    pending
-  }
+    val testFile = File.createTempFile("large-buffer-input-stream-test",".bin")
+    testFile.deleteOnExit()
 
-  test("dispose") {
-    pending
+    val out: OutputStream = new FileOutputStream(testFile)
+    val buffer: Array[Byte] = new Array[Byte](1 << 16)
+    val len: Long = 3L << 30
+    assertTrue(len > Integer.MAX_VALUE)
+    (0 until buffer.length).foreach { idx =>
+      buffer(idx) = idx.toByte
+    }
+    (0 until (len / buffer.length).toInt).foreach { idx =>
+      out.write(buffer)
+    }
+    out.close
+
+    val channel = new FileInputStream(testFile).getChannel
+    val buf = LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, 0, len)
+    val in = new LargeByteBufferInputStream(buf, dispose = true)
+
+    val read = new Array[Byte](buffer.length)
+    (0 until (len / buffer.length).toInt).foreach { idx =>
+      in.disposed should be (false)
+      in.read(read) should be (read.length)
+      (0 until buffer.length).foreach { arrIdx =>
+        assertEquals(buffer(arrIdx), read(arrIdx))
+      }
+    }
+    // XXX I assume its not intentional that the stream is only disposed when you try to read
+    // *past* the end in ByteBufferInputStream?
+    in.disposed should be (true)
+    in.read(read) should be (-1)
+    in.disposed should be (true)
   }
 
   test("io stream roundtrip") {

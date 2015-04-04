@@ -35,7 +35,11 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
       cleanUp()
       -1
     } else {
-      buffer.get() & 0xFF
+      val r = buffer.get() & 0xFF
+      if (buffer.remaining() == 0) {
+        cleanUp()
+      }
+      r
     }
   }
 
@@ -50,7 +54,11 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
     } else {
       val amountToGet = math.min(buffer.remaining(), length).toInt
       buffer.get(dest, offset, amountToGet)
-      //TODO should be a cleanup check here -- need tests
+      // XXX I assume its not intentional that the stream is only disposed when you try to read
+      // *past* the end in ByteBufferInputStream, so we do a check here
+      if (buffer.remaining() == 0) {
+        cleanUp()
+      }
       amountToGet
     }
   }
@@ -67,6 +75,9 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
     }
   }
 
+  //only for testing
+  private[util] var disposed = false
+
   /**
    * Clean up the buffer, and potentially dispose of it
    */
@@ -74,6 +85,7 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
     if (buffer != null) {
       if (dispose) {
         buffer.dispose()
+        disposed = true
       }
       buffer = null
     }
