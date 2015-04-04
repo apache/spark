@@ -236,3 +236,14 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
 
 ./python/run-tests
+
+echo ""
+echo "========================================================================="
+echo "Running SparkR tests"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
+
+./R/install-dev.sh
+./R/run-tests.sh
+
