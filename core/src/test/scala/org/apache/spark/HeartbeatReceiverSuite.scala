@@ -17,24 +17,33 @@
 
 package org.apache.spark
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.scalatest.FunSuite
-import org.mockito.Mockito._
+import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
 
 import org.apache.spark.scheduler.TaskScheduler
 import org.apache.spark.util.RpcUtils
+import org.scalatest.concurrent.Eventually._
 
 class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
 
   test("HeartbeatReceiver") {
-    sc = new SparkContext("local[2]", "test")
+    sc = spy(new SparkContext("local[2]", "test"))
     val scheduler = mock(classOf[TaskScheduler])
     when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(true)
+    when(sc.taskScheduler).thenReturn(scheduler)
 
-    sc.env.rpcEnv.setupEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
+    val heartbeatReceiver = new HeartbeatReceiver(sc)
+    sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver).send(TaskSchedulerIsSet)
+    eventually(timeout(5 seconds), interval(5 millis)) {
+      assert(heartbeatReceiver.scheduler != null)
+    }
     val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
 
     val metrics = new TaskMetrics
@@ -48,11 +57,16 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
   }
 
   test("HeartbeatReceiver re-register") {
-    sc = new SparkContext("local[2]", "test")
+    sc = spy(new SparkContext("local[2]", "test"))
     val scheduler = mock(classOf[TaskScheduler])
     when(scheduler.executorHeartbeatReceived(any(), any(), any())).thenReturn(false)
+    when(sc.taskScheduler).thenReturn(scheduler)
 
-    sc.env.rpcEnv.setupEndpoint("heartbeat", new HeartbeatReceiver(sc, scheduler))
+    val heartbeatReceiver = new HeartbeatReceiver(sc)
+    sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver).send(TaskSchedulerIsSet)
+    eventually(timeout(5 seconds), interval(5 millis)) {
+      assert(heartbeatReceiver.scheduler != null)
+    }
     val receiverRef = RpcUtils.makeDriverRef("heartbeat", sc.conf, sc.env.rpcEnv)
 
     val metrics = new TaskMetrics

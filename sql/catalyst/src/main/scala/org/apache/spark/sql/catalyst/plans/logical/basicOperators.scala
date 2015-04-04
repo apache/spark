@@ -80,7 +80,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved: Boolean =
     childrenResolved &&
-    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+    left.output.zip(right.output).forall { case (l,r) => l.dataType == r.dataType }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes

@@ -160,7 +160,7 @@ private[spark] class ApplicationMaster(
    * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
    * from the application code.
    */
-  final def getDefaultFinalStatus() = {
+  final def getDefaultFinalStatus(): FinalApplicationStatus = {
     if (isClusterMode) {
       FinalApplicationStatus.SUCCEEDED
     } else {
@@ -173,31 +173,35 @@ private[spark] class ApplicationMaster(
    * This means the ResourceManager will not retry the application attempt on your behalf if
    * a failure occurred.
    */
-  final def unregister(status: FinalApplicationStatus, diagnostics: String = null) = synchronized {
-    if (!unregistered) {
-      logInfo(s"Unregistering ApplicationMaster with $status" +
-        Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
-      unregistered = true
-      client.unregister(status, Option(diagnostics).getOrElse(""))
+  final def unregister(status: FinalApplicationStatus, diagnostics: String = null): Unit = {
+    synchronized {
+      if (!unregistered) {
+        logInfo(s"Unregistering ApplicationMaster with $status" +
+          Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
+        unregistered = true
+        client.unregister(status, Option(diagnostics).getOrElse(""))
+      }
     }
   }
 
-  final def finish(status: FinalApplicationStatus, code: Int, msg: String = null) = synchronized {
-    if (!finished) {
-      val inShutdown = Utils.inShutdown()
-      logInfo(s"Final app status: ${status}, exitCode: ${code}" +
-        Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-      exitCode = code
-      finalStatus = status
-      finalMsg = msg
-      finished = true
-      if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
-        logDebug("shutting down reporter thread")
-        reporterThread.interrupt()
-      }
-      if (!inShutdown && Thread.currentThread() != userClassThread && userClassThread != null) {
-        logDebug("shutting down user thread")
-        userClassThread.interrupt()
+  final def finish(status: FinalApplicationStatus, code: Int, msg: String = null): Unit = {
+    synchronized {
+      if (!finished) {
+        val inShutdown = Utils.inShutdown()
+        logInfo(s"Final app status: $status, exitCode: $code" +
+          Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
+        exitCode = code
+        finalStatus = status
+        finalMsg = msg
+        finished = true
+        if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
+          logDebug("shutting down reporter thread")
+          reporterThread.interrupt()
+        }
+        if (!inShutdown && Thread.currentThread() != userClassThread && userClassThread != null) {
+          logDebug("shutting down user thread")
+          userClassThread.interrupt()
+        }
       }
     }
   }
@@ -557,7 +561,7 @@ object ApplicationMaster extends Logging {
 
   private var master: ApplicationMaster = _
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
@@ -566,11 +570,11 @@ object ApplicationMaster extends Logging {
     }
   }
 
-  private[spark] def sparkContextInitialized(sc: SparkContext) = {
+  private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
     master.sparkContextInitialized(sc)
   }
 
-  private[spark] def sparkContextStopped(sc: SparkContext) = {
+  private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
     master.sparkContextStopped(sc)
   }
 
@@ -582,7 +586,7 @@ object ApplicationMaster extends Logging {
  */
 object ExecutorLauncher {
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     ApplicationMaster.main(args)
   }
 

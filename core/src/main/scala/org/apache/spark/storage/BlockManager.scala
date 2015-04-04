@@ -301,7 +301,7 @@ private[spark] class BlockManager(
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
         .asInstanceOf[Option[ByteBuffer]]
@@ -439,14 +439,10 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      val shuffleBlockManager = shuffleManager.shuffleBlockManager
-      shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
-        case Some(bytes) =>
-          Some(bytes)
-        case None =>
-          throw new BlockException(
-            blockId, s"Block $blockId not found on disk, though it should be")
-      }
+      val shuffleBlockManager = shuffleManager.shuffleBlockResolver
+      // TODO: This should gracefully handle case where local block is not available. Currently
+      // downstream code will throw an exception.
+      Option(shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
     } else {
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
