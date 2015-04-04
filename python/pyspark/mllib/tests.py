@@ -357,6 +357,12 @@ class StatTests(PySparkTestCase):
         summary = Statistics.colStats(data)
         self.assertEqual(10, summary.count())
 
+    def test_col_norms(self):
+        data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, len(summary.normL1()))
+        self.assertEqual(10, len(summary.normL2()))
+
 
 class VectorUDTTests(PySparkTestCase):
 
