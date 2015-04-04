@@ -70,11 +70,11 @@ class LogisticRegression
     }
 
     // Train model
-    val lr = new LogisticRegressionWithLBFGS
+    val lr = new LogisticRegressionWithLBFGS()
+      .setIntercept(paramMap(fitIntercept))
     lr.optimizer
       .setRegParam(paramMap(regParam))
       .setNumIterations(paramMap(maxIter))
-      .addIntercept(paramMap(fitIntercept))
     val oldModel = lr.run(oldDataset)
     val lrm = new LogisticRegressionModel(this, paramMap, oldModel.weights, oldModel.intercept)
 
