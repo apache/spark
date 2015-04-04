@@ -112,8 +112,8 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
         if (attr.nullable) {
           attr
         } else {
-          //field is not nullable but not present in the parquet file schema!!
-          //this is just a safety check since in hive all columns are nullable
+          // field is not nullable but not present in the parquet file schema!!
+          // this is just a safety check since in hive all columns are nullable
           // throw exception here
           throw new RuntimeException(s"""Field ${attr.name} is non-nullable, 
             but not found in parquet file schema: ${fileSchema}""".stripMargin)
