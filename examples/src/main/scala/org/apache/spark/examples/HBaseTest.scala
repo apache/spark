@@ -18,7 +18,7 @@
 package org.apache.spark.examples
 
 import org.apache.hadoop.hbase.client.HBaseAdmin
-import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
+import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor, TableName}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import org.apache.spark._
@@ -36,7 +36,7 @@ object HBaseTest {
     // Initialize hBase table if necessary
     val admin = new HBaseAdmin(conf)
     if (!admin.isTableAvailable(args(0))) {
-      val tableDesc = new HTableDescriptor(args(0))
+      val tableDesc = new HTableDescriptor(TableName.valueOf(args(0)))
       admin.createTable(tableDesc)
     }
 

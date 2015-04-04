@@ -21,18 +21,25 @@ import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.sql.{SQLContext, Row}
 
 /**
  *  Entry in vocabulary 
@@ -272,7 +279,7 @@ class Word2Vec extends Serializable with Logging {
         def hasNext: Boolean = iter.hasNext
 
         def next(): Array[Int] = {
-          var sentence = new ArrayBuffer[Int]
+          val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
           while (iter.hasNext && sentenceLength < MAX_SENTENCE_LENGTH) {
             val word = bcVocabHash.value.get(iter.next())
@@ -283,13 +290,20 @@ class Word2Vec extends Serializable with Logging {
               case None =>
             }
           }
-          sentence.toArray
+          sentence.result()
         }
       }
     }
     
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
+
+    if (vocabSize.toLong * vectorSize * 8 >= Int.MaxValue) {
+      throw new RuntimeException("Please increase minCount or decrease vectorSize in Word2Vec" +
+        " to avoid an OOM. You are highly recommended to make your vocabSize*vectorSize, " +
+        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue/8`.")
+    }
+
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
@@ -415,7 +429,7 @@ class Word2Vec extends Serializable with Logging {
  */
 @Experimental
 class Word2VecModel private[mllib] (
-    private val model: Map[String, Array[Float]]) extends Serializable {
+    private val model: Map[String, Array[Float]]) extends Serializable with Saveable {
 
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
@@ -425,7 +439,13 @@ class Word2VecModel private[mllib] (
     if (norm1 == 0 || norm2 == 0) return 0.0
     blas.sdot(n, v1, 1, v2,1) / norm1 / norm2
   }
-  
+
+  override protected def formatVersion = "1.0"
+
+  def save(sc: SparkContext, path: String): Unit = {
+    Word2VecModel.SaveLoadV1_0.save(sc, path, model)
+  }
+
   /**
    * Transforms a word to its vector representation
    * @param word a word 
@@ -468,11 +488,79 @@ class Word2VecModel private[mllib] (
       .tail
       .toArray
   }
-  
+
   /**
    * Returns a map of words to their vector representations.
    */
   def getVectors: Map[String, Array[Float]] = {
     model
+  }
+}
+
+@Experimental
+object Word2VecModel extends Loader[Word2VecModel] {
+
+  private object SaveLoadV1_0 {
+
+    val formatVersionV1_0 = "1.0"
+
+    val classNameV1_0 = "org.apache.spark.mllib.feature.Word2VecModel"
+
+    case class Data(word: String, vector: Array[Float])
+
+    def load(sc: SparkContext, path: String): Word2VecModel = {
+      val dataPath = Loader.dataPath(path)
+      val sqlContext = new SQLContext(sc)
+      val dataFrame = sqlContext.parquetFile(dataPath)
+
+      val dataArray = dataFrame.select("word", "vector").collect()
+
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      Loader.checkSchema[Data](dataFrame.schema)
+
+      val word2VecMap = dataArray.map(i => (i.getString(0), i.getSeq[Float](1).toArray)).toMap
+      new Word2VecModel(word2VecMap)
+    }
+
+    def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
+
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+
+      val vectorSize = model.values.head.size
+      val numWords = model.size
+      val metadata = compact(render
+        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
+      sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): Word2VecModel = {
+
+    val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
+    implicit val formats = DefaultFormats
+    val expectedVectorSize = (metadata \ "vectorSize").extract[Int]
+    val expectedNumWords = (metadata \ "numWords").extract[Int]
+    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    (loadedClassName, loadedVersion) match {
+      case (classNameV1_0, "1.0") =>
+        val model = SaveLoadV1_0.load(sc, path)
+        val vectorSize = model.getVectors.values.head.size
+        val numWords = model.getVectors.size
+        require(expectedVectorSize == vectorSize,
+          s"Word2VecModel requires each word to be mapped to a vector of size " +
+          s"$expectedVectorSize, got vector of size $vectorSize")
+        require(expectedNumWords == numWords,
+          s"Word2VecModel requires $expectedNumWords words, but got $numWords")
+        model
+      case _ => throw new Exception(
+        s"Word2VecModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $loadedVersion).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
+    }
   }
 }

@@ -29,7 +29,18 @@ class Predict(
     val predict: Double,
     val prob: Double = 0.0) extends Serializable {
 
-  override def toString = {
+  override def toString: String = {
     "predict = %f, prob = %f".format(predict, prob)
+  }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case p: Predict => predict == p.predict && prob == p.prob
+      case _ => false
+    }
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(predict: java.lang.Double, prob: java.lang.Double)
   }
 }

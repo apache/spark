@@ -170,6 +170,15 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     testPackage.runCallSiteTest(sc)
   }
 
+  test("Broadcast variables cannot be created after SparkContext is stopped (SPARK-5065)") {
+    sc = new SparkContext("local", "test")
+    sc.stop()
+    val thrown = intercept[IllegalStateException] {
+      sc.broadcast(Seq(1, 2, 3))
+    }
+    assert(thrown.getMessage.toLowerCase.contains("stopped"))
+  }
+
   /**
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).
@@ -349,8 +358,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 package object testPackage extends Assertions {
 
   def runCallSiteTest(sc: SparkContext) {
-    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val broadcast = sc.broadcast(rdd)
+    val broadcast = sc.broadcast(Array(1, 2, 3, 4))
     broadcast.destroy()
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))

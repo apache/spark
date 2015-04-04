@@ -33,7 +33,7 @@ class SimpleScanSource extends RelationProvider {
 }
 
 case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends TableScan {
+  extends BaseRelation with TableScan {
 
   override def schema =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
@@ -51,10 +51,11 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
 }
 
 case class AllDataTypesScan(
-  from: Int,
-  to: Int,
-  userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
-  extends TableScan {
+    from: Int,
+    to: Int,
+    userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
+  extends BaseRelation
+  with TableScan {
 
   override def schema = userSpecifiedSchema
 
@@ -70,8 +71,8 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        BigDecimal(i),
-        BigDecimal(i),
+        new java.math.BigDecimal(i),
+        new java.math.BigDecimal(i),
         new Date((i + 1) * 8640000),
         new Timestamp(20000 + i),
         s"varchar_$i",
@@ -99,8 +100,8 @@ class TableScanSuite extends DataSourceTest {
       i.toLong,
       i.toFloat,
       i.toDouble,
-      BigDecimal(i),
-      BigDecimal(i),
+      new java.math.BigDecimal(i),
+      new java.math.BigDecimal(i),
       new Date((i + 1) * 8640000),
       new Timestamp(20000 + i),
       s"varchar_$i",
@@ -244,7 +245,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT count(*) FROM tableWithSchema",
-    10)
+    Seq(Row(10)))
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
@@ -260,7 +261,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
-    Seq(Seq(1, 2)))
+    Seq(Row(1, 2)))
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
@@ -343,5 +344,25 @@ class TableScanSuite extends DataSourceTest {
         """.stripMargin)
     }
     assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
+  }
+
+  test("SPARK-5196 schema field with comment") {
+    sql(
+      """
+       |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
+       |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+       |OPTIONS (
+       |  from '1',
+       |  to '10'
+       |)
+       """.stripMargin)
+
+       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
+       val comments = planned.schema.fields.map { field =>
+         if (field.metadata.contains("comment")) field.metadata.getString("comment")
+         else "NO_COMMENT"
+       }.mkString(",")
+
+    assert(comments === "SN,SA,NO_COMMENT")
   }
 }

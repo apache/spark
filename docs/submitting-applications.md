@@ -58,8 +58,8 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Note that `cluster` mode is currently not supported for standalone
-clusters, Mesos clusters, or Python applications.
+the drivers and the executors. Note that `cluster` mode is currently not supported for
+Mesos clusters or Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
@@ -133,10 +133,10 @@ The master URL passed to Spark can be in one of the following formats:
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
 </td></tr>
 <tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-client mode. The cluster location will be found based on the HADOOP_CONF_DIR variable.
+client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 <tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-cluster mode. The cluster location will be found based on HADOOP_CONF_DIR.
+cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 </table>
 
@@ -173,6 +173,11 @@ Note that JARs and files are copied to the working directory for each SparkConte
 This can use up a significant amount of space over time and will need to be cleaned up. With YARN, cleanup
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
+
+Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates 
+with `--packages`. All transitive dependencies will be handled when using this command. Additional 
+repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`. 
+These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
 to executors.

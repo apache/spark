@@ -72,8 +72,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(conf, sparkConf, amClient, getAttemptId(), args,
-      preferredNodeLocations, securityMgr)
+    new YarnAllocator(conf, sparkConf, amClient, getAttemptId(), args, securityMgr)
   }
 
   /**

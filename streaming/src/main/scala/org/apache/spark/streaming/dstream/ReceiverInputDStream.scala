@@ -94,15 +94,4 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
     }
     Some(blockRDD)
   }
-
-  /**
-   * Clear metadata that are older than `rememberDuration` of this DStream.
-   * This is an internal method that should not be called directly. This
-   * implementation overrides the default implementation to clear received
-   * block information.
-   */
-  private[streaming] override def clearMetadata(time: Time) {
-    super.clearMetadata(time)
-    ssc.scheduler.receiverTracker.cleanupOldMetadata(time - rememberDuration)
-  }
 }

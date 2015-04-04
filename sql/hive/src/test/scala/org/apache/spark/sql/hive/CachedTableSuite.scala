@@ -20,25 +20,10 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{QueryTest, SchemaRDD}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
 
 class CachedTableSuite extends QueryTest {
-  /**
-   * Throws a test failed exception when the number of cached tables differs from the expected
-   * number.
-   */
-  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
-    val planWithCaching = query.queryExecution.withCachedData
-    val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
-    }
-
-    assert(
-      cachedData.size == numCachedTables,
-      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
-        planWithCaching)
-  }
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
@@ -64,6 +49,12 @@ class CachedTableSuite extends QueryTest {
       sql("SELECT * FROM src"),
       preCacheResults)
 
+    assertCached(sql("SELECT * FROM src s"))
+
+    checkAnswer(
+      sql("SELECT * FROM src s"),
+      preCacheResults)
+    
     uncacheTable("src")
     assertCached(sql("SELECT * FROM src"), 0)
   }
@@ -86,12 +77,12 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("Drop cached table") {
-    sql("CREATE TABLE test(a INT)")
-    cacheTable("test")
-    sql("SELECT * FROM test").collect()
-    sql("DROP TABLE test")
-    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
-      sql("SELECT * FROM test").collect()
+    sql("CREATE TABLE cachedTableTest(a INT)")
+    cacheTable("cachedTableTest")
+    sql("SELECT * FROM cachedTableTest").collect()
+    sql("DROP TABLE cachedTableTest")
+    intercept[AnalysisException] {
+      sql("SELECT * FROM cachedTableTest").collect()
     }
   }
 

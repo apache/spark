@@ -20,21 +20,22 @@ package org.apache.spark.serializer
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
+import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, RoaringBitmap}
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
-import org.apache.spark.network.nio.{PutBlock, GotBlock, GetBlock}
+import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.CompactBuffer
-
-import scala.reflect.ClassTag
 
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
@@ -48,26 +49,28 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize =
-    (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
+  private val bufferSizeMb = conf.getDouble("spark.kryoserializer.buffer.mb", 0.064)
+  if (bufferSizeMb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.mb must be less than " +
+      s"2048 mb, got: + $bufferSizeMb mb.")
+  }
+  private val bufferSize = (bufferSizeMb * 1024 * 1024).toInt
 
-  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
+  val maxBufferSizeMb = conf.getInt("spark.kryoserializer.buffer.max.mb", 64)
+  if (maxBufferSizeMb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.max.mb must be less than " +
+      s"2048 mb, got: + $maxBufferSizeMb mb.")
+  }
+  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
+
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val userRegistrator = conf.getOption("spark.kryo.registrator")
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
     .split(',')
     .filter(!_.isEmpty)
-    .map { className =>
-      try {
-        Class.forName(className)
-      } catch {
-        case e: Exception =>
-          throw new SparkException("Failed to load class to register with Kryo", e)
-      }
-    }
 
-  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+  def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -97,7 +100,8 @@ class KryoSerializer(conf: SparkConf)
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
       // Register classes given through spark.kryo.classesToRegister.
-      classesToRegister.foreach { clazz => kryo.register(clazz) }
+      classesToRegister
+        .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
       // Allow the user to register their own classes by setting spark.kryo.registrator.
       userRegistrator
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
@@ -164,7 +168,13 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
-    kryo.writeClassAndObject(output, t)
+    try {
+      kryo.writeClassAndObject(output, t)
+    } catch {
+      case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
+        throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
+          "increase spark.kryoserializer.buffer.max.mb value.")
+    }
     ByteBuffer.wrap(output.toBytes)
   }
 
@@ -209,9 +219,17 @@ private[serializer] object KryoSerializer {
     classOf[GetBlock],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
+    classOf[RoaringBitmap],
+    classOf[RoaringArray],
+    classOf[RoaringArray.Element],
+    classOf[Array[RoaringArray.Element]],
+    classOf[ArrayContainer],
+    classOf[BitmapContainer],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
+    classOf[Array[Short]],
+    classOf[Array[Long]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )

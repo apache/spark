@@ -24,6 +24,13 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
+import org.apache.spark.util.Utils
+
+private object LassoSuite {
+
+  /** 3 features */
+  val model = new LassoModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+}
 
 class LassoSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -114,6 +121,23 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("model save/load") {
+    val model = LassoSuite.model
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = LassoModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 

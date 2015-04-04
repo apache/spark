@@ -80,6 +80,29 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(rowMat.rows.collect().toSeq === data.map(_.vector).toSeq)
   }
 
+  test("toCoordinateMatrix") {
+    val idxRowMat = new IndexedRowMatrix(indexedRows)
+    val coordMat = idxRowMat.toCoordinateMatrix()
+    assert(coordMat.numRows() === m)
+    assert(coordMat.numCols() === n)
+    assert(coordMat.toBreeze() === idxRowMat.toBreeze())
+  }
+
+  test("toBlockMatrix") {
+    val idxRowMat = new IndexedRowMatrix(indexedRows)
+    val blockMat = idxRowMat.toBlockMatrix(2, 2)
+    assert(blockMat.numRows() === m)
+    assert(blockMat.numCols() === n)
+    assert(blockMat.toBreeze() === idxRowMat.toBreeze())
+
+    intercept[IllegalArgumentException] {
+      idxRowMat.toBlockMatrix(-1, 2)
+    }
+    intercept[IllegalArgumentException] {
+      idxRowMat.toBlockMatrix(2, 0)
+    }
+  }
+
   test("multiply a local matrix") {
     val A = new IndexedRowMatrix(indexedRows)
     val B = Matrices.dense(3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))

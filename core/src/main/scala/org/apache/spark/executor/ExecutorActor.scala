@@ -33,7 +33,7 @@ private[spark] case object TriggerThreadDump
 private[spark]
 class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case TriggerThreadDump =>
       sender ! Utils.getThreadDump()
   }

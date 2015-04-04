@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, NativeType}
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -33,7 +34,7 @@ object InterpretedPredicate {
 trait Predicate extends Expression {
   self: Product =>
 
-  def dataType = BooleanType
+  override def dataType: DataType = BooleanType
 
   type EvaluatedType = Any
 }
@@ -71,13 +72,13 @@ trait PredicateHelper {
 
 abstract class BinaryPredicate extends BinaryExpression with Predicate {
   self: Product =>
-  def nullable = left.nullable || right.nullable
+  override def nullable: Boolean = left.nullable || right.nullable
 }
 
 case class Not(child: Expression) extends UnaryExpression with Predicate {
-  override def foldable = child.foldable
-  def nullable = child.nullable
-  override def toString = s"NOT $child"
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"NOT $child"
 
   override def eval(input: Row): Any = {
     child.eval(input) match {
@@ -91,10 +92,10 @@ case class Not(child: Expression) extends UnaryExpression with Predicate {
  * Evaluates to `true` if `list` contains `value`.
  */
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
-  def children = value +: list
+  override def children: Seq[Expression] = value +: list
 
-  def nullable = true // TODO: Figure out correct nullability semantics of IN.
-  override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
+  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: Row): Any = {
     val evaluatedValue = value.eval(input)
@@ -109,10 +110,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 case class InSet(value: Expression, hset: Set[Any])
   extends Predicate {
 
-  def children = value :: Nil
+  override def children: Seq[Expression] = value :: Nil
 
-  def nullable = true // TODO: Figure out correct nullability semantics of IN.
-  override def toString = s"$value INSET ${hset.mkString("(", ",", ")")}"
+  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
   override def eval(input: Row): Any = {
     hset.contains(value.eval(input))
@@ -120,7 +121,7 @@ case class InSet(value: Expression, hset: Set[Any])
 }
 
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
-  def symbol = "&&"
+  override def symbol: String = "&&"
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -142,7 +143,7 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 }
 
 case class Or(left: Expression, right: Expression) extends BinaryPredicate {
-  def symbol = "||"
+  override def symbol: String = "||"
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -168,21 +169,27 @@ abstract class BinaryComparison extends BinaryPredicate {
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = "="
+  override def symbol: String = "="
+
   override def eval(input: Row): Any = {
     val l = left.eval(input)
     if (l == null) {
       null
     } else {
       val r = right.eval(input)
-      if (r == null) null else l == r
+      if (r == null) null
+      else if (left.dataType != BinaryType) l == r
+      else BinaryType.ordering.compare(
+        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
     }
   }
 }
 
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = "<=>"
-  override def nullable = false
+  override def symbol: String = "<=>"
+
+  override def nullable: Boolean = false
+
   override def eval(input: Row): Any = {
     val l = left.eval(input)
     val r = right.eval(input)
@@ -197,33 +204,129 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = "<"
-  override def eval(input: Row): Any = c2(input, left, right, _.lt(_, _))
+  override def symbol: String = "<"
+
+  lazy val ordering: Ordering[Any] = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.lt(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = "<="
-  override def eval(input: Row): Any = c2(input, left, right, _.lteq(_, _))
+  override def symbol: String = "<="
+
+  lazy val ordering: Ordering[Any] = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.lteq(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = ">"
-  override def eval(input: Row): Any = c2(input, left, right, _.gt(_, _))
+  override def symbol: String = ">"
+
+  lazy val ordering: Ordering[Any] = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.gt(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
-  def symbol = ">="
-  override def eval(input: Row): Any = c2(input, left, right, _.gteq(_, _))
+  override def symbol: String = ">="
+
+  lazy val ordering: Ordering[Any] = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.gteq(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-    extends Expression {
+  extends Expression {
 
-  def children = predicate :: trueValue :: falseValue :: Nil
-  override def nullable = trueValue.nullable || falseValue.nullable
+  override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
+  override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
-  def dataType = {
+  override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(
         this,
@@ -242,7 +345,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def toString = s"if ($predicate) $trueValue else $falseValue"
+  override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 }
 
 // scalastyle:off
@@ -262,9 +365,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 // scalastyle:on
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
   type EvaluatedType = Any
-  def children = branches
 
-  def dataType = {
+  override def children: Seq[Expression] = branches
+
+  override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
     }
@@ -279,12 +383,12 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
   @transient private[this] lazy val elseValue =
     if (branches.length % 2 == 0) None else Option(branches.last)
 
-  override def nullable = {
+  override def nullable: Boolean = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
     values.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
   }
 
-  override lazy val resolved = {
+  override lazy val resolved: Boolean = {
     if (!childrenResolved) {
       false
     } else {
@@ -315,7 +419,7 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     res
   }
 
-  override def toString = {
+  override def toString: String = {
     "CASE" + branches.sliding(2, 2).map {
       case Seq(cond, value) => s" WHEN $cond THEN $value"
       case Seq(elseValue) => s" ELSE $elseValue"

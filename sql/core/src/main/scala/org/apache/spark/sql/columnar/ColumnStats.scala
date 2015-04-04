@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
@@ -76,7 +76,7 @@ private[sql] sealed trait ColumnStats extends Serializable {
 private[sql] class NoopColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int): Unit = super.gatherStats(row, ordinal)
 
-  def collectedStatistics = Row(null, null, nullCount, count, 0L)
+  override def collectedStatistics: Row = Row(null, null, nullCount, count, 0L)
 }
 
 private[sql] class BooleanColumnStats extends ColumnStats {
@@ -93,7 +93,7 @@ private[sql] class BooleanColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class ByteColumnStats extends ColumnStats {
@@ -110,7 +110,7 @@ private[sql] class ByteColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class ShortColumnStats extends ColumnStats {
@@ -127,7 +127,7 @@ private[sql] class ShortColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class LongColumnStats extends ColumnStats {
@@ -144,7 +144,7 @@ private[sql] class LongColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class DoubleColumnStats extends ColumnStats {
@@ -161,7 +161,7 @@ private[sql] class DoubleColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class FloatColumnStats extends ColumnStats {
@@ -178,7 +178,24 @@ private[sql] class FloatColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
+}
+
+private[sql] class FixedDecimalColumnStats extends ColumnStats {
+  protected var upper: Decimal = null
+  protected var lower: Decimal = null
+
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      val value = row(ordinal).asInstanceOf[Decimal]
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
+      sizeInBytes += FIXED_DECIMAL.defaultSize
+    }
+  }
+
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class IntColumnStats extends ColumnStats {
@@ -195,7 +212,7 @@ private[sql] class IntColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class StringColumnStats extends ColumnStats {
@@ -212,25 +229,10 @@ private[sql] class StringColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[sql] class DateColumnStats extends ColumnStats {
-  protected var upper: Date = null
-  protected var lower: Date = null
-
-  override def gatherStats(row: Row, ordinal: Int) {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[Date]
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += DATE.defaultSize
-    }
-  }
-
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
-}
+private[sql] class DateColumnStats extends IntColumnStats
 
 private[sql] class TimestampColumnStats extends ColumnStats {
   protected var upper: Timestamp = null
@@ -246,7 +248,7 @@ private[sql] class TimestampColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class BinaryColumnStats extends ColumnStats {
@@ -257,7 +259,7 @@ private[sql] class BinaryColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(null, null, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(null, null, nullCount, count, sizeInBytes)
 }
 
 private[sql] class GenericColumnStats extends ColumnStats {
@@ -268,5 +270,5 @@ private[sql] class GenericColumnStats extends ColumnStats {
     }
   }
 
-  def collectedStatistics = Row(null, null, nullCount, count, sizeInBytes)
+  override def collectedStatistics: Row = Row(null, null, nullCount, count, sizeInBytes)
 }

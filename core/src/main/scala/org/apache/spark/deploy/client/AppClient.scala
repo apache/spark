@@ -47,18 +47,18 @@ private[spark] class AppClient(
     conf: SparkConf)
   extends Logging {
 
-  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
+  private val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
 
-  val REGISTRATION_TIMEOUT = 20.seconds
-  val REGISTRATION_RETRIES = 3
+  private val REGISTRATION_TIMEOUT = 20.seconds
+  private val REGISTRATION_RETRIES = 3
 
-  var masterAddress: Address = null
-  var actor: ActorRef = null
-  var appId: String = null
-  var registered = false
-  var activeMasterUrl: String = null
+  private var masterAddress: Address = null
+  private var actor: ActorRef = null
+  private var appId: String = null
+  private var registered = false
+  private var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with ActorLogReceive with Logging {
+  private class ClientActor extends Actor with ActorLogReceive with Logging {
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
@@ -107,15 +107,16 @@ private[spark] class AppClient(
     def changeMaster(url: String) {
       // activeMasterUrl is a valid Spark url since we receive it from master.
       activeMasterUrl = url
-      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-      masterAddress = Master.toAkkaAddress(activeMasterUrl)
+      master = context.actorSelection(
+        Master.toAkkaUrl(activeMasterUrl, AkkaUtils.protocol(actorSystem)))
+      masterAddress = Master.toAkkaAddress(activeMasterUrl, AkkaUtils.protocol(actorSystem))
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
       masterAkkaUrls.map(AddressFromURIString(_).hostPort).contains(remoteUrl.hostPort)
     }
 
-    override def receiveWithLogging = {
+    override def receiveWithLogging: PartialFunction[Any, Unit] = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
@@ -156,6 +157,7 @@ private[spark] class AppClient(
 
       case StopAppClient =>
         markDead("Application has been stopped.")
+        master ! UnregisterApplication(appId)
         sender ! true
         context.stop(self)
     }

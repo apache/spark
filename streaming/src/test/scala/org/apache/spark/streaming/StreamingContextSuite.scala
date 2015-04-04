@@ -100,7 +100,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.sparkConf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(newCp.createSparkConf().getInt("spark.cleaner.ttl", -1) === 10)
     ssc = new StreamingContext(null, newCp, null)
     assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }
@@ -190,7 +190,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         logInfo("Count = " + count + ", Running count = " + runningCount)
       }
       ssc.start()
-      ssc.awaitTermination(500)
+      ssc.awaitTerminationOrTimeout(500)
       ssc.stop(stopSparkContext = false, stopGracefully = true)
       logInfo("Running count = " + runningCount)
       logInfo("TestReceiver.counter = " + TestReceiver.counter.get())
@@ -205,6 +205,32 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("stop slow receiver gracefully") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.gracefulStopTimeout", "20000")
+    sc = new SparkContext(conf)
+    logInfo("==================================\n\n\n")
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    var runningCount = 0
+    SlowTestReceiver.receivedAllRecords = false
+    //Create test receiver that sleeps in onStop()
+    val totalNumRecords = 15
+    val recordsPerSecond = 1
+    val input = ssc.receiverStream(new SlowTestReceiver(totalNumRecords, recordsPerSecond))
+    input.count().foreachRDD { rdd =>
+      val count = rdd.first()
+      runningCount += count.toInt
+      logInfo("Count = " + count + ", Running count = " + runningCount)
+    }
+    ssc.start()
+    ssc.awaitTerminationOrTimeout(500)
+    ssc.stop(stopSparkContext = false, stopGracefully = true)
+    logInfo("Running count = " + runningCount)
+    assert(runningCount > 0)
+    assert(runningCount == totalNumRecords)
+    Thread.sleep(100)
+  }
+
   test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
@@ -217,7 +243,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     // test whether awaitTermination() exits after give amount of time
     failAfter(1000 millis) {
-      ssc.awaitTermination(500)
+      ssc.awaitTerminationOrTimeout(500)
     }
 
     // test whether awaitTermination() does not exit if not time is given
@@ -262,7 +288,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
     val exception = intercept[Exception] {
       ssc.start()
-      ssc.awaitTermination(5000)
+      ssc.awaitTerminationOrTimeout(5000)
     }
     assert(exception.getMessage.contains("map task"), "Expected exception not thrown")
   }
@@ -273,9 +299,33 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     inputStream.transform { rdd => throw new TestException("error in transform"); rdd }.register()
     val exception = intercept[TestException] {
       ssc.start()
-      ssc.awaitTermination(5000)
+      ssc.awaitTerminationOrTimeout(5000)
     }
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
+  }
+
+  test("awaitTerminationOrTimeout") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val inputStream = addInputStream(ssc)
+    inputStream.map(x => x).register()
+
+    ssc.start()
+
+    // test whether awaitTerminationOrTimeout() return false after give amount of time
+    failAfter(1000 millis) {
+      assert(ssc.awaitTerminationOrTimeout(500) === false)
+    }
+
+    // test whether awaitTerminationOrTimeout() return true if context is stopped
+    failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
+      new Thread() {
+        override def run() {
+          Thread.sleep(500)
+          ssc.stop()
+        }
+      }.start()
+      assert(ssc.awaitTerminationOrTimeout(10000) === true)
+    }
   }
 
   test("DStream and generated RDD creation sites") {
@@ -317,6 +367,38 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
 object TestReceiver {
   val counter = new AtomicInteger(1)
+}
+
+/** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
+class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int) extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        logInfo("Receiving started")
+        for(i <- 1 to totalRecords) {
+          Thread.sleep(1000 / recordsPerSecond)
+          store(i)
+        }
+        SlowTestReceiver.receivedAllRecords = true
+        logInfo(s"Received all $totalRecords records")
+      }
+    }
+    receivingThreadOption = Some(thread)
+    thread.start()
+  }
+
+  def onStop() {
+    // Simulate slow receiver by waiting for all records to be produced
+    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    // no cleanup to be done, the receiving thread should stop on it own
+  }
+}
+
+object SlowTestReceiver {
+  var receivedAllRecords = false
 }
 
 /** Streaming application for testing DStream and RDD creation sites */

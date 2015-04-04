@@ -58,7 +58,8 @@ class Normalizer(VectorTransformer):
     For any 1 <= `p` < float('inf'), normalizes samples using
     sum(abs(vector) :sup:`p`) :sup:`(1/p)` as norm.
 
-    For `p` = float('inf'), max(abs(vector)) will be used as norm for normalization.
+    For `p` = float('inf'), max(abs(vector)) will be used as norm for
+    normalization.
 
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
@@ -120,9 +121,14 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         Applies standardization transformation on a vector.
 
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
         :param vector: Vector or RDD of Vector to be standardized.
-        :return: Standardized vector. If the variance of a column is zero,
-                it will return default `0.0` for the column with zero variance.
+        :return: Standardized vector. If the variance of a column is
+                 zero, it will return default `0.0` for the column with
+                 zero variance.
         """
         return JavaVectorTransformer.transform(self, vector)
 
@@ -148,9 +154,10 @@ class StandardScaler(object):
         """
         :param withMean: False by default. Centers the data with mean
                  before scaling. It will build a dense output, so this
-                 does not work on sparse input and will raise an exception.
-        :param withStd: True by default. Scales the data to unit standard
-                 deviation.
+                 does not work on sparse input and will raise an
+                 exception.
+        :param withStd: True by default. Scales the data to unit
+                 standard deviation.
         """
         if not (withMean or withStd):
             warnings.warn("Both withMean and withStd are false. The model does nothing.")
@@ -159,10 +166,11 @@ class StandardScaler(object):
 
     def fit(self, dataset):
         """
-        Computes the mean and variance and stores as a model to be used for later scaling.
+        Computes the mean and variance and stores as a model to be used
+        for later scaling.
 
-        :param data: The data used to compute the mean and variance to build
-                    the transformation model.
+        :param data: The data used to compute the mean and variance
+                 to build the transformation model.
         :return: a StandardScalarModel
         """
         dataset = dataset.map(_convert_to_vector)
@@ -174,7 +182,8 @@ class HashingTF(object):
     """
     .. note:: Experimental
 
-    Maps a sequence of terms to their term frequencies using the hashing trick.
+    Maps a sequence of terms to their term frequencies using the hashing
+    trick.
 
     Note: the terms must be hashable (can not be dict/set/list...).
 
@@ -195,8 +204,9 @@ class HashingTF(object):
 
     def transform(self, document):
         """
-        Transforms the input document (list of terms) to term frequency vectors,
-        or transform the RDD of document to RDD of term frequency vectors.
+        Transforms the input document (list of terms) to term frequency
+        vectors, or transform the RDD of document to RDD of term
+        frequency vectors.
         """
         if isinstance(document, RDD):
             return document.map(self.transform)
@@ -220,7 +230,12 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        :param x: an RDD of term frequency vectors or a term frequency vector
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param x: an RDD of term frequency vectors or a term frequency
+                 vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
         if isinstance(x, RDD):
@@ -228,6 +243,12 @@ class IDFModel(JavaVectorTransformer):
 
         x = _convert_to_vector(x)
         return JavaVectorTransformer.transform(self, x)
+
+    def idf(self):
+        """
+        Returns the current IDF vector.
+        """
+        return self.call('idf')
 
 
 class IDF(object):
@@ -241,9 +262,9 @@ class IDF(object):
     of documents that contain term `t`.
 
     This implementation supports filtering out terms which do not appear
-    in a minimum number of documents (controlled by the variable `minDocFreq`).
-    For terms that are not in at least `minDocFreq` documents, the IDF is
-    found as 0, resulting in TF-IDFs of 0.
+    in a minimum number of documents (controlled by the variable
+    `minDocFreq`). For terms that are not in at least `minDocFreq`
+    documents, the IDF is found as 0, resulting in TF-IDFs of 0.
 
     >>> n = 4
     >>> freqs = [Vectors.sparse(n, (1, 3), (1.0, 2.0)),
@@ -316,6 +337,12 @@ class Word2VecModel(JavaVectorTransformer):
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
+    def getVectors(self):
+        """
+        Returns a map of words to their vector representations.
+        """
+        return self.call("getVectors")
+
 
 class Word2Vec(object):
     """
@@ -325,15 +352,16 @@ class Word2Vec(object):
     The vector representation can be used as features in
     natural language processing and machine learning algorithms.
 
-    We used skip-gram model in our implementation and hierarchical softmax
-    method to train the model. The variable names in the implementation
-    matches the original C implementation.
+    We used skip-gram model in our implementation and hierarchical
+    softmax method to train the model. The variable names in the
+    implementation matches the original C implementation.
 
-    For original C implementation, see https://code.google.com/p/word2vec/
+    For original C implementation,
+    see https://code.google.com/p/word2vec/
     For research papers, see
     Efficient Estimation of Word Representations in Vector Space
-    and
-    Distributed Representations of Words and Phrases and their Compositionality.
+    and Distributed Representations of Words and Phrases and their
+    Compositionality.
 
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
@@ -357,6 +385,7 @@ class Word2Vec(object):
         self.numPartitions = 1
         self.numIterations = 1
         self.seed = random.randint(0, sys.maxint)
+        self.minCount = 5
 
     def setVectorSize(self, vectorSize):
         """
@@ -374,15 +403,16 @@ class Word2Vec(object):
 
     def setNumPartitions(self, numPartitions):
         """
-        Sets number of partitions (default: 1). Use a small number for accuracy.
+        Sets number of partitions (default: 1). Use a small number for
+        accuracy.
         """
         self.numPartitions = numPartitions
         return self
 
     def setNumIterations(self, numIterations):
         """
-        Sets number of iterations (default: 1), which should be smaller than or equal to number of
-        partitions.
+        Sets number of iterations (default: 1), which should be smaller
+        than or equal to number of partitions.
         """
         self.numIterations = numIterations
         return self
@@ -392,6 +422,14 @@ class Word2Vec(object):
         Sets random seed.
         """
         self.seed = seed
+        return self
+
+    def setMinCount(self, minCount):
+        """
+        Sets minCount, the minimum number of times a token must appear
+        to be included in the word2vec model's vocabulary (default: 5).
+        """
+        self.minCount = minCount
         return self
 
     def fit(self, data):
@@ -405,7 +443,8 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), long(self.seed))
+                               int(self.numIterations), long(self.seed),
+                               int(self.minCount))
         return Word2VecModel(jmodel)
 
 

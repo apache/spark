@@ -76,6 +76,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices(0).mkString(",") === (0 to 32).mkString(","))
     assert(slices(1).mkString(",") === (33 to 66).mkString(","))
     assert(slices(2).mkString(",") === (67 to 100).mkString(","))
+    assert(slices(2).isInstanceOf[Range.Inclusive])
   }
 
   test("empty data") {
@@ -226,5 +227,29 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices.size === 3)
     assert(slices.map(_.size).reduceLeft(_+_) === 100)
     assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
+  }
+
+  test("inclusive ranges with Int.MaxValue and Int.MinValue") {
+    val data1 = 1 to Int.MaxValue
+    val slices1 = ParallelCollectionRDD.slice(data1, 3)
+    assert(slices1.size === 3)
+    assert(slices1.map(_.size).sum === Int.MaxValue)
+    assert(slices1(2).isInstanceOf[Range.Inclusive])
+    val data2 = -2 to Int.MinValue by -1
+    val slices2 = ParallelCollectionRDD.slice(data2, 3)
+    assert(slices2.size == 3)
+    assert(slices2.map(_.size).sum === Int.MaxValue)
+    assert(slices2(2).isInstanceOf[Range.Inclusive])
+  }
+
+  test("empty ranges with Int.MaxValue and Int.MinValue") {
+    val data1 = Int.MaxValue until Int.MaxValue
+    val slices1 = ParallelCollectionRDD.slice(data1, 5)
+    assert(slices1.size === 5)
+    for (i <- 0 until 5) assert(slices1(i).size === 0)
+    val data2 = Int.MaxValue until Int.MaxValue
+    val slices2 = ParallelCollectionRDD.slice(data2, 5)
+    assert(slices2.size === 5)
+    for (i <- 0 until 5) assert(slices2(i).size === 0)
   }
 }

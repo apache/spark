@@ -32,7 +32,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val jobId = request.getParameter("id").toInt
+      val parameterId = request.getParameter("id")
+      require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+
+      val jobId = parameterId.toInt
       val jobDataOption = listener.jobIdToData.get(jobId)
       if (jobDataOption.isEmpty) {
         val content =

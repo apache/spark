@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.util
 
+import java.{util => ju}
+
 import scala.language.postfixOps
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -72,24 +73,25 @@ object MFDataGenerator {
 
     val sc = new SparkContext(sparkMaster, "MFDataGenerator")
 
-    val A = DoubleMatrix.randn(m, rank)
-    val B = DoubleMatrix.randn(rank, n)
-    val z = 1 / scala.math.sqrt(scala.math.sqrt(rank))
-    A.mmuli(z)
-    B.mmuli(z)
-    val fullData = A.mmul(B)
+    val random = new ju.Random(42L)
+
+    val A = DenseMatrix.randn(m, rank, random)
+    val B = DenseMatrix.randn(rank, n, random)
+    val z = 1 / math.sqrt(rank)
+    val fullData = DenseMatrix.zeros(m, n)
+    BLAS.gemm(z, A, B, 1.0, fullData)
 
     val df = rank * (m + n - rank)
     val sampSize = scala.math.min(scala.math.round(trainSampFact * df),
       scala.math.round(.99 * m * n)).toInt
     val rand = new Random()
     val mn = m * n
-    val shuffled = rand.shuffle(1 to mn toList)
+    val shuffled = rand.shuffle((0 until mn).toList)
 
     val omega = shuffled.slice(0, sampSize)
     val ordered = omega.sortWith(_ < _).toArray
     val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered)
-      .map(x => (fullData.indexRows(x - 1), fullData.indexColumns(x - 1), fullData.get(x - 1)))
+      .map(x => (x % m, x / m, fullData.values(x)))
 
     // optionally add gaussian noise
     if (noise) {
@@ -105,7 +107,7 @@ object MFDataGenerator {
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)
-        .map(x => (fullData.indexRows(x - 1), fullData.indexColumns(x - 1), fullData.get(x - 1)))
+        .map(x => (x % m, x / m, fullData.values(x)))
       testData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
     }
 

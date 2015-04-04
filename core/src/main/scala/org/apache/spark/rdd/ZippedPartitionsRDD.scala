@@ -32,7 +32,7 @@ private[spark] class ZippedPartitionsPartition(
 
   override val index: Int = idx
   var partitionValues = rdds.map(rdd => rdd.partitions(idx))
-  def partitions = partitionValues
+  def partitions: Seq[Partition] = partitionValues
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {

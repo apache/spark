@@ -25,16 +25,15 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import com.google.common.io.Files
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+import org.apache.spark.util.Utils
 
 class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
 
@@ -60,7 +59,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     )
 
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
-    tempDirectory = Files.createTempDir()
+    tempDirectory = Utils.createTempDir()
     ssc.checkpoint(tempDirectory.getAbsolutePath)
   }
 
@@ -68,10 +67,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     if (ssc != null) {
       ssc.stop()
     }
-    if (tempDirectory != null && tempDirectory.exists()) {
-      FileUtils.deleteDirectory(tempDirectory)
-      tempDirectory = null
-    }
+    Utils.deleteRecursively(tempDirectory)
     tearDownKafka()
   }
 
@@ -79,7 +75,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
   test("Reliable Kafka input stream with single topic") {
     var topic = "test-topic"
     createTopic(topic)
-    produceAndSendMessage(topic, data)
+    sendMessages(topic, data)
 
     // Verify whether the offset of this group/topic/partition is 0 before starting.
     assert(getCommitOffset(groupId, topic, 0) === None)
@@ -111,7 +107,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     val topics = Map("topic1" -> 1, "topic2" -> 1, "topic3" -> 1)
     topics.foreach { case (t, _) =>
       createTopic(t)
-      produceAndSendMessage(t, data)
+      sendMessages(t, data)
     }
 
     // Before started, verify all the group/topic/partition offsets are 0.

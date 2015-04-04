@@ -55,7 +55,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @return an RDD containing the edges in this graph
    *
    * @see [[Edge]] for the edge type.
-   * @see [[triplets]] to get an RDD which contains all the edges
+   * @see [[Graph#triplets]] to get an RDD which contains all the edges
    * along with their vertex data.
    *
    */
@@ -103,6 +103,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint(): Unit
+
+  /**
+   * Return whether this Graph has been checkpointed or not.
+   * This returns true iff both the vertices RDD and edges RDD have been checkpointed.
+   */
+  def isCheckpointed: Boolean
+
+  /**
+   * Gets the name of the files to which this Graph was checkpointed.
+   * (The vertices RDD and edges RDD are checkpointed separately.)
+   */
+  def getCheckpointFiles: Seq[String]
 
   /**
    * Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that

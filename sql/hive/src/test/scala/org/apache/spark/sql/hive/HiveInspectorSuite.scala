@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.util
-import java.sql.Date
 import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
@@ -31,7 +30,6 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
@@ -77,13 +75,13 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     Literal(0.asInstanceOf[Float]) ::
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
-    Literal(new Date(2014, 9, 23)) ::
+    Literal(java.sql.Date.valueOf("2014-09-23")) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1,2,3)) ::
-    Literal(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
-    Literal(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
-    Literal(Row(1,2.0d,3.0f),
+    Literal.create(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
+    Literal.create(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
+    Literal.create(Row(1,2.0d,3.0f),
       StructType(StructField("c1", IntegerType) ::
       StructField("c2", DoubleType) ::
       StructField("c3", FloatType) :: Nil)) ::
@@ -130,6 +128,12 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     }
   }
 
+  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+    row1.zip(row2.toSeq).map {
+      case (r1, r2) => checkValue(r1, r2)
+    }
+  }
+
   def checkValue(v1: Any, v2: Any): Unit = {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
@@ -138,7 +142,6 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).map { case (b1, b2) => assert(b1 === b2) }
-      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) === 0)
       case (r1, r2) => assert(r1 === r2)
     }
   }
@@ -163,7 +166,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val constantData = constantExprs.map(_.eval())
     val constantNullData = constantData.map(_ => null)
     val constantWritableOIs = constantExprs.map(e => toWritableInspector(e.dataType))
-    val constantNullWritableOIs = constantExprs.map(e => toInspector(Literal(null, e.dataType)))
+    val constantNullWritableOIs = constantExprs.map(e => toInspector(Literal.create(null, e.dataType)))
 
     checkValues(constantData, constantData.zip(constantWritableOIs).map {
       case (d, oi) => unwrap(wrap(d, oi), oi)
@@ -199,7 +202,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
 
-    checkValues(row, unwrap(wrap(row, toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+    checkValues(row, unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
@@ -209,8 +212,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val d = row(0) :: row(0) :: Nil
     checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
   }
 
   test("wrap / unwrap Map Type") {
@@ -219,7 +222,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val d = Map(row(0) -> row(1))
     checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal.create(d, dt))), toInspector(Literal.create(d, dt))))
   }
 }

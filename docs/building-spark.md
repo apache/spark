@@ -9,6 +9,10 @@ redirect_from: "building-with-maven.html"
 
 Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
+**Note:** Building Spark with Java 7 or later can create JAR files that may not be
+readable with early versions of Java 6, due to the large number of files in the JAR
+archive. Build with Java 6 if this is an issue for your deployment.
+
 # Building with `build/mvn`
 
 Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
@@ -18,6 +22,18 @@ build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 {% endhighlight %}
 
 Other build examples can be found below.
+
+**Note:** When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
+
+    <arg>-Xmax-classfile-name</arg>
+    <arg>128</arg>
+
+and in `project/SparkBuild.scala` add:
+
+    scalacOptions in Compile ++= Seq("-Xmax-classfile-name", "128"),
+
+to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
+
 
 # Setting up Maven's Memory Usage
 
@@ -111,9 +127,9 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
     dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
-Scala 2.11 support in Spark is experimental and does not support a few features.
-Specifically, Spark's external Kafka library and JDBC component are not yet
-supported in Scala 2.11 builds.
+Scala 2.11 support in Spark does not support a few features due to dependencies
+which are themselves not Scala 2.11 ready. Specifically, Spark's external 
+Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
 
 # Spark Tests in Maven
 
@@ -137,15 +153,18 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
 should run continuous compilation (i.e. wait for changes). However, this has not been tested
 extensively. A couple of gotchas to note:
+
 * it only scans the paths `src/main` and `src/test` (see
 [docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
 from within certain submodules that have that structure.
+
 * you'll typically need to run `mvn install` from the project root for compilation within
 specific submodules to work; this is because submodules that depend on other submodules do so via
 the `spark-parent` module).
 
 Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
- ```
+
+```
  $ mvn install
  $ cd core
  $ mvn scala:cc
@@ -155,14 +174,6 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
 [wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
-
-# Building Spark Debian Packages
-
-The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
-
-    mvn -Pdeb -DskipTests clean package
-
-The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
 
 # Running Java 8 Test Suites
 

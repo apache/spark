@@ -62,6 +62,7 @@ class DataTypeSuite extends FunSuite {
     }
   }
 
+  checkDataTypeJsonRepr(NullType)
   checkDataTypeJsonRepr(BooleanType)
   checkDataTypeJsonRepr(ByteType)
   checkDataTypeJsonRepr(ShortType)
@@ -69,7 +70,9 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(LongType)
   checkDataTypeJsonRepr(FloatType)
   checkDataTypeJsonRepr(DoubleType)
+  checkDataTypeJsonRepr(DecimalType(10, 5))
   checkDataTypeJsonRepr(DecimalType.Unlimited)
+  checkDataTypeJsonRepr(DateType)
   checkDataTypeJsonRepr(TimestampType)
   checkDataTypeJsonRepr(StringType)
   checkDataTypeJsonRepr(BinaryType)
@@ -77,12 +80,122 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(ArrayType(StringType, false))
   checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
   checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
-  checkDataTypeJsonRepr(
-    StructType(Seq(
-      StructField("a", IntegerType, nullable = true),
-      StructField("b", ArrayType(DoubleType), nullable = false),
-      StructField("c", DoubleType, nullable = false, metadata))))
+  val structType = StructType(Seq(
+    StructField("a", IntegerType, nullable = true),
+    StructField("b", ArrayType(DoubleType), nullable = false),
+    StructField("c", DoubleType, nullable = false, metadata)))
+  checkDataTypeJsonRepr(structType)
+
+  def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
+    test(s"Check the default size of ${dataType}") {
+      assert(dataType.defaultSize === expectedDefaultSize)
+    }
+  }
+
+  checkDefaultSize(NullType, 1)
+  checkDefaultSize(BooleanType, 1)
+  checkDefaultSize(ByteType, 1)
+  checkDefaultSize(ShortType, 2)
+  checkDefaultSize(IntegerType, 4)
+  checkDefaultSize(LongType, 8)
+  checkDefaultSize(FloatType, 4)
+  checkDefaultSize(DoubleType, 8)
+  checkDefaultSize(DecimalType(10, 5), 4096)
+  checkDefaultSize(DecimalType.Unlimited, 4096)
+  checkDefaultSize(DateType, 4)
+  checkDefaultSize(TimestampType,12)
+  checkDefaultSize(StringType, 4096)
+  checkDefaultSize(BinaryType, 4096)
+  checkDefaultSize(ArrayType(DoubleType, true), 800)
+  checkDefaultSize(ArrayType(StringType, false), 409600)
+  checkDefaultSize(MapType(IntegerType, StringType, true), 410000)
+  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
+  checkDefaultSize(structType, 812)
+
+  def checkEqualsIgnoreCompatibleNullability(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName =
+      s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
+    test(testName) {
+      assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
+    }
+  }
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(StringType, containsNull = false),
+    expected = false)
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
+    expected = true)
+
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = true) :: Nil),
+    to = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = false) :: Nil),
+    expected = false)
 }

@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.admin.CreateTopicCommand
+import kafka.admin.AdminUtils
 import kafka.common.{KafkaException, TopicAndPartition}
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.{StringDecoder, StringEncoder}
@@ -48,30 +48,41 @@ import org.apache.spark.util.Utils
  */
 abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Logging {
 
-  var zkAddress: String = _
-  var zkClient: ZkClient = _
-
   private val zkHost = "localhost"
+  private var zkPort: Int = 0
   private val zkConnectionTimeout = 6000
   private val zkSessionTimeout = 6000
   private var zookeeper: EmbeddedZookeeper = _
-  private var zkPort: Int = 0
+  private val brokerHost = "localhost"
   private var brokerPort = 9092
   private var brokerConf: KafkaConfig = _
   private var server: KafkaServer = _
   private var producer: Producer[String, String] = _
+  private var zkReady = false
+  private var brokerReady = false
+
+  protected var zkClient: ZkClient = _
+
+  def zkAddress: String = {
+    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
+    s"$zkHost:$zkPort"
+  }
+
+  def brokerAddress: String = {
+    assert(brokerReady, "Kafka not setup yet or already torn down, cannot get broker address")
+    s"$brokerHost:$brokerPort"
+  }
 
   def setupKafka() {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkAddress = s"$zkHost:$zkPort"
-    logInfo("==================== 0 ====================")
+    zkReady = true
+    logInfo("==================== Zookeeper Started ====================")
 
-    zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout,
-      ZKStringSerializer)
-    logInfo("==================== 1 ====================")
+    zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout, ZKStringSerializer)
+    logInfo("==================== Zookeeper Client Created ====================")
 
     // Kafka broker startup
     var bindSuccess: Boolean = false
@@ -80,9 +91,8 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
         val brokerProps = getBrokerConfig()
         brokerConf = new KafkaConfig(brokerProps)
         server = new KafkaServer(brokerConf)
-        logInfo("==================== 2 ====================")
         server.startup()
-        logInfo("==================== 3 ====================")
+        logInfo("==================== Kafka Broker Started ====================")
         bindSuccess = true
       } catch {
         case e: KafkaException =>
@@ -94,10 +104,13 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     }
 
     Thread.sleep(2000)
-    logInfo("==================== 4 ====================")
+    logInfo("==================== Kafka + Zookeeper Ready ====================")
+    brokerReady = true
   }
 
   def tearDownKafka() {
+    brokerReady = false
+    zkReady = false
     if (producer != null) {
       producer.close()
       producer = null
@@ -121,26 +134,23 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     }
   }
 
-  private def createTestMessage(topic: String, sent: Map[String, Int])
-    : Seq[KeyedMessage[String, String]] = {
-    val messages = for ((s, freq) <- sent; i <- 0 until freq) yield {
-      new KeyedMessage[String, String](topic, s)
-    }
-    messages.toSeq
-  }
-
   def createTopic(topic: String) {
-    CreateTopicCommand.createTopic(zkClient, topic, 1, 1, "0")
-    logInfo("==================== 5 ====================")
+    AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated
     waitUntilMetadataIsPropagated(topic, 0)
+    logInfo(s"==================== Topic $topic Created ====================")
   }
 
-  def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
+  def sendMessages(topic: String, messageToFreq: Map[String, Int]) {
+    val messages = messageToFreq.flatMap { case (s, freq) => Seq.fill(freq)(s) }.toArray
+    sendMessages(topic, messages)
+  }
+  
+  def sendMessages(topic: String, messages: Array[String]) {
     producer = new Producer[String, String](new ProducerConfig(getProducerConfig()))
-    producer.send(createTestMessage(topic, sent): _*)
+    producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
     producer.close()
-    logInfo("==================== 6 ====================")
+    logInfo(s"==================== Sent Messages: ${messages.mkString(", ")} ====================")
   }
 
   private def getBrokerConfig(): Properties = {
@@ -164,9 +174,9 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
-    eventually(timeout(1000 milliseconds), interval(100 milliseconds)) {
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(
-        server.apis.leaderCache.keySet.contains(TopicAndPartition(topic, partition)),
+        server.apis.metadataCache.containsTopicAndPartition(topic, partition),
         s"Partition [$topic, $partition] metadata not propagated after timeout"
       )
     }
@@ -218,7 +228,7 @@ class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     val topic = "topic1"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     createTopic(topic)
-    produceAndSendMessage(topic, sent)
+    sendMessages(topic, sent)
 
     val kafkaParams = Map("zookeeper.connect" -> zkAddress,
       "group.id" -> s"test-consumer-${Random.nextInt(10000)}",

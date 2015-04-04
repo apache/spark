@@ -49,6 +49,10 @@ package org.apache.spark.sql.catalyst
  */
 package object expressions  {
 
+  type Row = org.apache.spark.sql.Row
+
+  val Row = org.apache.spark.sql.Row
+
   /**
    * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
    * new row. If the schema of the input row is specified, then the given expression will be bound

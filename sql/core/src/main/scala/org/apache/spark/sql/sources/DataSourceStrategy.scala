@@ -18,19 +18,19 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
 private[sql] object DataSourceStrategy extends Strategy {
-  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+  def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: CatalystScan)) =>
       pruneFilterProjectRaw(
         l,
@@ -54,6 +54,10 @@ private[sql] object DataSourceStrategy extends Strategy {
 
     case l @ LogicalRelation(t: TableScan) =>
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
+
+    case i @ logical.InsertIntoTable(
+      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
+      execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }
@@ -82,7 +86,7 @@ private[sql] object DataSourceStrategy extends Strategy {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition = filterPredicates.reduceLeftOption(And)
+    val filterCondition = filterPredicates.reduceLeftOption(expressions.And)
 
     val pushedFilters = filterPredicates.map { _ transform {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
@@ -112,24 +116,69 @@ private[sql] object DataSourceStrategy extends Strategy {
     }
   }
 
-  protected[sql] def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
-    case expressions.EqualTo(a: Attribute, Literal(v, _)) => EqualTo(a.name, v)
-    case expressions.EqualTo(Literal(v, _), a: Attribute) => EqualTo(a.name, v)
+  /**
+   * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s,
+   * and convert them.
+   */
+  protected[sql] def selectFilters(filters: Seq[Expression]) = {
+    def translate(predicate: Expression): Option[Filter] = predicate match {
+      case expressions.EqualTo(a: Attribute, Literal(v, _)) =>
+        Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(Literal(v, _), a: Attribute) =>
+        Some(sources.EqualTo(a.name, v))
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, _)) => GreaterThan(a.name, v)
-    case expressions.GreaterThan(Literal(v, _), a: Attribute) => LessThan(a.name, v)
+      case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
+        Some(sources.GreaterThan(a.name, v))
+      case expressions.GreaterThan(Literal(v, _), a: Attribute) =>
+        Some(sources.LessThan(a.name, v))
 
-    case expressions.LessThan(a: Attribute, Literal(v, _)) => LessThan(a.name, v)
-    case expressions.LessThan(Literal(v, _), a: Attribute) => GreaterThan(a.name, v)
+      case expressions.LessThan(a: Attribute, Literal(v, _)) =>
+        Some(sources.LessThan(a.name, v))
+      case expressions.LessThan(Literal(v, _), a: Attribute) =>
+        Some(sources.GreaterThan(a.name, v))
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
-      GreaterThanOrEqual(a.name, v)
-    case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
-      LessThanOrEqual(a.name, v)
+      case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
+        Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
+        Some(sources.LessThanOrEqual(a.name, v))
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) => LessThanOrEqual(a.name, v)
-    case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) => GreaterThanOrEqual(a.name, v)
+      case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) =>
+        Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) =>
+        Some(sources.GreaterThanOrEqual(a.name, v))
 
-    case expressions.InSet(a: Attribute, set) => In(a.name, set.toArray)
+      case expressions.InSet(a: Attribute, set) =>
+        Some(sources.In(a.name, set.toArray))
+
+      case expressions.IsNull(a: Attribute) =>
+        Some(sources.IsNull(a.name))
+      case expressions.IsNotNull(a: Attribute) =>
+        Some(sources.IsNotNull(a.name))
+
+      case expressions.And(left, right) =>
+        (translate(left) ++ translate(right)).reduceOption(sources.And)
+
+      case expressions.Or(left, right) =>
+        for {
+          leftFilter <- translate(left)
+          rightFilter <- translate(right)
+        } yield sources.Or(leftFilter, rightFilter)
+
+      case expressions.Not(child) =>
+        translate(child).map(sources.Not)
+
+      case expressions.StartsWith(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringStartsWith(a.name, v))
+
+      case expressions.EndsWith(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringEndsWith(a.name, v))
+
+      case expressions.Contains(a: Attribute, Literal(v: String, StringType)) =>
+        Some(sources.StringContains(a.name, v))
+
+      case _ => None
+    }
+
+    filters.flatMap(translate)
   }
 }

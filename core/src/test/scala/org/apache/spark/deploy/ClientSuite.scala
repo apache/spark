@@ -23,6 +23,7 @@ import org.scalatest.Matchers
 class ClientSuite extends FunSuite with Matchers {
   test("correctly validates driver jar URL's") {
     ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
+    ClientArguments.isValidJarUrl("https://someHost:8080/foo.jar") should be (true)
 
     // file scheme with authority and path is valid.
     ClientArguments.isValidJarUrl("file://somehost/path/to/a/jarFile.jar") should be (true)

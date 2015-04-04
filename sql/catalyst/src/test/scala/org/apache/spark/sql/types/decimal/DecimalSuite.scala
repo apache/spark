@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types.decimal
 
+import org.apache.spark.sql.types.Decimal
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import scala.language.postfixOps

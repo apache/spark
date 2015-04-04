@@ -34,7 +34,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
-RecordWriter => NewRecordWriter}
+  RecordWriter => NewRecordWriter}
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
@@ -978,12 +978,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
       val config = wrappedConf.value
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
+        context.attemptNumber)
       val hadoopContext = newTaskAttemptContext(config, attemptId)
       val format = outfmt.newInstance
       format match {
@@ -993,11 +990,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
 
-      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context, config)
+      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
-      try {
-        var recordsWritten = 0L
+      require(writer != null, "Unable to obtain RecordWriter")
+      var recordsWritten = 0L
+      Utils.tryWithSafeFinally {
         while (iter.hasNext) {
           val pair = iter.next()
           writer.write(pair._1, pair._2)
@@ -1006,11 +1004,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
           recordsWritten += 1
         }
-      } finally {
+      } {
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
       1
     } : Int
 
@@ -1062,14 +1061,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
-      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context, config)
+      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
-      writer.setup(context.stageId, context.partitionId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
-      try {
-        var recordsWritten = 0L
+      var recordsWritten = 0L
+
+      Utils.tryWithSafeFinally {
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
@@ -1078,22 +1078,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
           recordsWritten += 1
         }
-      } finally {
+      } {
         writer.close()
       }
       writer.commit()
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
 
     self.context.runJob(self, writeToFile)
     writer.commitJob()
   }
 
-  private def initHadoopOutputMetrics(context: TaskContext, config: Configuration)
-    : (OutputMetrics, Option[() => Long]) = {
-    val bytesWrittenCallback = Option(config.get("mapreduce.output.fileoutputformat.outputdir"))
-      .map(new Path(_))
-      .flatMap(SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(_, config))
+  private def initHadoopOutputMetrics(context: TaskContext): (OutputMetrics, Option[() => Long]) = {
+    val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
     val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
     if (bytesWrittenCallback.isDefined) {
       context.taskMetrics.outputMetrics = Some(outputMetrics)
@@ -1103,9 +1101,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
       outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
-    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
-        && bytesWrittenCallback.isDefined) {
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
   }
 

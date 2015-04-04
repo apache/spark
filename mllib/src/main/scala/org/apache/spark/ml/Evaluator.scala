@@ -19,7 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: AlphaComponent ::
@@ -35,5 +35,5 @@ abstract class Evaluator extends Identifiable {
    * @param paramMap parameter map that specifies the input columns and output metrics
    * @return metric
    */
-  def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double
+  def evaluate(dataset: DataFrame, paramMap: ParamMap): Double
 }

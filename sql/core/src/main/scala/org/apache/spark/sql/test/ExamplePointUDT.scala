@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  * @param y y coordinate
  */
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
-private[sql] class ExamplePoint(val x: Double, val y: Double)
+private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable
 
 /**
  * User-defined type for [[ExamplePoint]].
@@ -37,7 +37,7 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def sqlType: DataType = ArrayType(DoubleType, false)
 
-  override def pyUDT: String = "pyspark.tests.ExamplePointUDT"
+  override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
   override def serialize(obj: Any): Seq[Double] = {
     obj match {
@@ -59,4 +59,6 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   }
 
   override def userClass: Class[ExamplePoint] = classOf[ExamplePoint]
+
+  private[spark] override def asNullable: ExamplePointUDT = this
 }

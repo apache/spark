@@ -145,7 +145,7 @@ private[spark] class TaskSchedulerImpl(
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
-        Utils.tryOrExit { checkSpeculatableTasks() }
+        Utils.tryOrStopSparkContext(sc) { checkSpeculatableTasks() }
       }
     }
   }
@@ -158,7 +158,7 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
+      val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
@@ -168,7 +168,7 @@ private[spark] class TaskSchedulerImpl(
             if (!hasLaunchedTask) {
               logWarning("Initial job has not accepted any resources; " +
                 "check your cluster UI to ensure that workers are registered " +
-                "and have sufficient memory")
+                "and have sufficient resources")
             } else {
               this.cancel()
             }
@@ -178,6 +178,13 @@ private[spark] class TaskSchedulerImpl(
       hasReceivedTask = true
     }
     backend.reviveOffers()
+  }
+
+  // Label as private[scheduler] to allow tests to swap in different task set managers if necessary
+  private[scheduler] def createTaskSetManager(
+      taskSet: TaskSet,
+      maxTaskFailures: Int): TaskSetManager = {
+    new TaskSetManager(this, taskSet, maxTaskFailures)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -361,22 +368,22 @@ private[spark] class TaskSchedulerImpl(
     dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
   }
 
-  def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {
+  def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
     taskSetManager.handleTaskGettingResult(tid)
   }
 
   def handleSuccessfulTask(
-    taskSetManager: TaskSetManager,
-    tid: Long,
-    taskResult: DirectTaskResult[_]) = synchronized {
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      taskResult: DirectTaskResult[_]): Unit = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
   }
 
   def handleFailedTask(
-    taskSetManager: TaskSetManager,
-    tid: Long,
-    taskState: TaskState,
-    reason: TaskEndReason) = synchronized {
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      taskState: TaskState,
+      reason: TaskEndReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
     if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
       // Need to revive offers again now that the task set manager state has been updated to
@@ -416,7 +423,7 @@ private[spark] class TaskSchedulerImpl(
     starvationTimer.cancel()
   }
 
-  override def defaultParallelism() = backend.defaultParallelism()
+  override def defaultParallelism(): Int = backend.defaultParallelism()
 
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
@@ -429,7 +436,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  def executorLost(executorId: String, reason: ExecutorLossReason) {
+  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
 
     synchronized {

@@ -225,13 +225,22 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Needs constant object inspectors
     "udf_round",
 
+    // the table src(key INT, value STRING) is not the same as HIVE unittest. In Hive
+    // is src(key STRING, value STRING), and in the reflect.q, it failed in
+    // Integer.valueOf, which expect the first argument passed as STRING type not INT.
+    "udf_reflect",
+
     // Sort with Limit clause causes failure.
     "ctas",
     "ctas_hadoop20",
 
     // timestamp in array, the output format of Hive contains double quotes, while
     // Spark SQL doesn't
-    "udf_sort_array"
+    "udf_sort_array",
+
+    // It has a bug and it has been fixed by
+    // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
+    "input46"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -357,6 +366,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "database_drop",
     "database_location",
     "database_properties",
+    "date_1",
     "date_2",
     "date_3",
     "date_4",
@@ -517,6 +527,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
+    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
@@ -625,6 +636,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "mapreduce8",
     "merge1",
     "merge2",
+    "merge4",
     "mergejoins",
     "multiMapJoin1",
     "multiMapJoin2",
@@ -638,6 +650,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nonblock_op_deduplicate",
     "notable_alias1",
     "notable_alias2",
+    "nullformatCTAS",
     "nullgroup",
     "nullgroup2",
     "nullgroup3",
@@ -717,6 +730,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semicolon",
     "semijoin",
     "serde_regex",
     "serde_reported_schema",
@@ -786,6 +800,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udaf_covar_pop",
     "udaf_covar_samp",
     "udaf_histogram_numeric",
+    "udaf_number_format",
     "udf2",
     "udf5",
     "udf6",
@@ -883,6 +898,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
+    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",

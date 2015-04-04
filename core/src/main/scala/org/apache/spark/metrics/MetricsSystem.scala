@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
@@ -84,7 +85,7 @@ private[spark] class MetricsSystem private (
   /**
    * Get any UI handlers used by this metrics system; can only be called after start().
    */
-  def getServletHandlers = {
+  def getServletHandlers: Array[ServletContextHandler] = {
     require(running, "Can only call getServletHandlers on a running MetricsSystem")
     metricsServlet.map(_.getHandlers).getOrElse(Array())
   }
@@ -130,8 +131,8 @@ private[spark] class MetricsSystem private (
       if (appId.isDefined && executorId.isDefined) {
         MetricRegistry.name(appId.get, executorId.get, source.sourceName)
       } else {
-        // Only Driver and Executor are set spark.app.id and spark.executor.id.
-        // For instance, Master and Worker are not related to a specific application.
+        // Only Driver and Executor set spark.app.id and spark.executor.id.
+        // Other instance types, e.g. Master and Worker, are not related to a specific application.
         val warningMsg = s"Using default name $defaultName for source because %s is not set."
         if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
         if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }
@@ -191,7 +192,10 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
+          case e: Exception => {
+            logError("Sink class " + classPath + " cannot be instantialized")
+            throw e
+          }
         }
       }
     }

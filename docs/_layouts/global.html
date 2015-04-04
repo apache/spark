@@ -7,7 +7,9 @@
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
         <title>{{ page.title }} - Spark {{site.SPARK_VERSION_SHORT}} Documentation</title>
-        <meta name="description" content="">
+        {% if page.description %}
+          <meta name="description" content="{{page.description | replace: 'SPARK_VERSION_SHORT', site.SPARK_VERSION_SHORT}}">
+        {% endif %}
 
         {% if page.redirect %}
           <meta http-equiv="refresh" content="0; url={{page.redirect}}">
@@ -69,7 +71,7 @@
                                 <li><a href="programming-guide.html">Spark Programming Guide</a></li>
                                 <li class="divider"></li>
                                 <li><a href="streaming-programming-guide.html">Spark Streaming</a></li>
-                                <li><a href="sql-programming-guide.html">Spark SQL</a></li>
+                                <li><a href="sql-programming-guide.html">DataFrames and SQL</a></li>
                                 <li><a href="mllib-guide.html">MLlib (Machine Learning)</a></li>
                                 <li><a href="graphx-programming-guide.html">GraphX (Graph Processing)</a></li>
                                 <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>

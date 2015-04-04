@@ -32,19 +32,15 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],
@@ -54,7 +50,7 @@ case class InsertIntoHiveTable(
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val db = Hive.get(sc.hiveconf)
+  @transient private lazy val catalog = sc.catalog
 
   private def newSerializer(tableDesc: TableDesc): Serializer = {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
@@ -62,7 +58,7 @@ case class InsertIntoHiveTable(
     serializer
   }
 
-  def output = child.output
+  def output: Seq[Attribute] = child.output
 
   def saveAsHiveFile(
       rdd: RDD[Row],
@@ -76,7 +72,6 @@ case class InsertIntoHiveTable(
     val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
     assert(outputFileFormatClassName != null, "Output format class not set")
     conf.value.set("mapred.output.format.class", outputFileFormatClassName)
-    conf.value.setOutputCommitter(classOf[FileOutputCommitter])
 
     FileOutputFormat.setOutputPath(
       conf.value,
@@ -100,10 +95,7 @@ case class InsertIntoHiveTable(
       val wrappers = fieldOIs.map(wrapperFor)
       val outputData = new Array[Any](fieldOIs.length)
 
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
-      writerContainer.executorSideSetup(context.stageId, context.partitionId, attemptNumber)
+      writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
       iterator.foreach { row =>
         var i = 0
@@ -207,42 +199,49 @@ case class InsertIntoHiveTable(
           orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
-      db.validatePartitionNameCharacters(partVals)
+      catalog.synchronized {
+        catalog.client.validatePartitionNameCharacters(partVals)
+      }
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        db.loadDynamicPartitions(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          numDynamicPartitions,
-          holdDDLTime,
-          isSkewedStoreAsSubdir
-        )
+        catalog.synchronized {
+          catalog.client.loadDynamicPartitions(
+            outputPath,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            numDynamicPartitions,
+            holdDDLTime,
+            isSkewedStoreAsSubdir)
+        }
       } else {
-        db.loadPartition(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          holdDDLTime,
-          inheritTableSpecs,
-          isSkewedStoreAsSubdir)
+        catalog.synchronized {
+          catalog.client.loadPartition(
+            outputPath,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            holdDDLTime,
+            inheritTableSpecs,
+            isSkewedStoreAsSubdir)
+        }
       }
     } else {
-      db.loadTable(
-        outputPath,
-        qualifiedTableName,
-        overwrite,
-        holdDDLTime)
+      catalog.synchronized {
+        catalog.client.loadTable(
+          outputPath,
+          qualifiedTableName,
+          overwrite,
+          holdDDLTime)
+      }
     }
 
     // Invalidate the cache.
-    sqlContext.invalidateCache(table)
+    sqlContext.cacheManager.invalidateCache(table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

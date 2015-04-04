@@ -61,7 +61,7 @@ class BlockManagerMaster(
       tachyonSize: Long): Boolean = {
     val res = askDriverWithReply[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
-    logInfo("Updated info of block " + blockId)
+    logDebug(s"Updated info of block $blockId")
     res
   }
 
@@ -79,7 +79,7 @@ class BlockManagerMaster(
    * Check if block manager master has a block. Note that this can be used to check for only
    * those blocks that are reported to block manager master.
    */
-  def contains(blockId: BlockId) = {
+  def contains(blockId: BlockId): Boolean = {
     !getLocations(blockId).isEmpty
   }
 

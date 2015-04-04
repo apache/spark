@@ -21,7 +21,7 @@ from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import RDD, SparkConf
-from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
+from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
@@ -189,7 +189,16 @@ class StreamingContext(object):
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            self._jssc.awaitTermination(int(timeout * 1000))
+            self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+
+    def awaitTerminationOrTimeout(self, timeout):
+        """
+        Wait for the execution to stop. Return `true` if it's stopped; or
+        throw the reported error during the execution; or `false` if the
+        waiting time elapsed before returning from the method.
+        @param timeout: time to wait in seconds
+        """
+        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -250,6 +259,20 @@ class StreamingContext(object):
         file system. File names starting with . are ignored.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
+
+    def binaryRecordsStream(self, directory, recordLength):
+        """
+        Create an input stream that monitors a Hadoop-compatible file system
+        for new files and reads them as flat binary files with records of
+        fixed length. Files must be written to the monitored directory by "moving"
+        them from another location within the same file system.
+        File names starting with . are ignored.
+
+        @param directory:       Directory to load data from
+        @param recordLength:    Length of each record in bytes
+        """
+        return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
+                       NoOpSerializer())
 
     def _check_serializers(self, rdds):
         # make sure they have same serializer

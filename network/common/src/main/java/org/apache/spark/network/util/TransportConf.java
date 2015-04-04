@@ -98,4 +98,11 @@ public class TransportConf {
   public boolean lazyFileDescriptor() {
     return conf.getBoolean("spark.shuffle.io.lazyFD", true);
   }
+
+  /**
+   * Maximum number of retries when binding to a port before giving up.
+   */
+  public int portMaxRetries() {
+    return conf.getInt("spark.port.maxRetries", 16);
+  }
 }

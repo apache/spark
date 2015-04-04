@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.ExceptionFailure
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
@@ -48,18 +48,26 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
   val executorToInputBytes = HashMap[String, Long]()
+  val executorToInputRecords = HashMap[String, Long]()
   val executorToOutputBytes = HashMap[String, Long]()
+  val executorToOutputRecords = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
+  val executorToLogUrls = HashMap[String, Map[String, String]]()
 
-  def storageStatusList = storageStatusListener.storageStatusList
+  def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
+    val eid = executorAdded.executorId
+    executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+  }
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val eid = taskStart.taskInfo.executorId
     executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = info.executorId
@@ -78,10 +86,14 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
         metrics.inputMetrics.foreach { inputMetrics =>
           executorToInputBytes(eid) =
             executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+          executorToInputRecords(eid) =
+            executorToInputRecords.getOrElse(eid, 0L) + inputMetrics.recordsRead
         }
         metrics.outputMetrics.foreach { outputMetrics =>
           executorToOutputBytes(eid) =
             executorToOutputBytes.getOrElse(eid, 0L) + outputMetrics.bytesWritten
+          executorToOutputRecords(eid) =
+            executorToOutputRecords.getOrElse(eid, 0L) + outputMetrics.recordsWritten
         }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =

@@ -38,8 +38,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   var masterActor: ActorSelection = _
   val timeout = AkkaUtils.askTimeout(conf)
 
-  override def preStart() = {
-    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
+  override def preStart(): Unit = {
+    masterActor = context.actorSelection(
+      Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
 
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
@@ -67,8 +68,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
-        val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, sys.env, classPathEntries, libraryPathEntries, javaOpts)
+        val command = new Command(mainClass,
+          Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
+          sys.env, classPathEntries, libraryPathEntries, javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
@@ -116,7 +118,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     }
   }
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
@@ -161,7 +163,7 @@ object Client {
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
-    Master.toAkkaUrl(driverArgs.master)
+    Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(actorSystem))
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

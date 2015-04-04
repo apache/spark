@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.types
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
+import scala.collection.mutable.ArrayBuffer
+import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -29,10 +31,10 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.types.decimal._
 import org.apache.spark.util.Utils
 
 
@@ -160,7 +162,6 @@ object DataType {
       case failure: NoSuccess =>
         throw new IllegalArgumentException(s"Unsupported dataType: $asString, $failure")
     }
-
   }
 
   protected[types] def buildFormattedString(
@@ -181,7 +182,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -198,12 +199,48 @@ object DataType {
       case (left, right) => left == right
     }
   }
+
+  /**
+   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType.
+   *
+   * Compatible nullability is defined as follows:
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
+   *   `to.containsNull` are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
+   *   if and only if for all every pair of fields, `to.nullable` is true, or both
+   *   of `fromField.nullable` and `toField.nullable` are false.
+   */
+  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        (tn || !fn) &&
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.size == toFields.size &&
+          fromFields.zip(toFields).forall {
+            case (fromField, toField) =>
+              fromField.name == toField.name &&
+                (toField.nullable || !fromField.nullable) &&
+                equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
 }
 
 
 /**
  * :: DeveloperApi ::
- *
  * The base type of all Spark SQL data types.
  *
  * @group dataType
@@ -216,6 +253,9 @@ abstract class DataType {
     case _ => false
   }
 
+  /** The default size of a value of this data type. */
+  def defaultSize: Int
+
   def isPrimitive: Boolean = false
 
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
@@ -225,44 +265,54 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
-}
 
+  def simpleString: String = typeName
+
+  /** Check if `this` and `other` are the same data type when ignoring nullability
+   *  (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   */
+  private[spark] def sameType(other: DataType): Boolean =
+    DataType.equalsIgnoreNullability(this, other)
+
+  /** Returns the same data type but set all nullability fields are true
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   */
+  private[spark] def asNullable: DataType
+}
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object NullType extends DataType
+class NullType private() extends DataType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "NullType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
+  override def defaultSize: Int = 1
+
+  private[spark] override def asNullable: NullType = this
+}
+
+case object NullType extends NullType
 
 
-object NativeType {
+protected[sql] object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
-
-  val defaultSizeOf: Map[NativeType, Int] = Map(
-    IntegerType -> 4,
-    BooleanType -> 1,
-    LongType -> 8,
-    DoubleType -> 8,
-    FloatType -> 4,
-    ShortType -> 2,
-    ByteType -> 1,
-    StringType -> 4096)
 }
 
 
-trait PrimitiveType extends DataType {
-  override def isPrimitive = true
+protected[sql] trait PrimitiveType extends DataType {
+  override def isPrimitive: Boolean = true
 }
 
 
-object PrimitiveType {
+protected[sql] object PrimitiveType {
   private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
   private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
 
@@ -277,7 +327,7 @@ object PrimitiveType {
   }
 }
 
-abstract class NativeType extends DataType {
+protected[sql] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
@@ -291,29 +341,42 @@ abstract class NativeType extends DataType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object StringType extends NativeType with PrimitiveType {
+class StringType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the StringType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
+
+  private[spark] override def asNullable: StringType = this
 }
+
+case object StringType extends StringType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Array[Byte]` values.
  * Please use the singleton [[DataTypes.BinaryType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object BinaryType extends NativeType with PrimitiveType {
+class BinaryType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Array[Byte]
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = new Ordering[JvmType] {
@@ -325,64 +388,110 @@ case object BinaryType extends NativeType with PrimitiveType {
       x.length - y.length
     }
   }
+
+  /**
+   * The default size of a value of the BinaryType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
+
+  private[spark] override def asNullable: BinaryType = this
 }
+
+case object BinaryType extends BinaryType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
  *
  *@group dataType
  */
 @DeveloperApi
-case object BooleanType extends NativeType with PrimitiveType {
+class BooleanType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the BooleanType is 1 byte.
+   */
+  override def defaultSize: Int = 1
+
+  private[spark] override def asNullable: BooleanType = this
 }
+
+case object BooleanType extends BooleanType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `java.sql.Timestamp` values.
  * Please use the singleton [[DataTypes.TimestampType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object TimestampType extends NativeType {
+class TimestampType private() extends NativeType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "TimestampType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Timestamp
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
   private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
+    def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
+
+  /**
+   * The default size of a value of the TimestampType is 12 bytes.
+   */
+  override def defaultSize: Int = 12
+
+  private[spark] override def asNullable: TimestampType = this
 }
+
+case object TimestampType extends TimestampType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `java.sql.Date` values.
  * Please use the singleton [[DataTypes.DateType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object DateType extends NativeType {
-  private[sql] type JvmType = Date
+class DateType private() extends NativeType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "DateType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
+  private[sql] type JvmType = Int
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
-  private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Date, y: Date) = x.compareTo(y)
-  }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the DateType is 4 bytes.
+   */
+  override def defaultSize: Int = 4
+
+  private[spark] override def asNullable: DateType = this
 }
 
+case object DateType extends DateType
 
+
+/**
+ * :: DeveloperApi ::
+ * Numeric data types.
+ *
+ * @group dataType
+ */
 abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -393,13 +502,13 @@ abstract class NumericType extends NativeType with PrimitiveType {
 }
 
 
-object NumericType {
+protected[sql] object NumericType {
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */
-object IntegralType {
+protected[sql] object IntegralType {
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
     case _ => false
@@ -407,81 +516,133 @@ object IntegralType {
 }
 
 
-sealed abstract class IntegralType extends NumericType {
+protected[sql] sealed abstract class IntegralType extends NumericType {
   private[sql] val integral: Integral[JvmType]
 }
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object LongType extends IntegralType {
+class LongType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Long
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the LongType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
+
+  override def simpleString: String = "bigint"
+
+  private[spark] override def asNullable: LongType = this
 }
+
+case object LongType extends LongType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object IntegerType extends IntegralType {
+class IntegerType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Int
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the IntegerType is 4 bytes.
+   */
+  override def defaultSize: Int = 4
+
+  override def simpleString: String = "int"
+
+  private[spark] override def asNullable: IntegerType = this
 }
+
+case object IntegerType extends IntegerType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object ShortType extends IntegralType {
+class ShortType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "ShortType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Short
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the ShortType is 2 bytes.
+   */
+  override def defaultSize: Int = 2
+
+  override def simpleString: String = "smallint"
+
+  private[spark] override def asNullable: ShortType = this
 }
+
+case object ShortType extends ShortType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object ByteType extends IntegralType {
+class ByteType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "ByteType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Byte
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the ByteType is 1 byte.
+   */
+  override def defaultSize: Int = 1
+
+  override def simpleString: String = "tinyint"
+
+  private[spark] override def asNullable: ByteType = this
 }
+
+case object ByteType extends ByteType
 
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
-object FractionalType {
+protected[sql] object FractionalType {
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
     case _ => false
@@ -489,7 +650,7 @@ object FractionalType {
 }
 
 
-sealed abstract class FractionalType extends NumericType {
+protected[sql] sealed abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
 }
@@ -501,8 +662,7 @@ case class PrecisionInfo(precision: Int, scale: Int)
 
 /**
  * :: DeveloperApi ::
- *
- * The data type representing `scala.math.BigDecimal` values.
+ * The data type representing `java.math.BigDecimal` values.
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
@@ -511,6 +671,10 @@ case class PrecisionInfo(precision: Int, scale: Int)
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = Decimal.DecimalIsFractional
@@ -531,6 +695,18 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
     case None => "DecimalType()"
   }
+
+  /**
+   * The default size of a value of the DecimalType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
+
+  override def simpleString: String = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal(10,0)"
+  }
+
+  private[spark] override def asNullable: DecimalType = this
 }
 
 
@@ -568,38 +744,60 @@ object DecimalType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object DoubleType extends FractionalType {
+class DoubleType private() extends FractionalType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Double
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
+
+  /**
+   * The default size of a value of the DoubleType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
+
+  private[spark] override def asNullable: DoubleType = this
 }
+
+case object DoubleType extends DoubleType
 
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
  *
  * @group dataType
  */
 @DeveloperApi
-case object FloatType extends FractionalType {
+class FloatType private() extends FractionalType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Float
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = FloatAsIfIntegral
+
+  /**
+   * The default size of a value of the FloatType is 4 bytes.
+   */
+  override def defaultSize: Int = 4
+
+  private[spark] override def asNullable: FloatType = this
 }
+
+case object FloatType extends FloatType
 
 
 object ArrayType {
@@ -610,7 +808,6 @@ object ArrayType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
@@ -627,6 +824,10 @@ object ArrayType {
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
       s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
@@ -637,12 +838,22 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
+
+  /**
+   * The default size of a value of the ArrayType is 100 * the default size of the element type.
+   * (We assume that there are 100 elements).
+   */
+  override def defaultSize: Int = 100 * elementType.defaultSize
+
+  override def simpleString: String = s"array<${elementType.simpleString}>"
+
+  private[spark] override def asNullable: ArrayType =
+    ArrayType(elementType.asNullable, containsNull = true)
 }
 
 
 /**
  * A field inside a StructType.
- *
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
@@ -654,6 +865,9 @@ case class StructField(
     dataType: DataType,
     nullable: Boolean = true,
     metadata: Metadata = Metadata.empty) {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, null)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
@@ -681,12 +895,64 @@ object StructType {
   def apply(fields: java.util.List[StructField]): StructType = {
     StructType(fields.toArray.asInstanceOf[Array[StructField]])
   }
+
+  private[sql] def merge(left: DataType, right: DataType): DataType =
+    (left, right) match {
+      case (ArrayType(leftElementType, leftContainsNull),
+            ArrayType(rightElementType, rightContainsNull)) =>
+        ArrayType(
+          merge(leftElementType, rightElementType),
+          leftContainsNull || rightContainsNull)
+
+      case (MapType(leftKeyType, leftValueType, leftContainsNull),
+            MapType(rightKeyType, rightValueType, rightContainsNull)) =>
+        MapType(
+          merge(leftKeyType, rightKeyType),
+          merge(leftValueType, rightValueType),
+          leftContainsNull || rightContainsNull)
+
+      case (StructType(leftFields), StructType(rightFields)) =>
+        val newFields = ArrayBuffer.empty[StructField]
+
+        leftFields.foreach {
+          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
+            rightFields
+              .find(_.name == leftName)
+              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              }
+              .orElse(Some(leftField))
+              .foreach(newFields += _)
+        }
+
+        rightFields
+          .filterNot(f => leftFields.map(_.name).contains(f.name))
+          .foreach(newFields += _)
+
+        StructType(newFields)
+
+      case (DecimalType.Fixed(leftPrecision, leftScale),
+            DecimalType.Fixed(rightPrecision, rightScale)) =>
+        DecimalType(
+          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
+          max(leftScale, rightScale))
+
+      case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
+        if leftUdt.userClass == rightUdt.userClass => leftUdt
+
+      case (leftType, rightType) if leftType == rightType =>
+        leftType
+
+      case _ =>
+        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+    }
 }
 
 
 /**
  * :: DeveloperApi ::
- *
  * A [[StructType]] object can be constructed by
  * {{{
  * StructType(fields: Seq[StructField])
@@ -727,7 +993,7 @@ object StructType {
  * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
  * }}}
  *
- * A [[org.apache.spark.sql.catalyst.expressions.Row]] object is used as a value of the StructType.
+ * A [[org.apache.spark.sql.Row]] object is used as a value of the StructType.
  * Example:
  * {{{
  * import org.apache.spark.sql._
@@ -751,6 +1017,9 @@ object StructType {
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
@@ -762,7 +1031,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name, throw new IllegalArgumentException(s"Field $name does not exist."))
+    nameToField.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   /**
@@ -806,6 +1076,39 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def length: Int = fields.length
 
   override def iterator: Iterator[StructField] = fields.iterator
+
+  /**
+   * The default size of a value of the StructType is the total default sizes of all field types.
+   */
+  override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
+
+  override def simpleString: String = {
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    s"struct<${fieldTypes.mkString(",")}>"
+  }
+
+  /**
+   * Merges with another schema (`StructType`).  For a struct field A from `this` and a struct field
+   * B from `that`,
+   *
+   * 1. If A and B have the same name and data type, they are merged to a field C with the same name
+   *    and data type.  C is nullable if and only if either A or B is nullable.
+   * 2. If A doesn't exist in `that`, it's included in the result schema.
+   * 3. If B doesn't exist in `this`, it's also included in the result schema.
+   * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
+   *    thrown.
+   */
+  private[sql] def merge(that: StructType): StructType =
+    StructType.merge(this, that).asInstanceOf[StructType]
+
+  private[spark] override def asNullable: StructType = {
+    val newFields = fields.map {
+      case StructField(name, dataType, nullable, metadata) =>
+        StructField(name, dataType.asNullable, nullable = true, metadata)
+    }
+
+    StructType(newFields)
+  }
 }
 
 
@@ -821,7 +1124,6 @@ object MapType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
  *
  * Please use [[DataTypes.createMapType()]] to create a specific instance.
@@ -836,6 +1138,10 @@ case class MapType(
     keyType: DataType,
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  def this() = this(null, null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
     builder.append(s"$prefix-- value: ${valueType.typeName} " +
@@ -849,6 +1155,18 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+
+  /**
+   * The default size of a value of the MapType is
+   * 100 * (the default size of the key type + the default size of the value type).
+   * (We assume that there are 100 elements).
+   */
+  override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
+
+  override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
+
+  private[spark] override def asNullable: MapType =
+    MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 }
 
 
@@ -858,13 +1176,13 @@ case class MapType(
  *
  * This interface allows a user to make their own classes more interoperable with SparkSQL;
  * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
- * a SchemaRDD which has class X in the schema.
+ * a `DataFrame` which has class X in the schema.
  *
  * For SparkSQL to recognize UDTs, the UDT must be annotated with
  * [[SQLUserDefinedType]].
  *
- * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
- * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
+ * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {
@@ -897,4 +1215,15 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    * Class object for the UserType
    */
   def userClass: java.lang.Class[UserType]
+
+  /**
+   * The default size of a value of the UserDefinedType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
+
+  /**
+   * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
+   * itself.
+   */
+  private[spark] override def asNullable: UserDefinedType[UserType] = this
 }

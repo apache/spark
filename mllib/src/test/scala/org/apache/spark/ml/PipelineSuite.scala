@@ -23,7 +23,7 @@ import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends FunSuite {
 
@@ -36,11 +36,11 @@ class PipelineSuite extends FunSuite {
     val estimator2 = mock[Estimator[MyModel]]
     val model2 = mock[MyModel]
     val transformer3 = mock[Transformer]
-    val dataset0 = mock[SchemaRDD]
-    val dataset1 = mock[SchemaRDD]
-    val dataset2 = mock[SchemaRDD]
-    val dataset3 = mock[SchemaRDD]
-    val dataset4 = mock[SchemaRDD]
+    val dataset0 = mock[DataFrame]
+    val dataset1 = mock[DataFrame]
+    val dataset2 = mock[DataFrame]
+    val dataset3 = mock[DataFrame]
+    val dataset4 = mock[DataFrame]
 
     when(estimator0.fit(meq(dataset0), any[ParamMap]())).thenReturn(model0)
     when(model0.transform(meq(dataset0), any[ParamMap]())).thenReturn(dataset1)
@@ -74,7 +74,7 @@ class PipelineSuite extends FunSuite {
     val estimator = mock[Estimator[MyModel]]
     val pipeline = new Pipeline()
       .setStages(Array(estimator, estimator))
-    val dataset = mock[SchemaRDD]
+    val dataset = mock[DataFrame]
     intercept[IllegalArgumentException] {
       pipeline.fit(dataset)
     }
