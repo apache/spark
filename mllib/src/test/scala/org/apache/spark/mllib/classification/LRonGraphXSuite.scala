@@ -49,9 +49,20 @@ class LRonGraphXSuite extends FunSuite with LocalClusterSparkContext with Matche
     val numIterations = 1000
     val regParam = 1e-2
     val trainSet = dataSet.cache()
-    LRonGraphX.train(trainSet, numIterations, stepSize, regParam, true)
+    // LRonGraphX.trainSGD(trainSet, numIterations, stepSize, regParam, true)
 
+    val max = trainSet.map(_.features.asInstanceOf[SparseVector].values.map(_.abs).sum + 1L).max
+    //    val trainSet = dataSet.map(t => {
+    //      val sv = t.features.asInstanceOf[SparseVector]
+    //      for (i <- 0 until sv.values.length) {
+    //        sv.values(i) /= max
+    //      }
+    //      t
+    //    })
+    //
+    LRonGraphX.trainMIS(trainSet, numIterations, 1 / (2 * max), 1e-3, regParam)
 
+    //    LRonGraphX.trainMIS(trainSet, numIterations, stepSize, regParam, 1e-3, true)
     //    val trainSet = dataSet.map(t => {
     //      LabeledPoint(if (t.label > 0) 1 else 0, t.features)
     //    }).cache()
