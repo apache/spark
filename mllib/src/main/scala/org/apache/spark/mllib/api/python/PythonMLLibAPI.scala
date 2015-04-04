@@ -406,17 +406,6 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * A Wrapper of FPGrowthModel to provide helper method for Python
-   */
-  private[python] class FPGrowthModelWrapper(model: FPGrowthModel[Any])
-    extends FPGrowthModel(model.freqItemsets) {
-
-    def getFreqItemsets: RDD[Array[Any]] = {
-      SerDe.fromTuple2RDD(model.freqItemsets.map(x => (x.javaItems, x.freq)))
-    }
-  }
-
-  /**
    * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
    * needs to be taken in the Python code to ensure it gets freed on exit; see
@@ -426,11 +415,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[java.lang.Iterable[Any]],
       minSupport: Double,
       numPartitions: Int): FPGrowthModel[Any] = {
-    val fpm = new FPGrowth()
+    val fpg = new FPGrowth()
       .setMinSupport(minSupport)
       .setNumPartitions(numPartitions)
 
-    val model = fpm.run(data.rdd.map(_.asScala.toArray))
+    val model = fpg.run(data.rdd.map(_.asScala.toArray))
     new FPGrowthModelWrapper(model)
   }
 

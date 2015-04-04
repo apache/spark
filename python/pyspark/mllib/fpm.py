@@ -26,26 +26,12 @@ class FPGrowthModel(JavaModelWrapper):
 
     """A FP-Growth model for mining frequent itemsets using the Parallel FP-Growth algorithm.
 
-    >>> r1 = ["r","z","h","k","p"]
-    >>> r2 = ["z","y","x","w","v","u","t","s"]
-    >>> r3 = ["s","x","o","n","r"]
-    >>> r4 = ["x","z","y","m","t","s","q","e"]
-    >>> r5 = ["z"]
-    >>> r6 = ["x","z","y","r","q","t","p"]
-    >>> rdd = sc.parallelize([r1,r2,r3,r4,r5,r6], 2)
-    >>> model = FPGrowth.train(rdd, 0.5, 2)
+    >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
+    >>> rdd = sc.parallelize(data, 2)
+    >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> result = model.freqItemsets().collect()
-    >>> expected = [([u"s"], 3), ([u"z"], 5), ([u"x"], 4), ([u"t"], 3), ([u"y"], 3), ([u"r"],3),
-    ... ([u"x", u"z"], 3), ([u"y", u"t"], 3), ([u"t", u"x"], 3), ([u"s",u"x"], 3),
-    ... ([u"y", u"x"], 3), ([u"y", u"z"], 3), ([u"t", u"z"], 3), ([u"y", u"x", u"z"], 3),
-    ... ([u"t", u"x", u"z"], 3), ([u"y", u"t", u"z"], 3), ([u"y", u"t", u"x"], 3),
-    ... ([u"y", u"t", u"x", u"z"], 3)]
-    >>> diff1 = [x for x in result if x not in expected]
-    >>> len(diff1)
-    0
-    >>> diff2 = [x for x in expected if x not in result]
-    >>> len(diff2)
-    0
+    >>> sorted(model.freqItemsets().collect())
+    [([u'a'], 4), ([u'c'], 3), ([u'c', u'a'], 3)]
     """
     def freqItemsets(self):
         return self.call("getFreqItemsets")
