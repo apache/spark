@@ -73,60 +73,64 @@ class S3Hook(BaseHook):
     def __init__(
             self,
             s3_conn_id='s3_default'):
-        session = settings.Session()
-        db = session.query(
-            Connection).filter(
-                Connection.conn_id == s3_conn_id)
-        if db.count() == 0:
-            raise Exception("The conn_id you provided isn't defined")
-        else:
-            db = db.all()[0]
-        # Get AWS credentials
+        self.s3_conn_id = s3_conn_id
+        self.s3_conn = self.get_connection(s3_conn_id)
         self.profile = None
+        self._sts_conn_required = False
         try:
-            extra_params = json.loads(db.extra)
-            s3_config_format = extra_params['s3_config_format']
-            s3_config_file = extra_params['s3_config_file']
-            if 'profile' in extra_params:
-                self.profile = extra_params['profile']
-            sts_conn_required = 'aws_account_id' in extra_params
-            if sts_conn_required:
-                aws_account_id = extra_params['aws_account_id']
-                aws_iam_role = extra_params['aws_iam_role']
-                role_arn = "arn:aws:iam::" + aws_account_id + ":role/"
-                role_arn += aws_iam_role
+            self.extra_params = json.loads(self.s3_conn.extra)
+            self.s3_config_format = self.extra_params['s3_config_format']
+            self.s3_config_file = self.extra_params['s3_config_file']
+            if 'profile' in self.extra_params:
+                self.profile = self.extra_params['profile']
+            self._sts_conn_required = 'aws_account_id' in self.extra_params
+            if self._sts_conn_required:
+                self.aws_account_id = self.extra_params['aws_account_id']
+                self.aws_iam_role = self.extra_params['aws_iam_role']
+                self.role_arn = "arn:aws:iam::" + self.aws_account_id + ":role/"
+                self.role_arn += self.aws_iam_role
         except TypeError as e:
             raise Exception("S3 connection needs to set config params in extra")
         except KeyError as e:
             raise Exception("S3 connection definition needs to include"
                             "{p} in extra".format(p=e.message))
-        a_key, s_key = _parse_s3_config(s3_config_file, s3_config_format,
-                                        self.profile)
-        if sts_conn_required:
-            sts_connection = STSConnection(aws_access_key_id=a_key,
-                                           aws_secret_access_key=s_key,
-                                           profile_name=self.profile)
-            assumed_role_object = sts_connection.assume_role(
-                role_arn=role_arn,
-                role_session_name="Airflow_" + s3_conn_id
-                )
-            creds = assumed_role_object.credentials
-            self.connection = S3Connection(
-                aws_access_key_id=creds.access_key,
-                aws_secret_access_key=creds.secret_key,
-                security_token=creds.session_token
-                )
-        else:
-            self.connection = S3Connection(aws_access_key_id=a_key,
-                                           aws_secret_access_key=s_key)
-        session.commit()
-        session.close()
+        self.connection = self.get_conn()
+
+    def __getstate__(self):
+        pickled_dict = dict(self.__dict__)
+        del pickled_dict['connection']
+        return pickled_dict
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+        self.__dict__['connection'] = self.get_conn()
 
     def get_conn(self):
         '''
         Returns the boto S3Connection object.
         '''
-        return self.connection
+        _s3_conn = self.get_connection(self.s3_conn_id)
+        a_key, s_key = _parse_s3_config(self.s3_config_file,
+                                        self.s3_config_format,
+                                        self.profile)
+        if self._sts_conn_required:
+            sts_connection = STSConnection(aws_access_key_id=a_key,
+                                           aws_secret_access_key=s_key,
+                                           profile_name=self.profile)
+            assumed_role_object = sts_connection.assume_role(
+                role_arn=self.role_arn,
+                role_session_name="Airflow_" + self.s3_conn_id
+                )
+            creds = assumed_role_object.credentials
+            connection = S3Connection(
+                aws_access_key_id=creds.access_key,
+                aws_secret_access_key=creds.secret_key,
+                security_token=creds.session_token
+                )
+        else:
+            connection = S3Connection(aws_access_key_id=a_key,
+                                      aws_secret_access_key=s_key)
+        return connection
 
     def check_for_bucket(self, bucket_name):
         '''
