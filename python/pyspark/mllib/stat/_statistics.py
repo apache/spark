@@ -49,6 +49,12 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
     def min(self):
         return self.call("min").toArray()
 
+    def normL1(self):
+        return self.call("normL1").toArray()
+
+    def normL2(self):
+        return self.call("normL2").toArray()
+
 
 class Statistics(object):
 
