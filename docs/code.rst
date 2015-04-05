@@ -8,6 +8,17 @@ the DAG when instantiated. All operators derive from BaseOperator and
 inherit a whole lot of attributes and method that way. Refer to the 
 BaseOperator documentation for more details.
 
+There are 3 main types of operators:
+
+- Operators that performs an **action**, or tells another system to 
+  perform an action
+- **Transfer** operators move data from a system to another
+- **Sensors** are a certain type of operators that will keep running until a
+  certain criteria is met. Things like a specific file landing in HDFS or
+  S3, a partition appearing in Hive, or a specific time of the day. Sensors 
+  are derived from ``BaseSensorOperator`` and run a poke
+  method at a specified ``poke_interval`` until it returns ``True``.
+
 .. automodule:: airflow.operators
     :show-inheritance:
     :members: 
@@ -20,6 +31,7 @@ BaseOperator documentation for more details.
         HiveOperator,
         HivePartitionSensor,
         MySqlOperator,
+        MySqlToHiveTransfer,
         PostgresOperator, 
         PrestoCheckOperator,
         PrestoIntervalCheckOperator,
