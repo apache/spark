@@ -18,7 +18,7 @@ archive. Build with Java 6 if this is an issue for your deployment.
 Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
 {% highlight bash %}
-build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.6.0 -DskipTests clean package
 {% endhighlight %}
 
 Other build examples can be found below.
@@ -70,7 +70,7 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
-    <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
+    <tr><td>2.4.x and later</td><td>hadoop-2.4</td></tr>
   </tbody>
 </table>
 
@@ -98,10 +98,10 @@ mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
-# Apache Hadoop 2.4.X or 2.5.X
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
+# Apache Hadoop 2.4.X and later
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=(Hadoop version) -DskipTests clean package
 
-Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
+Versions of Hadoop after 2.6.X may or may not work with the -Phadoop-2.4 profile (they were
 released after this version of Spark).
 
 # Different versions of HDFS and YARN.

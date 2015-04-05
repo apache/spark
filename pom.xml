@@ -1617,6 +1617,11 @@
       </properties>
     </profile>
 
+    <!--
+    Note that the Hadoop 2.4 profile is intended to support 2.4.0 and later,
+    and so is the profile to activate for Hadoop 2.5, 2.6 and later.
+    For later versions, also set -Dhadoop.version=...
+     -->
     <profile>
       <id>hadoop-2.4</id>
       <properties>
