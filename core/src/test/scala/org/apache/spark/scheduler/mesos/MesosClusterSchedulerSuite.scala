@@ -49,8 +49,8 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     assert(response2.success)
 
     val state = scheduler.getState()
-    assert(state.queuedDrivers.exists(d => d.submissionId == response.submissionId))
-    assert(state.queuedDrivers.exists(d => d.submissionId == response2.submissionId))
+    assert(state.queuedDrivers.exists(d => d.submissionId.get == response.submissionId))
+    assert(state.queuedDrivers.exists(d => d.submissionId.get == response2.submissionId))
   }
 
   test("can kill queued drivers") {

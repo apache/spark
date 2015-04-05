@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.List
 import java.util.concurrent.CountDownLatch
 
-import org.apache.mesos.Protos.{FrameworkInfo, Resource}
+import org.apache.mesos.Protos.{Status, FrameworkInfo, Resource}
 import org.apache.mesos.{MesosSchedulerDriver, Scheduler, SchedulerDriver}
 import org.apache.spark.Logging
 
@@ -64,6 +64,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
           try {
             val ret = driver.run()
             logInfo("driver.run() returned with code " + ret)
+            onDriverExit(ret)
           } catch {
             case e: Exception => logError("driver.run() failed", e)
           }
@@ -71,6 +72,14 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       }.start()
 
       waitForRegister()
+    }
+  }
+
+  def onDriverExit(status: Status): Unit = {
+    // Exit the process when the Mesos framework driver was aborted.
+    // This behavior can be overriden by the scheduler.
+    if (status.equals(Status.DRIVER_ABORTED)) {
+      System.exit(1)
     }
   }
 

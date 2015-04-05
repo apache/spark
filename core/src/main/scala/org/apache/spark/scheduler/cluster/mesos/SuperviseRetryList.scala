@@ -59,20 +59,22 @@ private[mesos] class SuperviseRetryList(state: MesosClusterPersistenceEngine) {
 
   def size: Int = drivers.size
 
-  def contains(submissionId: String): Boolean =
-    drivers.exists(d => d.submission.submissionId.equals(submissionId))
+  def contains(submissionId: String): Boolean = {
+    drivers.exists { d =>
+      d.submission.submissionId.map(_.equals(submissionId)).getOrElse(false)
+    }
+  }
 
-  def getNextRetry(currentTime: Date): (Option[MesosDriverDescription], Option[RetryState]) = {
-    val retry = drivers.find(d => d.nextRetry.before(currentTime))
-    if (retry.isDefined) {
-      (Some(retry.get.submission), retry)
-    } else {
-      (None, None)
+  def getNextRetries(currentTime: Date): Seq[(MesosDriverDescription, Option[RetryState])] = {
+    drivers.filter(d => d.nextRetry.before(currentTime)).map { d =>
+      (d.submission, Some(d))
     }
   }
 
   def get(submissionId: String): Option[RetryState] = {
-    drivers.find(d => d.submission.submissionId.equals(submissionId))
+    drivers.find { d =>
+      d.submission.submissionId.map(_.equals(submissionId)).getOrElse(false)
+    }
   }
 
   def retries: Iterable[RetryState] = {
@@ -80,7 +82,9 @@ private[mesos] class SuperviseRetryList(state: MesosClusterPersistenceEngine) {
   }
 
   def remove(submissionId: String): Boolean = {
-    val index = drivers.indexWhere(s => s.submission.submissionId.equals(submissionId))
+    val index = drivers.indexWhere { s =>
+      s.submission.submissionId.map(_.equals(submissionId)).getOrElse(false)
+    }
 
     if (index != -1) {
       drivers.remove(index)

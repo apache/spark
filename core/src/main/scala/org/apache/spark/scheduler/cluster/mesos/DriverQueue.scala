@@ -62,30 +62,17 @@ private[mesos] class DriverQueue(state: MesosClusterPersistenceEngine, capacity:
   }
 
   def remove(submissionId: String): Boolean = {
-    val removed = queue.dequeueFirst(d => d.submissionId.equals(submissionId))
-    if (removed.isDefined) {
-      state.expunge(removed.get.submissionId.get)
+    val removed = queue.dequeueFirst { d =>
+      d.submissionId.map(_.equals(submissionId)).getOrElse(false)
     }
-
+    if (removed.isDefined) state.expunge(removed.get.submissionId.get)
     removed.isDefined
   }
 
-  def peek(): Option[MesosDriverDescription] = {
-    queue.headOption
-  }
-
-  def poll(): Option[MesosDriverDescription] = {
-    if (queue.isEmpty) {
-      None
-    } else {
-      val item = queue.dequeue()
-      state.expunge(item.submissionId.get)
-      Some(item)
-    }
-  }
+  def drivers: Seq[MesosDriverDescription] = queue
 
   // Returns a copy of the queued drivers.
-  def drivers: Iterable[MesosDriverDescription] = {
+  def copyDrivers: Iterable[MesosDriverDescription] = {
     val buffer = new Array[MesosDriverDescription](queue.size)
     queue.copyToArray(buffer)
     buffer
