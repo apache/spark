@@ -63,6 +63,7 @@ def superuser_required(f):
             return redirect(url_for('admin.index'))
     return decorated_function
 
+
 def data_profiling_required(f):
     '''
     Decorator for views requiring data profiling access
@@ -797,8 +798,8 @@ class Airflow(BaseView):
                     for t in task.get_flat_relatives(upstream=True)]
             TI = models.TaskInstance
             tis = session.query(TI).filter(
-                TI.dag_id==dag_id,
-                TI.execution_date==execution_date,
+                TI.dag_id == dag_id,
+                TI.execution_date == execution_date,
                 TI.task_id.in_(task_ids)).all()
 
             if confirmed:
@@ -1152,8 +1153,10 @@ admin.add_view(Airflow(name='DAGs'))
 class LoginMixin(object):
     def is_accessible(self):
         return (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.is_authenticated())
+            not AUTHENTICATE or (
+                not current_user.is_anonymous() and
+                current_user.is_authenticated()
+            )
         )
 
 
