@@ -543,90 +543,58 @@ private[master] class Master(
    * spark.executor.cores (multiple executors per worker) or worker.freeCores (one executor per
    * worker) cores and app.desc.memoryPerExecutorMB megabytes to each executor.
    */
-  private def startExecutorsOnWorker() {
+  private def startExecutorsOnWorkers() {
+    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
+    // in the queue, then the second app, etc.
     if (spreadOutApps) {
+      // Try to spread out each app among all the nodes, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
-        val memoryPerExecutor = app.desc.memoryPerExecutorMB
-        val usableWorkers = workers.filter(_.state == WorkerState.ALIVE).
-          filter(canUse(app, _)).toArray.sortBy(_.memoryFree / memoryPerExecutor).reverse
-        // the maximum number of cores allocated on each executor per visit on the worker list
-        val maxCoreAllocationPerRound = app.desc.maxCorePerExecutor.getOrElse(1)
-        var maxCoresLeft = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+        val maxCoresPerExecutor = app.desc.maxCorePerExecutor.getOrElse(Int.MaxValue)
+        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
-        val maxExecutorPerWorker = {
-          if (app.desc.maxCorePerExecutor.isDefined) {
-            usableWorkers(0).memoryFree / memoryPerExecutor
-          } else {
-            1
-          }
-        }
-        // A 2D array that tracks the number of cores used by each executor launched on
-        // each worker. The first index refers to the usable worker, and the second index
-        // refers to the executor launched on that worker.
-        val assigned = Array.fill[Array[Int]](numUsable)(Array.fill[Int](maxExecutorPerWorker)(0))
-        val executorNumberOnWorker = Array.fill[Int](numUsable)(0)
-        val assignedSum = Array.fill[Int](numUsable)(0)
+        val assigned = new Array[Int](numUsable) // Number of cores to give on each node
+        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
-        while (maxCoresLeft > 0) {
-          val memoryDemand = {
-            if (app.desc.maxCorePerExecutor.isDefined) {
-              (executorNumberOnWorker(pos) + 1) * memoryPerExecutor
-            } else {
-              memoryPerExecutor  
-            }  
-          }
-          if ((usableWorkers(pos).coresFree - assignedSum(pos) > 0) && 
-            (usableWorkers(pos).memoryFree >= memoryDemand)) {
-            val coreToAssign = math.min(math.min(usableWorkers(pos).coresFree - assignedSum(pos),
-              maxCoreAllocationPerRound), maxCoresLeft)
-            assigned(pos)(executorNumberOnWorker(pos)) += coreToAssign
-            assignedSum(pos) += coreToAssign
-            maxCoresLeft -= coreToAssign
-            if (app.desc.maxCorePerExecutor.isDefined) {
-              // if starting multiple executors on the worker, we move to the next executor
-              executorNumberOnWorker(pos) += 1     
-            }
+        while (toAssign > 0) {
+          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
+            toAssign -= 1
+            assigned(pos) += 1
           }
           pos = (pos + 1) % numUsable
         }
-
-        // Now that we've decided how many executors and the core number for each to
-        // give on each node, let's actually give them
-        for (pos <- 0 until numUsable; 
-             execIdx <- 0 until math.max(executorNumberOnWorker(pos), 1)) {
-          val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
-          launchExecutor(usableWorkers(pos), exec)
-          app.state = ApplicationState.RUNNING
+        // Now that we've decided how many cores to give on each node, let's actually give them
+        for (pos <- 0 until numUsable) {
+          while (assigned(pos) > 0) {
+            val coresForThisExecutor = math.min(maxCoresPerExecutor, assigned(pos))
+            val exec = app.addExecutor(usableWorkers(pos), coresForThisExecutor)
+            assigned(pos) -= coresForThisExecutor
+            launchExecutor(usableWorkers(pos), exec)
+            app.state = ApplicationState.RUNNING
+          }
         }
       }
     } else {
       // Pack each app into as few nodes as possible until we've assigned all its cores
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0 &&
-          app.desc.memoryPerExecutorMB <= worker.memoryFree) {
-          val coreNumPerExecutor = app.desc.maxCorePerExecutor.getOrElse(worker.coresFree)
-          var coresLeft = math.min(worker.coresFree, app.coresLeft)
-          while (coresLeft > 0 && app.desc.memoryPerExecutorMB <= worker.memoryFree) {
-            val coreToAssign = math.min(coreNumPerExecutor, coresLeft)
-            val exec = app.addExecutor(worker, coreToAssign)
-            launchExecutor(worker, exec)
-            coresLeft -= coreToAssign
-            app.state = ApplicationState.RUNNING
+        for (app <- waitingApps if app.coresLeft > 0) {
+          val maxCoresPerExecutor = app.desc.maxCorePerExecutor.getOrElse(Int.MaxValue)
+          if (canUse(app, worker)) {
+            var coresToAssign = math.min(worker.coresFree, app.coresLeft)
+            while (coresToAssign > 0) {
+              val coresForThisExecutor = math.min(maxCoresPerExecutor, coresToAssign)
+              val exec = app.addExecutor(worker, coresForThisExecutor)
+              coresToAssign -= coresForThisExecutor
+              launchExecutor(worker, exec)
+              app.state = ApplicationState.RUNNING
+            }
           }
         }
       }
     }
   }
 
-
-  /**
-   * Schedule the currently available resources among waiting apps. This method will be called
-   * every time a new app joins or resource availability changes.
-   */
-  private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
-
-    // First schedule drivers, they take strict precedence over applications
+  private def startDriversOnWorkers(): Unit = {
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
       for (driver <- waitingDrivers) {
@@ -636,8 +604,18 @@ private[master] class Master(
         }
       }
     }
+  }
 
-    startExecutorsOnWorker()
+  /**
+   * Schedule the currently available resources among waiting apps. This method will be called
+   * every time a new app joins or resource availability changes.
+   */
+  private def schedule(): Unit = {
+    if (state != RecoveryState.ALIVE) { return }
+    //start in-cluster drivers, they take strict precedence over applications
+    startDriversOnWorkers()
+    //start executors
+    startExecutorsOnWorkers()
   }
 
   def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
