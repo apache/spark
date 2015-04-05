@@ -656,29 +656,17 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 case class SumZeroFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  private val calcType =
-    expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        DecimalType.Unlimited
-      case _ =>
-        expr.dataType
-    }
-
-  private val sum = MutableLiteral(0, calcType)
+  private val sum = MutableLiteral(0L, LongType)
 
   private val addFunction =
-    Coalesce(Seq(Add(Coalesce(Seq(sum)), Cast(expr, calcType)), sum))
+    Coalesce(Seq(Add(Coalesce(Seq(sum)), Cast(expr, LongType)), sum))
 
   override def update(input: Row): Unit = {
     sum.update(addFunction, input)
   }
 
   override def eval(input: Row): Any = {
-    expr.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        Cast(sum, dataType).eval(null)
-      case _ => sum.eval(null)
-    }
+    sum.eval(null)
   }
 }
 
