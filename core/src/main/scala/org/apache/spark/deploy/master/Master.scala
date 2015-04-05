@@ -615,9 +615,9 @@ private[master] class Master(
    */
   private def schedule(): Unit = {
     if (state != RecoveryState.ALIVE) { return }
-    //start in-cluster drivers, they take strict precedence over applications
+    // start in-cluster drivers, they take strict precedence over applications
     startDriversOnWorkers()
-    //start executors
+    // start executors
     startExecutorsOnWorkers()
   }
 
