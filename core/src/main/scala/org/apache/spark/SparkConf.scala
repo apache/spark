@@ -139,7 +139,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set a parameter if it isn't already configured */
-  def setIfMissing(key: String, value: String): SparkConf = {
+  def setIfMissing(key: String, value: => String): SparkConf = {
     settings.putIfAbsent(key, value)
     this
   }
