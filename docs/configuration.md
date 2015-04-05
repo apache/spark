@@ -128,15 +128,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.cores</code></td>
-  <td>None (Standalone), 1 (YARN)</td>
-  <td>
-    Number of cores per executor. In Standalone mode, Spark will try to run more
-    than 1 executors on each worker in standalone mode; otherwise, only one executor on each executor
-    is allowed (the executor will take all available cores of the worker at the moment.
-  </td>
-</tr>
-<tr>
   <td><code>spark.executor.memory</code></td>
   <td>512m</td>
   <td>
@@ -720,6 +711,15 @@ Apart from these, the following properties are also available, and may be useful
     forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
     case of Spark Streaming applications). Note that any RDD that persists in memory for more than
     this duration will be cleared as well.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.maxCoresPerExecutor</code></td>
+  <td>(infinite)</td>
+  <td>
+    The maximum number of cores given to the executor. When this parameter is set, Spark will try to 
+    run more than 1 executors on each worker in standalone mode; otherwise, only one executor is 
+    launched on each worker.
   </td>
 </tr>
 <tr>
