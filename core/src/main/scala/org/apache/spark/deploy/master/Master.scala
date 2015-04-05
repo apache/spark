@@ -545,7 +545,6 @@ private[master] class Master(
     if (spreadOutApps) {
       // Try to spread out each app among all the workers, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
-        val maxCoresPerExecutor = app.desc.maxCorePerExecutor.getOrElse(Int.MaxValue)
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
