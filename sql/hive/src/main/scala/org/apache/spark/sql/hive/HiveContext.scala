@@ -140,7 +140,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
           val size = if (fileStatus.isDir) {
-            fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
+            fs.listStatus(path,
+              getPathFilter().get).map(status => calculateTableSize(fs, status.getPath)).sum
           } else {
             fileStatus.getLen
           }

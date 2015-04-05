@@ -20,6 +20,10 @@ package org.apache.spark.sql
 import java.beans.Introspector
 import java.util.Properties
 
+import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.util.ReflectionUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -161,6 +165,26 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] val cacheManager = new CacheManager(this)
+
+  private val DEFAULT_FILTER: PathFilter = new PathFilter() {
+    @Override
+    def accept(file: Path): Boolean = {
+      return true
+    }
+  }
+
+  /**
+   * Return PathFilter to be used for filtering input files using custom filter class
+   */
+  protected[sql] def getPathFilter(): Option[PathFilter] = {
+    val filterClassName = getConf(NewFileInputFormat.PATHFILTER_CLASS, "")
+    if (filterClassName.nonEmpty) {
+      val filterClazz = Class.forName(filterClassName).asInstanceOf[Class[_ <: PathFilter]]
+      Option(ReflectionUtils.newInstance(filterClazz, null))
+    } else {
+      Option(DEFAULT_FILTER)
+    }
+  }
 
   /**
    * :: Experimental ::

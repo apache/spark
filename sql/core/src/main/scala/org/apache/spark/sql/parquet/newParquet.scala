@@ -28,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
@@ -282,9 +282,10 @@ private[sql] case class ParquetRelation2(
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
       val leaves = baseStatuses.flatMap { f =>
         val fs = FileSystem.get(f.getPath.toUri, sparkContext.hadoopConfiguration)
-        SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
-          isSummaryFile(f.getPath) ||
-            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+        SparkHadoopUtil.get.listLeafStatusesFiltered(fs, f.getPath,
+          sqlContext.getPathFilter()).filter { f =>
+            isSummaryFile(f.getPath) ||
+              !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
         }
       }
 
@@ -422,6 +423,8 @@ private[sql] case class ParquetRelation2(
     val selectedPartitions = prunePartitions(predicates, partitions)
     val selectedFiles = if (isPartitioned) {
       selectedPartitions.flatMap { p =>
+        // files filtered in liststatus call when populating metadataCache.dataStatuses
+        // so no need to set it in jobContext
         metadataCache.dataStatuses.filter(_.getPath.getParent.toString == p.path)
       }
     } else {
@@ -617,6 +620,15 @@ private[sql] case class ParquetRelation2(
 
     val conf = ContextUtil.getConfiguration(job)
     RowWriteSupport.setSchema(data.schema.toAttributes, conf)
+
+    // set filter class in job context object
+    // will be used in findMaxTaskId below
+    val filterClassName = sqlContext.getConf(FileInputFormat.PATHFILTER_CLASS, "")
+    if (filterClassName.nonEmpty) {
+      val filterClazz = Class.forName(filterClassName).asInstanceOf[Class[_ <: PathFilter]]
+      conf.setClass(FileInputFormat.PATHFILTER_CLASS,
+        filterClazz, classOf[PathFilter])
+    }
 
     val destinationPath = new Path(paths.head)
 

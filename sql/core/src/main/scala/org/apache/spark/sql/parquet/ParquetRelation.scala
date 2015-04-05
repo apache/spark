@@ -57,6 +57,7 @@ private[sql] case class ParquetRelation(
   self: Product =>
 
   // will be used in the listStatus call in FilteringParquetRowInputFormat.readFooters
+  // also used in readMetaData in ParquetTypes.scala
   @transient val filterClassName = sqlContext.getConf(NewFileInputFormat.PATHFILTER_CLASS, "")
   if (filterClassName.nonEmpty) {
     val filterClazz = Class.forName(filterClassName).asInstanceOf[Class[_ <: PathFilter]]

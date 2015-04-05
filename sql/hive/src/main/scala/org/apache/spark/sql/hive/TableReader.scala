@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
@@ -75,21 +74,11 @@ class HadoopTableReader(
   private val _broadcastedHiveConf =
     sc.sparkContext.broadcast(new SerializableWritable(hiveExtraConf))
 
-  override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] = {
-    val filterClassName = sc.getConf(NewFileInputFormat.PATHFILTER_CLASS, "")
-    val filterOpt: Option[PathFilter] = {
-      if (filterClassName.nonEmpty) {
-        val filterClazz = Class.forName(filterClassName)
-        Option(ReflectionUtils.newInstance(filterClazz.asInstanceOf[Class[_ <: PathFilter]], null))
-      } else {
-        None
-      }
-    }
+  override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
       relation.tableDesc.getDeserializerClass.asInstanceOf[Class[Deserializer]],
-      filterOpt)
-  }
+      sc.getPathFilter)
   /**
    * Creates a Hadoop RDD to read data from the target table's data directory. Returns a transformed
    * RDD that contains deserialized rows.
@@ -136,16 +125,7 @@ class HadoopTableReader(
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[Row] = {
     val partitionToDeserializer = partitions.map(part =>
       (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
-    val filterClassName = sc.getConf(NewFileInputFormat.PATHFILTER_CLASS, "")
-    val filterOpt: Option[PathFilter] = {
-      if (filterClassName.nonEmpty) {
-        val filterClazz = Class.forName(filterClassName)
-        Option(ReflectionUtils.newInstance(filterClazz.asInstanceOf[Class[_ <: PathFilter]], null))
-      } else {
-        None
-      }
-    }
-    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt)
+    makeRDDForPartitionedTable(partitionToDeserializer, sc.getPathFilter)
   }
 
   /**
