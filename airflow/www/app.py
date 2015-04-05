@@ -1040,7 +1040,8 @@ class Airflow(BaseView):
             'airflow/chart.html',
             dag=dag,
             data=all_data,
-            height="500px",
+            chart_options={'yAxis': {'title': {'text': 'hours'}}},
+            height="700px",
         )
 
     @expose('/landing_times')
@@ -1073,7 +1074,8 @@ class Airflow(BaseView):
             'airflow/chart.html',
             dag=dag,
             data=all_data,
-            height="500px",
+            height="700px",
+            chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
         )
 
     @expose('/gantt')
