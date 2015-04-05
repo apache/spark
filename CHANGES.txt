@@ -1,0 +1,395 @@
+Spark Change Log
+----------------
+
+Release 1.2.2
+
+  [CORE] The descriptionof jobHistory config should be spark.history.fs.logDirectory
+  KaiXinXiaoLei <huleilei1@huawei.com>
+  2015-04-02 20:24:31 -0700
+  Commit: f4a9c41, github.com/apache/spark/pull/5332
+
+  [SPARK-5195][sql]Update HiveMetastoreCatalog.scala(override the MetastoreRelation's sameresult method only compare databasename and table name)
+  seayi <405078363@qq.com>, Michael Armbrust <michael@databricks.com>
+  2015-02-02 16:06:52 -0800
+  Commit: 2991dd0, github.com/apache/spark/pull/3898
+
+  [SPARK-6578] [core] Fix thread-safety issue in outbound path of network library.
+  Reynold Xin <rxin@databricks.com>, Marcelo Vanzin <vanzin@cloudera.com>
+  2015-04-02 14:51:00 -0700
+  Commit: d82e732, github.com/apache/spark/pull/5336
+
+  SPARK-6414: Spark driver failed with NPE on job cancelation
+  Hung Lin <hung.lin@gmail.com>
+  2015-04-02 14:01:43 -0700
+  Commit: 8fa09a4, github.com/apache/spark/pull/5124
+
+  [SPARK-6667] [PySpark] remove setReuseAddress
+  Davies Liu <davies@databricks.com>
+  2015-04-02 12:18:33 -0700
+  Commit: a73055f, github.com/apache/spark/pull/5324
+
+  SPARK-6480 [CORE] histogram() bucket function is wrong in some simple edge cases
+  Sean Owen <sowen@cloudera.com>
+  2015-03-26 15:00:23 +0000
+  Commit: 758ebf7, github.com/apache/spark/pull/5148
+
+  [SPARK-3266] Use intermediate abstract classes to fix type erasure issues in Java APIs
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-17 09:18:57 -0700
+  Commit: 61c059a, github.com/apache/spark/pull/5050
+
+  [SPARK-5559] [Streaming] [Test] Remove oppotunity we met flakiness when running FlumeStreamSuite
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2015-03-24 16:13:25 +0000
+  Commit: 8ef6995, github.com/apache/spark/pull/4337
+
+  [SPARK-5775] BugFix: GenericRow cannot be cast to SpecificMutableRow when nested data and partitioned table
+  Anselme Vignon <anselme.vignon@flaminem.com>, Cheng Lian <lian@databricks.com>
+  2015-03-23 12:00:50 -0700
+  Commit: e080cc3, github.com/apache/spark/pull/4697
+
+  [SPARK-6132][HOTFIX] ContextCleaner InterruptedException should be quiet
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 20:49:45 -0800
+  Commit: abdcec6, github.com/apache/spark/pull/4882
+
+  [SPARK-6132] ContextCleaner race condition across SparkContexts
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 13:44:05 -0800
+  Commit: 06d883c, github.com/apache/spark/pull/4869
+
+  [SPARK-6313] Add config option to disable file locks/fetchFile cache to ...
+  nemccarthy <nathan@nemccarthy.me>
+  2015-03-17 09:33:11 -0700
+  Commit: a2a94a1, github.com/apache/spark/pull/5036
+
+  [SPARK-6294] [PySpark] fix take of PythonRDD in JVM (branch 1.2)
+  Davies Liu <davies@databricks.com>
+  2015-03-12 15:19:17 -0700
+  Commit: 9ebd6f1, github.com/apache/spark/pull/5003
+
+  [SPARK-5186][branch-1.2] Vector.hashCode is not efficient
+  Yuhao Yang <hhbyyh@gmail.com>
+  2015-03-12 01:40:40 -0700
+  Commit: c684e5f, github.com/apache/spark/pull/4985
+
+  [SPARK-6194] [SPARK-677] [PySpark] fix memory leak in collect()
+  Davies Liu <davies@databricks.com>
+  2015-03-09 16:24:06 -0700
+  Commit: d7c359b, github.com/apache/spark/pull/4923
+
+  [EXAMPLES] fix typo.
+  Makoto Fukuhara <fukuo33@gmail.com>
+  2015-02-23 09:24:33 +0000
+  Commit: e753f9c, github.com/apache/spark/pull/4724
+
+  SPARK-1911 [DOCS] Backport. Warn users if their assembly jars are not built with Java 6
+  Sean Owen <sowen@cloudera.com>
+  2015-03-04 11:42:50 +0000
+  Commit: 77a8c06, github.com/apache/spark/pull/4888
+
+  [SPARK-6133] Make sc.stop() idempotent
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 15:09:57 -0800
+  Commit: a91c1c5, github.com/apache/spark/pull/4871
+
+  Revert "[SPARK-5423][Core] Cleanup resources in DiskMapIterator.finalize to ensure deleting the temp file"
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 13:04:50 -0800
+  Commit: eb30fc1
+
+  SPARK-5628 [EC2] Backport: Add version option to spark-ec2
+  Sean Owen <sowen@cloudera.com>
+  2015-03-01 09:20:36 +0000
+  Commit: 5226dc7, github.com/apache/spark/pull/4833
+
+  [SPARK-6055] [PySpark] fix incorrect DataType.__eq__ (for 1.2)
+  Davies Liu <davies@databricks.com>
+  2015-02-27 20:04:16 -0800
+  Commit: 576fc54, github.com/apache/spark/pull/4809
+
+  [SPARK-5417] Remove redundant executor-id set() call
+  Ryan Williams <ryan.blake.williams@gmail.com>
+  2015-01-28 13:04:52 -0800
+  Commit: 17b7cc7, github.com/apache/spark/pull/4213
+
+  [SPARK-5434] [EC2] Preserve spaces in EC2 path
+  Nicholas Chammas <nicholas.chammas@gmail.com>
+  2015-01-28 12:56:03 -0800
+  Commit: 6b22741, github.com/apache/spark/pull/4224
+
+  fix spark-6033, clarify the spark.worker.cleanup behavior in standalone mode
+  许鹏 <peng.xu@fraudmetrix.cn>
+  2015-02-26 23:05:56 -0800
+  Commit: d4ce702, github.com/apache/spark/pull/4803
+
+  SPARK-4579 [WEBUI] Scheduling Delay appears negative
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 17:35:09 -0800
+  Commit: d0bf938, github.com/apache/spark/pull/4796
+
+  Add a note for context termination for History server on Yarn
+  moussa taifi <moutai10@gmail.com>
+  2015-02-26 14:19:43 -0800
+  Commit: 58b3aa6, github.com/apache/spark/pull/4721
+
+  SPARK-4300 [CORE] Race condition during SparkWorker shutdown
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 14:08:56 -0800
+  Commit: 64e0cbc, github.com/apache/spark/pull/4787
+
+  SPARK-794 [CORE] Backport. Remove sleep() in ClusterScheduler.stop
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 22:07:09 +0000
+  Commit: 2d83442, github.com/apache/spark/pull/4793
+
+  [SPARK-6018] [YARN] NoSuchMethodError in Spark app is swallowed by YARN AM
+  Cheolsoo Park <cheolsoop@netflix.com>
+  2015-02-26 13:53:49 -0800
+  Commit: e21475d, github.com/apache/spark/pull/4773
+
+  Modify default value description for spark.scheduler.minRegisteredResourcesRatio on docs.
+  Li Zhihui <zhihui.li@intel.com>
+  2015-02-26 13:07:07 -0800
+  Commit: 94faf4c, github.com/apache/spark/pull/4781
+
+  SPARK-4704 [CORE] SparkSubmitDriverBootstrap doesn't flush output
+  Sean Owen <sowen@cloudera.com>
+  2015-02-26 12:56:54 -0800
+  Commit: 602d5c1, github.com/apache/spark/pull/4788
+
+  [SPARK-5363] Fix bug in PythonRDD: remove() inside iterator is not safe
+  Davies Liu <davies@databricks.com>
+  2015-02-26 11:54:17 -0800
+  Commit: cc7313d, github.com/apache/spark/pull/4776
+
+  [SPARK-6015] fix links to source code in Python API docs
+  Davies Liu <davies@databricks.com>
+  2015-02-26 10:45:29 -0800
+  Commit: 015895a, github.com/apache/spark/pull/4772
+
+  [SPARK-1955][GraphX]: VertexRDD can incorrectly assume index sharing
+  Brennon York <brennon.york@capitalone.com>
+  2015-02-25 14:11:12 -0800
+  Commit: 00112ba, github.com/apache/spark/pull/4705
+
+  [SPARK-5973] [PySpark] fix zip with two RDDs with AutoBatchedSerializer
+  Davies Liu <davies@databricks.com>
+  2015-02-24 14:50:00 -0800
+  Commit: a9abcaa, github.com/apache/spark/pull/4745
+
+  [Spark-5967] [UI] Correctly clean JobProgressListener.stageIdToActiveJobIds
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-02-24 11:02:47 -0800
+  Commit: 3ad00ee, github.com/apache/spark/pull/4741
+
+  Revert "[SPARK-4808] Removing minimum number of elements read before spill check"
+  Andrew Or <andrew@databricks.com>
+  2015-02-24 10:52:19 -0800
+  Commit: 2c9d965
+
+  [SPARK-5722] [SQL] [PySpark] infer int as LongType in Python (for 1.2 branch)
+  Davies Liu <davies@databricks.com>
+  2015-02-23 17:29:25 -0800
+  Commit: 71173de, github.com/apache/spark/pull/4521
+
+  [SPARK-4808] Removing minimum number of elements read before spill check
+  mcheah <mcheah@palantir.com>
+  2015-02-19 18:09:22 -0800
+  Commit: 5cea859, github.com/apache/spark/pull/4420
+
+  [Spark-5889] Remove pid file after stopping service.
+  Zhan Zhang <zhazhan@gmail.com>
+  2015-02-19 23:13:02 +0000
+  Commit: 18fbed5, github.com/apache/spark/pull/4676
+
+  [SPARK-5825] [Spark Submit] Remove the double checking instance name when stopping the service
+  Cheng Hao <hao.cheng@intel.com>
+  2015-02-19 12:07:51 -0800
+  Commit: 856fdcb, github.com/apache/spark/pull/4611
+
+  [SPARK-5423][Core] Cleanup resources in DiskMapIterator.finalize to ensure deleting the temp file
+  zsxwing <zsxwing@gmail.com>
+  2015-02-19 18:37:31 +0000
+  Commit: 61bde00, github.com/apache/spark/pull/4219
+
+  [SPARK-5846] Correctly set job description and pool for SQL jobs
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2015-02-19 10:03:56 +0800
+  Commit: f6ee80b, github.com/apache/spark/pull/4631
+
+  [SPARK-4903][SQL]Backport the bug fix for SPARK-4903
+  Yin Huai <yhuai@databricks.com>
+  2015-02-18 13:59:55 -0800
+  Commit: 36e15b4, github.com/apache/spark/pull/4671
+
+  SPARK-4610 addendum: [Minor] [MLlib] Minor doc fix in GBT classification example
+  MechCoder <manojkumarsivaraj334@gmail.com>
+  2015-02-18 10:13:28 +0000
+  Commit: 068ba45, github.com/apache/spark/pull/4672
+
+  Revert "[SPARK-5363] [PySpark] check ending mark in non-block way"
+  Josh Rosen <joshrosen@databricks.com>
+  2015-02-17 07:48:27 -0800
+  Commit: 6be36d5
+
+  HOTFIX: Style issue causing build break
+  Patrick Wendell <patrick@databricks.com>
+  2015-02-16 22:10:39 -0800
+  Commit: 432ceca
+
+  [SPARK-5363] [PySpark] check ending mark in non-block way
+  Davies Liu <davies@databricks.com>
+  2015-02-16 20:32:03 -0800
+  Commit: 0df26bb, github.com/apache/spark/pull/4601
+
+  [SPARK-5395] [PySpark] fix python process leak while coalesce()
+  Davies Liu <davies@databricks.com>
+  2015-01-29 17:28:37 -0800
+  Commit: a39da17, github.com/apache/spark/pull/4238
+
+  [SPARK-5788] [PySpark] capture the exception in python write thread
+  Davies Liu <davies@databricks.com>
+  2015-02-16 17:57:14 -0800
+  Commit: f468688, github.com/apache/spark/pull/4577
+
+  [SPARK-5361]Multiple Java RDD <-> Python RDD conversions not working correctly
+  Winston Chen <wchen@quid.com>
+  2015-01-28 11:08:44 -0800
+  Commit: 6f47114, github.com/apache/spark/pull/4146
+
+  [SPARK-5441][pyspark] Make SerDeUtil PairRDD to Python conversions more robust
+  Michael Nazario <mnazario@palantir.com>
+  2015-01-28 13:55:01 -0800
+  Commit: 1af7ca1, github.com/apache/spark/pull/4236
+
+  [SPARK-1600] Refactor FileInputStream tests to remove Thread.sleep() calls and SystemClock usage (branch-1.2 backport)
+  Josh Rosen <joshrosen@databricks.com>
+  2015-02-16 15:41:38 -0800
+  Commit: 7f19c7c, github.com/apache/spark/pull/4633
+
+  SPARK-5819 Backported the fix described in SPARK-5805
+  Emre Sevinç <emre.sevinc@gmail.com>
+  2015-02-14 15:06:45 +0000
+  Commit: f9d8c5e, github.com/apache/spark/pull/4605
+
+  [SPARK-5227] [SPARK-5679] Disable FileSystem cache in WholeTextFileRecordReaderSuite
+  Josh Rosen <joshrosen@databricks.com>
+  2015-02-13 17:45:31 -0800
+  Commit: 26410a2, github.com/apache/spark/pull/4599
+
+  SPARK-4267 [YARN] Backport: Failing to launch jobs on Spark on YARN with Hadoop 2.5.0 or later
+  Sean Owen <sowen@cloudera.com>
+  2015-02-13 14:25:54 +0000
+  Commit: c2b4633, github.com/apache/spark/pull/4575
+
+  SPARK-5728 [STREAMING] MQTTStreamSuite leaves behind ActiveMQ database files
+  Sean Owen <sowen@cloudera.com>
+  2015-02-11 08:13:51 +0000
+  Commit: 222ce9f, github.com/apache/spark/pull/4517
+
+  [SPARK-4631][streaming][FIX] Wait for a receiver to start before publishing test data.
+  Iulian Dragos <jaguarul@gmail.com>
+  2015-02-02 14:00:33 -0800
+  Commit: a5d72fd, github.com/apache/spark/pull/4270
+
+  [SPARK-4832][Deploy]some other processes might take the daemon pid
+  WangTaoTheTonic <barneystinson@aliyun.com>, WangTaoTheTonic <wangtao111@huawei.com>
+  2015-02-13 10:27:23 +0000
+  Commit: 2b9dbdd, github.com/apache/spark/pull/3683
+
+  Revert "[SPARK-5762] Fix shuffle write time for sort-based shuffle"
+  Andrew Or <andrew@databricks.com>
+  2015-02-12 16:18:27 -0800
+  Commit: 0ba065f
+
+  [SPARK-5335] Fix deletion of security groups within a VPC
+  Vladimir Grigor <vladimir@kiosked.com>, Vladimir Grigor <vladimir@voukka.com>
+  2015-02-12 23:26:24 +0000
+  Commit: d24971a, github.com/apache/spark/pull/4122
+
+  [SPARK-5780] [PySpark] Mute the logging during unit tests
+  Davies Liu <davies@databricks.com>
+  2015-02-12 14:54:38 -0800
+  Commit: c7bac57, github.com/apache/spark/pull/4572
+
+  [SPARK-5762] Fix shuffle write time for sort-based shuffle
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2015-02-12 14:46:37 -0800
+  Commit: 9c5454d, github.com/apache/spark/pull/4559
+
+  [SPARK-5765][Examples]Fixed word split problem in run-example and compute-classpath
+  Venkata Ramana G <ramana.gollamudihuawei.com>, Venkata Ramana Gollamudi <ramana.gollamudi@huawei.com>
+  2015-02-12 14:44:21 -0800
+  Commit: b78a686, github.com/apache/spark/pull/4561
+
+  [SPARK-5655] Don't chmod700 application files if running in YARN
+  Andrew Rowson <github@growse.com>
+  2015-02-12 18:41:39 +0000
+  Commit: 64254ee, github.com/apache/spark/pull/4509
+
+  [SPARK-5703] AllJobsPage throws empty.max exception
+  Andrew Or <andrew@databricks.com>
+  2015-02-09 21:18:48 -0800
+  Commit: 53de237, github.com/apache/spark/pull/4490
+
+  [SPARK-5698] Do not let user request negative # of executors
+  Andrew Or <andrew@databricks.com>
+  2015-02-09 17:33:29 -0800
+  Commit: 515f658, github.com/apache/spark/pull/4483
+
+  [SPARK-4905][STREAMING] FlumeStreamSuite fix.
+  Hari Shreedharan <hshreedharan@apache.org>
+  2015-02-09 14:17:14 -0800
+  Commit: 63eee52, github.com/apache/spark/pull/4371
+
+  [SPARK-5691] Fixing wrong data structure lookup for dupe app registration
+  Andrew Or <andrew@databricks.com>
+  2015-02-09 19:58:58 +0100
+  Commit: 97541b2
+
+  SPARK-5425: Use synchronised methods in system properties to create SparkConf
+  Jacek Lewandowski <lewandowski.jacek@gmail.com>
+  2015-02-07 19:16:07 -0800
+  Commit: 4bad854, github.com/apache/spark/pull/4221
+
+  SPARK-5613: Catch the ApplicationNotFoundException exception to avoid thread from getting killed on yarn restart.
+  Kashish Jain <kashish.jain@guavus.com>
+  2015-02-06 13:47:23 -0800
+  Commit: d89964f, github.com/apache/spark/pull/4392
+
+  [SPARK-4983] Insert waiting time before tagging EC2 instances
+  GenTang <gen.tang86@gmail.com>, Gen TANG <gen.tang86@gmail.com>
+  2015-02-06 13:27:34 -0800
+  Commit: 36f70de, github.com/apache/spark/pull/3986
+
+  [SPARK-4989][CORE] backport for branch-1.2 catch eventlog exception for wrong eventlog conf
+  Zhang, Liye <liye.zhang@intel.com>
+  2015-02-06 11:49:40 -0800
+  Commit: 09da688, github.com/apache/spark/pull/3969
+
+  [Minor] Fix incorrect warning log
+  Liang-Chi Hsieh <viirya@gmail.com>
+  2015-02-04 00:52:41 -0800
+  Commit: f318af0, github.com/apache/spark/pull/4360
+
+  [SPARK-4939] revive offers periodically in LocalBackend
+  Davies Liu <davies@databricks.com>
+  2015-02-03 22:30:23 -0800
+  Commit: 3799763, github.com/apache/spark/pull/4147
+
+  [STREAMING] SPARK-4986 Wait for receivers to deregister and receiver job to terminate
+  Jesper Lundgren <jesper.lundgren@vpon.com>
+  2015-02-03 14:53:39 -0800
+  Commit: 62c7587, github.com/apache/spark/pull/4338
+
+  [SPARK-5153][Streaming][Test] Increased timeout to deal with flaky KafkaStreamSuite
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2015-02-03 13:46:02 -0800
+  Commit: 36c2994, github.com/apache/spark/pull/4342
+
+  Preparing development version 1.2.2-SNAPSHOT
+  Patrick Wendell <patrick@databricks.com>
+  2015-02-03 00:39:28 +0000
+  Commit: 591cd83
+
