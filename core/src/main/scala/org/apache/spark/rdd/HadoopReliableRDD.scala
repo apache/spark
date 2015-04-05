@@ -16,6 +16,9 @@
  */
 package org.apache.spark.rdd
 
+import java.io.EOFException
+import org.apache.spark.TaskKilledException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred._
 import org.apache.spark._
@@ -86,11 +89,32 @@ class HadoopReliableRDD[K, V](sc: SparkContext,
 
   def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[Try[(K, V)]] = {
     val iter:  NextIterator[(K,V)] = hadoopRDD.constructIter(theSplit, context)
+
     val tryIter = new  NextIterator[Try[(K,V)]] {
+      var moreToFollow = true
+
       override protected def getNext(): Try[(K, V)] = {
-        val readAttempt = SparkTaskTry(iter.next())
-        finished = readAttempt.isFailure
-        readAttempt
+        if (moreToFollow) {
+          // The first failure is a valid value and should be returned
+          // any iteration after the first failure should return the end of input
+          val readAttempt = SparkTaskTry(iter.next())
+          readAttempt match {
+            case Failure(e) => {
+              moreToFollow = false
+              logWarning(s"Exception on read attempt ${e.getClass.getSimpleName} " +
+                s"- ${e.getMessage} - stopping any further read attempts from this split")
+            }
+            case Success(_) => {
+              moreToFollow = iter.hasNext
+            }
+          }
+          readAttempt
+        } else {
+          // we passed a Failure in the previous get, no more data will be passed from this split
+          finished = true
+          Failure(new IllegalStateException("Should not attempt to read NextIterator.getNext " +
+            " if finished = true")) // return value will be ignored if finished = true
+        }
       }
       override protected def close(): Unit = iter.closeIfNeeded()
     }
