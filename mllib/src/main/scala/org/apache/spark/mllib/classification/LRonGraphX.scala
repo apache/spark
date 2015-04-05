@@ -267,7 +267,8 @@ class LRonGraphX(
       gradient.setName(s"gradient-$iter").persist(storageLevel)
     }
     if (useAdaGrad) {
-      delta = adaGrad(deltaSum, gradient, 1, 1e-2, 1 - 1e-2)
+      // delta = adaGrad(deltaSum, gradient, 1.0, 1e-2, 1 - 1e-2)
+      delta = adaGrad(deltaSum, gradient, 1.0, 1e-4, 1)
       delta.setName(s"delta-$iter").persist(storageLevel).count()
 
       gradient.unpersist(blocking = false)
@@ -418,8 +419,8 @@ object LRonGraphX {
     // dataSet = dataSet.partitionBy(PartitionStrategy.EdgePartition2D)
 
     dataSet.outerJoinVertices(vertices) { (vid, data, deg) =>
-      deg.getOrElse(Utils.random.nextGaussian() * 1e-2)
-      // deg.getOrElse(0)
+      // deg.getOrElse(Utils.random.nextGaussian() * 1e-2)
+      deg.getOrElse(0)
     }
   }
 
