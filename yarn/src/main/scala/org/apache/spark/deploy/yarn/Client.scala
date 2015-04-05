@@ -588,7 +588,7 @@ private[spark] class Client(
         if (log.isDebugEnabled) {
           logDebug(formattedDetails)
         } else if (lastState != state) {
-          logInfo(formattedDetails)
+          println(formattedDetails)
         }
       }
 
