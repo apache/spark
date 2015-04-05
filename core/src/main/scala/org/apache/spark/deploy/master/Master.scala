@@ -22,7 +22,7 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.collection.mutable.{ListBuffer, ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps

@@ -75,7 +75,8 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): ExecutorDesc = {
+  private[master] def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None):
+      ExecutorDesc = {
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerExecutorMB)
     executors(exec.id) = exec
     coresGranted += cores
