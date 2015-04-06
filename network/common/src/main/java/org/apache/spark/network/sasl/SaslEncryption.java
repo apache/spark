@@ -196,7 +196,6 @@ class SaslEncryption {
       do {
         if (currentChunk == null) {
           nextChunk();
-          currentHeader = Unpooled.copyLong(8 + currentChunkSize);
         }
 
         if (currentHeader.readableBytes() > 0) {
@@ -236,6 +235,7 @@ class SaslEncryption {
       byte[] encrypted = backend.wrap(byteChannel.getData(), 0, byteChannel.length());
       this.currentChunk = ByteBuffer.wrap(encrypted);
       this.currentChunkSize = encrypted.length;
+      this.currentHeader = Unpooled.copyLong(8 + currentChunkSize);
       this.unencryptedChunkSize = byteChannel.length();
     }
 
