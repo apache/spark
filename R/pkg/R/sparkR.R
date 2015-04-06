@@ -103,7 +103,7 @@ sparkR.init <- function(
   sparkRLibDir = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    # cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
+    cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
