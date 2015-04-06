@@ -21,13 +21,11 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, HashMap, Map}
-import scala.concurrent.Await
+import scala.collection.mutable.{HashSet, Map}
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
-import akka.actor._
-import akka.pattern.ask
-
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
@@ -38,14 +36,15 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-/** Actor class for MapOutputTrackerMaster */
-private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
-  extends Actor with ActorLogReceive with Logging {
+/** RpcEndpoint class for MapOutputTrackerMaster */
+private[spark] class MapOutputTrackerMasterEndpoint(
+    override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
+  extends RpcEndpoint with Logging {
   val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
-      val hostPort = sender.path.address.hostPort
+      val hostPort = context.sender.address.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
       val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
       val serializedSize = mapOutputStatuses.size
@@ -53,19 +52,19 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
         val msg = s"Map output statuses were $serializedSize bytes which " +
           s"exceeds spark.akka.frameSize ($maxAkkaFrameSize bytes)."
 
-        /* For SPARK-1244 we'll opt for just logging an error and then throwing an exception.
-         * Note that on exception the actor will just restart. A bigger refactoring (SPARK-1239)
-         * will ultimately remove this entire code path. */
+        /* For SPARK-1244 we'll opt for just logging an error and then sending it to the sender.
+         * A bigger refactoring (SPARK-1239) will ultimately remove this entire code path. */
         val exception = new SparkException(msg)
         logError(msg, exception)
-        throw exception
+        context.sendFailure(exception)
+      } else {
+        context.reply(mapOutputStatuses)
       }
-      sender ! mapOutputStatuses
 
     case StopMapOutputTracker =>
-      logInfo("MapOutputTrackerActor stopped!")
-      sender ! true
-      context.stop(self)
+      logInfo("MapOutputTrackerMasterEndpoint stopped!")
+      context.reply(true)
+      stop()
   }
 }
 
@@ -75,12 +74,9 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
  * (driver and executor) use different HashMap to store its metadata.
  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
-  private val timeout = AkkaUtils.askTimeout(conf)
-  private val retryAttempts = AkkaUtils.numRetries(conf)
-  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
 
-  /** Set to the MapOutputTrackerActor living on the driver. */
-  var trackerActor: ActorRef = _
+  /** Set to the MapOutputTrackerMasterEndpoint living on the driver. */
+  var trackerEndpoint: RpcEndpointRef = _
 
   /**
    * This HashMap has different behavior for the driver and the executors.
@@ -105,12 +101,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   private val fetching = new HashSet[Int]
 
   /**
-   * Send a message to the trackerActor and get its result within a default timeout, or
+   * Send a message to the trackerEndpoint and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
-  protected def askTracker(message: Any): Any = {
+  protected def askTracker[T: ClassTag](message: Any): T = {
     try {
-      AkkaUtils.askWithReply(message, trackerActor, retryAttempts, retryIntervalMs, timeout)
+      trackerEndpoint.askWithReply[T](message)
     } catch {
       case e: Exception =>
         logError("Error communicating with MapOutputTracker", e)
@@ -118,9 +114,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
+  /** Send a one-way message to the trackerEndpoint, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    val response = askTracker(message)
+    val response = askTracker[Boolean](message)
     if (response != true) {
       throw new SparkException(
         "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
@@ -157,11 +153,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
       if (fetchedStatuses == null) {
         // We won the race to fetch the output locs; do so
-        logInfo("Doing the fetch; tracker actor = " + trackerActor)
+        logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:
         try {
-          val fetchedBytes =
-            askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
+          val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
@@ -328,7 +323,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   override def stop() {
     sendTracker(StopMapOutputTracker)
     mapStatuses.clear()
-    trackerActor = null
+    trackerEndpoint = null
     metadataCleaner.cancel()
     cachedSerializedStatuses.clear()
   }
@@ -349,6 +344,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 }
 
 private[spark] object MapOutputTracker extends Logging {
+
+  val ENDPOINT_NAME = "MapOutputTracker"
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
