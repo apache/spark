@@ -17,13 +17,15 @@ class MySqlToHiveTransfer(BaseOperator):
     a ``CREATE TABLE`` and ``DROP TABLE`` statements are generated.
     Hive data types are inferred from the cursors's metadata.
 
-    Note that the table genearted in Hive uses ``STORED AS textfile``
+    Note that the table generated in Hive uses ``STORED AS textfile``
     which isn't the most efficient serialization format. If a
-    large amount of data is loaded and/or if the tables gets
+    large amount of data is loaded and/or if the table gets
     queried considerably, you may want to use this operator only to
     stage the data into a temporary table before loading it into its
     final destination using a ``HiveOperator``.
 
+    :param sql: SQL query to execute against the MySQL database
+    :type sql: str
     :param hive_table: target Hive table, use dot notation to target a
         specific database
     :type hive_table: str
@@ -59,7 +61,7 @@ class MySqlToHiveTransfer(BaseOperator):
             recreate=False,
             partition=None,
             delimiter=chr(1),
-            mysql_conn_id='hive_cli_default',
+            mysql_conn_id='mysql_default',
             hive_cli_conn_id='hive_cli_default',
             *args, **kwargs):
         super(MySqlToHiveTransfer, self).__init__(*args, **kwargs)
