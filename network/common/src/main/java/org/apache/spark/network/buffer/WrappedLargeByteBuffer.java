@@ -31,7 +31,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   //only public for tests for the moment ...
   public final ByteBuffer[] underlying;
   private final Long totalCapacity;
-  private final long[] chunkOffsets;
 
   private long _pos;
   private int currentBufferIdx;
@@ -42,9 +41,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
     this.underlying = underlying;
     long sum = 0l;
-    chunkOffsets = new long[underlying.length];
     for (int i = 0; i < underlying.length; i++) {
-      chunkOffsets[i] = sum;
       sum += underlying[i].capacity();
     }
     totalCapacity = sum;
@@ -165,7 +162,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     for (int i = 0; i < underlying.length; i++) {
       duplicates[i] = underlying[i].duplicate();
     }
-    //we could also avoid initializing offsets here, if we cared ...
     return new WrappedLargeByteBuffer(duplicates);
   }
 
