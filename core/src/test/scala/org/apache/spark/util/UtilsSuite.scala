@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
+  
   test("timeConversion") {
     assert(Utils.timeStringAsS("1") === 1)
     assert(Utils.timeStringAsS("1s") === 1)
