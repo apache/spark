@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.TimeUnit
+
 import scala.util.Random
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
@@ -40,25 +42,25 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.timeStringAsS("1s") === 1)
     assert(Utils.timeStringAsS("1000ms") === 1)
     assert(Utils.timeStringAsS("1000000us") === 1)
-    assert(Utils.timeStringAsS("1min") === 60)
-    assert(Utils.timeStringAsS("1h") === 60 * 60)
-    assert(Utils.timeStringAsS("1d") === 60 * 60 * 24)
+    assert(Utils.timeStringAsS("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsS("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsS("1d") === TimeUnit.DAYS.toSeconds(1))
     
     assert(Utils.timeStringAsMs("1") === 1)
     assert(Utils.timeStringAsMs("1ms") === 1)
     assert(Utils.timeStringAsMs("1000us") === 1)
-    assert(Utils.timeStringAsMs("1s") === 1000)
-    assert(Utils.timeStringAsMs("1min") === 1000 * 60)
-    assert(Utils.timeStringAsMs("1h") === 1000 * 60 * 60)
-    assert(Utils.timeStringAsMs("1d") === 1000 * 60 * 60 * 24)
+    assert(Utils.timeStringAsMs("1s") === TimeUnit.SECONDS.toMillis(1))
+    assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
+    assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
 
     assert(Utils.timeStringAsUs("1") === 1)
     assert(Utils.timeStringAsUs("1us") === 1)
-    assert(Utils.timeStringAsUs("1ms") === 1000)
-    assert(Utils.timeStringAsUs("1s") === 1000 * 1000)
-    assert(Utils.timeStringAsUs("1min") === 1000 * 1000 * 60)
-    assert(Utils.timeStringAsUs("1h") === 1000L * 1000L * 60 * 60)
-    assert(Utils.timeStringAsUs("1d") === 1000L * 1000L * 60 * 60 * 24)
+    assert(Utils.timeStringAsUs("1ms") === TimeUnit.MILLISECONDS.toMillis(1))
+    assert(Utils.timeStringAsUs("1s") === TimeUnit.SECONDS.toSeconds(1))
+    assert(Utils.timeStringAsUs("1min") === TimeUnit.MINUTES.toMicros(1))
+    assert(Utils.timeStringAsUs("1h") === TimeUnit.HOURS.toMicros(1))
+    assert(Utils.timeStringAsUs("1d") === TimeUnit.DAYS.toMicros(1))
   }
   
   test("bytesToString") {
