@@ -312,9 +312,9 @@ class HiveServer2Hook(BaseHook):
         Get a set of records from a Hive query.
 
         >>> hh = HiveServer2Hook()
-        >>> sql = "SELECT count(1) AS num FROM airflow.static_babynames"
-        >>> hh.get_records(sql)
-        [[340698]]
+        >>> sql = "SELECT * FROM airflow.static_babynames LIMIT 100"
+        >>> len(hh.get_records(sql))
+        100
         '''
         return self.get_results(hql, schema=schema)['data']
 
@@ -323,10 +323,10 @@ class HiveServer2Hook(BaseHook):
         Get a pandas dataframe from a Hive query
 
         >>> hh = HiveServer2Hook()
-        >>> sql = "SELECT count(1) AS num FROM airflow.static_babynames"
+        >>> sql = "SELECT * FROM airflow.static_babynames LIMIT 100"
         >>> df = hh.get_pandas_df(sql)
-        >>> df.to_dict()
-        {'num': {0: 340698}}
+        >>> len(df.index)
+        100
         '''
         import pandas as pd
         res = self.get_results(hql, schema=schema)
