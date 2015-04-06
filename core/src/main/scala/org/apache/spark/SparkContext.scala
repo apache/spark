@@ -1908,7 +1908,7 @@ object SparkContext extends Logging {
   private[spark] val DRIVER_IDENTIFIER = "driver"
 
   /**
-   * Legacy version of DRIVER_IDENTIFIER, retained for use in backwards-compatibility tests.
+   * Legacy version of DRIVER_IDENTIFIER, retained for backwards-compatibility.
    */
   private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
