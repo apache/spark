@@ -514,10 +514,35 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         ("onDisconnected", remoteAddress)))
     }
   }
+
+  test("sendWithReply: unserializable error") {
+    env.setupEndpoint("sendWithReply-unserializable-error", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext) = {
+        case msg: String => context.sendFailure(new UnserializableException)
+      }
+    })
+
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(
+      "local", env.address, "sendWithReply-unserializable-error")
+    try {
+      val f = rpcEndpointRef.sendWithReply[String]("hello")
+      intercept[TimeoutException] {
+        Await.result(f, 1 seconds)
+      }
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
+
 }
 
-case object Start
+class UnserializableClass
 
-case class Ping(id: Int)
-
-case class Pong(id: Int)
+class UnserializableException extends Exception {
+  private val unserializableField = new UnserializableClass
+}

@@ -30,7 +30,9 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
  * receives messages. Then [[RpcEnv]] will process messages sent from [[RpcEndpointRef]] or remote
- * nodes, and deliver them to corresponding [[RpcEndpoint]]s.
+ * nodes, and deliver them to corresponding [[RpcEndpoint]]s. For uncaught exceptions caught by
+ * [[RpcEnv]], [[RpcEnv]] will use [[RpcCallContext.sendFailure]] to send exceptions back to the
+ * sender, or logging them if no such sender or `NotSerializableException`.
  *
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
  */
