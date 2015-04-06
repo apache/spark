@@ -363,6 +363,13 @@ class StatTests(PySparkTestCase):
         self.assertEqual(10, len(summary.normL1()))
         self.assertEqual(10, len(summary.normL2()))
 
+        data2 = self.sc.parallelize(xrange(10)).map(lambda x: Vectors.dense(x))
+        summary2 = Statistics.colStats(data2)
+        self.assertEqual(array([45.0]), summary2.normL1())
+        # Confirm normL2 is among this span because it is a float value.
+        self.assertTrue(summary2.normL2()[0] > 16.5)
+        self.assertTrue(summary2.normL2()[0] < 17.0)
+
 
 class VectorUDTTests(PySparkTestCase):
 
