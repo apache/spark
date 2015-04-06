@@ -46,7 +46,7 @@ class MySqlToHiveTransfer(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'MySqlToHiveOperator'
     }
-    template_fields = ('sql',)
+    template_fields = ('sql', 'partition')
     template_ext = ('.sql',)
     ui_color = '#a0e08c'
 
@@ -71,6 +71,7 @@ class MySqlToHiveTransfer(BaseOperator):
         self.delimiter = delimiter
         self.hive = HiveCliHook(hive_cli_conn_id=hive_cli_conn_id)
         self.mysql = MySqlHook(mysql_conn_id=mysql_conn_id)
+        self.partition = partition or {}
 
     @classmethod
     def type_map(cls, mysql_type):

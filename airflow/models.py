@@ -709,10 +709,18 @@ class TaskInstance(Base):
             if self.task.dag.user_defined_macros:
                 jinja_context.update(
                     self.task.dag.user_defined_macros)
+
+        rt = self.task.render_template  # shortcut to method
         for attr in task.__class__.template_fields:
-            result = getattr(task, attr)
-            template = self.task.get_template(attr)
-            result = template.render(**jinja_context)
+            content = getattr(task, attr)
+            if isinstance(content, basestring):
+                result = rt(content, jinja_context)
+            elif isinstance(content, list):
+                result = [rt(s, jinja_context) for s in content]
+            elif isinstance(content, dict):
+                result = {k: rt(content[k], jinja_context) for k in content}
+            else:
+                raise Exception("Type not supported for templating")
             setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
@@ -913,8 +921,7 @@ class BaseOperator(Base):
         '''
         pass
 
-    def get_template(self, attr):
-        content = getattr(self, attr)
+    def render_template(self, content, context):
         if hasattr(self, 'dag'):
             env = self.dag.get_template_env()
         else:
@@ -925,7 +932,7 @@ class BaseOperator(Base):
             template = env.get_template(content)
         else:
             template = env.from_string(content)
-        return template
+        return template.render(**context)
 
     def prepare_template(self):
         '''
@@ -940,7 +947,8 @@ class BaseOperator(Base):
         # Getting the content of files for template_field / template_ext
         for attr in self.template_fields:
             content = getattr(self, attr)
-            if any([content.endswith(ext) for ext in self.template_ext]):
+            if (content and isinstance(content, basestring) and
+                    any([content.endswith(ext) for ext in self.template_ext])):
                 env = self.dag.get_template_env()
                 try:
                     setattr(self, attr, env.loader.get_source(env, content)[0])

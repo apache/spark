@@ -318,9 +318,6 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
     silence the import errors for when libraries are missing. It makes
     for a clean package abstracting the underlying modules and only
     brings funcitonal operators to those namespaces.
-
-    >>> module_attrs = {'operators': ['BashOperator']}
-    >>> import_module_attrs(globals(), module_attrs)
     '''
     imported_attrs = []
     for mod, attrs in module_attrs_dict.items():

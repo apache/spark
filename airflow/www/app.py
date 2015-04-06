@@ -621,7 +621,7 @@ class Airflow(BaseView):
                 )
             else:
                 html_dict[template_field] = (
-                    "<pre><code>" + content + "</pre></code>")
+                    "<pre><code>" + str(content) + "</pre></code>")
 
         return self.render(
             'airflow/ti_code.html',
@@ -1320,6 +1320,7 @@ admin.add_view(mv)
 
 
 class ConnectionModelView(SuperUserMixin, ModelView):
+    column_default_sort = ('conn_id', False)
     column_list = ('conn_id', 'conn_type', 'host', 'port')
     form_choices = {
         'conn_type': [
