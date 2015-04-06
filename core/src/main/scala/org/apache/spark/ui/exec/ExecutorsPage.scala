@@ -42,7 +42,8 @@ private[ui] case class ExecutorSummaryInfo(
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
     maxMemory: Long,
-    executorLogs: Map[String, String])
+    executorLogs: Map[String, String],
+    debugPortOpt: Option[Int])
 
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
@@ -58,6 +59,7 @@ private[ui] class ExecutorsPage(
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
+    val debugPortDefined = execInfo.filter(_.debugPortOpt.isDefined).nonEmpty
 
     val execTable =
       <table class={UIUtils.TABLE_CLASS_STRIPED}>
@@ -84,9 +86,10 @@ private[ui] class ExecutorsPage(
           </th>
           {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+          {if (debugPortDefined) <th class="sorttable_nosort">Debug Port</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_, logsExist))}
+          {execInfoSorted.map(execRow(_, logsExist, debugPortDefined))}
         </tbody>
       </table>
 
@@ -111,10 +114,11 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummaryInfo, logsExist: Boolean): Seq[Node] = {
+  private def execRow(info: ExecutorSummaryInfo, logsExist: Boolean, debugPortDefined: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
+
     <tr>
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
@@ -167,6 +171,15 @@ private[ui] class ExecutorsPage(
           Seq.empty
         }
       }
+      {
+        if (debugPortDefined) {
+          <td>
+            {
+              info.debugPortOpt.getOrElse("")
+            }
+          </td>
+        }
+      }
     </tr>
   }
 
@@ -188,6 +201,7 @@ private[ui] class ExecutorsPage(
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
+    val debugPortOpt = listener.executorToDebugPort.get(execId)
 
     new ExecutorSummaryInfo(
       execId,
@@ -204,7 +218,8 @@ private[ui] class ExecutorsPage(
       totalShuffleRead,
       totalShuffleWrite,
       maxMem,
-      executorLogs
+      executorLogs,
+      debugPortOpt
     )
   }
 }

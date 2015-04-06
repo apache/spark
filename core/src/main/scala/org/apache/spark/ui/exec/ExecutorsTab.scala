@@ -54,12 +54,14 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
+  val executorToDebugPort = HashMap[String, Int]()
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+    executorAdded.debugPortOpt.foreach(port => executorToDebugPort(eid) = port)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {

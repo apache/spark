@@ -49,11 +49,15 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
+    import sun.misc.VMSupport
+    val agentProps = VMSupport.getAgentProperties
+    val debugPortOpt = Option(agentProps.get("sun.jdwp.listenerAddress").asInstanceOf[String]).map(_.split(":")(1).toInt)
+
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
       ref.sendWithReply[RegisteredExecutor.type](
-        RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
+        RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls, debugPortOpt))
     } onComplete {
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
