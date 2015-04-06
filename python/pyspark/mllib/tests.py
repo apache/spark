@@ -382,11 +382,11 @@ class VectorUDTTests(PySparkTestCase):
     def test_infer_schema(self):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
-        srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema
+        df = rdd.toDF()
+        schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = srdd.map(lambda p: p.features).collect()
+        vectors = df.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -639,7 +639,7 @@ class ChiSqTestTests(PySparkTestCase):
 
 class SerDeTest(PySparkTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
-        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
         self.assertEqual(_to_java_object_rdd(data).count(), 10)
 
 
