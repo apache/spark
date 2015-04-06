@@ -311,7 +311,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("self: call in onStop") {
-    @volatile var e: Throwable = null
+    @volatile var selfOption: Option[RpcEndpointRef] = null
 
     val endpointRef = env.setupEndpoint("self-onStop", new RpcEndpoint {
       override val rpcEnv = env
@@ -321,20 +321,18 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
 
       override def onStop(): Unit = {
-        self
+        selfOption = Option(self)
       }
 
       override def onError(cause: Throwable): Unit = {
-        e = cause
       }
     })
 
     env.stop(endpointRef)
 
     eventually(timeout(5 seconds), interval(10 millis)) {
-      // Calling `self` in `onStop` is invalid
-      assert(e != null)
-      assert(e.getMessage.contains("Cannot find RpcEndpointRef"))
+      // Calling `self` in `onStop` will return null, so selfOption will be None
+      assert(selfOption == None)
     }
   }
 
@@ -342,7 +340,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     // If a RpcEnv implementation breaks the `receive` contract, hope this test can expose it
     for(i <- 0 until 100) {
       @volatile var result = 0
-      val endpointRef = env.setupThreadSafeEndpoint(s"receive-in-sequence-$i", new RpcEndpoint {
+      val endpointRef = env.setupEndpoint(s"receive-in-sequence-$i", new ThreadSafeRpcEndpoint {
         override val rpcEnv = env
 
         override def receive = {
@@ -475,7 +473,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("network events") {
     val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupThreadSafeEndpoint("network-events", new RpcEndpoint {
+    env.setupEndpoint("network-events", new ThreadSafeRpcEndpoint {
       override val rpcEnv = env
 
       override def receive = {
@@ -516,10 +514,35 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         ("onDisconnected", remoteAddress)))
     }
   }
+
+  test("sendWithReply: unserializable error") {
+    env.setupEndpoint("sendWithReply-unserializable-error", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext) = {
+        case msg: String => context.sendFailure(new UnserializableException)
+      }
+    })
+
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(
+      "local", env.address, "sendWithReply-unserializable-error")
+    try {
+      val f = rpcEndpointRef.sendWithReply[String]("hello")
+      intercept[TimeoutException] {
+        Await.result(f, 1 seconds)
+      }
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
+
 }
 
-case object Start
+class UnserializableClass
 
-case class Ping(id: Int)
-
-case class Pong(id: Int)
+class UnserializableException extends Exception {
+  private val unserializableField = new UnserializableClass
+}
