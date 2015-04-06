@@ -16,25 +16,39 @@
  */
 package org.apache.spark.rdd
 
-import org.apache.spark.SharedSparkContext
-import org.apache.spark.storage.StorageLevel
-import org.scalatest.FunSuite
+import org.apache.spark._
+import org.apache.spark.storage.{ReplicationBlockSizeLimitException, StorageLevel}
+import org.scalatest.{Matchers, FunSuite}
 
-class LargePartitionCachingSuite extends FunSuite with SharedSparkContext {
+class LargePartitionCachingSuite extends FunSuite with SharedSparkContext with Matchers {
 
   def largePartitionRdd = sc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
 
   //just don't want to kill the test server
   ignore("memory serialized cache large partitions") {
-    largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count()
+    largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count() should be (1e6.toInt)
   }
 
   test("disk cache large partitions") {
-    largePartitionRdd.persist(StorageLevel.DISK_ONLY).count()
+    largePartitionRdd.persist(StorageLevel.DISK_ONLY).count() should be (1e6.toInt)
   }
 
   test("disk cache large partitions with replications") {
-    // TODO this should fail, but w/ sensible message
-    pending
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2, 1, 512]")
+      .setAppName("test-cluster")
+      .set("spark.task.maxFailures", "1")
+      .set("spark.akka.frameSize", "1") // set to 1MB to detect direct serialization of data
+    val clusterSc = new SparkContext(conf)
+    try {
+      val exc = intercept[SparkException]{
+        val myRDD = clusterSc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
+          .persist(StorageLevel.DISK_ONLY_2)
+        myRDD.count()
+      }
+      exc.getMessage() should include (classOf[ReplicationBlockSizeLimitException].getSimpleName)
+    } finally {
+      clusterSc.stop()
+    }
   }
 }
