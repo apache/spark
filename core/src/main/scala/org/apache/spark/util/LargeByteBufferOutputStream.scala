@@ -41,12 +41,15 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   }
 
   def largeBuffer: LargeByteBuffer = {
-    largeBuffer(LargeByteBufferHelper.DEFAULT_MAX_CHUNK)
+    largeBuffer(LargeByteBufferHelper.MAX_CHUNK)
   }
 
   //exposed for testing
   private[util] def largeBuffer(maxChunk: Int): LargeByteBuffer = {
-    // Merge the underlying arrays as much as possible
+    // LargeByteBuffer is supposed to make a "best effort" to get all the data
+    // in one nio.ByteBuffer, so we want to try to merge the smaller chunks together
+    // as much as possible.  This is necessary b/c there are a number of parts of spark that
+    // still can't deal w/ > 2GB.
     val totalSize = output.size
     val chunksNeeded = ((totalSize + maxChunk -1) / maxChunk).toInt
     val chunks = new Array[Array[Byte]](chunksNeeded)

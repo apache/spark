@@ -1297,7 +1297,7 @@ object BlockSizeLimitException {
   def sizeMsg(cause: BufferTooLargeException): String = {
     s"that was ${Utils.bytesToString(cause.actualSize)} (too " +
     s"large by ${Utils.bytesToString(cause.extra)} / " +
-      s"${cause.actualSize.toDouble / LargeByteBufferHelper.DEFAULT_MAX_CHUNK}x)."
+      s"${cause.actualSize.toDouble / LargeByteBufferHelper.MAX_CHUNK}x)."
   }
 
   def sizeMsgAndAdvice(cause: BufferTooLargeException): String = {

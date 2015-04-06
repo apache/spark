@@ -24,9 +24,9 @@ public class BufferTooLargeException extends IOException {
 
   public BufferTooLargeException(long actualSize) {
     super("LargeByteBuffer is too large to convert.  Size: " + actualSize + "; Size Limit: "
-      + LargeByteBufferHelper.DEFAULT_MAX_CHUNK + " (" +
-      (actualSize - LargeByteBufferHelper.DEFAULT_MAX_CHUNK) + " too big)");
-    this.extra = actualSize - LargeByteBufferHelper.DEFAULT_MAX_CHUNK;
+      + LargeByteBufferHelper.MAX_CHUNK + " (" +
+      (actualSize - LargeByteBufferHelper.MAX_CHUNK) + " too big)");
+    this.extra = actualSize - LargeByteBufferHelper.MAX_CHUNK;
     this.actualSize = actualSize;
   }
 }

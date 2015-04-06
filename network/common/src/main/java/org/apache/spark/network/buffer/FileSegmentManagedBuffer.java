@@ -73,7 +73,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
         buf.flip();
         return buf;
       } else {
-        if (length > LargeByteBufferHelper.DEFAULT_MAX_CHUNK) {
+        if (length > LargeByteBufferHelper.MAX_CHUNK) {
           throw new BufferTooLargeException(length);
         }
         return channel.map(FileChannel.MapMode.READ_ONLY, offset, length);

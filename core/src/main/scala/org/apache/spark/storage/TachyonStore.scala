@@ -115,7 +115,7 @@ private[spark] class TachyonStore(
     assert (is != null)
     try {
       val size = file.length
-      if (size > LargeByteBufferHelper.DEFAULT_MAX_CHUNK) {
+      if (size > LargeByteBufferHelper.MAX_CHUNK) {
         throw new TachyonBlockSizeLimitException(new BufferTooLargeException(size))
       }
       val bs = new Array[Byte](size.asInstanceOf[Int])

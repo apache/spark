@@ -23,7 +23,7 @@ import java.util.ArrayList;
 
 public class LargeByteBufferHelper {
 
-    public static final int DEFAULT_MAX_CHUNK = Integer.MAX_VALUE - 1000000;
+    public static final int MAX_CHUNK = Integer.MAX_VALUE - 1000000;
 
     public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
         return new WrappedLargeByteBuffer(new ByteBuffer[]{buffer});
@@ -37,7 +37,7 @@ public class LargeByteBufferHelper {
         ArrayList<ByteBuffer> chunks = new ArrayList<ByteBuffer>();
         long remaining = size;
         while (remaining > 0) {
-            int nextSize = (int)Math.min(remaining, DEFAULT_MAX_CHUNK);
+            int nextSize = (int)Math.min(remaining, MAX_CHUNK);
             ByteBuffer next = ByteBuffer.allocate(nextSize);
             remaining -= nextSize;
             chunks.add(next);
@@ -52,7 +52,7 @@ public class LargeByteBufferHelper {
             long offset,
             long length
     ) throws IOException {
-        int maxChunk = DEFAULT_MAX_CHUNK;
+        int maxChunk = MAX_CHUNK;
         ArrayList<Long> offsets = new ArrayList<Long>();
         long curOffset = offset;
         long end = offset + length;
