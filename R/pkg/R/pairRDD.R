@@ -708,9 +708,9 @@ setMethod("cogroup",
                 acc <- res[[i]]
                 # Create an accumulator.
                 if (is.null(acc)) {
-                  acc <- SparkR:::initAccumulator()
+                  acc <- initAccumulator()
                 }
-                SparkR:::addItemToAccumulator(acc, x[[2]])
+                addItemToAccumulator(acc, x[[2]])
                 res[[i]] <- acc
               }
               lapply(res, function(acc) {

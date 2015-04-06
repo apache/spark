@@ -37,7 +37,7 @@ connExists <- function(env) {
 sparkR.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
-    cat("Stopping SparkR\n")
+    # cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")

@@ -299,17 +299,17 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "OFF_HEAP")) {
   match.arg(newLevel)
   storageLevel <- switch(newLevel,
-                         "DISK_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
-                         "DISK_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
-                         "MEMORY_AND_DISK" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
-                         "MEMORY_AND_DISK_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
-                         "MEMORY_AND_DISK_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
-                         "MEMORY_AND_DISK_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
-                         "MEMORY_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
-                         "MEMORY_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
-                         "MEMORY_ONLY_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
-                         "MEMORY_ONLY_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
-                         "OFF_HEAP" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
+                         "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
+                         "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
+                         "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
+                         "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
+                         "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow

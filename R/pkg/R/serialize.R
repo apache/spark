@@ -101,7 +101,7 @@ writeRowSerialize <- function(outputCon, rows) {
 serializeRow <- function(row) {
   rawObj <- rawConnection(raw(0), "wb")
   on.exit(close(rawObj))
-  SparkR:::writeRow(rawObj, row)
+  writeRow(rawObj, row)
   rawConnectionValue(rawObj)
 }
 

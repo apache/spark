@@ -154,7 +154,7 @@ readRowList <- function(obj) {
   # deserialize the row.
   rawObj <- rawConnection(obj, "r+")
   on.exit(close(rawObj))
-  SparkR:::readRow(rawObj)
+  readRow(rawObj)
 }
 
 readRow <- function(inputCon) {
