@@ -87,11 +87,11 @@ class SaslRpcHandler extends RpcHandler {
     byte[] response = saslServer.response(saslMessage.payload);
     callback.onSuccess(response);
 
-    // Setup encryption after the SASL response, otherwise the client can't parse the response.
-    // It's ok to change the channel pipeline here since we are processing an incoming message,
-    // so the pipeline is busy and no new incoming messages will be fed to it before this method
-    // returns. This assumes that the code ensures, through other means, that no outbound messages
-    // are being written to the channel while negotiation is still going on.
+    // Setup encryption after the SASL response is sent, otherwise the client can't parse the
+    // response. It's ok to change the channel pipeline here since we are processing an incoming
+    // message, so the pipeline is busy and no new incoming messages will be fed to it before this
+    // method returns. This assumes that the code ensures, through other means, that no outbound
+    // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
       logger.debug("SASL authentication successful for channel {}", client);
       isComplete = true;
