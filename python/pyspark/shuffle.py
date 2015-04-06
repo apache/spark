@@ -313,7 +313,7 @@ class ExternalMerger(Merger):
                 else:
                     batch *= 1.5
 
-        if get_used_memory() >= limit:
+        if limit and get_used_memory() >= limit:
             self._spill()
 
     def _spill(self):

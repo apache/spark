@@ -239,6 +239,9 @@ class FlattedValuesSerializer(BatchedSerializer):
     def load_stream(self, stream):
         return self.serializer.load_stream(stream)
 
+    def __repr__(self):
+        return "FlattedValuesSerializer(%d)" % self.batchSize
+
 
 class AutoBatchedSerializer(BatchedSerializer):
     """
@@ -271,7 +274,7 @@ class AutoBatchedSerializer(BatchedSerializer):
         return (isinstance(other, AutoBatchedSerializer) and
                 other.serializer == self.serializer and other.bestSize == self.bestSize)
 
-    def __str__(self):
+    def __repr__(self):
         return "AutoBatchedSerializer(%s)" % str(self.serializer)
 
 
