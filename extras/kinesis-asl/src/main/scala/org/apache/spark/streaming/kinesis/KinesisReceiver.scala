@@ -36,18 +36,19 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
  * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
  * https://github.com/awslabs/amazon-kinesis-client
- * This is a custom receiver used with StreamingContext.receiverStream(Receiver) 
+ * This is a custom receiver used with StreamingContext.receiverStream(Receiver)
  *   as described here:
  *     http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * Instances of this class will get shipped to the Spark Streaming Workers 
+ * Instances of this class will get shipped to the Spark Streaming Workers
  *   to run within a Spark Executor.
  *
  * @param appName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                 by the Kinesis Client Library.  If you change the App name or Stream name,
- *                 the KCL will throw errors.  This usually requires deleting the backing  
+ *                 the KCL will throw errors.  This usually requires deleting the backing
  *                 DynamoDB table with the same name this Kinesis application.
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+ * @param regionName   Region name to indicate the location of the Amazon Kinesis service
  * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
@@ -59,12 +60,13 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  *                                 the tip of the stream (InitialPositionInStream.LATEST).
  * @param storageLevel Storage level to use for storing the received objects
  *
- * @return ReceiverInputDStream[Array[Byte]]   
+ * @return ReceiverInputDStream[ Array[Byte] ]
  */
 private[kinesis] class KinesisReceiver(
     appName: String,
     streamName: String,
     endpointUrl: String,
+    regionName: String,
     checkpointInterval: Duration,
     initialPositionInStream: InitialPositionInStream,
     storageLevel: StorageLevel)
@@ -82,11 +84,11 @@ private[kinesis] class KinesisReceiver(
   var workerId: String = null
 
   /*
-   * This impl uses the DefaultAWSCredentialsProviderChain and searches for credentials 
+   * This impl uses the DefaultAWSCredentialsProviderChain and searches for credentials
    *   in the following order of precedence:
    * Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
    * Java System Properties - aws.accessKeyId and aws.secretKey
-   * Credential profiles file at the default location (~/.aws/credentials) shared by all 
+   * Credential profiles file at the default location (~/.aws/credentials) shared by all
    *   AWS SDKs and the AWS CLI
    * Instance profile credentials delivered through the Amazon EC2 metadata service
    */
@@ -97,7 +99,7 @@ private[kinesis] class KinesisReceiver(
 
   /*
    *  RecordProcessorFactory creates impls of IRecordProcessor.
-   *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the 
+   *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the
    *    IRecordProcessor.processRecords() method.
    *  We're using our custom KinesisRecordProcessor in this case.
    */
@@ -107,14 +109,14 @@ private[kinesis] class KinesisReceiver(
    * Create a Kinesis Worker.
    * This is the core client abstraction from the Kinesis Client Library (KCL).
    * We pass the RecordProcessorFactory from above as well as the KCL config instance.
-   * A Kinesis Worker can process 1..* shards from the given stream - each with its 
+   * A Kinesis Worker can process 1..* shards from the given stream - each with its
    *   own RecordProcessor.
    */
   var worker: Worker = null
 
   /**
    *  This is called when the KinesisReceiver starts and must be non-blocking.
-   *  The KCL creates and manages the receiving/processing thread pool through the Worker.run() 
+   *  The KCL creates and manages the receiving/processing thread pool through the Worker.run()
    *    method.
    */
   override def onStart() {
@@ -123,6 +125,8 @@ private[kinesis] class KinesisReceiver(
     kinesisClientLibConfiguration = new KinesisClientLibConfiguration(appName, streamName,
       credentialsProvider, workerId).withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream).withTaskBackoffTimeMillis(500)
+      .withRegionName(regionName)
+
     recordProcessorFactory = new IRecordProcessorFactory {
       override def createProcessor: IRecordProcessor = new KinesisRecordProcessor(receiver,
         workerId, new KinesisCheckpointState(checkpointInterval))
