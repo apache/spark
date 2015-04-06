@@ -10,7 +10,18 @@ from airflow.utils import apply_defaults
 
 class MySqlToHiveTransfer(BaseOperator):
     """
-    Moves data from Hive to MySql
+    Moves data from MySql to Hive. The operator runs your query against
+    MySQL, stores the file locally before loading it into a Hive table.
+    If the ``create`` or ``recreate`` arguments are set to ``True``,
+    a ``CREATE TABLE`` and ``DROP TABLE`` statements are generated.
+    Hive data types are inferred from the cursors's metadata.
+
+    Note that the table genearted in Hive uses ``STORED AS textfile``
+    which isn't the most efficient serialization format. If a
+    large amount of data is loaded and/or if the tables gets
+    queried considerably, you may want to use this operator only to
+    stage the data into a temporary table before loading it into its
+    final destination using a ``HiveOperator``.
 
     :param hive_table: target Hive table, use dot notation to target a
         specific database
