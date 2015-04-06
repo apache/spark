@@ -47,7 +47,7 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   /**
    * Transforms the input document into a sparse term frequency vector.
    */
-  def transform(document: Iterable[_]): Vector = {
+  def transform(document: Iterable[_]): SparseVector = {
     val termFrequencies = mutable.HashMap.empty[Int, Double]
     document.foreach { term =>
       val i = indexOf(term)
