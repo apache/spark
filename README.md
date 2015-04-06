@@ -1,4 +1,5 @@
 # Apache Spark
+[![Build Status](https://travis-ci.org/juanrh/spark.svg?branch=master)](https://travis-ci.org/juanrh/spark)
 
 Spark is a fast and general cluster computing system for Big Data. It provides
 high-level APIs in Scala, Java, and Python, and an optimized engine that
