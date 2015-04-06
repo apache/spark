@@ -80,7 +80,8 @@ class SaslRpcHandler extends RpcHandler {
 
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
-      saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder);
+      saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
+        conf.saslServerAlwaysEncrypt());
     }
 
     byte[] response = saslServer.response(saslMessage.payload);

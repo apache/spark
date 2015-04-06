@@ -81,15 +81,17 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   private final SecretKeyHolder secretKeyHolder;
   private SaslServer saslServer;
 
-  public SparkSaslServer(String secretKeyId, SecretKeyHolder secretKeyHolder) {
+  public SparkSaslServer(
+      String secretKeyId,
+      SecretKeyHolder secretKeyHolder,
+      boolean alwaysEncrypt) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
 
-    // The server is configured to accept both "auth" and "auth-conf" for quality-of-protection.
-    // The client will choose which one it wants.
+    String qop = alwaysEncrypt ? QOP_AUTH_CONF : String.format("%s,%s", QOP_AUTH_CONF, QOP_AUTH);
     Map<String, String> saslProps = ImmutableMap.<String, String>builder()
       .putAll(SASL_PROPS)
-      .put(Sasl.QOP, String.format("%s,%s", QOP_AUTH_CONF, QOP_AUTH))
+      .put(Sasl.QOP, qop)
       .build();
     try {
       this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, saslProps,

@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.security.sasl.SaslException;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
@@ -73,7 +74,7 @@ public class SparkSaslSuite {
   @Test
   public void testMatching() {
     SparkSaslClient client = new SparkSaslClient("shared-secret", secretKeyHolder, false);
-    SparkSaslServer server = new SparkSaslServer("shared-secret", secretKeyHolder);
+    SparkSaslServer server = new SparkSaslServer("shared-secret", secretKeyHolder, false);
 
     assertFalse(client.isComplete());
     assertFalse(server.isComplete());
@@ -95,7 +96,7 @@ public class SparkSaslSuite {
   @Test
   public void testNonMatching() {
     SparkSaslClient client = new SparkSaslClient("my-secret", secretKeyHolder, false);
-    SparkSaslServer server = new SparkSaslServer("your-secret", secretKeyHolder);
+    SparkSaslServer server = new SparkSaslServer("your-secret", secretKeyHolder, false);
 
     assertFalse(client.isComplete());
     assertFalse(server.isComplete());
@@ -185,6 +186,25 @@ public class SparkSaslSuite {
         response.get().release();
       }
       System.clearProperty(blockSizeConf);
+    }
+  }
+
+  @Test
+  public void testServerAlwaysEncrypt() throws Exception {
+    final String alwaysEncryptConfName = "spark.network.sasl.server_always_encrypt";
+    System.setProperty(alwaysEncryptConfName, "true");
+
+    SaslTestCtx ctx = null;
+    try {
+      ctx = new SaslTestCtx(mock(RpcHandler.class), false);
+      fail("Should have failed to connect without encryption.");
+    } catch (Exception e) {
+      assertTrue(e.getCause() instanceof SaslException);
+    } finally {
+      if (ctx != null) {
+        ctx.close();
+      }
+      System.clearProperty(alwaysEncryptConfName);
     }
   }
 
