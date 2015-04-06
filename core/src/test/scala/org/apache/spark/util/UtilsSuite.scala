@@ -56,8 +56,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     assert(Utils.timeStringAsUs("1") === 1)
     assert(Utils.timeStringAsUs("1us") === 1)
-    assert(Utils.timeStringAsUs("1ms") === TimeUnit.MILLISECONDS.toMillis(1))
-    assert(Utils.timeStringAsUs("1s") === TimeUnit.SECONDS.toSeconds(1))
+    assert(Utils.timeStringAsUs("1ms") === TimeUnit.MILLISECONDS.toMicros(1))
+    assert(Utils.timeStringAsUs("1s") === TimeUnit.SECONDS.toMicros(1))
     assert(Utils.timeStringAsUs("1min") === TimeUnit.MINUTES.toMicros(1))
     assert(Utils.timeStringAsUs("1h") === TimeUnit.HOURS.toMicros(1))
     assert(Utils.timeStringAsUs("1d") === TimeUnit.DAYS.toMicros(1))

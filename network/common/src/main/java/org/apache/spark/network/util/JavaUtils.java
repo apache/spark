@@ -144,8 +144,8 @@ public class JavaUtils {
     try {
       String suffix = "";
       for (String tail: timeSuffixes.keySet()) {
-        char prevChar = lower.charAt(lower.length() - tail.length()-1);
-        if (lower.endsWith(tail) && Character.isDigit(prevChar)) {
+        int charIdx = lower.length() - tail.length()-1;
+        if (lower.endsWith(tail) && (charIdx >= 0 && Character.isDigit(lower.charAt(charIdx)))) {
           suffix = tail;
         }
       }
