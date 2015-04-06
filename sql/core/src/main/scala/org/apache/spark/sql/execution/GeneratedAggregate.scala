@@ -93,7 +93,7 @@ case class GeneratedAggregate(
           }
 
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal(null, calcType)
+        val initialValue = Literal.create(null, calcType)
 
         // Coalasce avoids double calculation...
         // but really, common sub expression elimination would be better....
@@ -137,13 +137,13 @@ case class GeneratedAggregate(
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
+                Literal.create(null, a.dataType),
                 Cast(Divide(
                   Cast(currentSum, DecimalType.Unlimited),
                   Cast(currentCount, DecimalType.Unlimited)), a.dataType))
             case _ =>
               If(EqualTo(currentCount, Literal(0L)),
-                Literal(null, a.dataType),
+                Literal.create(null, a.dataType),
                 Divide(Cast(currentSum, a.dataType), Cast(currentCount, a.dataType)))
           }
 
@@ -156,7 +156,7 @@ case class GeneratedAggregate(
 
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
-        val initialValue = Literal(null, expr.dataType)
+        val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
 
         AggregateEvaluation(

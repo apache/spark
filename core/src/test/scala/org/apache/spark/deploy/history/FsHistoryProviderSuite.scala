@@ -50,7 +50,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       inProgress: Boolean,
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
-    val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, appId)
+    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId)
     val logPath = new URI(logUri).getPath + ip
     new File(logPath)
   }

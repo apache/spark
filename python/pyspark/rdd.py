@@ -119,6 +119,7 @@ def _parse_memory(s):
 
 def _load_from_socket(port, serializer):
     sock = socket.socket()
+    sock.settimeout(3)
     try:
         sock.connect(("localhost", port))
         rf = sock.makefile("rb", 65536)

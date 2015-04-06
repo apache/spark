@@ -127,11 +127,11 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(
       Coalesce(Literal(1.0)
         :: Literal(1)
-        :: Literal(1.0, FloatType)
+        :: Literal.create(1.0, FloatType)
         :: Nil),
       Coalesce(Cast(Literal(1.0), DoubleType)
         :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal(1.0, FloatType), DoubleType)
+        :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
     ruleTest(
       Coalesce(Literal(1L)

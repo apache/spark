@@ -36,11 +36,13 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, Vectors, Matrices
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
@@ -134,6 +136,13 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(sv[-4], 0)
         for ind in [4, -5, 7.8]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
+
+    def test_matrix_indexing(self):
+        mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
+        expected = [[0, 6], [1, 8], [4, 10]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat[i, j], expected[i][j])
 
 
 class ListTests(PySparkTestCase):
@@ -347,6 +356,12 @@ class StatTests(PySparkTestCase):
         data = self.sc.parallelize([pyarray.array("d", range(10))] * 10)
         summary = Statistics.colStats(data)
         self.assertEqual(10, summary.count())
+
+    def test_col_norms(self):
+        data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, len(summary.normL1()))
+        self.assertEqual(10, len(summary.normL2()))
 
 
 class VectorUDTTests(PySparkTestCase):
@@ -622,6 +637,12 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertIsNotNone(chi[1000])
 
 
+class SerDeTest(PySparkTestCase):
+    def test_to_java_object_rdd(self):  # SPARK-6660
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        self.assertEqual(_to_java_object_rdd(data).count(), 10)
+
+
 class FeatureTest(PySparkTestCase):
     def test_idf_model(self):
         data = [
@@ -633,6 +654,41 @@ class FeatureTest(PySparkTestCase):
         model = IDF().fit(self.sc.parallelize(data, 2))
         idf = model.idf()
         self.assertEqual(len(idf), 11)
+
+
+class Word2VecTests(PySparkTestCase):
+    def test_word2vec_setters(self):
+        data = [
+            ["I", "have", "a", "pen"],
+            ["I", "like", "soccer", "very", "much"],
+            ["I", "live", "in", "Tokyo"]
+        ]
+        model = Word2Vec() \
+            .setVectorSize(2) \
+            .setLearningRate(0.01) \
+            .setNumPartitions(2) \
+            .setNumIterations(10) \
+            .setSeed(1024) \
+            .setMinCount(3)
+        self.assertEquals(model.vectorSize, 2)
+        self.assertTrue(model.learningRate < 0.02)
+        self.assertEquals(model.numPartitions, 2)
+        self.assertEquals(model.numIterations, 10)
+        self.assertEquals(model.seed, 1024)
+        self.assertEquals(model.minCount, 3)
+
+    def test_word2vec_get_vectors(self):
+        data = [
+            ["a", "b", "c", "d", "e", "f", "g"],
+            ["a", "b", "c", "d", "e", "f"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "b", "c", "d"],
+            ["a", "b", "c"],
+            ["a", "b"],
+            ["a"]
+        ]
+        model = Word2Vec().fit(self.sc.parallelize(data))
+        self.assertEquals(len(model.getVectors()), 3)
 
 if __name__ == "__main__":
     if not _have_scipy:

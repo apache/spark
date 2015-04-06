@@ -52,7 +52,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> ratings = sc.parallelize([r1, r2, r3])
     >>> model = ALS.trainImplicit(ratings, 1, seed=10)
     >>> model.predict(2, 2)
-    0.43...
+    0.4...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
     >>> model = ALS.train(ratings, 2, seed=0)
@@ -82,14 +82,14 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
-    0.43...
+    0.4...
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = MatrixFactorizationModel.load(sc, path)
     >>> sameModel.predict(2,2)
-    0.43...
+    0.4...
     >>> sameModel.predictAll(testset).collect()
     [Rating(...
     >>> try:

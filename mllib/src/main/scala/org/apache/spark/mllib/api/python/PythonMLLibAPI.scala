@@ -473,13 +473,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long): Word2VecModelWrapper = {
+      seed: Long,
+      minCount: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
+      .setMinCount(minCount)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -512,6 +514,10 @@ private[python] class PythonMLLibAPI extends Serializable {
       val similarity = Vectors.dense(result.map(_._2))
       val words = result.map(_._1)
       List(words, similarity).map(_.asInstanceOf[Object]).asJava
+    }
+
+    def getVectors: JMap[String, JList[Float]] = {
+      model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
   }
 
@@ -1118,7 +1124,10 @@ private[spark] object SerDe extends Serializable {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
+          obj match {
+            case list: JArrayList[_] => list.asScala
+            case arr: Array[_] => arr
+          }
         } else {
           Seq(obj)
         }

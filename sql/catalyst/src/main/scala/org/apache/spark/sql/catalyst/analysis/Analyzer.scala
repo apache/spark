@@ -140,10 +140,10 @@ class Analyzer(
           case x: Expression if nonSelectedGroupExprSet.contains(x) =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
-            Literal(null, expr.dataType)
+            Literal.create(null, expr.dataType)
           case x if x == g.gid =>
             // replace the groupingId with concrete value (the bit mask)
-            Literal(bitmask, IntegerType)
+            Literal.create(bitmask, IntegerType)
         })
 
         result += GroupExpression(substitution)
