@@ -103,7 +103,7 @@ private[mesos] object MesosClusterDispatcher extends spark.Logging {
     val dispatcherArgs = new ClusterDispatcherArguments(args, conf)
 
     conf.setMaster(dispatcherArgs.masterUrl)
-    conf.setAppName("Mesos Cluster Dispatcher")
+    conf.setAppName("Spark Cluster")
 
     dispatcherArgs.zookeeperUrl.foreach { z =>
       conf.set("spark.deploy.recoveryMode", "ZOOKEEPER")
