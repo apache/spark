@@ -21,8 +21,8 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
+import org.apache.spark.sql.types.NativeType
 
 /**
  * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
@@ -81,7 +81,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     }
   }
 
-  override def build() = {
+  override def build(): ByteBuffer = {
     val nonNullBuffer = buildNonNulls()
     val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {

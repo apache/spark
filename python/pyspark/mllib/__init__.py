@@ -19,8 +19,17 @@
 Python bindings for MLlib.
 """
 
-# MLlib currently needs and NumPy 1.4+, so complain if lower
+# MLlib currently needs NumPy 1.4+, so complain if lower
 
 import numpy
 if numpy.version.version < '1.4':
     raise Exception("MLlib requires NumPy 1.4+")
+
+__all__ = ['classification', 'clustering', 'feature', 'linalg', 'random',
+           'recommendation', 'regression', 'stat', 'tree', 'util']
+
+import sys
+import rand as random
+random.__name__ = 'random'
+random.RandomRDDs.__module__ = __name__ + '.random'
+sys.modules[__name__ + '.random'] = random

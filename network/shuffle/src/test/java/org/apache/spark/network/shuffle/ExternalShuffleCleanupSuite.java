@@ -25,20 +25,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
-
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
+  TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
 
   @Test
   public void noCleanupAndCleanup() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(sameThreadExecutor);
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", false /* cleanup */);
 
@@ -61,7 +64,7 @@ public class ExternalShuffleCleanupSuite {
       @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
     };
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(noThreadExecutor);
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", true);
@@ -78,7 +81,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(sameThreadExecutor);
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
@@ -93,7 +96,7 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(sameThreadExecutor);
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
 
     manager.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));

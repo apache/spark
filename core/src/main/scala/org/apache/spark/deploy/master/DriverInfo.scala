@@ -19,10 +19,11 @@ package org.apache.spark.deploy.master
 
 import java.util.Date
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.util.Utils
 
-private[spark] class DriverInfo(
+private[deploy] class DriverInfo(
     val startTime: Long,
     val id: String,
     val desc: DriverDescription,

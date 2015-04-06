@@ -22,14 +22,11 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
-import scala.util.Random
 
 import WriteAheadLogSuite._
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
@@ -42,9 +39,9 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   var manager: WriteAheadLogManager = null
 
   before {
-    tempDir = Files.createTempDir()
+    tempDir = Utils.createTempDir()
     testDir = tempDir.toString
-    testFile = new File(tempDir, Random.nextString(10)).toString
+    testFile = new File(tempDir, "testFile").toString
     if (manager != null) {
       manager.stop()
       manager = null
@@ -52,7 +49,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   after {
-    FileUtils.deleteQuietly(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("WriteAheadLogWriter - writing data") {
@@ -185,15 +182,29 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("WriteAheadLogManager - cleanup old logs") {
+    logCleanUpTest(waitForCompletion = false)
+  }
+
+  test("WriteAheadLogManager - cleanup old logs synchronously") {
+    logCleanUpTest(waitForCompletion = true)
+  }
+
+  private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
     val manualClock = new ManualClock
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
-    manager.cleanupOldLogs(manualClock.currentTime() / 2)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
+
+    manager.cleanupOldLogs(manualClock.getTimeMillis() / 2, waitForCompletion)
+
+    if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+    } else {
+      eventually(timeout(1 second), interval(10 milliseconds)) {
+        assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+      }
     }
   }
 
@@ -208,7 +219,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
-    manualClock.addToTime(100000)
+    manualClock.advance(100000)
     writeDataUsingManager(testDir, dataToWrite2, manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
@@ -268,12 +279,12 @@ object WriteAheadLogSuite {
       manualClock: ManualClock = new ManualClock,
       stopManager: Boolean = true
     ): WriteAheadLogManager = {
-    if (manualClock.currentTime < 100000) manualClock.setTime(10000)
+    if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
       rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = manualClock)
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      manualClock.addToTime(500)
+      manualClock.advance(500)
       manager.writeToLog(item)
     }
     if (stopManager) manager.stop()

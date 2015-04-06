@@ -17,8 +17,8 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Run this on the master nde
+# Stop all spark daemons.
+# Run this on the master node.
 
 
 sbin="`dirname "$0"`"
@@ -30,3 +30,20 @@ sbin="`cd "$sbin"; pwd`"
 # Stop the slaves, then the master
 "$sbin"/stop-slaves.sh
 "$sbin"/stop-master.sh
+
+if [ "$1" == "--wait" ]
+then
+  printf "Waiting for workers to shut down..."
+  while true
+  do
+    running=`$sbin/slaves.sh ps -ef | grep -v grep | grep deploy.worker.Worker`
+    if [ -z "$running" ]
+    then
+      printf "\nAll workers successfully shut down.\n"
+      break
+    else
+      printf "."
+      sleep 10
+    fi
+  done
+fi

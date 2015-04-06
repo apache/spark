@@ -23,9 +23,9 @@ import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, s
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with LocalSparkContext {
+class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -168,6 +168,14 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       assert(svd.U.numCols() === 1)
       assert(svd.V.numRows === 3)
       assert(svd.V.numCols === 1)
+    }
+  }
+
+  test("validate k in svd") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      intercept[IllegalArgumentException] {
+        mat.computeSVD(-1)
+      }
     }
   }
 

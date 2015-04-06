@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.sources
 
+import scala.language.existentials
+
 import org.apache.spark.sql._
+import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
   override def createRelation(
@@ -28,7 +31,8 @@ class PrunedScanSource extends RelationProvider {
 }
 
 case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends PrunedScan {
+  extends BaseRelation
+  with PrunedScan {
 
   override def schema =
     StructType(

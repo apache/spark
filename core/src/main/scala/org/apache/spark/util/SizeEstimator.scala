@@ -18,17 +18,15 @@
 package org.apache.spark.util
 
 import java.lang.management.ManagementFactory
-import java.lang.reflect.{Array => JArray}
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
-import java.util.IdentityHashMap
-import java.util.Random
+import java.lang.reflect.{Field, Modifier}
+import java.util.{IdentityHashMap, Random}
 import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.mutable.ArrayBuffer
+import scala.runtime.ScalaRunTime
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.OpenHashSet
+
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
@@ -184,9 +182,9 @@ private[spark] object SizeEstimator extends Logging {
   private val ARRAY_SIZE_FOR_SAMPLING = 200
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
-  private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
-    val length = JArray.getLength(array)
-    val elementClass = cls.getComponentType
+  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
+    val length = ScalaRunTime.array_length(array)
+    val elementClass = arrayClass.getComponentType()
 
     // Arrays have object header and length field which is an integer
     var arrSize: Long = alignSize(objectSize + INT_SIZE)
@@ -199,22 +197,26 @@ private[spark] object SizeEstimator extends Logging {
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
-        for (i <- 0 until length) {
-          state.enqueue(JArray.get(array, i))
+        var arrayIndex = 0
+        while (arrayIndex < length) {
+          state.enqueue(ScalaRunTime.array_apply(array, arrayIndex).asInstanceOf[AnyRef])
+          arrayIndex += 1
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
         var size = 0.0
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
-        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+        var numElementsDrawn = 0
+        while (numElementsDrawn < ARRAY_SAMPLE_SIZE) {
           var index = 0
           do {
             index = rand.nextInt(length)
           } while (drawn.contains(index))
           drawn.add(index)
-          val elem = JArray.get(array, index)
+          val elem = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
           size += SizeEstimator.estimate(elem, state.visited)
+          numElementsDrawn += 1
         }
         state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
       }

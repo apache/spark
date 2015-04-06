@@ -39,7 +39,7 @@ import scala.reflect.ClassTag
  *
  * {{{
  * scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
- * broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+ * broadcastVar: org.apache.spark.broadcast.Broadcast[Array[Int]] = Broadcast(0)
  *
  * scala> broadcastVar.value
  * res0: Array[Int] = Array(1, 2, 3)
@@ -146,5 +146,5 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
     }
   }
 
-  override def toString = "Broadcast(" + id + ")"
+  override def toString: String = "Broadcast(" + id + ")"
 }

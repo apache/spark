@@ -79,6 +79,21 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test ("convertToCanonicalEdges") {
+    withSpark { sc =>
+      val vertices =
+        sc.parallelize(Seq[(VertexId, String)]((1, "one"), (2, "two"), (3, "three")), 2)
+      val edges =
+        sc.parallelize(Seq(Edge(1, 2, 1), Edge(2, 1, 1), Edge(3, 2, 2)))
+      val g: Graph[String, Int] = Graph(vertices, edges)
+
+      val g1 = g.convertToCanonicalEdges()
+
+      val e = g1.edges.collect().toSet
+      assert(e === Set(Edge(1, 2, 1), Edge(2, 3, 2)))
+    }
+  }
+
   test("collectEdgesCycleDirectionOut") {
     withSpark { sc =>
       val graph = getCycleGraph(sc, 100)

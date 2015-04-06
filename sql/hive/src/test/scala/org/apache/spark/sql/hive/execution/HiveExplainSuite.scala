@@ -38,4 +38,40 @@ class HiveExplainSuite extends QueryTest {
                    "== Physical Plan ==",
                    "Code Generation", "== RDD ==")
   }
+
+  test("explain create table command") {
+    checkExistence(sql("explain create table temp__b as select * from src limit 2"), true,
+                   "== Physical Plan ==",
+                   "InsertIntoHiveTable",
+                   "Limit",
+                   "src")
+
+    checkExistence(sql("explain extended create table temp__b as select * from src limit 2"), true,
+      "== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==",
+      "== Physical Plan ==",
+      "CreateTableAsSelect",
+      "InsertIntoHiveTable",
+      "Limit",
+      "src")
+
+    checkExistence(sql(
+      """
+        | EXPLAIN EXTENDED CREATE TABLE temp__b
+        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+        | STORED AS RCFile
+        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+        | AS SELECT * FROM src LIMIT 2
+      """.stripMargin), true,
+      "== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==",
+      "== Physical Plan ==",
+      "CreateTableAsSelect",
+      "InsertIntoHiveTable",
+      "Limit",
+      "src")
+  }
 }

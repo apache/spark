@@ -41,7 +41,7 @@ trait HashJoin {
     case BuildRight => (rightKeys, leftKeys)
   }
 
-  override def output = left.output ++ right.output
+  override def output: Seq[Attribute] = left.output ++ right.output
 
   @transient protected lazy val buildSideKeyGenerator: Projection =
     newProjection(buildKeys, buildPlan.output)
@@ -65,7 +65,7 @@ trait HashJoin {
         (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
           (streamIter.hasNext && fetchNext())
 
-      override final def next() = {
+      override final def next(): Row = {
         val ret = buildSide match {
           case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)

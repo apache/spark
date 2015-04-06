@@ -16,7 +16,7 @@
 #
 
 """
-An example of how to use SchemaRDD as a dataset for ML. Run with::
+An example of how to use DataFrame as a dataset for ML. Run with::
     bin/spark-submit examples/src/main/python/mllib/dataset_example.py
 """
 

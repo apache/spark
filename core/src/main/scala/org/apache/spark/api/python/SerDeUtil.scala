@@ -84,7 +84,7 @@ private[spark] object SerDeUtil extends Logging {
   private var initialized = false
   // This should be called before trying to unpickle array.array from Python
   // In cluster mode, this should be put in closure
-  def initialize() = {
+  def initialize(): Unit = {
     synchronized{
       if (!initialized) {
         Unpickler.registerConstructor("array", "array", new ArrayConstructor())
@@ -153,7 +153,10 @@ private[spark] object SerDeUtil extends Logging {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
+          obj match {
+            case array: Array[Any] => array.toSeq
+            case _ => obj.asInstanceOf[JArrayList[_]].asScala
+          }
         } else {
           Seq(obj)
         }
@@ -199,7 +202,10 @@ private[spark] object SerDeUtil extends Logging {
    * representation is serialized
    */
   def pairRDDToPython(rdd: RDD[(Any, Any)], batchSize: Int): RDD[Array[Byte]] = {
-    val (keyFailed, valueFailed) = checkPickle(rdd.first())
+    val (keyFailed, valueFailed) = rdd.take(1) match {
+      case Array() => (false, false)
+      case Array(first) => checkPickle(first)
+    }
 
     rdd.mapPartitions { iter =>
       val cleaned = iter.map { case (k, v) =>
@@ -226,10 +232,12 @@ private[spark] object SerDeUtil extends Logging {
     }
 
     val rdd = pythonToJava(pyRDD, batched).rdd
-    rdd.first match {
-      case obj if isPair(obj) =>
+    rdd.take(1) match {
+      case Array(obj) if isPair(obj) =>
         // we only accept (K, V)
-      case other => throw new SparkException(
+      case Array() =>
+        // we also accept empty collections
+      case Array(other) => throw new SparkException(
         s"RDD element of type ${other.getClass.getName} cannot be used")
     }
     rdd.map { obj =>

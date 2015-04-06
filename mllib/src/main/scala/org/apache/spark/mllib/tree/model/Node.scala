@@ -50,8 +50,10 @@ class Node (
     var rightNode: Option[Node],
     var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
-  override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
-    "impurity =  " + impurity + "split = " + split + ", stats = " + stats
+  override def toString: String = {
+    "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
+      "impurity =  " + impurity + "split = " + split + ", stats = " + stats
+  }
 
   /**
    * build the left node and right nodes if not leaf
@@ -166,6 +168,11 @@ class Node (
     }
   }
 
+  /** Returns an iterator that traverses (DFS, left to right) the subtree of this node. */
+  private[tree] def subtreeIterator: Iterator[Node] = {
+    Iterator.single(this) ++ leftNode.map(_.subtreeIterator).getOrElse(Iterator.empty) ++
+      rightNode.map(_.subtreeIterator).getOrElse(Iterator.empty)
+  }
 }
 
 private[tree] object Node {

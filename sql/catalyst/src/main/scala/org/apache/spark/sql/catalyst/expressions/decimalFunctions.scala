@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.catalyst.types.{DecimalType, LongType, DoubleType, DataType}
+import org.apache.spark.sql.types._
 
 /** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
   override type EvaluatedType = Any
 
   override def dataType: DataType = LongType
-  override def foldable = child.foldable
-  def nullable = child.nullable
-  override def toString = s"UnscaledValue($child)"
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"UnscaledValue($child)"
 
   override def eval(input: Row): Any = {
     val childResult = child.eval(input)
@@ -44,9 +43,9 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override type EvaluatedType = Decimal
 
   override def dataType: DataType = DecimalType(precision, scale)
-  override def foldable = child.foldable
-  def nullable = child.nullable
-  override def toString = s"MakeDecimal($child,$precision,$scale)"
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
   override def eval(input: Row): Decimal = {
     val childResult = child.eval(input)

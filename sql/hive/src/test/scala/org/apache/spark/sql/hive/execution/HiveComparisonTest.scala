@@ -22,9 +22,10 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -133,23 +134,23 @@ abstract class HiveComparisonTest
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    val orderedAnswer = hiveQuery.logical match {
+    val orderedAnswer = hiveQuery.analyzed match {
       // Clean out non-deterministic time schema info.
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
-      case LogicalNativeCommand(c) if c.toLowerCase.contains("desc") =>
+      case HiveNativeCommand(c) if c.toLowerCase.contains("desc") =>
         answer
           .filterNot(nonDeterministicLine)
           .map(_.replaceAll("from deserializer", ""))
           .map(_.replaceAll("None", ""))
           .map(_.trim)
           .filterNot(_ == "")
-      case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case _: DescribeCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
@@ -240,7 +241,10 @@ abstract class HiveComparisonTest
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
 
-      val allQueries = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
+      val sqlWithoutComment =
+        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
+      val allQueries =
+        sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       // TODO: DOCUMENT UNSUPPORTED
       val queryList =
@@ -295,7 +299,7 @@ abstract class HiveComparisonTest
 
             val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
-            hiveQueries.foreach(_.logical)
+            hiveQueries.foreach(_.analyzed)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>
                 try {

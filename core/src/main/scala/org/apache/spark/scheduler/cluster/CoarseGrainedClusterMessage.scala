@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
@@ -39,7 +40,12 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
 
   // Executors to driver
-  case class RegisterExecutor(executorId: String, hostPort: String, cores: Int)
+  case class RegisterExecutor(
+      executorId: String,
+      executorRef: RpcEndpointRef,
+      hostPort: String,
+      cores: Int,
+      logUrls: Map[String, String])
     extends CoarseGrainedClusterMessage {
     Utils.checkHostPort(hostPort, "Expected host port")
   }
@@ -66,6 +72,8 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
+  case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
   // Exchanged between the driver and the AM in Yarn client mode
   case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
@@ -73,7 +81,7 @@ private[spark] object CoarseGrainedClusterMessages {
   // Messages exchanged between the driver and the cluster manager for executor allocation
   // In Yarn mode, these are exchanged between the driver and the AM
 
-  case object RegisterClusterManager extends CoarseGrainedClusterMessage
+  case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running

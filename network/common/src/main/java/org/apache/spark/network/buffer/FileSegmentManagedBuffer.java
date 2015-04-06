@@ -31,24 +31,19 @@ import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * A {@link ManagedBuffer} backed by a segment in a file.
  */
 public final class FileSegmentManagedBuffer extends ManagedBuffer {
-
-  /**
-   * Memory mapping is expensive and can destabilize the JVM (SPARK-1145, SPARK-3889).
-   * Avoid unless there's a good reason not to.
-   */
-  // TODO: Make this configurable
-  private static final long MIN_MEMORY_MAP_BYTES = 2 * 1024 * 1024;
-
+  private final TransportConf conf;
   private final File file;
   private final long offset;
   private final long length;
 
-  public FileSegmentManagedBuffer(File file, long offset, long length) {
+  public FileSegmentManagedBuffer(TransportConf conf, File file, long offset, long length) {
+    this.conf = conf;
     this.file = file;
     this.offset = offset;
     this.length = length;
@@ -65,7 +60,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     try {
       channel = new RandomAccessFile(file, "r").getChannel();
       // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
-      if (length < MIN_MEMORY_MAP_BYTES) {
+      if (length < conf.memoryMapBytes()) {
         ByteBuffer buf = ByteBuffer.allocate((int) length);
         channel.position(offset);
         while (buf.remaining() != 0) {
@@ -134,8 +129,12 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    FileChannel fileChannel = new FileInputStream(file).getChannel();
-    return new DefaultFileRegion(fileChannel, offset, length);
+    if (conf.lazyFileDescriptor()) {
+      return new LazyFileRegion(file, offset, length);
+    } else {
+      FileChannel fileChannel = new FileInputStream(file).getChannel();
+      return new DefaultFileRegion(fileChannel, offset, length);
+    }
   }
 
   public File getFile() { return file; }

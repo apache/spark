@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
@@ -34,8 +33,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   override def beforeEach() {
     super.beforeEach()
-    checkpointDir = File.createTempFile("temp", "")
-    checkpointDir.deleteOnExit()
+    checkpointDir = File.createTempFile("temp", "", Utils.createTempDir())
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)

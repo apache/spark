@@ -110,4 +110,14 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-5064 GraphGenerators.rmatGraph numEdges upper bound") {
+    withSpark { sc =>
+      val g1 = GraphGenerators.rmatGraph(sc, 4, 4)
+      assert(g1.edges.count() === 4)
+      intercept[IllegalArgumentException] {
+        val g2 = GraphGenerators.rmatGraph(sc, 4, 8)
+      }
+    }
+  }
+
 }

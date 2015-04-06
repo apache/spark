@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Quick Start
+description: Quick start tutorial for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -243,6 +244,9 @@ object SimpleApp {
   }
 }
 {% endhighlight %}
+
+Note that applications should define a `main()` method instead of extending `scala.App`.
+Subclasses of `scala.App` may not work correctly.
 
 This program just counts the number of lines containing 'a' and the number containing 'b' in the
 Spark README. Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is

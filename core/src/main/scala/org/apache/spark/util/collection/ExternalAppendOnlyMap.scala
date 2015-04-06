@@ -76,10 +76,6 @@ class ExternalAppendOnlyMap[K, V, C](
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
 
-  // Number of pairs inserted since last spill; note that we count them even if a value is merged
-  // with a previous key in case we're doing something like groupBy where the result grows
-  protected[this] var elementsRead = 0L
-
   /**
    * Size of object batches when reading/writing from serializers.
    *
@@ -132,7 +128,7 @@ class ExternalAppendOnlyMap[K, V, C](
         currentMap = new SizeTrackingAppendOnlyMap[K, C]
       }
       currentMap.changeValue(curEntry._1, update)
-      elementsRead += 1
+      addElementsRead()
     }
   }
 
@@ -163,7 +159,7 @@ class ExternalAppendOnlyMap[K, V, C](
     val batchSizes = new ArrayBuffer[Long]
 
     // Flush the disk writer's contents to disk, and update relevant variables
-    def flush() = {
+    def flush(): Unit = {
       val w = writer
       writer = null
       w.commitAndClose()
@@ -209,8 +205,6 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
-
-    elementsRead = 0
   }
 
   def diskBytesSpilled: Long = _diskBytesSpilled
@@ -361,7 +355,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def isEmpty = pairs.length == 0
+      def isEmpty: Boolean = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {

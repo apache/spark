@@ -100,11 +100,11 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def getInputStreams() = this.synchronized { inputStreams.toArray }
+  def getInputStreams(): Array[InputDStream[_]] = this.synchronized { inputStreams.toArray }
 
-  def getOutputStreams() = this.synchronized { outputStreams.toArray }
+  def getOutputStreams(): Array[DStream[_]] = this.synchronized { outputStreams.toArray }
 
-  def getReceiverInputStreams() = this.synchronized {
+  def getReceiverInputStreams(): Array[ReceiverInputDStream[_]] = this.synchronized {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
       .toArray
@@ -158,6 +158,14 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       // " is very low")
       assert(getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
     }
+  }
+
+  /**
+   * Get the maximum remember duration across all the input streams. This is a conservative but
+   * safe remember duration which can be used to perform cleanup operations.
+   */
+  def getMaxInputStreamRememberDuration(): Duration = {
+    inputStreams.map { _.rememberDuration }.maxBy { _.milliseconds }
   }
 
   @throws(classOf[IOException])

@@ -32,11 +32,21 @@ private[hive] object SparkSQLEnv extends Logging {
 
   def init() {
     if (hiveContext == null) {
-      val sparkConf = new SparkConf()
+      val sparkConf = new SparkConf(loadDefaults = true)
+      val maybeSerializer = sparkConf.getOption("spark.serializer")
+      val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
+
+      sparkConf
         .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}")
         .set("spark.sql.hive.version", HiveShim.version)
-      sparkContext = new SparkContext(sparkConf)
+        .set(
+          "spark.serializer",
+          maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
+        .set(
+          "spark.kryo.referenceTracking",
+          maybeKryoReferenceTracking.getOrElse("false"))
 
+      sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
 

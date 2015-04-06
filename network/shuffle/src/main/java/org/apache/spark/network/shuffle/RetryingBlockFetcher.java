@@ -106,7 +106,7 @@ public class RetryingBlockFetcher {
     this.fetchStarter = fetchStarter;
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
-    this.retryWaitTime = conf.ioRetryWaitTime();
+    this.retryWaitTime = conf.ioRetryWaitTimeMs();
     this.outstandingBlocksIds = Sets.newLinkedHashSet();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockFetchListener();

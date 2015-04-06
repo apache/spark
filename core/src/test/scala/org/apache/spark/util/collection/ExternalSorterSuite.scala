@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 
 import scala.util.Random
 
@@ -127,6 +126,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
@@ -152,6 +152,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling, bypass merge-sort") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 

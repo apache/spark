@@ -157,18 +157,20 @@ class DStream(object):
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
 
-    def pprint(self):
+    def pprint(self, num=10):
         """
-        Print the first ten elements of each RDD generated in this DStream.
+        Print the first num elements of each RDD generated in this DStream.
+
+        @param num: the number of elements from the first will be printed.
         """
         def takeAndPrint(time, rdd):
-            taken = rdd.take(11)
+            taken = rdd.take(num + 1)
             print "-------------------------------------------"
             print "Time: %s" % time
             print "-------------------------------------------"
-            for record in taken[:10]:
+            for record in taken[:num]:
                 print record
-            if len(taken) > 10:
+            if len(taken) > num:
                 print "..."
             print
 
@@ -576,7 +578,7 @@ class DStream(object):
             if a is None:
                 g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
-                g = a.cogroup(b, numPartitions)
+                g = a.cogroup(b.partitionBy(numPartitions), numPartitions)
                 g = g.mapValues(lambda (va, vb): (list(vb), list(va)[0] if len(va) else None))
             state = g.mapValues(lambda (vs, s): updateFunc(vs, s))
             return state.filter(lambda (k, v): v is not None)

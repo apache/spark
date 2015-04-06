@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
+import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
@@ -31,7 +31,8 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
     AttributeReference("u", DecimalType.Unlimited)(),
-    AttributeReference("f", FloatType)()
+    AttributeReference("f", FloatType)(),
+    AttributeReference("b", DoubleType)()
   )
 
   val i: Expression = UnresolvedAttribute("i")
@@ -39,14 +40,35 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   val d2: Expression = UnresolvedAttribute("d2")
   val u: Expression = UnresolvedAttribute("u")
   val f: Expression = UnresolvedAttribute("f")
+  val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.registerTable(None, "table", relation)
+    catalog.registerTable(Seq("table"), relation)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Seq(Alias(expression, "c")()), relation)
     assert(analyzer(plan).schema.fields(0).dataType === expectedType)
+  }
+
+  private def checkComparison(expression: Expression, expectedType: DataType): Unit = {
+    val plan = Project(Alias(expression, "c")() :: Nil, relation)
+    val comparison = analyzer(plan).collect {
+      case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
+    }.head
+    assert(comparison.left.dataType === expectedType)
+    assert(comparison.right.dataType === expectedType)
+  }
+
+  private def checkUnion(left: Expression, right: Expression, expectedType: DataType): Unit = {
+    val plan =
+      Union(Project(Seq(Alias(left, "l")()), relation),
+        Project(Seq(Alias(right, "r")()), relation))
+    val (l, r) = analyzer(plan).collect {
+      case Union(left, right) => (left.output.head, right.output.head)
+    }.head
+    assert(l.dataType === expectedType)
+    assert(r.dataType === expectedType)
   }
 
   test("basic operations") {
@@ -63,6 +85,27 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
     checkType(Add(Add(Add(d1, d2), d1), d2), DecimalType(8, 2))
     checkType(Add(Add(d1, d2), Add(d1, d2)), DecimalType(7, 2))
+  }
+
+  test("Comparison operations") {
+    checkComparison(LessThan(i, d1), DecimalType.Unlimited)
+    checkComparison(LessThanOrEqual(d1, d2), DecimalType.Unlimited)
+    checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
+    checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
+    checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
+  }
+
+  test("decimal precision for union") {
+    checkUnion(d1, i, DecimalType(11, 1))
+    checkUnion(i, d2, DecimalType(12, 2))
+    checkUnion(d1, d2, DecimalType(5, 2))
+    checkUnion(d2, d1, DecimalType(5, 2))
+    checkUnion(d1, f, DecimalType(8, 7))
+    checkUnion(f, d2, DecimalType(10, 7))
+    checkUnion(d1, b, DecimalType(16, 15))
+    checkUnion(b, d2, DecimalType(18, 15))
+    checkUnion(d1, u, DecimalType.Unlimited)
+    checkUnion(u, d2, DecimalType.Unlimited)
   }
 
   test("bringing in primitive types") {

@@ -1,0 +1,1 @@
+java_method(class,method[,arg1[,arg2..]]) calls method with reflection

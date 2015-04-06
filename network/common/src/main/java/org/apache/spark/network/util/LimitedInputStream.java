@@ -27,7 +27,7 @@ import com.google.common.base.Preconditions;
  * Wraps a {@link InputStream}, limiting the number of bytes which can be read.
  *
  * This code is from Guava's 14.0 source code, because there is no compatible way to
- * use this functionality in both a Guava 11 environment and a Guava >14 environment.
+ * use this functionality in both a Guava 11 environment and a Guava &gt;14 environment.
  */
 public final class LimitedInputStream extends FilterInputStream {
   private long left;
