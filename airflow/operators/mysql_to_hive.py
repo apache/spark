@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import csv
 import logging
 from tempfile import NamedTemporaryFile
@@ -94,8 +95,9 @@ class MySqlToHiveTransfer(BaseOperator):
         cursor.execute(self.sql)
         with NamedTemporaryFile("w") as f:
             csv_writer = csv.writer(f, delimiter=self.delimiter)
-            field_dict = {
-                i[0]: self.type_map(i[1]) for i in cursor.description}
+            field_dict = OrderedDict()
+            for field in cursor.description:
+                field_dict[field[0]] = self.type_map(field[1])
             csv_writer.writerows(cursor)
             f.flush()
             cursor.close()
