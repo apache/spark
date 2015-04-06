@@ -23,3 +23,4 @@ TODO
 
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library
+* Pause flag at the task level

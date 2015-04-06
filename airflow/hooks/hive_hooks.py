@@ -64,7 +64,7 @@ class HiveCliHook(BaseHook):
             self,
             filepath,
             table,
-            delimiter="'",
+            delimiter=",",
             field_dict=None,
             create=True,
             overwrite=True,
