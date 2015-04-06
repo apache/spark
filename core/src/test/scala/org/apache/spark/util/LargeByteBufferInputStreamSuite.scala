@@ -54,7 +54,7 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
         assertEquals(buffer(arrIdx), read(arrIdx))
       }
     }
-    // XXX I assume its not intentional that the stream is only disposed when you try to read
+    // XXX I assume its *not* intentional that the stream is only disposed when you try to read
     // *past* the end in ByteBufferInputStream?
     in.disposed should be (true)
     in.read(read) should be (-1)
