@@ -277,6 +277,9 @@ class ExternalMerger(Merger):
                 else:
                     batch *= 1.5
 
+        if get_used_memory() >= limit:
+            self._spill()
+
     def _partition(self, key):
         """ Return the partition for key """
         return hash((key, self._seed)) % self.partitions
@@ -309,6 +312,9 @@ class ExternalMerger(Merger):
                     c = 0
                 else:
                     batch *= 1.5
+
+        if get_used_memory() >= limit:
+            self._spill()
 
     def _spill(self):
         """
