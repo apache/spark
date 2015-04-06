@@ -25,7 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.{Utils}
+import org.apache.spark.util.Utils
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -62,15 +62,18 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
+  private val networkTimeoutS = Utils.timeStringAsS(sc.conf.get("spark.network.timeout", "120s"))
   private val executorTimeoutMs = Utils.timeStringAsMs(
     sc.conf.get("spark.storage.blockManagerSlaveTimeoutMs", 
-      s"${Utils.timeStringAsS(sc.conf.get("spark.network.timeout", "120s"))}s"))
+      s"${networkTimeoutS}s"))
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
+  private val timeoutIntervalS = Utils.timeStringAsS(sc.conf
+      .get("spark.network.timeoutInterval", "60s"))
   private val checkTimeoutIntervalMs = Utils.timeStringAsMs(
     sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", 
-      s"${Utils.timeStringAsS(sc.conf.get("spark.network.timeoutInterval", "60s"))}s"))
+      s"${timeoutIntervalS}s"))
   
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 

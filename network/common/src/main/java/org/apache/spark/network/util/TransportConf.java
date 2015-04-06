@@ -72,7 +72,7 @@ public class TransportConf {
 
   /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
   public int saslRTTimeoutMs() {
-    return (int) JavaUtils.timeStringAsS(conf.get("spark.shuffle.sasl.timeout", "30s")) * 1000;
+    return (int) JavaUtils.timeStringAsMs(conf.get("spark.shuffle.sasl.timeout", "30s"));
   }
 
   /**
@@ -86,7 +86,7 @@ public class TransportConf {
    * Only relevant if maxIORetries &gt; 0.
    */
   public int ioRetryWaitTimeMs() {
-    return (int) JavaUtils.timeStringAsS(conf.get("spark.shuffle.io.retryWait", "5s")) * 1000;
+    return (int) JavaUtils.timeStringAsMs(conf.get("spark.shuffle.io.retryWait", "5s"));
   }
 
   /**

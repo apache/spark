@@ -139,27 +139,24 @@ public class JavaUtils {
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
   private static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
-    String timeError = "Time must be specified as seconds (s), " +
-      "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
-      "E.g. 50s, 100ms, or 250us.";
     String lower = str.toLowerCase().trim();
     
     try {
       String suffix = "";
       for (String tail: timeSuffixes.keySet()) {
-        if (lower.endsWith(tail)) {
-          // Handle special case for overlapping suffixes
-          if (!tail.equals("s") || 
-                  (tail.equals("s") && !lower.endsWith("us") && !lower.endsWith("ms")))
-          {
-            suffix = tail;
-          }
+        char prevChar = lower.charAt(lower.length() - tail.length()-1);
+        if (lower.endsWith(tail) && Character.isDigit(prevChar)) {
+          suffix = tail;
         }
       }
       
       return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
         timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
+      String timeError = "Time must be specified as seconds (s), " +
+              "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
+              "E.g. 50s, 100ms, or 250us.";
+      
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
     }
   }
