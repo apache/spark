@@ -1320,10 +1320,19 @@ class TachyonBlockSizeLimitException(cause: BufferTooLargeException)
     "You tried to store a partition " + BlockSizeLimitException.sizeMsgAndAdvice(cause) +
     "  Or, you can use a different storage mechanism.", cause)
 
-class ShuffleBlockSizeLimitException(cause: BufferTooLargeException)
+class ShuffleBlockSizeLimitException(size: Long)
+  extends SparkException("Spark cannot shuffle partitions that are greater than 2GB.  " +
+    "You tried to shuffle a block that was at least " + Utils.bytesToString(size) + ".  " +
+    "You should try to increase the number of partitions of this shuffle, and / or increase the " +
+    "figure out which stage created the partitions before the shuffle, and increase the number " +
+    "of partitions for that stage.  You may want to make both of these numbers easily " +
+    "configurable parameters so you can continue to update as needed.")
+
+class ShuffleRemoteBlockSizeLimitException(cause: BufferTooLargeException)
   extends BlockSizeLimitException("Spark cannot shuffle partitions that are greater than 2GB.  " +
-    "You tried to shuffle a block " + BlockSizeLimitException.sizeMsg(cause) +
+    "You tried to shuffle a block that was at least " + BlockSizeLimitException.sizeMsg(cause) +
     "You should try to increase the number of partitions of this shuffle, and / or increase the " +
     "figure out which stage created the partitions before the shuffle, and increase the number " +
     "of partitions for that stage.  You may want to make both of these numbers easily " +
     "configurable parameters so you can continue to update as needed.", cause)
+

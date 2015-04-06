@@ -21,6 +21,7 @@ import java.io.{BufferedOutputStream, FileOutputStream, File, OutputStream}
 import java.nio.channels.FileChannel
 
 import org.apache.spark.Logging
+import org.apache.spark.network.buffer.LargeByteBufferHelper
 import org.apache.spark.serializer.{SerializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.util.Utils
@@ -153,6 +154,10 @@ private[spark] class DiskBlockObjectWriter(
         objOut.close()
       }
 
+      if (channel.position() > LargeByteBufferHelper.MAX_CHUNK) {
+        throw new ShuffleBlockSizeLimitException(channel.position())
+      }
+
       channel = null
       bs = null
       fos = null
@@ -214,6 +219,9 @@ private[spark] class DiskBlockObjectWriter(
 
     if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
+      if (reportedPosition > LargeByteBufferHelper.MAX_CHUNK) {
+        throw new ShuffleBlockSizeLimitException(reportedPosition)
+      }
     }
   }
 

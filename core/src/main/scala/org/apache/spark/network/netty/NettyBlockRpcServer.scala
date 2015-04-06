@@ -28,7 +28,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, OpenBlocks, StreamHandle, UploadBlock}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{ShuffleBlockSizeLimitException, BlockId, StorageLevel}
+import org.apache.spark.storage.{ShuffleRemoteBlockSizeLimitException, BlockId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -60,12 +60,14 @@ class NettyBlockRpcServer(
           logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
           responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
         } catch {
+          // shouldn't ever happen, b/c we should prevent writing 2GB shuffle files,
+          // but just to be safe
           case ex: BufferTooLargeException =>
             // throw & catch this helper exception, just to get full stack trace
             try {
-              throw new ShuffleBlockSizeLimitException(ex)
+              throw new ShuffleRemoteBlockSizeLimitException(ex)
             } catch {
-              case ex2: ShuffleBlockSizeLimitException =>
+              case ex2: ShuffleRemoteBlockSizeLimitException =>
                 responseContext.onFailure(ex2)
             }
         }
