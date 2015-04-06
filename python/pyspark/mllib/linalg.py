@@ -704,14 +704,20 @@ class DenseMatrix(Matrix):
 
 class SparseMatrix(object):
     """Sparse Matrix stored in CSC format."""
-    def __init__(self, numRows, numCols, colPtrs, rowIndices, values):
+    def __init__(self, numRows, numCols, colPtrs, rowIndices, values,
+                 isTransposed=False):
         self.numRows = numRows
         self.numCols = numCols
+        self.isTransposed = isTransposed
         if isinstance(colPtrs, basestring):
             self.colPtrs = np.frombuffer(colPtrs, dtype=np.uint64)
         else:
             self.colPtrs = np.asarray(colPtrs, dtype=np.uint64)
-        if self.colPtrs.size != numCols + 1:
+
+        if self.isTransposed and self.colPtrs.size != numRows + 1:
+            raise ValueError("Expected colPtrs of size %d, got %d."
+                             % (numRows + 1, self.colPtrs.size))
+        elif not self.isTransposed and self.colPtrs.size != numCols + 1:
             raise ValueError("Expected colPtrs of size %d, got %d."
                              % (numCols + 1, self.colPtrs.size))
         if isinstance(rowIndices, basestring):
@@ -726,7 +732,8 @@ class SparseMatrix(object):
     def __reduce__(self):
         return SparseMatrix, (
             self.numRows, self.numCols, self.colPtrs.tostring(),
-            self.rowIndices.tostring(), self.values.tostring()
+            self.rowIndices.tostring(), self.values.tostring(),
+            self.isTransposed
         )
 
     def __getitem__(self, indices):
@@ -737,8 +744,15 @@ class SparseMatrix(object):
         if j >= self.numCols or j < 0:
             raise ValueError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
+
+        # If a CSR matrix is given, then the row index should be searched
+        # for in ColPtrs, and the column index should be searched for in the
+        # corresponding slice obtained from rowIndices.
+        if self.isTransposed:
+            j, i = i, j
+
         nz = self.rowIndices[self.colPtrs[j]: self.colPtrs[j + 1]]
-        if nz.size == 0:
+        if nz.size == 0 or i > nz[-1]:
             return 0.0
         ind = np.searchsorted(nz, i)
         if i == nz[ind]:
@@ -747,21 +761,31 @@ class SparseMatrix(object):
 
     def _densify_values(self):
         sparsearr = np.zeros(self.numRows * self.numCols, dtype=np.float64)
+
+        if self.isTransposed:
+            offset_margin = self.numCols
+        else:
+            offset_margin = self.numRows
+
         offset = 0
         for ptr in xrange(self.colPtrs.size - 1):
             startptr = self.colPtrs[ptr]
             endptr = self.colPtrs[ptr + 1]
             sparsearr[offset + self.rowIndices[startptr: endptr]] = \
                 self.values[startptr: endptr]
-            offset += self.numRows
+            offset += offset_margin
         return sparsearr
 
     def toArray(self):
         """
         Return an numpy.ndarray
         """
+        if self.isTransposed:
+            order = 'C'
+        else:
+            order = 'F'
         return np.reshape(
-            self._densify_values(), (self.numRows, self.numCols), order='F'
+            self._densify_values(), (self.numRows, self.numCols), order=order
         )
 
     def toDense(self):

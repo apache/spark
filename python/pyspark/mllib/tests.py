@@ -163,6 +163,7 @@ class VectorTests(PySparkTestCase):
         for i in range(3):
             for j in range(4):
                 self.assertEquals(expected[i, j], sm1[i, j])
+        self.assertTrue(array_equal(sm1.toArray(), expected))
 
         # Test conversion to dense and sparse.
         smnew = sm1.toDense().toSparse()
@@ -171,6 +172,27 @@ class VectorTests(PySparkTestCase):
         self.assertTrue(array_equal(sm1.colPtrs, smnew.colPtrs))
         self.assertTrue(array_equal(sm1.rowIndices, smnew.rowIndices))
         self.assertTrue(array_equal(sm1.values, smnew.values))
+
+        sm1t = SparseMatrix(
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
+            isTransposed=True)
+        self.assertEquals(sm1t.numRows, 3)
+        self.assertEquals(sm1t.numCols, 4)
+        self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
+        self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
+        self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
+
+        expected = zeros((3, 4))
+        expected[0, 0] = 3.0
+        expected[0, 1] = 2.0
+        expected[1, 2] = 4.0
+        expected[2, 0] = 9.0
+        expected[2, 2] = 8.0
+
+        for i in range(3):
+            for j in range(4):
+                self.assertEquals(expected[i, j], sm1t[i, j])
+        self.assertTrue(array_equal(sm1t.toArray(), expected))
 
 
 class ListTests(PySparkTestCase):
