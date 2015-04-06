@@ -286,21 +286,18 @@ class RandomForest(object):
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for
                  splits at each node.
-                 Supported: "auto" (default), "all", "sqrt", "log2",
-                  "onethird".
-                 If "auto" is set, this parameter is set based on
-                 numTrees:
-                   if numTrees == 1, set to "all";
-                   if numTrees > 1 (forest) set to "sqrt".
-        :param impurity: Criterion used for information gain
-                 calculation.
+                 Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                 If "auto" is set, this parameter is set based on numTrees:
+                 if numTrees == 1, set to "all";
+                 if numTrees > 1 (forest) set to "sqrt".
+        :param impurity: Criterion used for information gain calculation.
                Supported values: "gini" (recommended) or "entropy".
         :param maxDepth: Maximum depth of the tree.
                  E.g., depth 0 means 1 leaf node; depth 1 means
                  1 internal node + 2 leaf nodes. (default: 4)
         :param maxBins: maximum number of bins used for splitting
                  features
-               (default: 100)
+                 (default: 100)
         :param seed: Random seed for bootstrapping and choosing feature
                  subsets.
         :return: RandomForestModel that can be used for prediction
@@ -365,13 +362,10 @@ class RandomForest(object):
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for
                  splits at each node.
-                 Supported: "auto" (default), "all", "sqrt", "log2",
-                   "onethird".
-                 If "auto" is set, this parameter is set based on
-                 numTrees:
-                   if numTrees == 1, set to "all";
-                   if numTrees > 1 (forest) set to "onethird" for
-                     regression.
+                 Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                 If "auto" is set, this parameter is set based on numTrees:
+                 if numTrees == 1, set to "all";
+                 if numTrees > 1 (forest) set to "onethird" for regression.
         :param impurity: Criterion used for information gain
                  calculation.
                  Supported values: "variance".

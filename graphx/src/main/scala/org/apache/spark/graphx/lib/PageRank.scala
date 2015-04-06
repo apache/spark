@@ -156,7 +156,7 @@ object PageRank extends Logging {
       (newPR, newPR - oldPR)
     }
 
-    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
+    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]): Iterator[(VertexId, Double)] = {
       if (edge.srcAttr._2 > tol) {
         Iterator((edge.dstId, edge.srcAttr._2 * edge.attr))
       } else {

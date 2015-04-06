@@ -17,41 +17,43 @@
 
 package org.apache.spark.storage
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-import akka.actor.{ActorRef, Actor}
-
+import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.ActorLogReceive
 
 /**
- * An actor to take commands from the master to execute options. For example,
+ * An RpcEndpoint to take commands from the master to execute options. For example,
  * this is used to remove blocks from the slave's BlockManager.
  */
 private[storage]
-class BlockManagerSlaveActor(
+class BlockManagerSlaveEndpoint(
+    override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends Actor with ActorLogReceive with Logging {
+  extends RpcEndpoint with Logging {
 
-  import context.dispatcher
+  private val asyncThreadPool =
+    Utils.newDaemonCachedThreadPool("block-manager-slave-async-thread-pool")
+  private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit]  = {
     case RemoveBlock(blockId) =>
-      doAsync[Boolean]("removing block " + blockId, sender) {
+      doAsync[Boolean]("removing block " + blockId, context) {
         blockManager.removeBlock(blockId)
         true
       }
 
     case RemoveRdd(rddId) =>
-      doAsync[Int]("removing RDD " + rddId, sender) {
+      doAsync[Int]("removing RDD " + rddId, context) {
         blockManager.removeRdd(rddId)
       }
 
     case RemoveShuffle(shuffleId) =>
-      doAsync[Boolean]("removing shuffle " + shuffleId, sender) {
+      doAsync[Boolean]("removing shuffle " + shuffleId, context) {
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
@@ -59,30 +61,34 @@ class BlockManagerSlaveActor(
       }
 
     case RemoveBroadcast(broadcastId, _) =>
-      doAsync[Int]("removing broadcast " + broadcastId, sender) {
+      doAsync[Int]("removing broadcast " + broadcastId, context) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 
     case GetBlockStatus(blockId, _) =>
-      sender ! blockManager.getStatus(blockId)
+      context.reply(blockManager.getStatus(blockId))
 
     case GetMatchingBlockIds(filter, _) =>
-      sender ! blockManager.getMatchingBlockIds(filter)
+      context.reply(blockManager.getMatchingBlockIds(filter))
   }
 
-  private def doAsync[T](actionMessage: String, responseActor: ActorRef)(body: => T) {
+  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
     val future = Future {
       logDebug(actionMessage)
       body
     }
     future.onSuccess { case response =>
       logDebug("Done " + actionMessage + ", response is " + response)
-      responseActor ! response
-      logDebug("Sent response: " + response + " to " + responseActor)
+      context.reply(response)
+      logDebug("Sent response: " + response + " to " + context.sender)
     }
     future.onFailure { case t: Throwable =>
       logError("Error in " + actionMessage, t)
-      responseActor ! null.asInstanceOf[T]
+      context.sendFailure(t)
     }
+  }
+
+  override def onStop(): Unit = {
+    asyncThreadPool.shutdownNow()
   }
 }
