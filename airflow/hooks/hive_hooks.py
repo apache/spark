@@ -43,7 +43,7 @@ class HiveCliHook(BaseHook):
             f.write(hql)
             f.flush()
             fname = f.name
-            hive_cmd = ['hive' , '-f' , fname]
+            hive_cmd = ['hive', '-f', fname]
             if self.hive_cli_params:
                 hive_params_list = self.hive_cli_params.split()
                 hive_cmd.extend(hive_params_list)
@@ -59,6 +59,69 @@ class HiveCliHook(BaseHook):
 
             if sp.returncode:
                 raise Exception(all_err)
+
+    def load_file(
+            self,
+            filepath,
+            table,
+            delimiter="'",
+            field_dict=None,
+            create=True,
+            overwrite=True,
+            partition=None,
+            recreate=False):
+        """
+        Loads a local file into Hive
+
+        Note that the table genearted in Hive uses ``STORED AS textfile``
+        which isn't the most efficient serialization format. If a
+        large amount of data is loaded and/or if the tables gets
+        queried considerably, you may want to use this operator only to
+        stage the data into a temporary table before loading it into its
+        final destination using a ``HiveOperator``.
+
+        :param table: target Hive table, use dot notation to target a
+            specific database
+        :type table: str
+        :param create: whether to create the table if it doesn't exist
+        :type create: bool
+        :param recreate: whether to drop and recreate the table at every
+            execution
+        :type recreate: bool
+        :param partition: target partition as a dict of partition columns
+            and values
+        :type partition: dict
+        :param delimiter: field delimiter in the file
+        :type delimiter: str
+        """
+        hql = ''
+        if recreate:
+            hql += "DROP TABLE IF EXISTS {table};\n"
+        if create or recreate:
+            fields = ",\n    ".join(
+                [k + ' ' + v for k, v in field_dict.items()])
+            hql += "CREATE EXTERNAL TABLE IF NOT EXISTS {table} (\n{fields})\n"
+            if partition:
+                pfields = ",\n    ".join(
+                    [p + " STRING" for p in partition])
+                hql += "PARTITIONED BY ({pfields})\n"
+            hql += "ROW FORMAT DELIMITED\n"
+            hql += "FIELDS TERMINATED BY '{delimiter}'\n"
+            hql += "STORED AS textfile;"
+        hql = hql.format(**locals())
+        logging.info(hql)
+        self.run_cli(hql)
+        hql = "LOAD DATA LOCAL INPATH '{filepath}' "
+        if overwrite:
+            hql += "OVERWRITE "
+        hql += "INTO TABLE {table} "
+        if partition:
+            pvals = ", ".join(
+                ["{0}='{1}'".format(k, v) for k, v in partition.items()])
+            hql += "PARTITION ({pvals});"
+        hql = hql.format(**locals())
+        logging.info(hql)
+        self.run_cli(hql)
 
     def kill(self):
         if hasattr(self, 'sp'):
