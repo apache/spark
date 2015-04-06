@@ -660,6 +660,23 @@ setMethod("minimum",
             reduce(x, min)
           })
 
+#' Add up the elements in an RDD.
+#'
+#' @param x The RDD to add up the elements in
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' sumRDD(rdd) # 55
+#'}
+#' @rdname sumRDD 
+#' @aliases sumRDD,RDD
+setMethod("sumRDD",
+          signature(x = "RDD"),
+          function(x) {
+            reduce(x, "+")
+          })
+
 #' Applies a function to all elements in an RDD, and force evaluation.
 #'
 #' @param x The RDD to apply the function

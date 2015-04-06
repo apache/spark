@@ -130,6 +130,10 @@ setGeneric("maximum", function(x) { standardGeneric("maximum") })
 #' @export
 setGeneric("minimum", function(x) { standardGeneric("minimum") })
 
+#' @rdname sumRDD 
+#' @export
+setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
+
 #' @rdname name
 #' @export
 setGeneric("name", function(x) { standardGeneric("name") })

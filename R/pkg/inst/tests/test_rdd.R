@@ -286,6 +286,11 @@ test_that("minimum() on RDDs", {
   expect_equal(min, 1)
 })
 
+test_that("sumRDD() on RDDs", {
+  sum <- sumRDD(rdd)
+  expect_equal(sum, 55)
+})
+
 test_that("keyBy on RDDs", {
   func <- function(x) { x*x }
   keys <- keyBy(rdd, func)
