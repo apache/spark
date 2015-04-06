@@ -147,7 +147,7 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sc.getConf("spark.sql.hive.verifyPartitionPath", "true").toBoolean) {
+      if (!sc.conf.verifyPartitionPath) {
         partitionToDeserializer
       } else {
         var existPathSet = collection.mutable.Set[String]()
@@ -158,9 +158,9 @@ class HadoopTableReader(
               val pathPattern = new Path(pathPatternStr)
               val fs = pathPattern.getFileSystem(sc.hiveconf)
               val matches = fs.globStatus(pathPattern)
-              matches.map(fileStatus => existPathSet += fileStatus.getPath.toString)
+              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
             }
-            // convert  /demo/data/year/month/day  to  /demo/data/**/**/**/
+            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
             def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
               var path = tempPath
               for (i <- (1 to parNum)) path = path.getParent
