@@ -287,16 +287,19 @@ private[spark] class MesosClusterSchedulerDriver(
     desc.command.environment.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v).build())
     }
-    builder.setEnvironment(envBuilder.build())
+    val executorOpts = desc.schedulerProperties.map { case (k, v) => s"-D$k=$v"}.mkString(" ")
+    // Pass all spark properties to executor.
+    envBuilder.addVariables(
+      Variable.newBuilder().setName("SPARK_EXECUTOR_OPTS").setValue(executorOpts))
     val cmdOptions = generateCmdOption(desc)
     val executorUri = desc.schedulerProperties.get("spark.executor.uri")
       .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
+    val appArguments = desc.command.arguments.mkString(" ")
     val cmd = if (executorUri.isDefined) {
       builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
       val folderBasename = executorUri.get.split('/').last.split('.').head
       val cmdExecutable = s"cd $folderBasename*; $prefixEnv bin/spark-submit"
       val cmdJar = s"../${desc.jarUrl.split("/").last}"
-      val appArguments = desc.command.arguments.mkString(" ")
       s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar $appArguments"
     } else {
       val executorSparkHome = desc.schedulerProperties.get("spark.mesos.executor.home")
@@ -307,9 +310,10 @@ private[spark] class MesosClusterSchedulerDriver(
         }
       val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getCanonicalPath
       val cmdJar = desc.jarUrl.split("/").last
-      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar"
+      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar $appArguments"
     }
     builder.setValue(cmd)
+    builder.setEnvironment(envBuilder.build())
     builder.build
   }
 

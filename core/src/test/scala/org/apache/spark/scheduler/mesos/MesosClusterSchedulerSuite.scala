@@ -39,15 +39,13 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     scheduler.recoverState
     val response =
       scheduler.submitDriver(
-        new MesosDriverDescription("jar", 1000, 1, true,
+        new MesosDriverDescription("d1", "jar", 1000, 1, true,
           createCommand, Map[String, String]()))
     assert(response.success)
-
     val response2 =
       scheduler.submitDriver(new MesosDriverDescription(
-        "jar", 1000, 1, true, createCommand, Map[String, String]()))
+        "d1", "jar", 1000, 1, true, createCommand, Map[String, String]()))
     assert(response2.success)
-
     val state = scheduler.getState()
     assert(state.queuedDrivers.exists(d => d.submissionId.get == response.submissionId))
     assert(state.queuedDrivers.exists(d => d.submissionId.get == response2.submissionId))
@@ -62,12 +60,11 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     scheduler.recoverState
     val response =
       scheduler.submitDriver(
-        new MesosDriverDescription("jar", 1000, 1, true, createCommand, Map[String, String]()))
+        new MesosDriverDescription("d1", "jar", 1000, 1, true,
+          createCommand, Map[String, String]()))
     assert(response.success)
-
     val killResponse = scheduler.killDriver(response.submissionId)
     assert(killResponse.success)
-
     val state = scheduler.getState()
     assert(state.queuedDrivers.isEmpty)
   }

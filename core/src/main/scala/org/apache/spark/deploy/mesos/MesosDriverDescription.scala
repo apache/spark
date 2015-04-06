@@ -33,6 +33,7 @@ import org.apache.spark.deploy.Command
  * @param schedulerProperties Extra properties to pass the Mesos scheduler
  */
 private[spark] case class MesosDriverDescription(
+    val name: String,
     val jarUrl: String,
     val mem: Int,
     val cores: Double,

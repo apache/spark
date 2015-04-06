@@ -27,8 +27,6 @@ import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 
-import scala.collection.mutable
-
 
 /**
  * A server that responds to requests submitted by the [[RestClient]].
@@ -87,22 +85,6 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
-    val schedulerProperties = new mutable.HashMap[String, String]
-    // Store Spark submit specific arguments here to pass to the scheduler.
-    schedulerProperties("spark.app.name") = sparkProperties.getOrElse("spark.app.name", mainClass)
-
-    sparkProperties.get("spark.executor.memory").foreach { v =>
-      schedulerProperties("spark.executor.memory") = v
-    }
-    sparkProperties.get("spark.cores.max").foreach { v =>
-      schedulerProperties("spark.cores.max") = v
-    }
-    sparkProperties.get("spark.executor.uri").foreach { v =>
-      schedulerProperties("spark.executor.uri") = v
-    }
-    sparkProperties.get("spark.mesos.executor.home").foreach { v =>
-      schedulerProperties("spark.mesos.executor.home") = v
-    }
 
     // Construct driver description
     val conf = new SparkConf(false)
@@ -119,8 +101,9 @@ private[mesos] class MesosSubmitRequestServlet(
     val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
 
     new MesosDriverDescription(
+      request.sparkProperties.get("spark.app.name").getOrElse(mainClass),
       appResource, actualDriverMemory, actualDriverCores,
-      actualSuperviseDriver, command, schedulerProperties.toMap)
+      actualSuperviseDriver, command, request.sparkProperties)
   }
 
   protected override def handleSubmit(
