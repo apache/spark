@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io.File
 
 import org.apache.spark.util.Utils
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.SparkConf
 
@@ -28,7 +28,11 @@ import org.apache.spark.SparkConf
 /**
  * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.
  */
-class LocalDirsSuite extends FunSuite {
+class LocalDirsSuite extends FunSuite with BeforeAndAfter {
+
+  before {
+    Utils.clearLocalRootDirs()
+  }
 
   test("Utils.getLocalDir() returns a valid directory, even if some local dirs are missing") {
     // Regression test for SPARK-2974

@@ -18,40 +18,52 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import org.apache.spark.sql.test._
-import org.scalatest.{FunSuite, BeforeAndAfter}
 import java.sql.DriverManager
+import java.util.{Calendar, GregorianCalendar, Properties}
+
+import org.apache.spark.sql.test._
+import org.h2.jdbc.JdbcSQLException
+import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
+import TestSQLContext.implicits._
 
 class JDBCSuite extends FunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
+  val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   before {
     Class.forName("org.h2.Driver")
-    conn = DriverManager.getConnection(url)
+    // Extra properties that will be specified for our database. We need these to test
+    // usage of parameters from OPTIONS clause in queries.
+    val properties = new Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+    properties.setProperty("rowId", "false")
+
+    conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement("create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('joe', 3)").executeUpdate()
+    conn.prepareStatement("insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
     conn.commit()
 
     sql(
       s"""
         |CREATE TEMPORARY TABLE foobar
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE')
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
       s"""
         |CREATE TEMPORARY TABLE parts
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE',
-        |partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
@@ -65,12 +77,12 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       s"""
         |CREATE TEMPORARY TABLE inttypes
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.INTTYPES')
+        |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.strtypes (a BINARY(20), b VARCHAR(20), "
       + "c VARCHAR_IGNORECASE(20), d CHAR(20), e BLOB, f CLOB)").executeUpdate()
-    var stmt = conn.prepareStatement("insert into test.strtypes values (?, ?, ?, ?, ?, ?)")
+    val stmt = conn.prepareStatement("insert into test.strtypes values (?, ?, ?, ?, ?, ?)")
     stmt.setBytes(1, testBytes)
     stmt.setString(2, "Sensitive")
     stmt.setString(3, "Insensitive")
@@ -82,7 +94,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       s"""
         |CREATE TEMPORARY TABLE strtypes
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.STRTYPES')
+        |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP)"
@@ -94,7 +106,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       s"""
         |CREATE TEMPORARY TABLE timetypes
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES')
+        |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
 
@@ -109,7 +121,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       s"""
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES')
+        |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -127,13 +139,20 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size == 0)
     assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size == 2)
     assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size == 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size == 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size == 2)
+    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size == 2)
+  }
+
+  test("SELECT * WHERE (quoted strings)") {
+    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size == 1)
   }
 
   test("SELECT first field") {
     val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size == 3)
     assert(names(0).equals("fred"))
-    assert(names(1).equals("joe"))
+    assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
   }
 
@@ -164,17 +183,17 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Basic API") {
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE").collect.size == 3)
+    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect.size == 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    val parts = JDBCPartitioningInfo("THEID", 0, 4, 3)
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE", parts).collect.size == 3)
+    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
+      .collect.size == 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE", parts).collect.size == 3)
+    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts).collect.size == 3)
   }
 
   test("H2 integral types") {
@@ -209,18 +228,22 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
-    assert(rows(0).getAs[java.sql.Timestamp](0).getHours == 12)
-    assert(rows(0).getAs[java.sql.Timestamp](0).getMinutes == 34)
-    assert(rows(0).getAs[java.sql.Timestamp](0).getSeconds == 56)
-    assert(rows(0).getAs[java.sql.Date](1).getYear == 96)
-    assert(rows(0).getAs[java.sql.Date](1).getMonth == 0)
-    assert(rows(0).getAs[java.sql.Date](1).getDate == 1)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getYear == 102)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getMonth == 1)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getDate == 20)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getHours == 11)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getMinutes == 22)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getSeconds == 33)
+    val cal = new GregorianCalendar(java.util.Locale.ROOT)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
+    assert(cal.get(Calendar.HOUR_OF_DAY) == 12)
+    assert(cal.get(Calendar.MINUTE) == 34)
+    assert(cal.get(Calendar.SECOND) == 56)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
+    assert(cal.get(Calendar.YEAR) == 1996)
+    assert(cal.get(Calendar.MONTH) == 0)
+    assert(cal.get(Calendar.DAY_OF_MONTH) == 1)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](2))
+    assert(cal.get(Calendar.YEAR) == 2002)
+    assert(cal.get(Calendar.MONTH) == 1)
+    assert(cal.get(Calendar.DAY_OF_MONTH) == 20)
+    assert(cal.get(Calendar.HOUR) == 11)
+    assert(cal.get(Calendar.MINUTE) == 22)
+    assert(cal.get(Calendar.SECOND) == 33)
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos == 543543543)
   }
 
@@ -232,17 +255,31 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         .equals(new BigDecimal("123456789012345.54321543215432100000")))
   }
 
-
   test("SQL query as table name") {
     sql(
       s"""
         |CREATE TEMPORARY TABLE hack
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable '(SELECT B, B*B FROM TEST.FLTTYPES)')
+        |OPTIONS (url '$url', dbtable '(SELECT B, B*B FROM TEST.FLTTYPES)',
+        |         user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
     val rows = sql("SELECT * FROM hack").collect()
     assert(rows(0).getDouble(0) == 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
+  }
+
+  test("Pass extra properties via OPTIONS") {
+    // We set rowId to false during setup, which means that _ROWID_ column should be absent from
+    // all tables. If rowId is true (default), the query below doesn't throw an exception.
+    intercept[JdbcSQLException] {
+      sql(
+        s"""
+          |CREATE TEMPORARY TABLE abc
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
+          |         user 'testUser', password 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
+    }
   }
 }

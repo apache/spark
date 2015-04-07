@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -38,10 +40,10 @@ case class ShuffledHashJoin(
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[ClusteredDistribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
       val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
       hashJoin(streamIter, hashed)

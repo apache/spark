@@ -228,7 +228,6 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks() {
-    val startTime = System.currentTimeMillis
     val iter = localBlocks.iterator
     while (iter.hasNext) {
       val blockId = iter.next()
@@ -246,7 +245,6 @@ final class ShuffleBlockFetcherIterator(
           return
       }
     }
-    shuffleMetrics.incLocalReadTime(System.currentTimeMillis - startTime)
   }
 
   private[this] def initialize(): Unit = {

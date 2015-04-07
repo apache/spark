@@ -38,7 +38,8 @@ class NullableColumnBuilderSuite extends FunSuite {
   import ColumnarTestUtils._
 
   Seq(
-    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC, DATE, TIMESTAMP
+    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, FIXED_DECIMAL(15, 10), BINARY, GENERIC,
+    DATE, TIMESTAMP
   ).foreach {
     testNullableColumnBuilder(_)
   }

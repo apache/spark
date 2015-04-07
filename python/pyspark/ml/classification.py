@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.ml.util import inherit_doc, keyword_only
+from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
+from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel']

@@ -25,16 +25,15 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import com.google.common.io.Files
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+import org.apache.spark.util.Utils
 
 class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
 
@@ -60,7 +59,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     )
 
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
-    tempDirectory = Files.createTempDir()
+    tempDirectory = Utils.createTempDir()
     ssc.checkpoint(tempDirectory.getAbsolutePath)
   }
 
@@ -68,10 +67,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     if (ssc != null) {
       ssc.stop()
     }
-    if (tempDirectory != null && tempDirectory.exists()) {
-      FileUtils.deleteDirectory(tempDirectory)
-      tempDirectory = null
-    }
+    Utils.deleteRecursively(tempDirectory)
     tearDownKafka()
   }
 

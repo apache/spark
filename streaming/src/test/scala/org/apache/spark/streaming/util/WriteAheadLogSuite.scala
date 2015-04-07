@@ -26,7 +26,7 @@ import scala.language.{implicitConversions, postfixOps}
 import WriteAheadLogSuite._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
@@ -197,7 +197,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
+    manager.cleanupOldLogs(manualClock.getTimeMillis() / 2, waitForCompletion)
 
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
@@ -219,7 +219,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
-    manualClock.addToTime(100000)
+    manualClock.advance(100000)
     writeDataUsingManager(testDir, dataToWrite2, manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
@@ -279,12 +279,12 @@ object WriteAheadLogSuite {
       manualClock: ManualClock = new ManualClock,
       stopManager: Boolean = true
     ): WriteAheadLogManager = {
-    if (manualClock.currentTime < 100000) manualClock.setTime(10000)
+    if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
       rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = manualClock)
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      manualClock.addToTime(500)
+      manualClock.advance(500)
       manager.writeToLog(item)
     }
     if (stopManager) manager.stop()

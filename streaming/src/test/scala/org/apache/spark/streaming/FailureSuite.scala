@@ -20,15 +20,13 @@ package org.apache.spark.streaming
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
-import java.io.File
-
 /**
  * This testsuite tests master failures at random times while the stream is running using
  * the real clock.
  */
 class FailureSuite extends TestSuiteBase with Logging {
 
-  val directory = Utils.createTempDir().getAbsolutePath
+  val directory = Utils.createTempDir()
   val numBatches = 30
 
   override def batchDuration = Milliseconds(1000)
@@ -36,16 +34,16 @@ class FailureSuite extends TestSuiteBase with Logging {
   override def useManualClock = false
 
   override def afterFunction() {
-    Utils.deleteRecursively(new File(directory))
+    Utils.deleteRecursively(directory)
     super.afterFunction()
   }
 
   test("multiple failures with map") {
-    MasterFailureTest.testMap(directory, numBatches, batchDuration)
+    MasterFailureTest.testMap(directory.getAbsolutePath, numBatches, batchDuration)
   }
 
   test("multiple failures with updateStateByKey") {
-    MasterFailureTest.testUpdateStateByKey(directory, numBatches, batchDuration)
+    MasterFailureTest.testUpdateStateByKey(directory.getAbsolutePath, numBatches, batchDuration)
   }
 }
 

@@ -1064,15 +1064,16 @@ class SparkILoop(
   private def main(settings: Settings): Unit = process(settings)
 }
 
-object SparkILoop {
+object SparkILoop extends Logging {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
-    val propJars = sys.props.get("spark.jars").flatMap { p =>
-      if (p == "") None else Some(p)
+    if (envJars.isDefined) {
+      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
+    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
     val jars = propJars.orElse(envJars).getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }

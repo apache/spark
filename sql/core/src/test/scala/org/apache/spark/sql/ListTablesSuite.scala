@@ -43,6 +43,10 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter {
       tables().filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
+    checkAnswer(
+      sql("SHOW tables").filter("tableName = 'ListTablesSuiteTable'"),
+      Row("ListTablesSuiteTable", true))
+
     catalog.unregisterTable(Seq("ListTablesSuiteTable"))
     assert(tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
@@ -52,25 +56,32 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter {
       tables("DB").filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
+    checkAnswer(
+      sql("show TABLES in DB").filter("tableName = 'ListTablesSuiteTable'"),
+      Row("ListTablesSuiteTable", true))
+
     catalog.unregisterTable(Seq("ListTablesSuiteTable"))
     assert(tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
   test("query the returned DataFrame of tables") {
-    val tableDF = tables()
-    val schema = StructType(
-      StructField("tableName", StringType, true) ::
+    val expectedSchema = StructType(
+      StructField("tableName", StringType, false) ::
       StructField("isTemporary", BooleanType, false) :: Nil)
-    assert(schema === tableDF.schema)
 
-    tableDF.registerTempTable("tables")
-    checkAnswer(
-      sql("SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
-      Row(true, "ListTablesSuiteTable")
-    )
-    checkAnswer(
-      tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
-      Row("tables", true))
-    dropTempTable("tables")
+    Seq(tables(), sql("SHOW TABLes")).foreach {
+      case tableDF =>
+        assert(expectedSchema === tableDF.schema)
+
+        tableDF.registerTempTable("tables")
+        checkAnswer(
+          sql("SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
+          Row(true, "ListTablesSuiteTable")
+        )
+        checkAnswer(
+          tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
+          Row("tables", true))
+        dropTempTable("tables")
+    }
   }
 }

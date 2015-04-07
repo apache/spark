@@ -32,8 +32,7 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
-import org.apache.spark.streaming.util.ManualClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -61,7 +60,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
 
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
@@ -147,7 +146,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   // This tests whether spark conf persists through checkpoints, and certain
   // configs gets scrubbed
-  test("persistence of conf through checkpoints") {
+  test("recovery of conf through checkpoints") {
     val key = "spark.mykey"
     val value = "myvalue"
     System.setProperty(key, value)
@@ -155,7 +154,7 @@ class CheckpointSuite extends TestSuiteBase {
     val originalConf = ssc.conf
 
     val cp = new Checkpoint(ssc, Time(1000))
-    val cpConf = cp.sparkConf
+    val cpConf = cp.createSparkConf()
     assert(cpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(cpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(cpConf.get(key) === value)
@@ -164,7 +163,8 @@ class CheckpointSuite extends TestSuiteBase {
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
 
-    val newCpConf = newCp.sparkConf
+    // Verify new SparkConf has all the previous properties
+    val newCpConf = newCp.createSparkConf()
     assert(newCpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(newCpConf.get(key) === value)
@@ -175,6 +175,20 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf = ssc.conf
     assert(restoredConf.get(key) === value)
+    ssc.stop()
+
+    // Verify new SparkConf picks up new master url if it is set in the properties. See SPARK-6331.
+    try {
+      val newMaster = "local[100]"
+      System.setProperty("spark.master", newMaster)
+      val newCpConf = newCp.createSparkConf()
+      assert(newCpConf.get("spark.master") === newMaster)
+      assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+      ssc = new StreamingContext(null, newCp, null)
+      assert(ssc.sparkContext.master === newMaster)
+    } finally {
+      System.clearProperty("spark.master")
+    }
   }
 
 
@@ -208,7 +222,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -231,7 +245,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsNewAPIHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -269,7 +283,7 @@ class CheckpointSuite extends TestSuiteBase {
     //
     // After SPARK-5079 is addressed, should be able to remove this test since a strengthened
     // version of the other saveAsHadoopFile* tests would prevent regressions for this issue.
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -324,13 +338,13 @@ class CheckpointSuite extends TestSuiteBase {
      * Writes a file named `i` (which contains the number `i`) to the test directory and sets its
      * modification time to `clock`'s current time.
      */
-    def writeFile(i: Int, clock: ManualClock): Unit = {
+    def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
       Files.write(i + "\n", file, Charsets.UTF_8)
-      assert(file.setLastModified(clock.currentTime()))
+      assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:
-      assert(file.lastModified() === clock.currentTime())
+      assert(file.lastModified() === clock.getTimeMillis())
     }
 
     /**
@@ -372,13 +386,13 @@ class CheckpointSuite extends TestSuiteBase {
         ssc.start()
 
         // Advance half a batch so that the first file is created after the StreamingContext starts
-        clock.addToTime(batchDuration.milliseconds / 2)
+        clock.advance(batchDuration.milliseconds / 2)
         // Create files and advance manual clock to process them
         for (i <- Seq(1, 2, 3)) {
           writeFile(i, clock)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           if (i != 3) {
             // Since we want to shut down while the 3rd batch is processing
             eventually(eventuallyTimeout) {
@@ -386,7 +400,7 @@ class CheckpointSuite extends TestSuiteBase {
             }
           }
         }
-        clock.addToTime(batchDuration.milliseconds)
+        clock.advance(batchDuration.milliseconds)
         eventually(eventuallyTimeout) {
           // Wait until all files have been recorded and all batches have started
           assert(recordedFiles(ssc) === Seq(1, 2, 3) && batchCounter.getNumStartedBatches === 3)
@@ -410,7 +424,7 @@ class CheckpointSuite extends TestSuiteBase {
         writeFile(i, clock)
         // Advance the clock after creating the file to avoid a race when
         // setting its modification time
-        clock.addToTime(batchDuration.milliseconds)
+        clock.advance(batchDuration.milliseconds)
       }
 
       // Recover context from checkpoint file and verify whether the files that were
@@ -419,7 +433,7 @@ class CheckpointSuite extends TestSuiteBase {
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
         // So that the restarted StreamingContext's clock has gone forward in time since failure
         ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration * 3).milliseconds.toString)
-        val oldClockTime = clock.currentTime()
+        val oldClockTime = clock.getTimeMillis()
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
@@ -430,7 +444,7 @@ class CheckpointSuite extends TestSuiteBase {
         ssc.start()
         // Verify that the clock has traveled forward to the expected time
         eventually(eventuallyTimeout) {
-          clock.currentTime() === oldClockTime
+          clock.getTimeMillis() === oldClockTime
         }
         // Wait for pre-failure batch to be recomputed (3 while SSC was down plus last batch)
         val numBatchesAfterRestart = 4
@@ -441,12 +455,12 @@ class CheckpointSuite extends TestSuiteBase {
           writeFile(i, clock)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
           }
         }
-        clock.addToTime(batchDuration.milliseconds)
+        clock.advance(batchDuration.milliseconds)
         logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed after restart")
         ssc.stop()
@@ -521,12 +535,12 @@ class CheckpointSuite extends TestSuiteBase {
    */
   def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    logInfo("Manual clock before advancing = " + clock.currentTime())
+    logInfo("Manual clock before advancing = " + clock.getTimeMillis())
     for (i <- 1 to numBatches.toInt) {
-      clock.addToTime(batchDuration.milliseconds)
+      clock.advance(batchDuration.milliseconds)
       Thread.sleep(batchDuration.milliseconds)
     }
-    logInfo("Manual clock after advancing = " + clock.currentTime())
+    logInfo("Manual clock after advancing = " + clock.getTimeMillis())
     Thread.sleep(batchDuration.milliseconds)
 
     val outputStream = ssc.graph.getOutputStreams.filter { dstream =>

@@ -372,8 +372,12 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     testRDD2.cache()
     testRDD3.cache()
 
+    val numIteration = 10
+
     val lrA = new LogisticRegressionWithLBFGS().setIntercept(true)
+    lrA.optimizer.setNumIterations(numIteration)
     val lrB = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(false)
+    lrB.optimizer.setNumIterations(numIteration)
 
     val modelA1 = lrA.run(testRDD1, initialWeights)
     val modelA2 = lrA.run(testRDD2, initialWeights)
@@ -420,6 +424,12 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     lr.optimizer.setConvergenceTol(1E-15).setNumIterations(200)
 
     val model = lr.run(testRDD)
+
+    val numFeatures = testRDD.map(_.features.size).first()
+    val initialWeights = Vectors.dense(new Array[Double]((numFeatures + 1) * 2))
+    val model2 = lr.run(testRDD, initialWeights)
+
+    LogisticRegressionSuite.checkModelsEqual(model, model2)
 
     /**
      * The following is the instruction to reproduce the model using R's glmnet package.

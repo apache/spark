@@ -31,19 +31,31 @@ if sys.version_info[0] != 2:
 import atexit
 import os
 import platform
+
+import py4j
+
 import pyspark
 from pyspark.context import SparkContext
+from pyspark.sql import SQLContext, HiveContext
 from pyspark.storagelevel import StorageLevel
 
-# this is the equivalent of ADD_JARS
-add_files = (os.environ.get("ADD_FILES").split(',')
-             if os.environ.get("ADD_FILES") is not None else None)
+# this is the deprecated equivalent of ADD_JARS
+add_files = None
+if os.environ.get("ADD_FILES") is not None:
+    add_files = os.environ.get("ADD_FILES").split(',')
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
 sc = SparkContext(appName="PySparkShell", pyFiles=add_files)
 atexit.register(lambda: sc.stop())
+
+try:
+    # Try to access HiveConf, it will raise exception if Hive is not added
+    sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+    sqlCtx = HiveContext(sc)
+except py4j.protocol.Py4JError:
+    sqlCtx = SQLContext(sc)
 
 print("""Welcome to
       ____              __
@@ -56,9 +68,10 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-print("SparkContext available as sc.")
+print("SparkContext available as sc, %s available as sqlCtx." % sqlCtx.__class__.__name__)
 
 if add_files is not None:
+    print("Warning: ADD_FILES environment variable is deprecated, use --py-files argument instead")
     print("Adding files: [%s]" % ", ".join(add_files))
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,

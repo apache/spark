@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{DataType, NativeType}
+import org.apache.spark.sql.types.{Decimal, DataType, NativeType}
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int) = {
@@ -41,16 +41,17 @@ object ColumnarTestUtils {
     }
 
     (columnType match {
-      case BYTE      => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
-      case SHORT     => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
-      case INT       => Random.nextInt()
-      case LONG      => Random.nextLong()
-      case FLOAT     => Random.nextFloat()
-      case DOUBLE    => Random.nextDouble()
-      case STRING    => Random.nextString(Random.nextInt(32))
-      case BOOLEAN   => Random.nextBoolean()
-      case BINARY    => randomBytes(Random.nextInt(32))
-      case DATE      => Random.nextInt()
+      case BYTE => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
+      case SHORT => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
+      case INT => Random.nextInt()
+      case LONG => Random.nextLong()
+      case FLOAT => Random.nextFloat()
+      case DOUBLE => Random.nextDouble()
+      case FIXED_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
+      case STRING => Random.nextString(Random.nextInt(32))
+      case BOOLEAN => Random.nextBoolean()
+      case BINARY => randomBytes(Random.nextInt(32))
+      case DATE => Random.nextInt()
       case TIMESTAMP =>
         val timestamp = new Timestamp(Random.nextLong())
         timestamp.setNanos(Random.nextInt(999999999))

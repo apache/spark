@@ -18,6 +18,7 @@
 package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
+import java.io.IOException
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -26,10 +27,10 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.jblas.DoubleMatrix
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.netlib.util.intW
 
-import org.apache.spark.{HashPartitioner, Logging, Partitioner}
+import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -47,7 +48,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
-  with HasPredictionCol {
+  with HasPredictionCol with HasCheckpointInterval {
 
   /**
    * Param for rank of the matrix factorization.
@@ -165,6 +166,7 @@ class ALSModel private[ml] (
     itemFactors: RDD[(Int, Array[Float])])
   extends Model[ALSModel] with ALSParams {
 
+  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
@@ -188,7 +190,7 @@ class ALSModel private[ml] (
       .select(dataset("*"), predict(users("features"), items("features")).as(map(predictionCol)))
   }
 
-  override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap)
   }
 }
@@ -263,6 +265,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   /** @group setParam */
   def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
+  /** @group setParam */
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
@@ -275,6 +280,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   setMaxIter(20)
   setRegParam(1.0)
+  setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
     val map = this.paramMap ++ paramMap
@@ -286,13 +292,14 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
       numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
       maxIter = map(maxIter), regParam = map(regParam), implicitPrefs = map(implicitPrefs),
-      alpha = map(alpha), nonnegative = map(nonnegative))
+      alpha = map(alpha), nonnegative = map(nonnegative),
+      checkpointInterval = map(checkpointInterval))
     val model = new ALSModel(this, map, map(rank), userFactors, itemFactors)
     Params.inheritValues(map, this, model)
     model
   }
 
-  override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap)
   }
 }
@@ -313,7 +320,7 @@ object ALS extends Logging {
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
-    /** Solves a least squares problem (possibly with other constraints). */
+    /** Solves a least squares problem with regularization (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
 
@@ -325,20 +332,19 @@ object ALS extends Logging {
     /**
      * Solves a least squares problem with L2 regularization:
      *
-     *   min norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     *   min norm(A x - b)^2^ + lambda * norm(x)^2^
      *
      * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
-     * @param lambda regularization constant, which will be scaled by n
+     * @param lambda regularization constant
      * @return the solution x
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       val k = ne.k
       // Add scaled lambda to the diagonals of AtA.
-      val scaledlambda = lambda * ne.n
       var i = 0
       var j = 2
       while (i < ne.triK) {
-        ne.ata(i) += scaledlambda
+        ne.ata(i) += lambda
         i += j
         j += 1
       }
@@ -361,14 +367,14 @@ object ALS extends Logging {
   private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
-    private var ata: DoubleMatrix = _
+    private var ata: Array[Double] = _
     private var initialized: Boolean = false
 
     private def initialize(rank: Int): Unit = {
       if (!initialized) {
         this.rank = rank
         workspace = NNLS.createWorkspace(rank)
-        ata = new DoubleMatrix(rank, rank)
+        ata = new Array[Double](rank * rank)
         initialized = true
       } else {
         require(this.rank == rank)
@@ -384,8 +390,8 @@ object ALS extends Logging {
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       val rank = ne.k
       initialize(rank)
-      fillAtA(ne.ata, lambda * ne.n)
-      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      fillAtA(ne.ata, lambda)
+      val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -398,23 +404,30 @@ object ALS extends Logging {
       var i = 0
       var pos = 0
       var a = 0.0
-      val data = ata.data
       while (i < rank) {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          data(i * rank + j) = a
-          data(j * rank + i) = a
+          ata(i * rank + j) = a
+          ata(j * rank + i) = a
           pos += 1
           j += 1
         }
-        data(i * rank + i) += lambda
+        ata(i * rank + i) += lambda
         i += 1
       }
     }
   }
 
-  /** Representing a normal equation (ALS' subproblem). */
+  /**
+   * Representing a normal equation to solve the following weighted least squares problem:
+   *
+   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - b,,i,,)^2^ + lambda * x^T^ x.
+   *
+   * Its normal equation is given by
+   *
+   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - b,,i,, a,,i,,) + lambda * x = 0.
+   */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
     /** Number of entries in the upper triangular part of a k-by-k matrix. */
@@ -423,8 +436,6 @@ object ALS extends Logging {
     val ata = new Array[Double](triK)
     /** A^T^ * b */
     val atb = new Array[Double](k)
-    /** Number of observations. */
-    var n = 0
 
     private val da = new Array[Double](k)
     private val upper = "U"
@@ -438,28 +449,13 @@ object ALS extends Logging {
     }
 
     /** Adds an observation. */
-    def add(a: Array[Float], b: Float): this.type = {
+    def add(a: Array[Float], b: Double, c: Double = 1.0): this.type = {
+      require(c >= 0.0)
       require(a.length == k)
       copyToDouble(a)
-      blas.dspr(upper, k, 1.0, da, 1, ata)
-      blas.daxpy(k, b.toDouble, da, 1, atb, 1)
-      n += 1
-      this
-    }
-
-    /**
-     * Adds an observation with implicit feedback. Note that this does not increment the counter.
-     */
-    def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
-      require(a.length == k)
-      // Extension to the original paper to handle b < 0. confidence is a function of |b| instead
-      // so that it is never negative.
-      val confidence = 1.0 + alpha * math.abs(b)
-      copyToDouble(a)
-      blas.dspr(upper, k, confidence - 1.0, da, 1, ata)
-      // For b <= 0, the corresponding preference is 0. So the term below is only added for b > 0.
-      if (b > 0) {
-        blas.daxpy(k, confidence, da, 1, atb, 1)
+      blas.dspr(upper, k, c, da, 1, ata)
+      if (b != 0.0) {
+        blas.daxpy(k, c * b, da, 1, atb, 1)
       }
       this
     }
@@ -469,7 +465,6 @@ object ALS extends Logging {
       require(other.k == k)
       blas.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       blas.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
-      n += other.n
       this
     }
 
@@ -477,7 +472,6 @@ object ALS extends Logging {
     def reset(): Unit = {
       ju.Arrays.fill(ata, 0.0)
       ju.Arrays.fill(atb, 0.0)
-      n = 0
     }
   }
 
@@ -496,13 +490,14 @@ object ALS extends Logging {
       nonnegative: Boolean = false,
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
     val sc = ratings.sparkContext
-    val userPart = new HashPartitioner(numUserBlocks)
-    val itemPart = new HashPartitioner(numItemBlocks)
+    val userPart = new ALSPartitioner(numUserBlocks)
+    val itemPart = new ALSPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
     val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
@@ -523,6 +518,18 @@ object ALS extends Logging {
     val seedGen = new XORShiftRandom(seed)
     var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
     var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
+    var previousCheckpointFile: Option[String] = None
+    val shouldCheckpoint: Int => Boolean = (iter) =>
+      sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)
+    val deletePreviousCheckpointFile: () => Unit = () =>
+      previousCheckpointFile.foreach { file =>
+        try {
+          FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
+        } catch {
+          case e: IOException =>
+            logWarning(s"Cannot delete checkpoint file $file:", e)
+        }
+      }
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
@@ -530,19 +537,30 @@ object ALS extends Logging {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, solver)
         previousItemFactors.unpersist()
-        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
-          itemFactors.checkpoint()
-        }
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
+        // TODO: Generalize PeriodicGraphCheckpointer and use it here.
+        if (shouldCheckpoint(iter)) {
+          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
+        }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+        if (shouldCheckpoint(iter)) {
+          deletePreviousCheckpointFile()
+          previousCheckpointFile = itemFactors.getCheckpointFile
+        }
         previousUserFactors.unpersist()
       }
     } else {
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
+        if (shouldCheckpoint(iter)) {
+          itemFactors.checkpoint()
+          itemFactors.count() // checkpoint item factors and cut lineage
+          deletePreviousCheckpointFile()
+          previousCheckpointFile = itemFactors.getCheckpointFile
+        }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
       }
@@ -550,13 +568,23 @@ object ALS extends Logging {
     val userIdAndFactors = userInBlocks
       .mapValues(_.srcIds)
       .join(userFactors)
-      .values
+      .mapPartitions({ items =>
+        items.flatMap { case (_, (ids, factors)) =>
+          ids.view.zip(factors)
+        }
+      // Preserve the partitioning because IDs are consistent with the partitioners in userInBlocks
+      // and userFactors.
+      }, preservesPartitioning = true)
       .setName("userFactors")
       .persist(finalRDDStorageLevel)
     val itemIdAndFactors = itemInBlocks
       .mapValues(_.srcIds)
       .join(itemFactors)
-      .values
+      .mapPartitions({ items =>
+        items.flatMap { case (_, (ids, factors)) =>
+          ids.view.zip(factors)
+        }
+      }, preservesPartitioning = true)
       .setName("itemFactors")
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
@@ -569,13 +597,7 @@ object ALS extends Logging {
       itemOutBlocks.unpersist()
       blockRatings.unpersist()
     }
-    val userOutput = userIdAndFactors.flatMap { case (ids, factors) =>
-      ids.view.zip(factors)
-    }
-    val itemOutput = itemIdAndFactors.flatMap { case (ids, factors) =>
-      ids.view.zip(factors)
-    }
-    (userOutput, itemOutput)
+    (userIdAndFactors, itemIdAndFactors)
   }
 
   /**
@@ -995,15 +1017,15 @@ object ALS extends Logging {
           "Converting to local indices took " + (System.nanoTime() - start) / 1e9 + " seconds.")
         val dstLocalIndices = dstIds.map(dstIdToLocalIndex.apply)
         (srcBlockId, (dstBlockId, srcIds, dstLocalIndices, ratings))
-    }.groupByKey(new HashPartitioner(srcPart.numPartitions))
-        .mapValues { iter =>
-      val builder =
-        new UncompressedInBlockBuilder[ID](new LocalIndexEncoder(dstPart.numPartitions))
-      iter.foreach { case (dstBlockId, srcIds, dstLocalIndices, ratings) =>
-        builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
-      }
-      builder.build().compress()
-    }.setName(prefix + "InBlocks")
+    }.groupByKey(new ALSPartitioner(srcPart.numPartitions))
+      .mapValues { iter =>
+        val builder =
+          new UncompressedInBlockBuilder[ID](new LocalIndexEncoder(dstPart.numPartitions))
+        iter.foreach { case (dstBlockId, srcIds, dstLocalIndices, ratings) =>
+          builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
+        }
+        builder.build().compress()
+      }.setName(prefix + "InBlocks")
       .persist(storageLevel)
     val outBlocks = inBlocks.mapValues { case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
       val encoder = new LocalIndexEncoder(dstPart.numPartitions)
@@ -1064,7 +1086,7 @@ object ALS extends Logging {
           (dstBlockId, (srcBlockId, activeIndices.map(idx => srcFactors(idx))))
         }
     }
-    val merged = srcOut.groupByKey(new HashPartitioner(dstInBlocks.partitions.length))
+    val merged = srcOut.groupByKey(new ALSPartitioner(dstInBlocks.partitions.length))
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
@@ -1080,6 +1102,7 @@ object ALS extends Logging {
             ls.merge(YtY.get)
           }
           var i = srcPtrs(j)
+          var numExplicits = 0
           while (i < srcPtrs(j + 1)) {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
@@ -1087,13 +1110,23 @@ object ALS extends Logging {
             val srcFactor = sortedSrcFactors(blockId)(localIndex)
             val rating = ratings(i)
             if (implicitPrefs) {
-              ls.addImplicit(srcFactor, rating, alpha)
+              // Extension to the original paper to handle b < 0. confidence is a function of |b|
+              // instead so that it is never negative. c1 is confidence - 1.0.
+              val c1 = alpha * math.abs(rating)
+              // For rating <= 0, the corresponding preference is 0. So the term below is only added
+              // for rating > 0. Because YtY is already added, we need to adjust the scaling here.
+              if (rating > 0) {
+                numExplicits += 1
+                ls.add(srcFactor, (c1 + 1.0) / c1, c1)
+              }
             } else {
               ls.add(srcFactor, rating)
+              numExplicits += 1
             }
             i += 1
           }
-          dstFactors(j) = solver.solve(ls, regParam)
+          // Weight lambda by the number of explicit ratings based on the ALS-WR paper.
+          dstFactors(j) = solver.solve(ls, numExplicits * regParam)
           j += 1
         }
         dstFactors
@@ -1107,7 +1140,7 @@ object ALS extends Logging {
   private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
     factorBlocks.values.aggregate(new NormalEquation(rank))(
       seqOp = (ne, factors) => {
-        factors.foreach(ne.add(_, 0.0f))
+        factors.foreach(ne.add(_, 0.0))
         ne
       },
       combOp = (ne1, ne2) => ne1.merge(ne2))
@@ -1149,4 +1182,11 @@ object ALS extends Logging {
       encoded & localIndexMask
     }
   }
+
+  /**
+   * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
+   * we have getPartition(getPartition(k)) = getPartition(k). Since the the default HashPartitioner
+   * satisfies this requirement, we simply use a type alias here.
+   */
+  private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
 }

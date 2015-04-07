@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.sql.Timestamp
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 
@@ -72,6 +72,11 @@ trait ScalaReflection {
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
     case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
+    case (r: Row, structType: StructType) =>
+      new GenericRow(
+        r.toSeq.zip(structType.fields).map { case (elem, field) =>
+          convertToCatalyst(elem, field.dataType)
+        }.toArray)
     case (other, _) => other
   }
 
@@ -91,9 +96,9 @@ trait ScalaReflection {
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
     // TODO: This is very slow!!!
-    new GenericRow(
+    new GenericRowWithSchema(
       r.toSeq.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
+        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray, schema)
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
@@ -179,6 +184,8 @@ trait ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+      case other =>
+        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
   }
 

@@ -22,13 +22,12 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
-import util.ManualClock
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
+import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
@@ -586,7 +585,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         for (i <- 0 until input.size) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(200)
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           collectRddInfo()
         }
 
@@ -637,8 +636,8 @@ class BasicOperationsSuite extends TestSuiteBase {
         ssc.graph.getOutputStreams().head.dependencies.head.asInstanceOf[DStream[T]]
       if (rememberDuration != null) ssc.remember(rememberDuration)
       val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
-      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      assert(clock.currentTime() === Seconds(10).milliseconds)
+      val clock = ssc.scheduler.clock.asInstanceOf[Clock]
+      assert(clock.getTimeMillis() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream
     }

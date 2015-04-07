@@ -90,7 +90,7 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("transform works on nodes with Option children") {
-    val dummy1 = Dummy(Some(Literal("1", StringType)))
+    val dummy1 = Dummy(Some(Literal.create("1", StringType)))
     val dummy2 = Dummy(None)
     val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
 
@@ -103,5 +103,19 @@ class TreeNodeSuite extends FunSuite {
     actual = dummy2 transform toZero
     assert(actual === Dummy(None))
   }
+
+  test("preserves origin") {
+    CurrentOrigin.setPosition(1,1)
+    val add = Add(Literal(1), Literal(1))
+    CurrentOrigin.reset()
+
+    val transformed = add transform {
+      case Literal(1, _) => Literal(2)
+    }
+
+    assert(transformed.origin.line.isDefined)
+    assert(transformed.origin.startPosition.isDefined)
+  }
+
 
 }

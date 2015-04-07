@@ -16,8 +16,9 @@
 #
 
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
-from pyspark.ml.util import inherit_doc, keyword_only
+from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaTransformer
+from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Tokenizer', 'HashingTF']
 

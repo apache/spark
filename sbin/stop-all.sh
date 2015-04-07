@@ -17,8 +17,8 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Run this on the master nde
+# Stop all spark daemons.
+# Run this on the master node.
 
 
 sbin="`dirname "$0"`"

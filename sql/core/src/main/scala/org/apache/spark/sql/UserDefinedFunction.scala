@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  *   df.select( predict(df("score")) )
  * }}}
  */
-case class UserDefinedFunction(f: AnyRef, dataType: DataType) {
+case class UserDefinedFunction protected[sql] (f: AnyRef, dataType: DataType) {
 
   def apply(exprs: Column*): Column = {
     Column(ScalaUdf(f, dataType, exprs.map(_.expr)))
@@ -58,6 +58,7 @@ private[sql] case class UserDefinedPythonFunction(
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType) {
 
+  /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
     val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
       accumulator, dataType, exprs.map(_.expr))

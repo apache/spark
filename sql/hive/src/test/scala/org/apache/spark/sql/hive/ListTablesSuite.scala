@@ -49,29 +49,33 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("get all tables of current database") {
-    val allTables = tables()
-    // We are using default DB.
-    checkAnswer(
-      allTables.filter("tableName = 'listtablessuitetable'"),
-      Row("listtablessuitetable", true))
-    assert(allTables.filter("tableName = 'indblisttablessuitetable'").count() === 0)
-    checkAnswer(
-      allTables.filter("tableName = 'hivelisttablessuitetable'"),
-      Row("hivelisttablessuitetable", false))
-    assert(allTables.filter("tableName = 'hiveindblisttablessuitetable'").count() === 0)
+    Seq(tables(), sql("SHOW TABLes")).foreach {
+      case allTables =>
+        // We are using default DB.
+        checkAnswer(
+          allTables.filter("tableName = 'listtablessuitetable'"),
+          Row("listtablessuitetable", true))
+        assert(allTables.filter("tableName = 'indblisttablessuitetable'").count() === 0)
+        checkAnswer(
+          allTables.filter("tableName = 'hivelisttablessuitetable'"),
+          Row("hivelisttablessuitetable", false))
+        assert(allTables.filter("tableName = 'hiveindblisttablessuitetable'").count() === 0)
+    }
   }
 
   test("getting all tables with a database name") {
-    val allTables = tables("ListTablesSuiteDB")
-    checkAnswer(
-      allTables.filter("tableName = 'listtablessuitetable'"),
-      Row("listtablessuitetable", true))
-    checkAnswer(
-      allTables.filter("tableName = 'indblisttablessuitetable'"),
-      Row("indblisttablessuitetable", true))
-    assert(allTables.filter("tableName = 'hivelisttablessuitetable'").count() === 0)
-    checkAnswer(
-      allTables.filter("tableName = 'hiveindblisttablessuitetable'"),
-      Row("hiveindblisttablessuitetable", false))
+    Seq(tables("listtablessuiteDb"), sql("SHOW TABLes in listTablesSuitedb")).foreach {
+      case allTables =>
+        checkAnswer(
+          allTables.filter("tableName = 'listtablessuitetable'"),
+          Row("listtablessuitetable", true))
+        checkAnswer(
+          allTables.filter("tableName = 'indblisttablessuitetable'"),
+          Row("indblisttablessuitetable", true))
+        assert(allTables.filter("tableName = 'hivelisttablessuitetable'").count() === 0)
+        checkAnswer(
+          allTables.filter("tableName = 'hiveindblisttablessuitetable'"),
+          Row("hiveindblisttablessuitetable", false))
+    }
   }
 }
