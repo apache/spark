@@ -53,8 +53,9 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
       .run(sc.parallelize(similarities, 2))
 
     assert(model.getK() == 5)
-    assert(model.findCluster(5).toSeq.sorted == Seq(4, 5, 6, 7))
-    assert(model.findClusterID(14) == model.findClusterID(15))
+    assert(model.findCluster(5).sorted === Array[Long](4, 5, 6, 7))
+    assert(model.findClusterID(14) != -1)
+    assert(model.findClusterID(14) === model.findClusterID(15))
   }
 
   test("normalize") {

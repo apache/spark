@@ -46,37 +46,48 @@ class AffinityPropagationModel(
 
   /**
    * Find the cluster the given vertex belongs
+   * @param vertexID vertex id.
+   * @return a [[Array]] that contains vertex ids in the same cluster of given vertexID. If
+   *         the given vertex doesn't belong to any cluster, return null.
    */
-  def findCluster(vertexID: Long): Set[Long] = {
-    clusters.filter(_.contains(vertexID))(0)
+  def findCluster(vertexID: Long): Array[Long] = {
+    val cluster = clusters.filter(_.contains(vertexID))
+    if (cluster.nonEmpty) {
+      cluster(0).toArray
+    } else {
+      null
+    }
   } 
  
   /**
-   * Find the cluster id the given vertex belongs
+   * Find the cluster id the given vertex belongs to
+   * @param vertexID vertex id.
+   * @return the cluster id that the given vertex belongs to. If the given vertex doesn't belong to
+   *         any cluster, return -1.
    */
-  def findClusterID(vertexID: Long): Option[Int] = {
+  def findClusterID(vertexID: Long): Int = {
     var i = 0
-    clusters.foreach(cluster => {
+    clusters.foreach { cluster =>
       if (cluster.contains(vertexID)) {
-        return Some(i)
+        return i
       }
       i += i
-    })
-    None 
+    }
+    -1
   } 
 }
 
 /**
  * :: Experimental ::
  *
- * AffinityPropagation (AP), a graph clustering algorithm based on the concept of "message passing"
+ * Affinity propagation (AP), a graph clustering algorithm based on the concept of "message passing"
  * between data points. Unlike clustering algorithms such as k-means or k-medoids, AP does not
  * require the number of clusters to be determined or estimated before running it. AP is developed
- * by [[http://www.psi.toronto.edu/affinitypropagation/FreyDueckScience07.pdf Frey and Dueck]].
+ * by [[http://doi.org/10.1126/science.1136800 Frey and Dueck]].
  *
  * @param maxIterations Maximum number of iterations of the AP algorithm.
  *
- * @see [[http://en.wikipedia.org/wiki/Affinity_propagation (Wikipedia)]]
+ * @see [[http://en.wikipedia.org/wiki/Affinity_propagation Affinity propagation (Wikipedia)]]
  */
 @Experimental
 class AffinityPropagation private[clustering] (
@@ -86,7 +97,7 @@ class AffinityPropagation private[clustering] (
 
   import org.apache.spark.mllib.clustering.AffinityPropagation._
 
-  /** Constructs a AP instance with default parameters: {maxIterations: 100, lambda: 0.5,
+  /** Constructs a AP instance with default parameters: {maxIterations: 100, lambda: `0.5`,
    *    normalization: false}.
    */
   def this() = this(maxIterations = 100, lambda = 0.5, normalization = false)
@@ -141,10 +152,11 @@ class AffinityPropagation private[clustering] (
    *
    * @param similarities an RDD of (i, j, s,,ij,,) tuples representing the similarity matrix, which
    *                     is the matrix S in the AP paper. The similarity s,,ij,, is set to
-   *                     real-valued similarities. This is not required to be a symmetric matrix 
-   *                     and hence s,,ij,, can be not equal to s,,ji,,. Tuples with i = j are
-   *                     referred to as "preferences" in the AP paper. The data points with larger
-   *                     values of s,,ii,, are more likely to be chosen as exemplars.
+   *                     real-valued (could be positive or negative) similarities. This is not
+   *                     required to be a symmetric matrix and hence s,,ij,, can be different from
+   *                     s,,ji,,. Tuples with i = j are referred to as "preferences" in the AP paper.
+   *                     The data points with larger values of s,,ii,, are more likely to be chosen
+   *                     as exemplars.
    *
    * @param symmetric the given similarity matrix is symmetric or not. Default value: true
    * @return a [[AffinityPropagationModel]] that contains the clustering result
@@ -173,9 +185,9 @@ private[clustering] object AffinityPropagation extends Logging {
    * Construct the similarity matrix (S) and do normalization if needed.
    * Returns the (normalized) similarity matrix (S).
    */
-  def constructGraph(similarities: RDD[(Long, Long, Double)], normalize: Boolean,
-    symmetric: Boolean):
-    Graph[Seq[Double], Seq[Double]] = {
+  def constructGraph(similarities: RDD[(Long, Long, Double)],
+      normalize: Boolean,
+      symmetric: Boolean): Graph[Seq[Double], Seq[Double]] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (symmetric && i != j) {
         Seq(Edge(i, j, Seq(s, 0.0, 0.0)), Edge(j, i, Seq(s, 0.0, 0.0)))
@@ -185,19 +197,18 @@ private[clustering] object AffinityPropagation extends Logging {
     }
 
     if (normalize) {
-      val gA = Graph.fromEdges(edges, Seq(0.0))
-      val vD = gA.aggregateMessages[Seq[Double]](
+      val gA = Graph.fromEdges(edges, 0.0)
+      val vD = gA.aggregateMessages[Double](
         sendMsg = ctx => {
-          ctx.sendToSrc(Seq(ctx.attr(0)))
+          ctx.sendToSrc(ctx.attr(0))
         },
-        mergeMsg = (s1, s2) => Seq(s1(0) + s2(0)),
+        mergeMsg = (s1, s2) => s1 + s2,
         TripletFields.EdgeOnly)
       val normalized = GraphImpl.fromExistingRDDs(vD, gA.edges)
-        .mapTriplets(
-          e => {
-            val s = if (e.srcAttr(0) == 0.0) { e.attr(0) } else { e.attr(0) / e.srcAttr(0) }
+        .mapTriplets({ e =>
+            val s = if (e.srcAttr == 0.0) e.attr(0) else e.attr(0) / e.srcAttr
             Seq(s, 0.0, 0.0)
-          }, TripletFields.Src)
+        }, TripletFields.Src)
       Graph.fromEdges(normalized.edges, Seq(0.0, 0.0))
     } else {
       Graph.fromEdges(edges, Seq(0.0, 0.0))
@@ -213,7 +224,8 @@ private[clustering] object AffinityPropagation extends Logging {
    */
   def apIter(
       g: Graph[Seq[Double], Seq[Double]],
-      maxIterations: Int, lambda: Double): Graph[Seq[Double], Seq[Double]] = {
+      maxIterations: Int,
+      lambda: Double): Graph[Seq[Double], Seq[Double]] = {
     val tol = math.max(1e-5 / g.vertices.count(), 1e-8)
     var prevDelta = (Double.MaxValue, Double.MaxValue)
     var diffDelta = (Double.MaxValue, Double.MaxValue)
@@ -229,17 +241,16 @@ private[clustering] object AffinityPropagation extends Logging {
         TripletFields.EdgeOnly)
     
       val updated_r = GraphImpl.fromExistingRDDs(vD_r, curG.edges)
-        .mapTriplets(
-          (e) => {
-            val filtered = e.srcAttr.filter(_ != (e.attr(0) + e.attr(1)))
-            val pool = if (filtered.size < e.srcAttr.size - 1) {
-              filtered.:+(e.attr(0) + e.attr(1))
-            } else {
-              filtered
-            }
-            val maxValue = if (pool.isEmpty) { 0.0 } else { pool.max }
-            Seq(e.attr(0), e.attr(1), lambda * (e.attr(0) - maxValue) + (1.0 - lambda) * e.attr(2))
-          }, TripletFields.Src)
+        .mapTriplets({ e =>
+          val filtered = e.srcAttr.filter(_ != (e.attr(0) + e.attr(1)))
+          val pool = if (filtered.size < e.srcAttr.size - 1) {
+            filtered :+ (e.attr(0) + e.attr(1))
+          } else {
+            filtered
+          }
+          val maxValue = if (pool.isEmpty) 0.0 else pool.max
+          Seq(e.attr(0), e.attr(1), lambda * (e.attr(0) - maxValue) + (1.0 - lambda) * e.attr(2))
+        }, TripletFields.Src)
 
       var iterG = Graph.fromEdges(updated_r.edges, Seq(0.0))
 
