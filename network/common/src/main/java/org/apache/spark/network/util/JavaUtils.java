@@ -138,7 +138,7 @@ public class JavaUtils {
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
    */
-  private static long parseTimeString(String str, TimeUnit unit) throws NumberFormatException {
+  private static long parseTimeString(String str, TimeUnit unit) {
     String lower = str.toLowerCase().trim();
     
     try {
@@ -165,7 +165,7 @@ public class JavaUtils {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in us.
    */
-  public static long timeStringAsUs(String str) throws NumberFormatException {
+  public static long timeStringAsUs(String str) {
     return parseTimeString(str, TimeUnit.MICROSECONDS);
   }
 
@@ -173,7 +173,7 @@ public class JavaUtils {
    * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
-  public static long timeStringAsMs(String str) throws NumberFormatException {
+  public static long timeStringAsMs(String str) {
     return parseTimeString(str, TimeUnit.MILLISECONDS);
   }
 
@@ -181,7 +181,7 @@ public class JavaUtils {
    * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
-  public static long timeStringAsS(String str) throws NumberFormatException {
+  public static long timeStringAsS(String str) {
     return parseTimeString(str, TimeUnit.SECONDS);
   }
 
