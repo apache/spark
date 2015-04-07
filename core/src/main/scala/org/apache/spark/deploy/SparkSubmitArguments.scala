@@ -214,7 +214,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (primaryResource == null) {
       SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python or R file)")
     }
-    if (mainClass == null && !isPython && !isR) {
+    if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
     }
     if (pyFiles != null && !isPython) {

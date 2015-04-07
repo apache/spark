@@ -17,7 +17,15 @@
 # limitations under the License.
 #
 
-# Install development version of SparkR
+# This scripts packages the SparkR source files (R and C files) and
+# creates a package that can be loaded in R. The package is by default installed to
+# $FWDIR/lib and the package can be loaded by using the following command in R:
+#
+#   library(SparkR, lib.loc="$FWDIR/lib")
+#
+# NOTE(shivaram): Right now we use $SPARK_HOME/R/lib to be the installation directory
+# to load the SparkR package on the worker nodes.
+
 
 FWDIR="$(cd `dirname $0`; pwd)"
 LIB_DIR="$FWDIR/lib"

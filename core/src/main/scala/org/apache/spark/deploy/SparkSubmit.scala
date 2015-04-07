@@ -334,7 +334,7 @@ object SparkSubmit {
         args.mainClass = "org.apache.spark.api.r.RBackend"
       } else {
         // If a R file is provided, add it to the child arguments and list of files to deploy.
-        // Usage: PythonAppRunner <main R file> [app arguments]
+        // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
         args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
         args.files = mergeFileLists(args.files, args.primaryResource)
@@ -437,7 +437,7 @@ object SparkSubmit {
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
-    // For python files, the primary resource is already distributed as a regular file
+    // For python and R files, the primary resource is already distributed as a regular file
     if (!isYarnCluster && !args.isPython && !args.isR) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
@@ -627,7 +627,7 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource represents a user jar.
    */
-  private def isUserJar(res: String): Boolean = {
+  private[deploy] def isUserJar(res: String): Boolean = {
     !isShell(res) && !isPython(res) && !isInternal(res) && !isR(res)
   }
 

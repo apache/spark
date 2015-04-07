@@ -42,7 +42,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
   extends RDD[U](parent) with Logging {
-  override def getPartitions = parent.partitions
+  override def getPartitions: Array[Partition] = parent.partitions
 
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
 
@@ -105,7 +105,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
   private def startStdinThread[T](
     output: OutputStream,
     iter: Iterator[T],
-    partition: Int) = {
+    partition: Int): Unit = {
 
     val env = SparkEnv.get
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
@@ -204,7 +204,7 @@ private class PairwiseRRDD[T: ClassTag](
 
   private var dataStream: DataInputStream = _
 
-  override protected def openDataStream(input: InputStream) = {
+  override protected def openDataStream(input: InputStream): Closeable = {
     dataStream = new DataInputStream(input)
     dataStream
   }
@@ -243,13 +243,13 @@ private class RRDD[T: ClassTag](
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, Array[Byte]](parent, -1, func, deserializer,
-                                   serializer, packageNames, rLibDir,
-                                   broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
+  extends BaseRRDD[T, Array[Byte]](
+    parent, -1, func, deserializer, serializer, packageNames, rLibDir,
+    broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
 
-  override protected def openDataStream(input: InputStream) = {
+  override protected def openDataStream(input: InputStream): Closeable = {
     dataStream = new DataInputStream(input)
     dataStream
   }
@@ -285,13 +285,13 @@ private class StringRRDD[T: ClassTag](
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, String](parent, -1, func, deserializer, SerializationFormats.STRING,
-                              packageNames, rLibDir,
-                              broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
+  extends BaseRRDD[T, String](
+    parent, -1, func, deserializer, SerializationFormats.STRING, packageNames, rLibDir,
+    broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: BufferedReader = _
 
-  override protected def openDataStream(input: InputStream) = {
+  override protected def openDataStream(input: InputStream): Closeable = {
     dataStream = new BufferedReader(new InputStreamReader(input))
     dataStream
   }
@@ -384,7 +384,7 @@ private[r] object RRDD {
     thread
   }
 
-  private def createRProcess(rLibDir: String, port: Int, script: String) = {
+  private def createRProcess(rLibDir: String, port: Int, script: String): BufferedStreamThread = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
     val rExecScript = rLibDir + "/SparkR/worker/" + script

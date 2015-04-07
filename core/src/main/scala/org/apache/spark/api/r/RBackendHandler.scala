@@ -36,7 +36,7 @@ import org.apache.spark.api.r.SerDe._
 private[r] class RBackendHandler(server: RBackend)
   extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
-  override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
+  override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]): Unit = {
     val bis = new ByteArrayInputStream(msg)
     val dis = new DataInputStream(bis)
 
@@ -78,11 +78,11 @@ private[r] class RBackendHandler(server: RBackend)
     ctx.write(reply)
   }
   
-  override def channelReadComplete(ctx: ChannelHandlerContext) {
+  override def channelReadComplete(ctx: ChannelHandlerContext): Unit = {
     ctx.flush()
   }
 
-  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
+  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
     // Close the connection when an exception is raised.
     cause.printStackTrace()
     ctx.close()
@@ -94,7 +94,7 @@ private[r] class RBackendHandler(server: RBackend)
       methodName: String,
       numArgs: Int,
       dis: DataInputStream,
-      dos: DataOutputStream) {
+      dos: DataOutputStream): Unit = {
     var obj: Object = null
     try {
       val cls = if (isStatic) {
@@ -150,7 +150,7 @@ private[r] class RBackendHandler(server: RBackend)
   }
 
   // Read a number of arguments from the data input stream
-  def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] =  {
+  def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] = {
     (0 until numArgs).map { arg =>
       readObject(dis)
     }.toArray
@@ -170,6 +170,7 @@ private[r] class RBackendHandler(server: RBackend)
       val parameterType = parameterTypes(i)
       var parameterWrapperType = parameterType
 
+      // Convert native parameters to Object types as args is Array[Object] here
       if (parameterType.isPrimitive) {
         parameterWrapperType = parameterType match {
           case java.lang.Integer.TYPE => classOf[java.lang.Integer]

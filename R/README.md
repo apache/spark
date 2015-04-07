@@ -65,9 +65,3 @@ The `./bin/spark-submit` and `./bin/sparkR` can also be used to submit jobs to Y
 export YARN_CONF_DIR=/etc/hadoop/conf
 ./bin/spark-submit --master yarn examples/src/main/r/pi.R 4
 ```
-
-### Report Issues/Feedback 
-
-For better tracking and collaboration, issues and TODO items are reported to a dedicated [SparkR JIRA](https://sparkr.atlassian.net/browse/SPARKR/).
-
-In your pull request, please cross reference the ticket item created. Likewise, if you already have a pull request ready, please reference it in your ticket item.

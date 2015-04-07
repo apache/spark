@@ -50,7 +50,7 @@ private[spark] class RBackend {
       .channel(classOf[NioServerSocketChannel])
   
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
-      def initChannel(ch: SocketChannel) = {
+      def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline()
           .addLast("encoder", new ByteArrayEncoder())
           .addLast("frameDecoder",

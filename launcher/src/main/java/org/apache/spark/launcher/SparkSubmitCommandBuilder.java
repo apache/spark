@@ -228,26 +228,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       return buildCommand(env);
     }
 
-    // When launching the pyspark shell, the spark-submit arguments should be stored in the
-    // PYSPARK_SUBMIT_ARGS env variable. The executable is the PYSPARK_DRIVER_PYTHON env variable
-    // set by the pyspark script, followed by PYSPARK_DRIVER_PYTHON_OPTS.
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
 
-    Properties props = loadPropertiesFile();
-    mergeEnvPathList(env, getLibPathEnvName(),
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+    // When launching the pyspark shell, the spark-submit arguments should be stored in the
+    // PYSPARK_SUBMIT_ARGS env variable.
+    constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
-    // Store spark-submit arguments in an environment variable, since there's no way to pass
-    // them to shell.py on the command line.
-    StringBuilder submitArgs = new StringBuilder();
-    for (String arg : buildSparkSubmitArgs()) {
-      if (submitArgs.length() > 0) {
-        submitArgs.append(" ");
-      }
-      submitArgs.append(quoteForPython(arg));
-    }
-    env.put("PYSPARK_SUBMIT_ARGS", submitArgs.toString());
-
+    // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
+    // followed by PYSPARK_DRIVER_PYTHON_OPTS.
     List<String> pyargs = new ArrayList<String>();
     pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
@@ -264,21 +252,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       appArgs.remove(0);
       return buildCommand(env);
     }
+    // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
+    // env variable.
+    constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS");
 
-    Properties props = loadPropertiesFile();
-    mergeEnvPathList(env, getLibPathEnvName(),
-            firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
-
-    // Store spark-submit arguments in an environment variable, since there's no way to pass
-    // them to sparkR on the command line.
-    StringBuilder submitArgs = new StringBuilder();
-    for (String arg : buildSparkSubmitArgs()) {
-      if (submitArgs.length() > 0) {
-        submitArgs.append(" ");
-      }
-      submitArgs.append(quoteForPython(arg));
-    }
-    env.put("SPARKR_SUBMIT_ARGS", submitArgs.toString());
+    // Set shell.R as R_PROFILE_USER to load the SparkR package when the shell comes up.
     String sparkHome = System.getenv("SPARK_HOME");
     env.put("R_PROFILE_USER",
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
@@ -287,6 +265,24 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
+
+  private void constructEnvVarArgs(
+      Map<String, String> env,
+      String submitArgsEnvVariable) throws IOException {
+    Properties props = loadPropertiesFile();
+    mergeEnvPathList(env, getLibPathEnvName(),
+      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+
+    StringBuilder submitArgs = new StringBuilder();
+    for (String arg : buildSparkSubmitArgs()) {
+      if (submitArgs.length() > 0) {
+        submitArgs.append(" ");
+      }
+      submitArgs.append(quoteForCommandString(arg));
+    }
+    env.put(submitArgsEnvVariable, submitArgs.toString());
+  }
+
 
   private boolean isClientMode(Properties userProps) {
     String userMaster = firstNonEmpty(master, (String) userProps.get(SparkLauncher.SPARK_MASTER));
