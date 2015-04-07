@@ -36,19 +36,37 @@ public interface LargeByteBuffer {
     public LargeByteBuffer rewind();
 
     /**
-     * return a deep copy of this, with a copy of all the data.
+     * return a deep copy of this buffer.
      * The returned buffer will have position == 0.  The position
-     * of this buffer will change from the copy.
-     * @return
+     * of this buffer will not change as a result of copying.
+     *
+     * @return a new buffer with a full copy of this buffer's data
      */
     public LargeByteBuffer deepCopy();
 
+    /**
+     * Advance the position in this buffer by up to <code>n</code> bytes.  <code>n</code> may be
+     * positive or negative.  It will move the full <code>n</code> unless that moves
+     * it past the end (or beginning) of the buffer, in which case it will move to the end
+     * (or beginning).
+     *
+     * @return the number of bytes moved forward (can be negative if <code>n</code> is negative)
+     */
     public long skip(long n);
 
     public long position();
 
-    /** doesn't copy data, just copies references & offsets */
+    /**
+     * Creates a new byte buffer that shares this buffer's content.
+     *
+     * <p> The content of the new buffer will be that of this buffer.  Changes
+     * to this buffer's content will be visible in the new buffer, and vice
+     * versa; the two buffers' positions will be independent.
+     *
+     * <p> The new buffer's position will be identical to those of this buffer
+     * */
     public LargeByteBuffer duplicate();
+
 
     public long remaining();
 
@@ -59,10 +77,16 @@ public interface LargeByteBuffer {
     public long size();
 
     /**
-     * writes the entire contents of this buffer to the given channel
+     * writes the data from the current <code>position()</code> to the end of this buffer
+     * to the given channel.  The <code>position()</code> will be moved to the end of
+     * the buffer after this.
+     *
+     * Note that this method will continually attempt to push data to the given channel.  If the
+     * channel cannot accept more data, this will continuously retry until the channel accepts
+     * the data.
      *
      * @param channel
-     * @return
+     * @return the number of bytes written to the channel
      * @throws IOException
      */
     public long writeTo(WritableByteChannel channel) throws IOException;

@@ -142,24 +142,84 @@ public class WrappedLargeByteBufferSuite {
 
   @Test
   public void writeTo() throws IOException {
-    File testFile = File.createTempFile("WrappedLargeByteBuffer-writeTo",".bin");
-    testFile.deleteOnExit();
-    System.out.println("will write data to " + testFile);
-    FileChannel channel = new FileOutputStream(testFile).getChannel();
-    WrappedLargeByteBuffer buf = testDataBuf();
-    buf.writeTo(channel);
-    channel.close();
+    for (int initialPosition: new int[]{0,20, 400}) {
+      File testFile = File.createTempFile("WrappedLargeByteBuffer-writeTo-" + initialPosition,".bin");
+      testFile.deleteOnExit();
+      FileChannel channel = new FileOutputStream(testFile).getChannel();
+      WrappedLargeByteBuffer buf = testDataBuf();
+      buf.skip(initialPosition);
+      assertEquals(initialPosition, buf.position());
+      int expN = 500 - initialPosition;
+      long bytesWritten = buf.writeTo(channel);
+      assertEquals(expN, bytesWritten);
+      channel.close();
 
-    byte[] written = new byte[500];
-    FileInputStream in = new FileInputStream(testFile);
-    int n = 0;
-    while (n < 500) {
-      n += in.read(written, n, 500 - n);
+      byte[] fileBytes = new byte[expN];
+      FileInputStream in = new FileInputStream(testFile);
+      int n = 0;
+      while (n < expN) {
+        n += in.read(fileBytes, n, expN - n);
+      }
+      assertEquals(-1, in.read());
+      byte[] dataSlice = Arrays.copyOfRange(data, initialPosition, 500);
+      assertArrayEquals(dataSlice, fileBytes);
+      assertEquals(0, buf.remaining());
+      assertEquals(500, buf.position());
     }
-    assertEquals(-1, in.read());
-    assertArrayEquals(data, written);
   }
 
+  @Test
+  public void duplicate() {
+    for (int initialPosition: new int[]{0,20, 400}) {
+      WrappedLargeByteBuffer buf = testDataBuf();
+      buf.skip(initialPosition);
+
+      WrappedLargeByteBuffer dup = buf.duplicate();
+      assertEquals(initialPosition, buf.position());
+      assertEquals(initialPosition, dup.position());
+      assertEquals(500, buf.size());
+      assertEquals(500, dup.size());
+      assertEquals(500 - initialPosition, buf.remaining());
+      assertEquals(500 - initialPosition, dup.remaining());
+      assertConsistent(buf);
+      assertConsistent(dup);
+    }
+  }
+
+  @Test
+  public void constructWithBuffersWithNonZeroPosition() {
+    ByteBuffer[] bufs = testDataBuf().underlying;
+
+    bufs[0].position(50);
+    bufs[1].position(5);
+
+    WrappedLargeByteBuffer b1 = new WrappedLargeByteBuffer(bufs);
+    assertEquals(55, b1.position());
+
+
+    bufs[1].position(50);
+    bufs[2].position(50);
+    bufs[3].position(35);
+    WrappedLargeByteBuffer b2 = new WrappedLargeByteBuffer(bufs);
+    assertEquals(185, b2.position());
+
+
+    bufs[5].position(16);
+    try {
+      new WrappedLargeByteBuffer(bufs);
+      fail("expected exception");
+    } catch (IllegalArgumentException ex) {
+    }
+
+    bufs[5].position(0);
+    bufs[0].position(49);
+    try {
+      new WrappedLargeByteBuffer(bufs);
+      fail("expected exception");
+    } catch (IllegalArgumentException ex) {
+    }
+
+  }
 
   private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {
     byte[] expCopy = new byte[length];

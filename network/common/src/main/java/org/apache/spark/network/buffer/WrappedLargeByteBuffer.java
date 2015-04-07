@@ -28,27 +28,58 @@ import java.util.List;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
-  //only public for tests for the moment ...
+  //only public for tests
   public final ByteBuffer[] underlying;
-  private final Long totalCapacity;
 
+  private final long size;
   private long _pos;
   private int currentBufferIdx;
   private ByteBuffer currentBuffer;
-  private long size;
 
 
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
-    this.underlying = underlying;
-    long sum = 0l;
-    for (int i = 0; i < underlying.length; i++) {
-      sum += underlying[i].capacity();
+    this(underlying, findExpectedInitialPosition(underlying));
+  }
+
+  private static long findExpectedInitialPosition(ByteBuffer[] bufs) {
+    long sum = 0L;
+    for (ByteBuffer b: bufs) {
+      if (b.position() > 0) {
+        // this could still lead to a mix of positions half-way through buffers that
+        // would be inconsistent -- but we'll discover that in the constructor checks
+        sum += b.position();
+      } else {
+        break;
+      }
     }
-    totalCapacity = sum;
-    _pos = 0l;
+    return sum;
+  }
+
+  private WrappedLargeByteBuffer(ByteBuffer[] underlying, long initialPosition) {
+    this.underlying = underlying;
+    long sum = 0L;
+    for (int i = 0; i < underlying.length; i++) {
+      ByteBuffer b = underlying[i];
+      long nextSum = sum + b.capacity();
+      int expectedPosition;
+      if (nextSum < initialPosition) {
+        expectedPosition = b.capacity();
+      } else if (sum > initialPosition) {
+        expectedPosition = 0;
+      } else {
+        expectedPosition = (int) (initialPosition - sum);
+      }
+      if (b.position() != expectedPosition) {
+        throw new IllegalArgumentException("ByteBuffer[" + i + "]:" + b + " was expected to have" +
+          " position = " + expectedPosition + " to be consistent with the overall " +
+          "initialPosition = " + initialPosition);
+      }
+      sum = nextSum;
+    }
+    _pos = initialPosition;
     currentBufferIdx = 0;
     currentBuffer = underlying[0];
-    size = totalCapacity;
+    size = sum;
   }
 
   @Override
@@ -162,7 +193,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     for (int i = 0; i < underlying.length; i++) {
       duplicates[i] = underlying[i].duplicate();
     }
-    return new WrappedLargeByteBuffer(duplicates);
+    return new WrappedLargeByteBuffer(duplicates, _pos);
   }
 
   @Override
@@ -173,11 +204,13 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0l;
-    for (ByteBuffer buffer : underlying) {
-      written += buffer.remaining();
-      while (buffer.hasRemaining())
-        channel.write(buffer);
+    for (; currentBufferIdx < underlying.length; currentBufferIdx++) {
+      currentBuffer = underlying[currentBufferIdx];
+      written += currentBuffer.remaining();
+      while (currentBuffer.hasRemaining())
+        channel.write(currentBuffer);
     }
+    _pos = size();
     return written;
   }
 
@@ -189,6 +222,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     return underlying[0];
   }
 
+  // only needed for tests
   public List<ByteBuffer> nioBuffers() {
     return Arrays.asList(underlying);
   }
