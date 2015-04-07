@@ -974,7 +974,38 @@ class DAGScheduler(
     runningStages -= stage
   }
 
-  /** Process complted shuffle map tasks */
+  /** Helper function for proessing shuffle task. If any tasks failed, resubmit the stage. 
+    * Otherwise, submit waiting stages. 
+    */
+  private def processNextStage(stage: Stage) {
+    if (stage.outputLocs.exists(_ == Nil)) {
+      // Some tasks had failed; let's resubmit this stage
+      // TODO: Lower-level scheduler should also deal with this
+      logInfo("Resubmitting " + stage + " (" + stage.name +
+          ") because some of its tasks had failed: " +
+          stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+      submitStage(stage)
+    } else {
+      val newlyRunnable = new ArrayBuffer[Stage]
+      for (stage <- waitingStages) {
+        logInfo("Missing parents for " + stage + ": " + getMissingParentStages(stage))
+      }
+      for (stage <- waitingStages if getMissingParentStages(stage) == Nil) {
+        newlyRunnable += stage
+      }
+      waitingStages --= newlyRunnable
+      runningStages ++= newlyRunnable
+      for {
+        stage <- newlyRunnable.sortBy(_.id)
+        jobId <- activeJobForStage(stage)
+      } {
+        logInfo("Submitting " + stage + " (" + stage.rdd + "), which is now runnable")
+        submitMissingTasks(stage, jobId)
+      }
+    }
+  }
+  
+  /** Process completed shuffle map tasks */
   private def processShuffleTask(event: CompletionEvent, stage: Stage, smt: ShuffleMapTask) {
     updateAccumulators(event)
     val status = event.result.asInstanceOf[MapStatus]
@@ -1004,34 +1035,10 @@ class DAGScheduler(
           changeEpoch = true)
       }
       clearCacheLocs()
-      if (stage.outputLocs.exists(_ == Nil)) {
-        // Some tasks had failed; let's resubmit this stage
-        // TODO: Lower-level scheduler should also deal with this
-        logInfo("Resubmitting " + stage + " (" + stage.name +
-            ") because some of its tasks had failed: " +
-            stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
-        submitStage(stage)
-      } else {
-        val newlyRunnable = new ArrayBuffer[Stage]
-        for (stage <- waitingStages) {
-          logInfo("Missing parents for " + stage + ": " + getMissingParentStages(stage))
-        }
-        for (stage <- waitingStages if getMissingParentStages(stage) == Nil) {
-          newlyRunnable += stage
-        }
-        waitingStages --= newlyRunnable
-        runningStages ++= newlyRunnable
-        for {
-          stage <- newlyRunnable.sortBy(_.id)
-          jobId <- activeJobForStage(stage)
-        } {
-          logInfo("Submitting " + stage + " (" + stage.rdd + "), which is now runnable")
-          submitMissingTasks(stage, jobId)
-        }
-      }
+      processNextStage(stage)
     }
   }
-
+  
   /** Process completed result tasks */
   private def processResultTask(event: CompletionEvent, stage: Stage, rt: ResultTask[_, _]) {
     stage.resultOfJob match {
