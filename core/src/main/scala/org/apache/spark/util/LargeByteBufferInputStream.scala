@@ -75,7 +75,7 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
     }
   }
 
-  //only for testing
+  // only for testing
   private[util] var disposed = false
 
   /**

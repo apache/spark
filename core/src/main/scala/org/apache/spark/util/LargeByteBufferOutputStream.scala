@@ -44,7 +44,7 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
     largeBuffer(LargeByteBufferHelper.MAX_CHUNK)
   }
 
-  //exposed for testing
+  // exposed for testing
   private[util] def largeBuffer(maxChunk: Int): LargeByteBuffer = {
     // LargeByteBuffer is supposed to make a "best effort" to get all the data
     // in one nio.ByteBuffer, so we want to try to merge the smaller chunks together
