@@ -70,8 +70,8 @@ def _py2java(sc, obj):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
-    elif isinstance(obj, list) and (obj or isinstance(obj[0], JavaObject)):
-        obj = ListConverter().convert(obj, sc._gateway._gateway_client)
+    elif isinstance(obj, list):
+        obj = ListConverter().convert([_py2java(sc, x) for x in obj], sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass
     elif isinstance(obj, (int, long, float, bool, basestring)):

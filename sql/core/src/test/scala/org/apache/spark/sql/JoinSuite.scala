@@ -34,7 +34,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.analyzed
+    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
@@ -109,7 +109,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.analyzed
+    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }

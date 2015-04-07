@@ -15,27 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.mllib.rdd
 
-import akka.actor.Actor
-import org.apache.spark.Logging
+import org.scalatest.FunSuite
 
-import org.apache.spark.util.{Utils, ActorLogReceive}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
+class MLPairRDDFunctionsSuite extends FunSuite with MLlibTestSparkContext {
+  test("topByKey") {
+    val topMap = sc.parallelize(Array((1, 1), (1, 2), (3, 2), (3, 7), (3, 5), (5, 1), (5, 3)), 2)
+      .topByKey(2)
+      .collectAsMap()
 
-/**
- * Actor that runs inside of executors to enable driver -> executor RPC.
- */
-private[spark]
-class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
-
-  override def receiveWithLogging = {
-    case TriggerThreadDump =>
-      sender ! Utils.getThreadDump()
+    assert(topMap.size === 3)
+    assert(topMap(1) === Array(2, 1))
+    assert(topMap(3) === Array(7, 5))
+    assert(topMap(5) === Array(3, 1))
   }
-
 }

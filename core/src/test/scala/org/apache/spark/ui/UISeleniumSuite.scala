@@ -17,19 +17,23 @@
 
 package org.apache.spark.ui
 
-import scala.collection.JavaConversions._
+import javax.servlet.http.HttpServletRequest
 
-import org.openqa.selenium.{By, WebDriver}
+import scala.collection.JavaConversions._
+import scala.xml.Node
+
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
+import org.openqa.selenium.{By, WebDriver}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.shuffle.FetchFailedException
+
 
 /**
  * Selenium tests for the Spark Web UI.
@@ -307,6 +311,48 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
           link.text.toLowerCase should include ("count")
           link.text.toLowerCase should not include "unknown"
         }
+      }
+    }
+  }
+
+  test("attaching and detaching a new tab") {
+    withSpark(newSparkContext()) { sc =>
+      val sparkUI = sc.ui.get
+
+      val newTab = new WebUITab(sparkUI, "foo") {
+        attachPage(new WebUIPage("") {
+          def render(request: HttpServletRequest): Seq[Node] = {
+            <b>"html magic"</b>
+          }
+        })
+      }
+      sparkUI.attachTab(newTab)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/"))
+        find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="storage"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="foo"]""")) should not be(None)
+      }
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        // check whether new page exists
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/foo")
+        find(cssSelector("b")).get.text should include ("html magic")
+      }
+      sparkUI.detachTab(newTab)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/"))
+        find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="storage"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="foo"]""")) should be(None)
+      }
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        // check new page not exist
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/foo")
+        find(cssSelector("b")) should be(None)
       }
     }
   }

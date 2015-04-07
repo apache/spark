@@ -89,7 +89,6 @@ export PYTHONSTARTUP="$SPARK_HOME/python/pyspark/shell.py"
 if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR
   unset HADOOP_CONF_DIR
-  export PYSPARK_SUBMIT_ARGS=pyspark-shell
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
     exec "$PYSPARK_DRIVER_PYTHON" -m doctest $1
   else

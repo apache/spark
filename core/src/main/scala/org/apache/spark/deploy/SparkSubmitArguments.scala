@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  * Parses and encapsulates arguments from the spark-submit script.
  * The env argument is used for testing.
  */
-private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
+private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
   extends SparkSubmitArgumentsParser {
   var master: String = null
   var deployMode: String = null
@@ -252,7 +252,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     master.startsWith("spark://") && deployMode == "cluster"
   }
 
-  override def toString = {
+  override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
     |  deployMode              $deployMode

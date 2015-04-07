@@ -183,6 +183,10 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     }
   }
 
+  override def hashCode: Int = 7919
+
+  override def typeName: String = "vector"
+
   private[spark] override def asNullable: VectorUDT = this
 }
 
@@ -478,7 +482,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
 
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
 
-  override def apply(i: Int) = values(i)
+  override def apply(i: Int): Double = values(i)
 
   override def copy: DenseVector = {
     new DenseVector(values.clone())

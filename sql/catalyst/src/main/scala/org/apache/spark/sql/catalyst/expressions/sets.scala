@@ -26,17 +26,17 @@ import org.apache.spark.util.collection.OpenHashSet
 case class NewSet(elementType: DataType) extends LeafExpression {
   type EvaluatedType = Any
 
-  def nullable = false
+  override def nullable: Boolean = false
 
   // We are currently only using these Expressions internally for aggregation.  However, if we ever
   // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
-  def dataType = ArrayType(elementType)
+  override def dataType: DataType = ArrayType(elementType)
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     new OpenHashSet[Any]()
   }
 
-  override def toString = s"new Set($dataType)"
+  override def toString: String = s"new Set($dataType)"
 }
 
 /**
@@ -46,12 +46,13 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 case class AddItemToSet(item: Expression, set: Expression) extends Expression {
   type EvaluatedType = Any
 
-  def children = item :: set :: Nil
+  override def children: Seq[Expression] = item :: set :: Nil
 
-  def nullable = set.nullable
+  override def nullable: Boolean = set.nullable
 
-  def dataType = set.dataType
-  def eval(input: Row): Any = {
+  override def dataType: DataType = set.dataType
+
+  override def eval(input: Row): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
 
@@ -67,7 +68,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
-  override def toString = s"$set += $item"
+  override def toString: String = s"$set += $item"
 }
 
 /**
@@ -77,13 +78,13 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
   type EvaluatedType = Any
 
-  def nullable = left.nullable || right.nullable
+  override def nullable: Boolean = left.nullable || right.nullable
 
-  def dataType = left.dataType
+  override def dataType: DataType = left.dataType
 
-  def symbol = "++="
+  override def symbol: String = "++="
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     val leftEval = left.eval(input).asInstanceOf[OpenHashSet[Any]]
     if(leftEval != null) {
       val rightEval = right.eval(input).asInstanceOf[OpenHashSet[Any]]
@@ -109,16 +110,16 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 case class CountSet(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 
-  def nullable = child.nullable
+  override def nullable: Boolean = child.nullable
 
-  def dataType = LongType
+  override def dataType: DataType = LongType
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     val childEval = child.eval(input).asInstanceOf[OpenHashSet[Any]]
     if (childEval != null) {
       childEval.size.toLong
     }
   }
 
-  override def toString = s"$child.count()"
+  override def toString: String = s"$child.count()"
 }

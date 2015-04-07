@@ -253,12 +253,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    private final List<String> driverJvmKeys = Arrays.asList(
-      SparkLauncher.DRIVER_EXTRA_CLASSPATH,
-      SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH,
-      SparkLauncher.DRIVER_MEMORY);
-
     @Override
     protected boolean handle(String opt, String value) {
       if (opt.equals(MASTER)) {
@@ -278,9 +272,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       } else if (opt.equals(CONF)) {
         String[] setConf = value.split("=", 2);
         checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-        if (driverJvmKeys.contains(setConf[0])) {
-          conf.put(setConf[0], setConf[1]);
-        }
+        conf.put(setConf[0], setConf[1]);
       } else if (opt.equals(CLASS)) {
         // The special classes require some special command line handling, since they allow
         // mixing spark-submit arguments with arguments that should be propagated to the shell

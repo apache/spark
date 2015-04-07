@@ -19,13 +19,16 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.mapred.InvalidInputException
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
@@ -34,8 +37,6 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
@@ -43,11 +44,12 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     reset()
-    if (tempPath.exists()) Utils.deleteRecursively(tempPath)
+    Utils.deleteRecursively(tempPath)
   }
 
   val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-  var tempPath: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
+  var tempPath: File = Utils.createTempDir()
+  tempPath.delete()
 
   test ("persistent JSON table") {
     sql(
@@ -154,7 +156,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("check change without refresh") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -192,7 +194,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("drop, change, recreate") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -579,7 +581,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         Row(3) :: Row(4) :: Nil
       )
 
-      table("test_parquet_ctas").queryExecution.analyzed match {
+      table("test_parquet_ctas").queryExecution.optimizedPlan match {
         case LogicalRelation(p: ParquetRelation2) => // OK
         case _ =>
           fail(
@@ -681,6 +683,27 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     val actualSchema = table("wide_schema").schema
     assert(schema === actualSchema)
   }
+
+  test("SPARK-6655 still support a schema stored in spark.sql.sources.schema") {
+    val tableName = "spark6655"
+    val schema = StructType(StructField("int", IntegerType, true) :: Nil)
+    // Manually create the metadata in metastore.
+    val tbl = new Table("default", tableName)
+    tbl.setProperty("spark.sql.sources.provider", "json")
+    tbl.setProperty("spark.sql.sources.schema", schema.json)
+    tbl.setProperty("EXTERNAL", "FALSE")
+    tbl.setTableType(TableType.MANAGED_TABLE)
+    tbl.setSerdeParam("path", catalog.hiveDefaultTableFilePath(tableName))
+    catalog.synchronized {
+      catalog.client.createTable(tbl)
+    }
+
+    invalidateTable(tableName)
+    val actualSchema = table(tableName).schema
+    assert(schema === actualSchema)
+    sql(s"drop table $tableName")
+  }
+
 
   test("insert into a table") {
     def createDF(from: Int, to: Int): DataFrame =

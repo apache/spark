@@ -196,6 +196,15 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.submit.waitAppCompletion</code></td>
+  <td>true</td>
+  <td>
+  In YARN cluster mode, controls whether the client waits to exit until the application completes.
+  If set to true, the client process will stay alive reporting the application's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
@@ -274,6 +283,6 @@ If you need a reference to the proper location to put log files in the YARN so t
 # Important notes
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
-- The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored.
+- In `yarn-cluster` mode, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In `yarn-client` mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in `yarn-client` mode, only the Spark executors do.
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `yarn-cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.

@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
+import org.apache.spark.util.Utils
 
 /**
  * A client that submits applications to the standalone Master using a REST protocol.
@@ -52,7 +53,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
  * implementation of this client can use that information to retry using the version specified
  * by the server.
  */
-private[spark] class StandaloneRestClient extends Logging {
+private[deploy] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
 
   /**
@@ -61,7 +62,7 @@ private[spark] class StandaloneRestClient extends Logging {
    * If the submission was successful, poll the status of the submission and report
    * it to the user. Otherwise, report the error message provided by the server.
    */
-  def createSubmission(
+  private[rest] def createSubmission(
       master: String,
       request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch an application in $master.")
@@ -106,7 +107,7 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /** Construct a message that captures the specified parameters for submitting an application. */
-  def constructSubmitRequest(
+  private[rest] def constructSubmitRequest(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],
@@ -148,8 +149,11 @@ private[spark] class StandaloneRestClient extends Logging {
     conn.setRequestProperty("charset", "utf-8")
     conn.setDoOutput(true)
     val out = new DataOutputStream(conn.getOutputStream)
-    out.write(json.getBytes(Charsets.UTF_8))
-    out.close()
+    Utils.tryWithSafeFinally {
+      out.write(json.getBytes(Charsets.UTF_8))
+    } {
+      out.close()
+    }
     readResponse(conn)
   }
 
@@ -241,7 +245,7 @@ private[spark] class StandaloneRestClient extends Logging {
       }
     } else {
       val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError("Application submission failed" + failMessage)
+      logError(s"Application submission failed$failMessage")
     }
   }
 
@@ -291,16 +295,16 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 }
 
-private[spark] object StandaloneRestClient {
-  val REPORT_DRIVER_STATUS_INTERVAL = 1000
-  val REPORT_DRIVER_STATUS_MAX_TRIES = 10
+private[rest] object StandaloneRestClient {
+  private val REPORT_DRIVER_STATUS_INTERVAL = 1000
+  private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
 
   /**
    * Submit an application, assuming Spark parameters are specified through the given config.
    * This is abstracted to its own method for testing purposes.
    */
-  private[rest] def run(
+  def run(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],

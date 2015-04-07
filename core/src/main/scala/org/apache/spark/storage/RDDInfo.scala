@@ -36,7 +36,7 @@ class RDDInfo(
 
   def isCached: Boolean = (memSize + diskSize + tachyonSize > 0) && numCachedPartitions > 0
 
-  override def toString = {
+  override def toString: String = {
     import Utils.bytesToString
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
       "MemorySize: %s; TachyonSize: %s; DiskSize: %s").format(
@@ -44,7 +44,7 @@ class RDDInfo(
         bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
 
-  override def compare(that: RDDInfo) = {
+  override def compare(that: RDDInfo): Int = {
     this.id - that.id
   }
 }
@@ -52,6 +52,6 @@ class RDDInfo(
 private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
+    new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel)
   }
 }

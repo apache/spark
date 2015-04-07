@@ -36,6 +36,37 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   import org.apache.spark.sql.test.TestSQLContext.implicits._
   val sqlCtx = TestSQLContext
 
+  test("self join with aliases") {
+    Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x.str, COUNT(*)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("self join with alias in agg") {
+      Seq(1,2,3)
+        .map(i => (i, i.toString))
+        .toDF("int", "str")
+        .groupBy("str")
+        .agg($"str", count("str").as("strCount"))
+        .registerTempTable("df")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT x.str, SUM(x.strCount)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
       sql("SELECT a FROM testData2 SORT BY a"),
@@ -1053,10 +1084,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-6145: ORDER BY test for nested fields") {
     jsonRDD(sparkContext.makeRDD(
       """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
-    // These should be successfully analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
+
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
+  }
+
+  test("SPARK-6145: special cases") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
+    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
+    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
 }

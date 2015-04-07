@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.mesos
+package org.apache.spark.shuffle
 
 import java.nio.ByteBuffer
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.storage.ShuffleBlockId
 
-import org.scalatest.FunSuite
+private[spark]
+/**
+ * Implementers of this trait understand how to retrieve block data for a logical shuffle block
+ * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
+ * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
+ * implementations when shuffle data is retrieved.
+ */
+trait ShuffleBlockResolver {
+  type ShuffleId = Int
 
-import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
+  /**
+   * Retrieve the data for the specified block. If the data for that block is not available,
+   * throws an unspecified exception.
+   */
+  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 
-class MesosTaskLaunchDataSuite extends FunSuite {
-  test("serialize and deserialize data must be same") {
-    val serializedTask = ByteBuffer.allocate(40)
-    (Range(100, 110).map(serializedTask.putInt(_)))
-    serializedTask.rewind
-    val attemptNumber = 100
-    val byteString = MesosTaskLaunchData(serializedTask, attemptNumber).toByteString
-    serializedTask.rewind
-    val mesosTaskLaunchData = MesosTaskLaunchData.fromByteString(byteString)
-    assert(mesosTaskLaunchData.attemptNumber == attemptNumber)
-    assert(mesosTaskLaunchData.serializedTask.equals(serializedTask))
-  }
+  def stop(): Unit
 }

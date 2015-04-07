@@ -272,8 +272,7 @@ object SQL {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.test.TestSQLContext._
-        |import org.apache.spark.sql.types._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+        |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()"
   )
 }
@@ -304,8 +303,7 @@ object Hive {
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.types._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+        |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
@@ -362,15 +360,15 @@ object Unidoc {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("akka")))
-      .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
-      .map(_.filterNot(_.getCanonicalPath.contains("network")))
-      .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
-      .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/shuffle")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
-      .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
   lazy val settings = scalaJavaUnidocSettings ++ Seq (

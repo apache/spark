@@ -23,6 +23,18 @@ build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 
 Other build examples can be found below.
 
+**Note:** When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
+
+    <arg>-Xmax-classfile-name</arg>
+    <arg>128</arg>
+
+and in `project/SparkBuild.scala` add:
+
+    scalacOptions in Compile ++= Seq("-Xmax-classfile-name", "128"),
+
+to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
+
+
 # Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
