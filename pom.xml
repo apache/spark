@@ -1265,6 +1265,7 @@
               <id>create-source-jar</id>
               <goals>
                 <goal>jar-no-fork</goal>
+                <goal>test-jar-no-fork</goal>
               </goals>
             </execution>
           </executions>
@@ -1472,6 +1473,25 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+      </plugin>
+      <!-- Build test-jar's for all projects, since some projects depend on tests from others -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-test-jar</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <configuration>
+              <excludes>
+                <exclude>log4j.properties</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

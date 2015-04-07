@@ -54,9 +54,17 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
           ) ++ Seq(
+            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+            // the stage class is defined as private[spark]
+            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
+          ) ++ Seq(
             // SPARK-6510 Add a Graph#minus method acting as Set#difference
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
           ) ++ Seq(
+            // SPARK-6492 Fix deadlock in SparkContext.stop()
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$" +
+                "apache$spark$SparkContext$$SPARK_CONTEXT_CONSTRUCTOR_LOCK")
+		  ) ++ Seq(
             // SPARK-5205
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.TaskContext.addTaskInterruptionListener")

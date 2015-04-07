@@ -127,10 +127,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *   import com.google.common.collect.ImmutableMap;
-   *   df.groupBy("department").agg(ImmutableMap.<String, String>builder()
-   *     .put("age", "max")
-   *     .put("expense", "sum")
-   *     .build());
+   *   df.groupBy("department").agg(ImmutableMap.of("age", "max", "expense", "sum"));
    * }}}
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
