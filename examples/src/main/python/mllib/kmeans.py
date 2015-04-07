@@ -42,4 +42,5 @@ if __name__ == "__main__":
     k = int(sys.argv[2])
     model = KMeans.train(data, k)
     print "Final centers: " + str(model.clusterCenters)
+    print "Total Cost: ", model.computeCost(data)
     sc.stop()

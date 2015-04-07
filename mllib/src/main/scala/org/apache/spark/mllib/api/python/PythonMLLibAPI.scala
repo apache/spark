@@ -19,6 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
+import java.util
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -277,12 +278,17 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String,
+      initializationSteps: Int,
+      epsilon: Double,
       seed: java.lang.Long): KMeansModel = {
+
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
+      .setInitializationSteps(initializationSteps)
+      .setEpsilon(epsilon)
 
     if (seed != null) kMeansAlg.setSeed(seed)
 
@@ -291,6 +297,15 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       data.rdd.unpersist(blocking = false)
     }
+  }
+
+  /**
+   * Java stub for Python mllib KMeansModel.computeCost()
+   */
+  def computeCostKmeansModel(
+    data: JavaRDD[Vector],
+    centers: java.util.ArrayList[Vector]): Double = {
+    new KMeansModel(centers).computeCost(data)
   }
 
   /**
