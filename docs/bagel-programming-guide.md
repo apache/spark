@@ -54,7 +54,7 @@ val numVerts = input.count()
 val verts = input.map(line => {
   val fields = line.split('\t')
   val (id, linksStr) = (fields(0), fields(1))
-    val links = linksStr.split(',').map(new PREdge(_))
+  val links = linksStr.split(',').map(new PREdge(_))
   (id, new PRVertex(id, 1.0 / numVerts, links, true))
 }).cache
 {% endhighlight %}
