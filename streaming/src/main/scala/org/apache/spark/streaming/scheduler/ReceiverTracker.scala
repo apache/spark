@@ -308,7 +308,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       if (graceful) {
         val pollTime = 100
         var elapsedTime = 0
-        def done = { receiverInfo.isEmpty && !running }
+        def done: Boolean = { receiverInfo.isEmpty && !running }
         logInfo("Waiting for receiver job to terminate gracefully")
         while(!done && elapsedTime < TIMEOUT) {
           Thread.sleep(pollTime)
