@@ -655,19 +655,19 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource requires running python.
    */
-  private[deploy] def isPython(primaryResource: String): Boolean = {
-    primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
+  private[deploy] def isPython(res: String): Boolean = {
+    res != null && res.endsWith(".py") || res == PYSPARK_SHELL
   }
 
   /**
    * Return whether the given primary resource requires running R.
    */
-  private[deploy] def isR(primaryResource: String): Boolean = {
-    primaryResource.endsWith(".R") || primaryResource == SPARKR_SHELL
+  private[deploy] def isR(res: String): Boolean = {
+    res != null && res.endsWith(".R") || res == SPARKR_SHELL
   }
 
-  private[deploy] def isInternal(primaryResource: String): Boolean = {
-    primaryResource == SPARK_INTERNAL
+  private[deploy] def isInternal(res: String): Boolean = {
+    res == SPARK_INTERNAL
   }
 
   /**
