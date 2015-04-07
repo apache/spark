@@ -3,7 +3,7 @@ Type: Package
 Title: R frontend for Spark
 Version: 1.4.0
 Date: 2013-09-09
-Author: Shivaram Venkataraman
+Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
 Imports:
     methods
