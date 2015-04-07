@@ -277,50 +277,9 @@ private[spark] class Client(
       }
     }
 
-    // Distribute the Hadoop config files. These are only really used by the AM, since executors
-    // will use the configuration object broadcast by the driver. But this is the easiest way to
-    // make sure the files are available for the AM. The files are zipped and added to the job as
-    // an archive, so that YARN will explode it when distributing to the AM. This directory is then
-    // added to the classpath of all processes (both the AM and all the executors), just to make
-    // sure that everybody is using the same default config.
-    //
-    // This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
-    // shows up in the classpath before YARN_CONF_DIR.
-    //
-    // Currently this makes a shallow copy of the conf directory. If there are cases where a
-    // Hadoop config directory contains subdirectories, this code will have to be fixed.
-    val hadoopConfFiles = new HashMap[String, File]()
-    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
-      sys.env.get(envKey).foreach { path =>
-        val dir = new File(path)
-        if (dir.isDirectory()) {
-          dir.listFiles().foreach { file =>
-            if (!hadoopConfFiles.contains(file.getName())) {
-              hadoopConfFiles(file.getName()) = file
-            }
-          }
-        }
-      }
-    }
-
-    if (!hadoopConfFiles.isEmpty) {
-      val hadoopConfArchive = File.createTempFile(HADOOP_CONF_DIR, ".jar",
-        new File(Utils.getLocalDir(sparkConf)))
-      require(addDistributedUri(hadoopConfArchive.toURI()))
-
-      val hadoopConfStream = new ZipOutputStream(new FileOutputStream(hadoopConfArchive))
-      try {
-        hadoopConfStream.setLevel(0)
-        hadoopConfFiles.foreach { case (name, file) =>
-          hadoopConfStream.putNextEntry(new ZipEntry(name))
-          Files.copy(file, hadoopConfStream)
-          hadoopConfStream.closeEntry()
-        }
-      } finally {
-        hadoopConfStream.close()
-      }
-
-      val destPath = copyFileToRemote(dst, new Path(hadoopConfArchive.toURI()), replication)
+    createConfArchive().foreach { file =>
+      require(addDistributedUri(file.toURI()))
+      val destPath = copyFileToRemote(dst, new Path(file.toURI()), replication)
       distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
         HADOOP_CONF_DIR, statCache)
     }
@@ -364,6 +323,59 @@ private[spark] class Client(
     }
 
     localResources
+  }
+
+  /**
+   * Create an archive with the Hadoop config files for distribution.
+   *
+   * These are only really used by the AM, since executors will use the configuration object
+   * broadcast by the driver. But this is the easiest way to make sure the files are available for
+   * the AM. The files are zipped and added to the job as an archive, so that YARN will explode it
+   * when distributing to the AM. This directory is then added to the classpath of all processes
+   * (both the AM and all the executors), just to make sure that everybody is using the same default
+   * config.
+   *
+   * This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
+   * shows up in the classpath before YARN_CONF_DIR.
+   *
+   * Currently this makes a shallow copy of the conf directory. If there are cases where a
+   * Hadoop config directory contains subdirectories, this code will have to be fixed.
+   */
+  private def createConfArchive(): Option[File] = {
+    val hadoopConfFiles = new HashMap[String, File]()
+    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
+      sys.env.get(envKey).foreach { path =>
+        val dir = new File(path)
+        if (dir.isDirectory()) {
+          dir.listFiles().foreach { file =>
+            if (!hadoopConfFiles.contains(file.getName())) {
+              hadoopConfFiles(file.getName()) = file
+            }
+          }
+        }
+      }
+    }
+
+    if (!hadoopConfFiles.isEmpty) {
+      val hadoopConfArchive = File.createTempFile(HADOOP_CONF_DIR, ".jar",
+        new File(Utils.getLocalDir(sparkConf)))
+
+      val hadoopConfStream = new ZipOutputStream(new FileOutputStream(hadoopConfArchive))
+      try {
+        hadoopConfStream.setLevel(0)
+        hadoopConfFiles.foreach { case (name, file) =>
+          hadoopConfStream.putNextEntry(new ZipEntry(name))
+          Files.copy(file, hadoopConfStream)
+          hadoopConfStream.closeEntry()
+        }
+      } finally {
+        hadoopConfStream.close()
+      }
+
+      Some(hadoopConfArchive)
+    } else {
+      None
+    }
   }
 
   /**
