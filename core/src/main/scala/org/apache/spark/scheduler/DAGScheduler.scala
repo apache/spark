@@ -713,10 +713,10 @@ class DAGScheduler(
       // cancelling the stages because if the DAG scheduler is stopped, the entire application
       // is in the process of getting stopped.
       val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
-      runningStages.foreach { stage =>
-        stage.latestInfo.stageFailed(stageFailedMessage)
-        outputCommitCoordinator.stageEnd(stage.id)
-        listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
+      // The `toArray` here is necessary so that we don't iterate over `runningStages` while
+      // mutating it.
+      runningStages.toArray.foreach { stage =>
+        markStageAsFinished(stage, Some(stageFailedMessage))
       }
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
@@ -891,10 +891,9 @@ class DAGScheduler(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
-      // Because we posted SparkListenerStageSubmitted earlier, we should post
-      // SparkListenerStageCompleted here in case there are no tasks to run.
-      outputCommitCoordinator.stageEnd(stage.id)
-      listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
+      // Because we posted SparkListenerStageSubmitted earlier, we should mark
+      // the stage as completed here in case there are no tasks to run
+      markStageAsFinished(stage, None)
 
       val debugString = stage match {
         case stage: ShuffleMapStage =>
@@ -906,7 +905,6 @@ class DAGScheduler(
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
-      runningStages -= stage
     }
   }
 
@@ -972,23 +970,6 @@ class DAGScheduler(
     }
 
     val stage = stageIdToStage(task.stageId)
-
-    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
-      val serviceTime = stage.latestInfo.submissionTime match {
-        case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
-        case _ => "Unknown"
-      }
-      if (errorMessage.isEmpty) {
-        logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-        stage.latestInfo.completionTime = Some(clock.getTimeMillis())
-      } else {
-        stage.latestInfo.stageFailed(errorMessage.get)
-        logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
-      }
-      outputCommitCoordinator.stageEnd(stage.id)
-      listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
-      runningStages -= stage
-    }
     event.reason match {
       case Success =>
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
@@ -1104,7 +1085,6 @@ class DAGScheduler(
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
           markStageAsFinished(failedStage, Some(failureMessage))
-          runningStages -= failedStage
         }
 
         if (disallowStageRetryForTest) {
@@ -1221,6 +1201,26 @@ class DAGScheduler(
   }
 
   /**
+   * Marks a stage as finished and removes it from the list of running stages.
+   */
+  private def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None): Unit = {
+    val serviceTime = stage.latestInfo.submissionTime match {
+      case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
+      case _ => "Unknown"
+    }
+    if (errorMessage.isEmpty) {
+      logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
+      stage.latestInfo.completionTime = Some(clock.getTimeMillis())
+    } else {
+      stage.latestInfo.stageFailed(errorMessage.get)
+      logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
+    }
+    outputCommitCoordinator.stageEnd(stage.id)
+    listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
+    runningStages -= stage
+  }
+
+  /**
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
@@ -1269,9 +1269,7 @@ class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-              stage.latestInfo.stageFailed(failureReason)
-              outputCommitCoordinator.stageEnd(stage.id)
-              listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
+              markStageAsFinished(stage, Some(failureReason))
             } catch {
               case e: UnsupportedOperationException =>
                 logInfo(s"Could not cancel tasks for stage $stageId", e)
