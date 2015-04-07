@@ -715,6 +715,7 @@ class DAGScheduler(
       val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
       runningStages.foreach { stage =>
         stage.latestInfo.stageFailed(stageFailedMessage)
+        outputCommitCoordinator.stageEnd(stage.id)
         listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
@@ -984,6 +985,7 @@ class DAGScheduler(
         stage.latestInfo.stageFailed(errorMessage.get)
         logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
       }
+      outputCommitCoordinator.stageEnd(stage.id)
       listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       runningStages -= stage
     }
@@ -1268,6 +1270,7 @@ class DAGScheduler(
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
               stage.latestInfo.stageFailed(failureReason)
+              outputCommitCoordinator.stageEnd(stage.id)
               listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
             } catch {
               case e: UnsupportedOperationException =>
