@@ -244,6 +244,10 @@ echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
 
-./R/install-dev.sh
-./R/run-tests.sh
+if [ $(command -v R) ]; then
+  ./R/install-dev.sh
+  ./R/run-tests.sh
+else
+  echo "Ignoring SparkR tests as R was not found in PATH"
+fi
 
