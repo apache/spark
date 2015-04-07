@@ -22,6 +22,8 @@ import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
+import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
@@ -170,7 +172,7 @@ import scala.collection.JavaConversions._
  *       e.g. date_add(printf("%s-%s-%s", a,b,c), 3)
  *       We don't need to unwrap the data for printf and wrap it again and passes in data_add
  */
-private[hive] trait HiveInspectors {
+private[hive] trait HiveInspectors extends Logging {
 
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
     // writable
@@ -214,8 +216,16 @@ private[hive] trait HiveInspectors {
 
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
 
+    // list type
+    case c: Class[_] if c == classOf[java.util.List[java.lang.Object]] =>
+      logWarning("Failed to catch a correct component type in List<> because of type erasure," +
+        " so you need to handle it correctly by yourself")
+      ArrayType(ErasedType)
+
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
+
+    case c => throw new HiveDataTypeException("Unknown java type: " + c)
   }
 
   /**
@@ -673,3 +683,18 @@ private[hive] trait HiveInspectors {
     }
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * This represents an erased type because of type erasure in JVM.
+ */
+@DeveloperApi
+class ErasedType private() extends DataType {
+  override def defaultSize: Int = 1
+  private[spark] override def asNullable: ErasedType = this
+}
+
+case object ErasedType extends ErasedType
+
+/** The exception thrown from the [[HiveInspectors]]. */
+private[hive] class HiveDataTypeException(message: String) extends Exception(message)
