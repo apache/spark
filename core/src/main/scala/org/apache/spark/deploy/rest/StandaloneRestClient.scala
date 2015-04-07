@@ -221,8 +221,11 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     conn.setRequestProperty("charset", "utf-8")
     conn.setDoOutput(true)
     val out = new DataOutputStream(conn.getOutputStream)
-    out.write(json.getBytes(Charsets.UTF_8))
-    out.close()
+    Utils.tryWithSafeFinally {
+      out.write(json.getBytes(Charsets.UTF_8))
+    } {
+      out.close()
+    }
     readResponse(conn)
   }
 
@@ -293,13 +296,18 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   /** Report the status of a newly created submission. */
   private def reportSubmissionStatus(
       submitResponse: CreateSubmissionResponse): Unit = {
-    val submissionId = submitResponse.submissionId
-    if (submissionId != null) {
-      logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
-      pollSubmissionStatus(submissionId)
+    if (submitResponse.success) {
+      val submissionId = submitResponse.submissionId
+      if (submissionId != null) {
+        logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
+        pollSubmissionStatus(submissionId)
+      } else {
+        // should never happen
+        logError("Application successfully submitted, but submission ID was not provided!")
+      }
     } else {
-      // should never happen
-      logError("Application successfully submitted, but submission ID was not provided!")
+      val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
+      logError(s"Application submission failed$failMessage")
     }
   }
 

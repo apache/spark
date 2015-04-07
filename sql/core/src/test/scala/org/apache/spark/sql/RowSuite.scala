@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
 class RowSuite extends FunSuite {
@@ -49,5 +52,14 @@ class RowSuite extends FunSuite {
     val row = new SpecificMutableRow(Seq(IntegerType))
     row(0) = null
     assert(row.isNullAt(0))
+  }
+
+  test("serialize w/ kryo") {
+    val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
+    val serializer = new SparkSqlSerializer(TestSQLContext.sparkContext.getConf)
+    val instance = serializer.newInstance()
+    val ser = instance.serialize(row)
+    val de = instance.deserialize(ser).asInstanceOf[Row]
+    assert(de === row)
   }
 }
