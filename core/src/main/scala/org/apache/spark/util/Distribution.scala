@@ -57,7 +57,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
     out.println
   }
 
-  def statCounter = StatCounter(data.slice(startIdx, endIdx))
+  def statCounter: StatCounter = StatCounter(data.slice(startIdx, endIdx))
 
   /**
    * print a summary of this distribution to the given PrintStream.

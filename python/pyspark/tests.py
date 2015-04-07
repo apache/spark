@@ -543,6 +543,12 @@ class RDDTests(ReusedPySparkTestCase):
         # regression test for bug in _reserializer()
         self.assertEqual(cnt, t.zip(rdd).count())
 
+    def test_zip_with_different_object_sizes(self):
+        # regress test for SPARK-5973
+        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
+        self.assertEqual(10000, a.zip(b).count())
+
     def test_zip_with_different_number_of_items(self):
         a = self.sc.parallelize(range(5), 2)
         # different number of partitions
@@ -727,7 +733,6 @@ class RDDTests(ReusedPySparkTestCase):
             (u'1', {u'director': u'David Lean'}),
             (u'2', {u'director': u'Andrew Dominik'})
         ]
-        from pyspark.rdd import RDD
         data_rdd = self.sc.parallelize(data)
         data_java_rdd = data_rdd._to_java_object_rdd()
         data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
@@ -739,6 +744,48 @@ class RDDTests(ReusedPySparkTestCase):
         data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
+
+    def test_narrow_dependency_in_join(self):
+        rdd = self.sc.parallelize(range(10)).map(lambda x: (x, x))
+        parted = rdd.partitionBy(2)
+        self.assertEqual(2, parted.union(parted).getNumPartitions())
+        self.assertEqual(rdd.getNumPartitions() + 2, parted.union(rdd).getNumPartitions())
+        self.assertEqual(rdd.getNumPartitions() + 2, rdd.union(parted).getNumPartitions())
+
+        self.sc.setJobGroup("test1", "test", True)
+        tracker = self.sc.statusTracker()
+
+        d = sorted(parted.join(parted).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual((0, (0, 0)), d[0])
+        jobId = tracker.getJobIdsForGroup("test1")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
+
+        self.sc.setJobGroup("test2", "test", True)
+        d = sorted(parted.join(rdd).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual((0, (0, 0)), d[0])
+        jobId = tracker.getJobIdsForGroup("test2")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
+
+        self.sc.setJobGroup("test3", "test", True)
+        d = sorted(parted.cogroup(parted).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual([[0], [0]], map(list, d[0][1]))
+        jobId = tracker.getJobIdsForGroup("test3")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
+
+        self.sc.setJobGroup("test4", "test", True)
+        d = sorted(parted.cogroup(rdd).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual([[0], [0]], map(list, d[0][1]))
+        jobId = tracker.getJobIdsForGroup("test4")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
+
+    # Regression test for SPARK-6294
+    def test_take_on_jrdd(self):
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd._jrdd.first()
 
 
 class ProfilerTests(PySparkTestCase):
@@ -1404,30 +1451,58 @@ class SparkSubmitTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.programDir)
 
-    def createTempFile(self, name, content):
+    def createTempFile(self, name, content, dir=None):
         """
         Create a temp file with the given name and content and return its path.
         Strips leading spaces from content up to the first '|' in each line.
         """
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         content = re.sub(pattern, '', content.strip())
-        path = os.path.join(self.programDir, name)
+        if dir is None:
+            path = os.path.join(self.programDir, name)
+        else:
+            os.makedirs(os.path.join(self.programDir, dir))
+            path = os.path.join(self.programDir, dir, name)
         with open(path, "w") as f:
             f.write(content)
         return path
 
-    def createFileInZip(self, name, content):
+    def createFileInZip(self, name, content, ext=".zip", dir=None, zip_name=None):
         """
         Create a zip archive containing a file with the given content and return its path.
         Strips leading spaces from content up to the first '|' in each line.
         """
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         content = re.sub(pattern, '', content.strip())
-        path = os.path.join(self.programDir, name + ".zip")
+        if dir is None:
+            path = os.path.join(self.programDir, name + ext)
+        else:
+            path = os.path.join(self.programDir, dir, zip_name + ext)
         zip = zipfile.ZipFile(path, 'w')
         zip.writestr(name, content)
         zip.close()
         return path
+
+    def create_spark_package(self, artifact_name):
+        group_id, artifact_id, version = artifact_name.split(":")
+        self.createTempFile("%s-%s.pom" % (artifact_id, version), ("""
+            |<?xml version="1.0" encoding="UTF-8"?>
+            |<project xmlns="http://maven.apache.org/POM/4.0.0"
+            |       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            |       xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+            |       http://maven.apache.org/xsd/maven-4.0.0.xsd">
+            |   <modelVersion>4.0.0</modelVersion>
+            |   <groupId>%s</groupId>
+            |   <artifactId>%s</artifactId>
+            |   <version>%s</version>
+            |</project>
+            """ % (group_id, artifact_id, version)).lstrip(),
+            os.path.join(group_id, artifact_id, version))
+        self.createFileInZip("%s.py" % artifact_id, """
+            |def myfunc(x):
+            |    return x + 1
+            """, ".jar", os.path.join(group_id, artifact_id, version),
+                             "%s-%s" % (artifact_id, version))
 
     def test_single_script(self):
         """Submit and test a single script file"""
@@ -1497,6 +1572,39 @@ class SparkSubmitTests(unittest.TestCase):
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
 
+    def test_package_dependency(self):
+        """Submit and test a script with a dependency on a Spark Package"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |from mylib import myfunc
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(myfunc).collect()
+            """)
+        self.create_spark_package("a:mylib:0.1")
+        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
+                                 "file:" + self.programDir, script], stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 3, 4]", out)
+
+    def test_package_dependency_on_cluster(self):
+        """Submit and test a script with a dependency on a Spark Package on a cluster"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |from mylib import myfunc
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(myfunc).collect()
+            """)
+        self.create_spark_package("a:mylib:0.1")
+        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
+                                 "file:" + self.programDir, "--master",
+                                 "local-cluster[1,1,512]", script], stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 3, 4]", out)
+
     def test_single_script_on_cluster(self):
         """Submit and test a single script on a cluster"""
         script = self.createTempFile("test.py", """
@@ -1549,6 +1657,37 @@ class ContextTests(unittest.TestCase):
             self.assertNotEqual(SparkContext._active_spark_context, None)
             sc.stop()
         self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_progress_api(self):
+        with SparkContext() as sc:
+            sc.setJobGroup('test_progress_api', '', True)
+
+            rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
+            t = threading.Thread(target=rdd.collect)
+            t.daemon = True
+            t.start()
+            # wait for scheduler to start
+            time.sleep(1)
+
+            tracker = sc.statusTracker()
+            jobIds = tracker.getJobIdsForGroup('test_progress_api')
+            self.assertEqual(1, len(jobIds))
+            job = tracker.getJobInfo(jobIds[0])
+            self.assertEqual(1, len(job.stageIds))
+            stage = tracker.getStageInfo(job.stageIds[0])
+            self.assertEqual(rdd.getNumPartitions(), stage.numTasks)
+
+            sc.cancelAllJobs()
+            t.join()
+            # wait for event listener to update the status
+            time.sleep(1)
+
+            job = tracker.getJobInfo(jobIds[0])
+            self.assertEqual('FAILED', job.status)
+            self.assertEqual([], tracker.getActiveJobsIds())
+            self.assertEqual([], tracker.getActiveStageIds())
+
+            sc.stop()
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

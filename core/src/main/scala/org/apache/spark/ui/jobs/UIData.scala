@@ -80,7 +80,7 @@ private[jobs] object UIData {
     var inputRecords: Long = _
     var outputBytes: Long = _
     var outputRecords: Long = _
-    var shuffleReadBytes: Long = _
+    var shuffleReadTotalBytes: Long = _
     var shuffleReadRecords : Long = _
     var shuffleWriteBytes: Long = _
     var shuffleWriteRecords: Long = _
@@ -94,11 +94,11 @@ private[jobs] object UIData {
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
 
-    def hasInput = inputBytes > 0
-    def hasOutput = outputBytes > 0
-    def hasShuffleRead = shuffleReadBytes > 0
-    def hasShuffleWrite = shuffleWriteBytes > 0
-    def hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+    def hasInput: Boolean = inputBytes > 0
+    def hasOutput: Boolean = outputBytes > 0
+    def hasShuffleRead: Boolean = shuffleReadTotalBytes > 0
+    def hasShuffleWrite: Boolean = shuffleWriteBytes > 0
+    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 && diskBytesSpilled > 0
   }
 
   /**

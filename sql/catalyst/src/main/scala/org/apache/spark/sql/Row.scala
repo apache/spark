@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.types.{StructType, DateUtils}
 
 object Row {
   /**
@@ -121,6 +121,11 @@ trait Row extends Serializable {
 
   /** Number of elements in the Row. */
   def length: Int
+
+  /**
+   * Schema for the row.
+   */
+  def schema: StructType = null
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following

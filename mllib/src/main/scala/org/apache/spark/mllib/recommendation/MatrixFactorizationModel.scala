@@ -21,7 +21,10 @@ import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import org.apache.hadoop.fs.Path
-import org.jblas.DoubleMatrix
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
@@ -67,9 +70,9 @@ class MatrixFactorizationModel(
 
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
-    val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
-    val productVector = new DoubleMatrix(productFeatures.lookup(product).head)
-    userVector.dot(productVector)
+    val userVector = userFeatures.lookup(user).head
+    val productVector = productFeatures.lookup(product).head
+    blas.ddot(userVector.length, userVector, 1, productVector, 1)
   }
 
   /**
@@ -86,9 +89,7 @@ class MatrixFactorizationModel(
     }
     users.join(productFeatures).map {
       case (product, ((user, uFeatures), pFeatures)) =>
-        val userVector = new DoubleMatrix(uFeatures)
-        val productVector = new DoubleMatrix(pFeatures)
-        Rating(user, product, userVector.dot(productVector))
+        Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
     }
   }
 
@@ -140,9 +141,8 @@ class MatrixFactorizationModel(
       recommendToFeatures: Array[Double],
       recommendableFeatures: RDD[(Int, Array[Double])],
       num: Int): Array[(Int, Double)] = {
-    val recommendToVector = new DoubleMatrix(recommendToFeatures)
     val scored = recommendableFeatures.map { case (id,features) =>
-      (id, recommendToVector.dot(new DoubleMatrix(features)))
+      (id, blas.ddot(features.length, recommendToFeatures, 1, features, 1))
     }
     scored.top(num)(Ordering.by(_._2))
   }
@@ -153,7 +153,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   import org.apache.spark.mllib.util.Loader._
 
   override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
-    val (loadedClassName, formatVersion, metadata) = loadMetadata(sc, path)
+    val (loadedClassName, formatVersion, _) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, formatVersion) match {
       case (className, "1.0") if className == classNameV1_0 =>
@@ -181,26 +181,27 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val sc = model.userFeatures.sparkContext
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
-      val metadata = (thisClassName, thisFormatVersion, model.rank)
-      val metadataRDD = sc.parallelize(Seq(metadata), 1).toDataFrame("class", "version", "rank")
-      metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
-      model.userFeatures.toDataFrame("id", "features").saveAsParquetFile(userPath(path))
-      model.productFeatures.toDataFrame("id", "features").saveAsParquetFile(productPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      model.userFeatures.toDF("id", "features").saveAsParquetFile(userPath(path))
+      model.productFeatures.toDF("id", "features").saveAsParquetFile(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
+      implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rank = metadata.select("rank").first().getInt(0)
+      val rank = (metadata \ "rank").extract[Int]
       val userFeatures = sqlContext.parquetFile(userPath(path))
-        .map { case Row(id: Int, features: Seq[Double]) =>
-          (id, features.toArray)
+        .map { case Row(id: Int, features: Seq[_]) =>
+          (id, features.asInstanceOf[Seq[Double]].toArray)
         }
       val productFeatures = sqlContext.parquetFile(productPath(path))
-        .map { case Row(id: Int, features: Seq[Double]) =>
-        (id, features.toArray)
+        .map { case Row(id: Int, features: Seq[_]) =>
+        (id, features.asInstanceOf[Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

@@ -21,12 +21,11 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
   val originalColumnBatchSize = conf.columnBatchSize
   val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
-
-  import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
@@ -35,7 +34,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
     val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
-    }, 5)
+    }, 5).toDF()
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning

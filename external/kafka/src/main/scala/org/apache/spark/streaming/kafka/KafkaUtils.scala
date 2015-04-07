@@ -27,7 +27,7 @@ import scala.collection.JavaConversions._
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import kafka.serializer.{Decoder, StringDecoder}
+import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
 
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.{SparkContext, SparkException}
@@ -154,6 +154,19 @@ object KafkaUtils {
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
   }
 
+  /** get leaders for the given offset ranges, or throw an exception */
+  private def leadersForRanges(
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange]): Map[TopicAndPartition, (String, Int)] = {
+    val kc = new KafkaCluster(kafkaParams)
+    val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
+    val leaders = kc.findLeaders(topics).fold(
+      errs => throw new SparkException(errs.mkString("\n")),
+      ok => ok
+    )
+    leaders
+  }
+
   /**
    * Create a RDD from Kafka using offset ranges for each topic and partition.
    *
@@ -176,12 +189,7 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange]
     ): RDD[(K, V)] = {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
-    val kc = new KafkaCluster(kafkaParams)
-    val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
-    val leaders = kc.findLeaders(topics).fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
-    )
+    val leaders = leadersForRanges(kafkaParams, offsetRanges)
     new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
@@ -198,7 +206,8 @@ object KafkaUtils {
    *    host1:port1,host2:port2 form.
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
-   * @param leaders Kafka leaders for each offset range in batch
+   * @param leaders Kafka brokers for each TopicAndPartition in offsetRanges.  May be an empty map,
+   *   in which case leaders will be looked up on the driver.
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
@@ -211,12 +220,17 @@ object KafkaUtils {
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange],
-      leaders: Array[Leader],
+      leaders: Map[TopicAndPartition, Broker],
       messageHandler: MessageAndMetadata[K, V] => R
     ): RDD[R] = {
-    val leaderMap = leaders
-      .map(l => TopicAndPartition(l.topic, l.partition) -> (l.host, l.port))
-      .toMap
+    val leaderMap = if (leaders.isEmpty) {
+      leadersForRanges(kafkaParams, offsetRanges)
+    } else {
+      // This could be avoided by refactoring KafkaRDD.leaders and KafkaCluster to use Broker
+      leaders.map {
+        case (tp: TopicAndPartition, Broker(host, port)) => (tp, (host, port))
+      }.toMap
+    }
     new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
   }
 
@@ -263,7 +277,8 @@ object KafkaUtils {
    *    host1:port1,host2:port2 form.
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
-   * @param leaders Kafka leaders for each offset range in batch
+   * @param leaders Kafka brokers for each TopicAndPartition in offsetRanges.  May be an empty map,
+   *   in which case leaders will be looked up on the driver.
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
@@ -276,7 +291,7 @@ object KafkaUtils {
       recordClass: Class[R],
       kafkaParams: JMap[String, String],
       offsetRanges: Array[OffsetRange],
-      leaders: Array[Leader],
+      leaders: JMap[TopicAndPartition, Broker],
       messageHandler: JFunction[MessageAndMetadata[K, V], R]
     ): JavaRDD[R] = {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
@@ -284,8 +299,9 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    val leaderMap = Map(leaders.toSeq: _*)
     createRDD[K, V, KD, VD, R](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges, leaders, messageHandler.call _)
+      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges, leaderMap, messageHandler.call _)
   }
 
   /**
@@ -496,7 +512,7 @@ object KafkaUtils {
    * @param topics Names of the topics to consume
    */
   @Experimental
-  def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
+  def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V]](
       jssc: JavaStreamingContext,
       keyClass: Class[K],
       valueClass: Class[V],
@@ -514,5 +530,32 @@ object KafkaUtils {
       Map(kafkaParams.toSeq: _*),
       Set(topics.toSeq: _*)
     )
+  }
+}
+
+/**
+ * This is a helper class that wraps the KafkaUtils.createStream() into more
+ * Python-friendly class and function so that it can be easily
+ * instantiated and called from Python's KafkaUtils (see SPARK-6027).
+ *
+ * The zero-arg constructor helps instantiate this class from the Class object
+ * classOf[KafkaUtilsPythonHelper].newInstance(), and the createStream()
+ * takes care of known parameters instead of passing them from Python
+ */
+private class KafkaUtilsPythonHelper {
+  def createStream(
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JMap[String, JInt],
+      storageLevel: StorageLevel): JavaPairReceiverInputDStream[Array[Byte], Array[Byte]] = {
+    KafkaUtils.createStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
+      jssc,
+      classOf[Array[Byte]],
+      classOf[Array[Byte]],
+      classOf[DefaultDecoder],
+      classOf[DefaultDecoder],
+      kafkaParams,
+      topics,
+      storageLevel)
   }
 }

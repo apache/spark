@@ -34,8 +34,8 @@ import org.apache.spark.ml.tuning.CrossValidator;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 /**
  * A simple example demonstrating model selection using CrossValidator.
@@ -115,9 +115,8 @@ public class JavaCrossValidatorExample {
     DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT id, text, probability, prediction FROM prediction");
-    for (Row r: predictions.collect()) {
+    DataFrame predictions = cvModel.transform(test);
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }

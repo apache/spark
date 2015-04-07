@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.concurrent.RejectedExecutionException
 
 import scala.language.existentials
 import scala.util.control.NonFatal
@@ -95,25 +96,30 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
     var reason : TaskEndReason = UnknownReason
-    getTaskResultExecutor.execute(new Runnable {
-      override def run(): Unit = Utils.logUncaughtExceptions {
-        try {
-          if (serializedData != null && serializedData.limit() > 0) {
-            reason = serializer.get().deserialize[TaskEndReason](
-              serializedData, Utils.getSparkClassLoader)
+    try {
+      getTaskResultExecutor.execute(new Runnable {
+        override def run(): Unit = Utils.logUncaughtExceptions {
+          try {
+            if (serializedData != null && serializedData.limit() > 0) {
+              reason = serializer.get().deserialize[TaskEndReason](
+                serializedData, Utils.getSparkClassLoader)
+            }
+          } catch {
+            case cnd: ClassNotFoundException =>
+              // Log an error but keep going here -- the task failed, so not catastrophic
+              // if we can't deserialize the reason.
+              val loader = Utils.getContextOrSparkClassLoader
+              logError(
+                "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
+            case ex: Exception => {}
           }
-        } catch {
-          case cnd: ClassNotFoundException =>
-            // Log an error but keep going here -- the task failed, so not catastrophic if we can't
-            // deserialize the reason.
-            val loader = Utils.getContextOrSparkClassLoader
-            logError(
-              "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-          case ex: Exception => {}
+          scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }
-        scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
-      }
-    })
+      })
+    } catch {
+      case e: RejectedExecutionException if sparkEnv.isStopped =>
+        // ignore it
+    }
   }
 
   def stop() {

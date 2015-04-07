@@ -45,7 +45,7 @@ abstract class Generator extends Expression {
   override lazy val dataType =
     ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
 
-  override def nullable = false
+  override def nullable: Boolean = false
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -71,6 +71,25 @@ abstract class Generator extends Expression {
     copy._output = _output
     copy
   }
+}
+
+/**
+ * A generator that produces its output using the provided lambda function.
+ */
+case class UserDefinedGenerator(
+    schema: Seq[Attribute],
+    function: Row => TraversableOnce[Row],
+    children: Seq[Expression])
+  extends Generator{
+
+  override protected def makeOutput(): Seq[Attribute] = schema
+
+  override def eval(input: Row): TraversableOnce[Row] = {
+    val inputRow = new InterpretedProjection(children)
+    function(inputRow(input))
+  }
+
+  override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 }
 
 /**
@@ -111,5 +130,5 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     }
   }
 
-  override def toString() = s"explode($child)"
+  override def toString: String = s"explode($child)"
 }

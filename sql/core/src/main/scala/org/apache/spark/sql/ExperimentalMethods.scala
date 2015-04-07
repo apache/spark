@@ -20,8 +20,13 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Experimental
 
 /**
+ * :: Experimental ::
  * Holder for experimental methods for the bravest. We make NO guarantee about the stability
  * regarding binary compatibility and source compatibility of methods here.
+ *
+ * {{{
+ *   sqlContext.experimental.extraStrategies += ...
+ * }}}
  */
 @Experimental
 class ExperimentalMethods protected[sql](sqlContext: SQLContext) {

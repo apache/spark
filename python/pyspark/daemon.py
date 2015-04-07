@@ -61,7 +61,10 @@ def worker(sock):
     except SystemExit as exc:
         exit_code = compute_real_exit_code(exc.code)
     finally:
-        outfile.flush()
+        try:
+            outfile.flush()
+        except Exception:
+            pass
     return exit_code
 
 

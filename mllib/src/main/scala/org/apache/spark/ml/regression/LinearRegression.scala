@@ -44,7 +44,10 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   setRegParam(0.1)
   setMaxIter(100)
 
+  /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {

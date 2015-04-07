@@ -38,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.network.util.JavaUtils
 
 class ExecutorRunnable(
@@ -59,15 +59,15 @@ class ExecutorRunnable(
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   lazy val env = prepareEnvironment(container)
 
-  def run = {
+  override def run(): Unit = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
     nmClient.init(yarnConf)
     nmClient.start()
-    startContainer
+    startContainer()
   }
 
-  def startContainer = {
+  def startContainer(): java.util.Map[String, ByteBuffer] = {
     logInfo("Setting up ContainerLaunchContext")
 
     val ctx = Records.newRecord(classOf[ContainerLaunchContext])
@@ -109,7 +109,13 @@ class ExecutorRunnable(
     }
 
     // Send the start request to the ContainerManager
-    nmClient.startContainer(container, ctx)
+    try {
+      nmClient.startContainer(container, ctx)
+    } catch {
+      case ex: Exception =>
+        throw new SparkException(s"Exception while starting container ${container.getId}" +
+          s" on host $hostname", ex)
+    }
   }
 
   private def prepareCommand(

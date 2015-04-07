@@ -36,6 +36,10 @@ private[spark] class StreamingTab(ssc: StreamingContext)
   ssc.addStreamingListener(listener)
   attachPage(new StreamingPage(this))
   parent.attachTab(this)
+
+  def detach() {
+    getSparkUI(ssc).detachTab(this)
+  }
 }
 
 private object StreamingTab {

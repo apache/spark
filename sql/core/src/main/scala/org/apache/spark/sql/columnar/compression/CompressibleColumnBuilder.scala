@@ -81,7 +81,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     }
   }
 
-  override def build() = {
+  override def build(): ByteBuffer = {
     val nonNullBuffer = buildNonNulls()
     val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {

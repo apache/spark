@@ -20,32 +20,27 @@ package org.apache.spark.streaming.kafka;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
-
 import scala.Tuple2;
-
-import junit.framework.Assert;
 
 import kafka.common.TopicAndPartition;
 import kafka.message.MessageAndMetadata;
 import kafka.serializer.StringDecoder;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-
-import org.junit.Test;
-import org.junit.After;
-import org.junit.Before;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private transient Random random = new Random();
   private transient KafkaStreamSuiteBase suiteBase = null;
 
   @Before
@@ -93,7 +88,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(scala.Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) throws Exception {
             return kv._2();
           }
         }
@@ -121,7 +116,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     unifiedStream.foreachRDD(
         new Function<JavaRDD<String>, Void>() {
           @Override
-          public Void call(org.apache.spark.api.java.JavaRDD<String> rdd) throws Exception {
+          public Void call(JavaRDD<String> rdd) throws Exception {
             result.addAll(rdd.collect());
             return null;
           }

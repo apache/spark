@@ -138,7 +138,7 @@ abstract class HiveComparisonTest
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    val orderedAnswer = hiveQuery.logical match {
+    val orderedAnswer = hiveQuery.analyzed match {
       // Clean out non-deterministic time schema info.
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
@@ -241,7 +241,10 @@ abstract class HiveComparisonTest
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
 
-      val allQueries = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
+      val sqlWithoutComment =
+        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
+      val allQueries =
+        sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       // TODO: DOCUMENT UNSUPPORTED
       val queryList =
@@ -296,7 +299,7 @@ abstract class HiveComparisonTest
 
             val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
-            hiveQueries.foreach(_.logical)
+            hiveQueries.foreach(_.analyzed)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>
                 try {

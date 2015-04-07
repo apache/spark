@@ -993,8 +993,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
-      try {
+      Utils.tryWithSafeFinally {
         while (iter.hasNext) {
           val pair = iter.next()
           writer.write(pair._1, pair._2)
@@ -1003,7 +1004,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
           recordsWritten += 1
         }
-      } finally {
+      } {
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
@@ -1067,7 +1068,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
       var recordsWritten = 0L
-      try {
+
+      Utils.tryWithSafeFinally {
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
@@ -1076,7 +1078,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
           recordsWritten += 1
         }
-      } finally {
+      } {
         writer.close()
       }
       writer.commit()

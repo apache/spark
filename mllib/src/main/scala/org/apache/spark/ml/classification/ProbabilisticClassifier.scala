@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -61,6 +61,7 @@ private[spark] abstract class ProbabilisticClassifier[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends Classifier[FeaturesType, E, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): E = set(probabilityCol, value).asInstanceOf[E]
 }
 
@@ -82,6 +83,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 
   /**
@@ -120,8 +122,8 @@ private[spark] abstract class ProbabilisticClassificationModel[
       val features2probs: FeaturesType => Vector = (features) => {
         tmpModel.predictProbabilities(features)
       }
-      outputData.select($"*",
-        callUDF(features2probs, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+      outputData.withColumn(map(probabilityCol),
+        callUDF(features2probs, new VectorUDT, col(map(featuresCol))))
     } else {
       if (numColsOutput == 0) {
         this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +

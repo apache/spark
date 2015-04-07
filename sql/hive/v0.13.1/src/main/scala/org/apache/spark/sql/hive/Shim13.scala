@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 import java.rmi.server.UID
@@ -35,9 +36,10 @@ import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
+import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, PrimitiveObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
@@ -55,7 +57,9 @@ import org.apache.spark.sql.types.{Decimal, DecimalType}
  *
  * @param functionClassName UDF class name
  */
-case class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
+private[hive] case class HiveFunctionWrapper(var functionClassName: String)
+  extends java.io.Externalizable {
+
   // for Serialization
   def this() = this(null)
 
@@ -397,7 +401,11 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
- 
+
+  def getConvertedOI(inputOI: ObjectInspector, outputOI: ObjectInspector): ObjectInspector = {
+    ObjectInspectorConverters.getConvertedOI(inputOI, outputOI)
+  }
+
   /*
    * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
    * is needed to initialize before serialization.
@@ -410,13 +418,22 @@ private[hive] object HiveShim {
     }
     w
   }
+
+  def setTblNullFormat(crtTbl: CreateTableDesc, tbl: Table) = {
+    if (crtTbl != null && crtTbl.getNullFormat() != null) {
+      tbl.setSerdeParam(serdeConstants.SERIALIZATION_NULL_FORMAT, crtTbl.getNullFormat())
+    }
+  }
 }
 
 /*
  * Bug introduced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
  * Fix it through wrapper.
  */
-class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
+private[hive] class ShimFileSinkDesc(
+    var dir: String,
+    var tableInfo: TableDesc,
+    var compressed: Boolean)
   extends Serializable with Logging {
   var compressCodec: String = _
   var compressType: String = _

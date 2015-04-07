@@ -38,7 +38,11 @@ object Literal {
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
+    case _ =>
+      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
+
+  def create(v: Any, dataType: DataType): Literal = Literal(v, dataType)
 }
 
 /**
@@ -60,16 +64,18 @@ object IntegerLiteral {
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+/**
+ * In order to do type checking, use Literal.create() instead of constructor
+ */
+case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
 
-  override def foldable = true
-  def nullable = value == null
+  override def foldable: Boolean = true
+  override def nullable: Boolean = value == null
 
-
-  override def toString = if (value != null) value.toString else "null"
+  override def toString: String = if (value != null) value.toString else "null"
 
   type EvaluatedType = Any
-  override def eval(input: Row):Any = value
+  override def eval(input: Row): Any = value
 }
 
 // TODO: Specialize
@@ -77,9 +83,9 @@ case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean 
     extends LeafExpression {
   type EvaluatedType = Any
 
-  def update(expression: Expression, input: Row) = {
+  def update(expression: Expression, input: Row): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row) = value
+  override def eval(input: Row): Any = value
 }

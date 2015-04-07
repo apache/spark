@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
-import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.{Attribute, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -34,9 +35,9 @@ import org.apache.spark.util.MutablePair
 @DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
-  override def outputPartitioning = newPartitioning
+  override def outputPartitioning: Partitioning = newPartitioning
 
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 
   /** We must copy rows when sort based shuffle is on */
   protected def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
@@ -44,7 +45,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   private val bypassMergeThreshold =
     child.sqlContext.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
 
-  override def execute() = attachTree(this , "execute") {
+  override def execute(): RDD[Row] = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
@@ -123,13 +124,13 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions = sqlContext.conf.numShufflePartitions
+  def numPartitions: Int = sqlContext.conf.numShufflePartitions
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
       // Check if every child's outputPartitioning satisfies the corresponding
       // required data distribution.
-      def meetsRequirements =
+      def meetsRequirements: Boolean =
         !operator.requiredChildDistribution.zip(operator.children).map {
           case (required, child) =>
             val valid = child.outputPartitioning.satisfies(required)
@@ -147,7 +148,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
       // datasets are both clustered by "a", but these two outputPartitionings are not
       // compatible.
       // TODO: ASSUMES TRANSITIVITY?
-      def compatible =
+      def compatible: Boolean =
         !operator.children
           .map(_.outputPartitioning)
           .sliding(2)
@@ -158,7 +159,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
 
       // Check if the partitioning we want to ensure is the same as the child's output
       // partitioning. If so, we do not need to add the Exchange operator.
-      def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan) =
+      def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan): SparkPlan =
         if (child.outputPartitioning != partitioning) Exchange(partitioning, child) else child
 
       if (meetsRequirements && compatible) {

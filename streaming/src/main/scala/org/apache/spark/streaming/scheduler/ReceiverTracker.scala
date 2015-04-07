@@ -89,22 +89,22 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private var actor: ActorRef = null
 
   /** Check if tracker has been marked for starting */
-  private def isTrackerStarted() = {
+  private def isTrackerStarted(): Boolean = {
     trackerState == Started
   }
  
   /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping() = {
+  private def isTrackerStopping(): Boolean = {
     trackerState == Stopping
   }
  
   /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped() = {
+  private def isTrackerStopped(): Boolean = {
     trackerState == Stopped
   }
 
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
     if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
     }
@@ -119,7 +119,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop(graceful: Boolean) = synchronized {
+  def stop(graceful: Boolean): Unit = synchronized {
     if (isTrackerStarted) {
       trackerState = Stopping
 
@@ -254,7 +254,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
-    def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
       case RegisterReceiver(streamId, typ, host, receiverActor) =>
         // Actor stops to accept registering when tracker is stopping
         if (!isTrackerStopping) {
@@ -318,7 +318,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       }
 
       // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
+      if (receiverInfo.nonEmpty) {
         logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")
