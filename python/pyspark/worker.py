@@ -91,7 +91,7 @@ def main(infile, outfile):
         (func, profiler, deserializer, serializer), version = command
         if version != sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
-                            "driver %s, PySpark cannot run with different versions") %
+                            "driver %s, PySpark cannot run with different minor versions") %
                             (sys.version_info[:2], version))
         init_time = time.time()
 
