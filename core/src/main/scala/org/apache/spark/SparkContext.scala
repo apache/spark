@@ -33,8 +33,6 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
-import akka.actor.{ActorRef, Props}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -49,13 +47,14 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.TriggerThreadDump
+import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, SimrSchedulerBackend}
@@ -215,7 +214,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _executorMemory: Int = _
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
-  private var _heartbeatReceiver: ActorRef = _
+  private var _heartbeatReceiver: RpcEndpointRef = _
   @volatile private var _dagScheduler: DAGScheduler = _
   private var _applicationId: String = _
   private var _eventLogger: Option[EventLoggingListener] = None
@@ -453,13 +452,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
+    // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
+    // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    _heartbeatReceiver = env.rpcEnv.setupEndpoint(
+      HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
-    _heartbeatReceiver = env.actorSystem.actorOf(
-      Props(new HeartbeatReceiver(this)), "HeartbeatReceiver")
     _dagScheduler = new DAGScheduler(this)
+    _heartbeatReceiver.send(TaskSchedulerIsSet)
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
@@ -538,10 +541,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
-        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
-        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
-          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+        val (host, port) = env.blockManager.master.getRpcHostPortForExecutor(executorId).get
+        val endpointRef = env.rpcEnv.setupEndpointRef(
+          SparkEnv.executorActorSystemName,
+          RpcAddress(host, port),
+          ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
+        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -1496,8 +1501,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       _listenerBusStarted = false
     }
     _eventLogger.foreach(_.stop())
-    if (env != null) {
-      env.actorSystem.stop(_heartbeatReceiver)
+    if (env != null && _heartbeatReceiver != null) {
+      env.rpcEnv.stop(_heartbeatReceiver)
     }
     _progressBar.foreach(_.stop())
     _taskScheduler = null
