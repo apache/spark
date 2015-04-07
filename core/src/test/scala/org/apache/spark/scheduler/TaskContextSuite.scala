@@ -65,12 +65,12 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
   }
 
   test("calls TaskInterruptionListener when task killed") {
-    TaskContextSuite.interupted = false
+    TaskContextSuite.interrupted = false
     sc = new SparkContext("local", "test")
     val rdd = new RDD[String](sc, List()) {
       override def getPartitions = Array[Partition](StubPartition(0))
       override def compute(split: Partition, context: TaskContext) = {
-        context.addTaskInterruptionListener(context => TaskContextSuite.interupted = true)
+        context.addTaskInterruptionListener(context => TaskContextSuite.interrupted = true)
         Thread.sleep(1000)
         Iterator("test")
       }
@@ -81,7 +81,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
       0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
 
     task.kill(false)
-    assert(TaskContextSuite.interupted === false)
+    assert(TaskContextSuite.interrupted === false)
 
     val taskThread = new Thread("Task") {
       override def run(): Unit = {
@@ -92,7 +92,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     Thread.sleep(500)
 
     task.kill(false)
-    assert(TaskContextSuite.interupted === true)
+    assert(TaskContextSuite.interrupted === true)
 
     taskThread.join()
   }
@@ -141,7 +141,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
 
 private object TaskContextSuite {
   @volatile var completed = false
-  @volatile var interupted = false
+  @volatile var interrupted = false
 }
 
 private case class StubPartition(index: Int) extends Partition
