@@ -19,7 +19,6 @@ package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
-import java.util
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -295,7 +294,6 @@ private[python] class PythonMLLibAPI extends Serializable {
       initializationSteps: Int,
       epsilon: Double,
       seed: java.lang.Long): KMeansModel = {
-
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)

@@ -100,10 +100,10 @@ object DenseKMeans {
       .setMaxIterations(params.numIterations)
       .run(examples)
 
-
     val cost = model.computeCost(examples)
 
     println(s"Total cost = $cost.")
+
     sc.stop()
   }
 }
