@@ -106,4 +106,24 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
     assert(arrays(1).toSeq === ref.slice(10, 20))
     assert(arrays(2).toSeq === ref.slice(20, 30))
   }
+
+  test("slice") {
+    val ref = new Array[Byte](30)
+    Random.nextBytes(ref)
+    val o = new ByteArrayChunkOutputStream(10)
+    o.write(ref)
+
+    for {
+      start <- (0 until 30)
+      end <- (start to 30)
+    } {
+      withClue(s"start = $start; end = $end") {
+        try {
+          assert(o.slice(start,end).toSeq === ref.slice(start,end))
+        } catch {
+          case ex => fail(ex)
+        }
+      }
+    }
+  }
 }
