@@ -37,7 +37,7 @@ class HashedRelationSuite extends FunSuite {
 
     assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))
     assert(hashed.get(data(1)) == CompactBuffer[Row](data(1)))
-    assert(hashed.get(Row(10)) === null)
+    assert(hashed.get(Row(10)).size === 0)
 
     val data2 = CompactBuffer[Row](data(2))
     data2 += data(2)
@@ -52,12 +52,12 @@ class HashedRelationSuite extends FunSuite {
     assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))
     assert(hashed.get(data(1)) == CompactBuffer[Row](data(1)))
     assert(hashed.get(data(2)) == CompactBuffer[Row](data(2)))
-    assert(hashed.get(Row(10)) === null)
+    assert(hashed.get(Row(10)).size === 0)
 
     val uniqHashed = hashed.asInstanceOf[UniqueKeyHashedRelation]
     assert(uniqHashed.getValue(data(0)) == data(0))
     assert(uniqHashed.getValue(data(1)) == data(1))
     assert(uniqHashed.getValue(data(2)) == data(2))
-    assert(uniqHashed.getValue(Row(10)) == null)
+    assert(uniqHashed.getValue(Row(10)).size === 0)
   }
 }
