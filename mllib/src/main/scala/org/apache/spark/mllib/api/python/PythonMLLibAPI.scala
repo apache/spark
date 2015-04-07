@@ -78,7 +78,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      if (model.isInstanceOf[LogisticRegressionModel]) {
+        val lrModel = model.asInstanceOf[LogisticRegressionModel]
+        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+          .map(_.asInstanceOf[Object]).asJava
+      } else {
+        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      }
     } finally {
       data.rdd.unpersist(blocking = false)
     }
@@ -191,9 +197,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val SVMAlg = new SVMWithSGD()
     SVMAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     SVMAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -217,9 +225,11 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regParam: Double,
       regType: String,
-      intercept: Boolean): JList[Object] = {
+      intercept: Boolean,
+      validateData: Boolean): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithSGD()
     LogRegAlg.setIntercept(intercept)
+      .setValidateData(validateData)
     LogRegAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -243,9 +253,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       regType: String,
       intercept: Boolean,
       corrections: Int,
-      tolerance: Double): JList[Object] = {
+      tolerance: Double,
+      validateData: Boolean,
+      numClasses: Int): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithLBFGS()
     LogRegAlg.setIntercept(intercept)
+      .setValidateData(validateData)
+      .setNumClasses(numClasses)
     LogRegAlg.optimizer
       .setNumIterations(numIterations)
       .setRegParam(regParam)
@@ -477,13 +491,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long): Word2VecModelWrapper = {
+      seed: Long,
+      minCount: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
+      .setMinCount(minCount)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -516,6 +532,10 @@ private[python] class PythonMLLibAPI extends Serializable {
       val similarity = Vectors.dense(result.map(_._2))
       val words = result.map(_._1)
       List(words, similarity).map(_.asInstanceOf[Object]).asJava
+    }
+
+    def getVectors: JMap[String, JList[Float]] = {
+      model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
   }
 
@@ -1114,7 +1134,10 @@ private[spark] object SerDe extends Serializable {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
+          obj match {
+            case list: JArrayList[_] => list.asScala
+            case arr: Array[_] => arr
+          }
         } else {
           Seq(obj)
         }
