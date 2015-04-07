@@ -154,7 +154,7 @@ class AffinityPropagation private[clustering] (
    *                     is the matrix S in the AP paper. The similarity s,,ij,, is set to
    *                     real-valued (could be positive or negative) similarities. This is not
    *                     required to be a symmetric matrix and hence s,,ij,, can be different from
-   *                     s,,ji,,. Tuples with i = j are referred to as "preferences" in the AP paper.
+   *                     s,,ji,,. Tuples with i = j are referred to as "preferences" in the paper.
    *                     The data points with larger values of s,,ii,, are more likely to be chosen
    *                     as exemplars.
    *
