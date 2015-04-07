@@ -49,7 +49,7 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
  * not caused by shuffle file loss are handled by the TaskScheduler, which will retry each task
  * a small number of times before cancelling the whole stage.
  *
- * Here's a checklist to review when making or reviewing changes to this class:
+ * Here's a checklist to use when making or reviewing changes to this class:
  *
  *  - When adding a new data structure, update `DAGSchedulerSuite.assertDataStructuresEmpty` to
  *    include the new structure. This will help to catch memory leaks.
