@@ -174,7 +174,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0l;
     for (ByteBuffer buffer : underlying) {
-      //TODO test this
       written += buffer.remaining();
       while (buffer.hasRemaining())
         channel.write(buffer);
@@ -190,7 +189,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     return underlying[0];
   }
 
-  @Override
   public List<ByteBuffer> nioBuffers() {
     return Arrays.asList(underlying);
   }

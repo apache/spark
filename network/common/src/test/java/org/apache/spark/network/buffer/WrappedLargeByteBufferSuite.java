@@ -16,8 +16,10 @@
  */
 package org.apache.spark.network.buffer;
 
+import java.io.*;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -137,6 +139,27 @@ public class WrappedLargeByteBufferSuite {
     } catch (BufferUnderflowException bue) {
     }
   }
+
+  @Test
+  public void writeTo() throws IOException {
+    File testFile = File.createTempFile("WrappedLargeByteBuffer-writeTo",".bin");
+    testFile.deleteOnExit();
+    System.out.println("will write data to " + testFile);
+    FileChannel channel = new FileOutputStream(testFile).getChannel();
+    WrappedLargeByteBuffer buf = testDataBuf();
+    buf.writeTo(channel);
+    channel.close();
+
+    byte[] written = new byte[500];
+    FileInputStream in = new FileInputStream(testFile);
+    int n = 0;
+    while (n < 500) {
+      n += in.read(written, n, 500 - n);
+    }
+    assertEquals(-1, in.read());
+    assertArrayEquals(data, written);
+  }
+
 
   private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {
     byte[] expCopy = new byte[length];

@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
+import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBufferHelper, LargeByteBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -813,12 +813,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val mapped = diskStoreMapped.getBytes(blockId).get
+    val mapped = diskStoreMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, (1000 * 1000).toString))
     val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val notMapped = diskStoreNotMapped.getBytes(blockId).get
+    val notMapped = diskStoreNotMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
     assert(notMapped.nioBuffers().get(0).getClass.getName.endsWith("HeapByteBuffer"),

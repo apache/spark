@@ -85,9 +85,4 @@ public interface LargeByteBuffer {
      * unfortunately no standard API to do this.
      */
     public void dispose();
-
-    //List b/c we need to know the size.  Could also use Iterator w/ separate numBuffers method
-    //TODO delete, only used in testing
-    public List<ByteBuffer> nioBuffers();
-
 }

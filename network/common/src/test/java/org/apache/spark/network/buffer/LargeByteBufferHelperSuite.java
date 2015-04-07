@@ -66,7 +66,6 @@ public class LargeByteBufferHelperSuite {
         if (read[j] != (byte)(j))
           fail("bad byte at (i,j) = (" + i + "," + j + ")");
       }
-      assertArrayEquals(buffer, read);
     }
   }
 }
