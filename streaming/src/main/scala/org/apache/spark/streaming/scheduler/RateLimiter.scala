@@ -71,7 +71,7 @@ trait DynamicRateLimiter extends RateLimiter {
       processedRecords.toDouble / processTimeInMs * 1000
     }
 
-    if (defaultRate <= 0) {
+    if (defaultRate <= 0.0) {
       dynamicRate = processRate
     } else {
       dynamicRate = if (processRate > defaultRate) defaultRate else processRate
