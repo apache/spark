@@ -468,6 +468,22 @@ test_that("zipRDD() on RDDs", {
   unlink(fileName)
 })
 
+test_that("intersection() on RDDs", {
+  # intersection with self
+  actual <- collect(intersection(rdd, rdd))
+  expect_equal(sort(as.integer(actual)), nums)
+  
+  # intersection with an empty RDD
+  emptyRdd <- parallelize(sc, list())
+  actual <- collect(intersection(rdd, emptyRdd))
+  expect_equal(actual, list())
+  
+  rdd1 <- parallelize(sc, list(1, 10, 2, 3, 4, 5))
+  rdd2 <- parallelize(sc, list(1, 6, 2, 3, 7, 8))
+  actual <- collect(intersection(rdd1, rdd2))
+  expect_equal(sort(as.integer(actual)), 1:3)
+})
+
 test_that("join() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,1), list(2,4)))
   rdd2 <- parallelize(sc, list(list(1,2), list(1,3)))

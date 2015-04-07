@@ -233,7 +233,6 @@ setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") }
 
 
 ############ Binary Functions #############
-
 #' @rdname countByKey
 #' @export
 setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
@@ -241,6 +240,11 @@ setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
 #' @rdname flatMapValues
 #' @export
 setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
+
+#' @rdname intersection
+#' @export
+setGeneric("intersection", function(x, other, numPartitions = 1L) {
+  standardGeneric("intersection") })
 
 #' @rdname keys
 #' @export

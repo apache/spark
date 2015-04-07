@@ -28,6 +28,7 @@ exportMethods(
               "fullOuterJoin",
               "glom",
               "groupByKey",
+              "intersection",
               "join",
               "keyBy",
               "keys",

@@ -1560,3 +1560,40 @@ setMethod("zipRDD",
             
             PipelinedRDD(zippedRDD, partitionFunc)
           })
+
+#' Intersection of this RDD and another one.
+#'
+#' Return the intersection of this RDD and another one.
+#' The output will not contain any duplicate elements, 
+#' even if the input RDDs did. Performs a hash partition
+#' across the cluster.
+#' Note that this method performs a shuffle internally. 
+#'
+#' @param x An RDD.
+#' @param other An RDD.
+#' @param numPartitions The number of partitions in the result RDD.
+#' @return An RDD which is the intersection of these two RDDs.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(1, 10, 2, 3, 4, 5))
+#' rdd2 <- parallelize(sc, list(1, 6, 2, 3, 7, 8))
+#' collect(sortBy(intersection(rdd1, rdd2), function(x) { x }))
+#' # list(1, 2, 3)
+#'}
+#' @rdname intersection
+#' @aliases intersection,RDD
+setMethod("intersection",
+          signature(x = "RDD", other = "RDD"),
+          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+            rdd1 <- map(x, function(v) { list(v, NA) })
+            rdd2 <- map(other, function(v) { list(v, NA) })
+            
+            filterFunction <- function(elem) {
+              iters <- elem[[2]]
+              all(as.vector(
+                lapply(iters, function(iter) { length(iter) > 0 }), mode = "logical"))
+            }
+
+            keys(filterRDD(cogroup(rdd1, rdd2, numPartitions = numPartitions), filterFunction))
+          })
