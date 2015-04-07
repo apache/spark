@@ -90,7 +90,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId, compressionCodecName, appAttemptId)
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   /**
    * Creates the log file in the configured log directory.
@@ -261,7 +261,7 @@ private[spark] object EventLoggingListener extends Logging {
    * @return A path which consists of file-system-safe characters.
    */
   def getLogPath(
-      logBaseDir: String,
+      logBaseDir: URI,
       appId: String,
       appAttemptId: String,
       compressionCodecName: Option[String] = None): String = {
@@ -271,13 +271,6 @@ private[spark] object EventLoggingListener extends Logging {
     } else {
       logBaseDir.toString.stripSuffix("/") + "/" + name.stripSuffix("/") +  "_" + appAttemptId
     }
-  }
-
-  def getLogPath(
-      logBaseDir: String,
-      appId: String,
-      compressionCodecName: Option[String] = None): String = {
-    getLogPath(logBaseDir, appId, "", compressionCodecName)
   }
 
   /**
