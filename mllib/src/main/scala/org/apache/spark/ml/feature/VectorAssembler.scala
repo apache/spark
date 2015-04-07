@@ -92,6 +92,7 @@ object VectorAssembler {
         }
         cur += vec.size
       case null =>
+        // TODO: output Double.NaN?
         throw new SparkException("Values to assemble cannot be null.")
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
