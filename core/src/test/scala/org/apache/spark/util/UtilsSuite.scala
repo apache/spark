@@ -241,7 +241,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/path to/file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
     intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
@@ -265,9 +264,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4.jar""",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4.jar",
-      testWindows = true)
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
   }
 
   test("nonLocalPaths") {

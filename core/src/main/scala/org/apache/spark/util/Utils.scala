@@ -1661,7 +1661,7 @@ private[spark] object Utils extends Logging {
   /**
    * Format a Windows path such that it can be safely passed to a URI.
    */
-  def formatWindowsPath(path: String): String = path.replace("\\", "/").replace(" ", "%20")
+  def formatWindowsPath(path: String): String = path.replace("\\", "/")
 
   /**
    * Indicates whether Spark is currently running unit tests.
