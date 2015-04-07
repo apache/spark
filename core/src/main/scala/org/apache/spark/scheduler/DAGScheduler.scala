@@ -34,6 +34,7 @@ import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.util._
+import org.apache.spark.util.collection.{Utils => CollectionUtils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -128,6 +129,15 @@ class DAGScheduler(
   taskScheduler.setDAGScheduler(this)
 
   private val outputCommitCoordinator = env.outputCommitCoordinator
+
+  // Number of map, reduce tasks above which we do not assign preferred locations
+  // based on map output sizes.
+  private val SHUFFLE_PREF_MAP_THRESHOLD = 1000
+  // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
+  private val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
+  // Number of preferred locations to use for reducer tasks
+  private[scheduler] val NUM_REDUCER_PREF_LOCS = 5
+
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -1341,7 +1351,7 @@ class DAGScheduler(
       visited: HashSet[(RDD[_],Int)]): Seq[TaskLocation] = {
     // If the partition has already been visited, no need to re-visit.
     // This avoids exponential path exploration.  SPARK-695
-    if (!visited.add((rdd,partition))) {
+    if (!visited.add((rdd, partition))) {
       // Nil has already been returned for previously visited partitions.
       return Nil
     }
@@ -1366,6 +1376,23 @@ class DAGScheduler(
             return locs
           }
         }
+      case s: ShuffleDependency[_, _, _] =>
+        if (rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
+            s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
+          // Assign preferred locations for reducers by looking at map output location and sizes
+          val mapStatuses = mapOutputTracker.getStatusByReducer(s.shuffleId, rdd.partitions.size)
+          mapStatuses.map { status =>
+            // Get the map output locations for this reducer
+            if (status.contains(partition)) {
+              // Select first few locations as preferred locations for the reducer
+              val topLocs = CollectionUtils.takeOrdered(
+                status(partition).iterator, NUM_REDUCER_PREF_LOCS)(
+                  Ordering.by[(BlockManagerId, Long), Long](_._2).reverse).toSeq
+              return topLocs.map(_._1).map(loc => TaskLocation(loc.host, loc.executorId))
+            }
+          }
+        }
+
       case _ =>
     }
     Nil
