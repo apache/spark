@@ -81,6 +81,25 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
    */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
+
+  /**
+   * Computes Within Set Sum of Squeared Error(WSSSE)
+   */
+  def WSSSE(data: RDD[Vector]): Double = {
+    val bvCenters = this.getCenters().map(_.toBreeze)
+    data.context.broadcast(bvCenters)
+    val distances = data.map {point =>
+      val bvPoint = point.toBreeze
+      val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
+      val idx = HierarchicalClustering.findClosestCenter(metric)(bvCenters)(bvPoint)
+      val closestCenter = bvCenters(idx)
+      val distance = metric(bvPoint, closestCenter)
+      distance
+    }
+    distances.sum()
+  }
+
+  def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
 }
 
 
