@@ -55,10 +55,11 @@ trait DynamicRateLimiter extends RateLimiter {
   def slowStartInitialRate: Double
 
   protected var dynamicRate = {
-    if (defaultRate == 0.0 || slowStartInitialRate > defaultRate)
+    if (defaultRate == 0.0 || slowStartInitialRate > defaultRate) {
       slowStartInitialRate
-    else
+    } else {
       defaultRate
+    }
   }
 
   def computeEffectiveRate(processedRecords: Long, processTimeInMs: Long): Unit = {
