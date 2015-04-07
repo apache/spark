@@ -626,12 +626,11 @@ private[spark] class Client(
     if (fireAndForget) {
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
-      if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
-        logInfo(formatReportDetails(report))
-        throw new SparkException(s"Application $appId finished with status: $state")
-      }
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report))
+      if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+        throw new SparkException(s"Application $appId finished with status: $state")
+      }
     } else {
       val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
       if (yarnApplicationState == YarnApplicationState.FAILED ||
