@@ -989,6 +989,167 @@ class DAGScheduler(
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
   }
+
+
+  /** Handle successfully completed task */
+  private def handleSuccess(event: CompletionEvent, task: Task[_], stageId: Int, taskType: String,
+      stage: Stage) {
+    listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
+      event.reason, event.taskInfo, event.taskMetrics))
+    stage.pendingTasks -= task
+    task match {
+      case rt: ResultTask[_, _] =>
+        processResultTask(event, stage, rt)
+
+      case smt: ShuffleMapTask =>
+        processShuffleTask(event, stage, smt)
+    }
+  }
+
+  /** Handle fetch failures */
+  private def handleFetchFailure(task: Task[_], bmAddress: BlockManagerId, shuffleId: Int,
+      mapId: Int, failureMessage: String) {
+    val failedStage = stageIdToStage(task.stageId)
+    val mapStage = shuffleToMapStage(shuffleId)
+
+    // It is likely that we receive multiple FetchFailed for a single stage (because we have
+    // multiple tasks running concurrently on different executors). In that case, it is possible
+    // the fetch failure has already been handled by the scheduler.
+    if (runningStages.contains(failedStage)) {
+      logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+          s"due to a fetch failure from $mapStage (${mapStage.name})")
+      markStageAsFinished(failedStage, Some(failureMessage))
+      runningStages -= failedStage
+    }
+
+    if (disallowStageRetryForTest) {
+      abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+    } else if (failedStages.isEmpty) {
+      // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+      // in that case the event will already have been scheduled.
+      // TODO: Cancel running tasks in the stage
+      logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+          s"$failedStage (${failedStage.name}) due to fetch failure")
+      messageScheduler.schedule(new Runnable {
+        override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+      }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+    }
+    failedStages += failedStage
+    failedStages += mapStage
+    // Mark the map whose fetch failed as broken in the map stage
+    if (mapId != -1) {
+      mapStage.removeOutputLoc(mapId, bmAddress)
+      mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+    }
+
+    // TODO: mark the executor as failed only if there were lots of fetch failures on it
+    if (bmAddress != null) {
+      handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
+    }
+  }
+
+  /** Submit the next stage for execution. If any tasks failed, resubmit the stage. Otherwise,
+    * submit waiting stages.
+    */
+  private def processNextStage(shuffleStage: ShuffleMapStage) {
+    if (shuffleStage.outputLocs.contains(Nil)) {
+      // Some tasks had failed; let's resubmit this shuffleStage
+      // TODO: Lower-level scheduler should also deal with this
+      logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
+          ") because some of its tasks had failed: " +
+          shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
+              .map(_._2).mkString(", "))
+      submitStage(shuffleStage)
+    } else {
+      val newlyRunnable = new ArrayBuffer[Stage]
+      for (shuffleStage <- waitingStages) {
+        logInfo("Missing parents for " + shuffleStage + ": " +
+            getMissingParentStages(shuffleStage))
+      }
+      for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage).isEmpty) {
+        newlyRunnable += shuffleStage
+      }
+      waitingStages --= newlyRunnable
+      runningStages ++= newlyRunnable
+      for {
+        shuffleStage <- newlyRunnable.sortBy(_.id)
+        jobId <- activeJobForStage(shuffleStage)
+      } {
+        logInfo("Submitting " + shuffleStage + " (" +
+            shuffleStage.rdd + "), which is now runnable")
+        submitMissingTasks(shuffleStage, jobId)
+      }
+    }
+  }
+  
+  /** Process successfully completed shuffle tasks */
+  private def processShuffleTask(event: CompletionEvent, stage: Stage, smt: ShuffleMapTask) {
+    val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
+    updateAccumulators(event)
+    val status = event.result.asInstanceOf[MapStatus]
+    val execId = status.location.executorId
+    logDebug("ShuffleMapTask finished on " + execId)
+    if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
+      logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
+    } else {
+      shuffleStage.addOutputLoc(smt.partitionId, status)
+    }
+    if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
+      markStageAsFinished(shuffleStage)
+      logInfo("looking for newly runnable stages")
+      logInfo("running: " + runningStages)
+      logInfo("waiting: " + waitingStages)
+      logInfo("failed: " + failedStages)
+
+      // We supply true to increment the epoch number here in case this is a
+      // recomputation of the map outputs. In that case, some nodes may have cached
+      // locations with holes (from when we detected the error) and will need the
+      // epoch incremented to refetch them.
+      // TODO: Only increment the epoch number if this is not the first time
+      //       we registered these map outputs.
+      mapOutputTracker.registerMapOutputs(
+        shuffleStage.shuffleDep.shuffleId,
+        shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+        changeEpoch = true)
+
+      clearCacheLocs()
+      processNextStage(shuffleStage)
+    }
+  }
+
+  /** Handle successfully completed result tasks */
+  private def processResultTask(event: CompletionEvent, stage: Stage, rt: ResultTask[_, _]) {
+    // Cast to ResultStage here because it's part of the ResultTask
+    // TODO Refactor this out to a function that accepts a ResultStage
+    val resultStage = stage.asInstanceOf[ResultStage]
+    resultStage.resultOfJob match {
+      case Some(job) =>
+        if (!job.finished(rt.outputId)) {
+          updateAccumulators(event)
+          job.finished(rt.outputId) = true
+          job.numFinished += 1
+          // If the whole job has finished, remove it
+          if (job.numFinished == job.numPartitions) {
+            markStageAsFinished(resultStage)
+            cleanupStateForJobAndIndependentStages(job)
+            listenerBus.post(
+              SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+          }
+
+          // taskSucceeded runs some user code that might throw an exception. Make sure
+          // we are resilient against that.
+          try {
+            job.listener.taskSucceeded(rt.outputId, event.result)
+          } catch {
+            case e: Exception =>
+              // TODO: Perhaps we want to mark the resultStage as failed?
+              job.listener.jobFailed(new SparkDriverExecutionException(e))
+          }
+        }
+      case None =>
+        logInfo("Ignoring result from " + rt + " because its job has finished")
+    }
+  }
   
   /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
@@ -1042,155 +1203,6 @@ class DAGScheduler(
         // will abort the job.
     }
     submitWaitingStages()
-  }
-
-  def handleSuccess(event: CompletionEvent, task: Task[_], stageId: Int, taskType: String, 
-      stage: Stage) {
-    listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-      event.reason, event.taskInfo, event.taskMetrics))
-    stage.pendingTasks -= task
-    task match {
-      case rt: ResultTask[_, _] =>
-        processResultTask(event, stage, rt)
-
-      case smt: ShuffleMapTask =>
-        processShuffleTask(event, stage, smt)
-    }
-  }
-
-  private def handleFetchFailure(task: Task[_], bmAddress: BlockManagerId, shuffleId: Int,
-      mapId: Int, failureMessage: String) {
-    val failedStage = stageIdToStage(task.stageId)
-    val mapStage = shuffleToMapStage(shuffleId)
-
-    // It is likely that we receive multiple FetchFailed for a single stage (because we have
-    // multiple tasks running concurrently on different executors). In that case, it is possible
-    // the fetch failure has already been handled by the scheduler.
-    if (runningStages.contains(failedStage)) {
-      logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-          s"due to a fetch failure from $mapStage (${mapStage.name})")
-      markStageAsFinished(failedStage, Some(failureMessage))
-      runningStages -= failedStage
-    }
-
-    if (disallowStageRetryForTest) {
-      abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
-    } else if (failedStages.isEmpty) {
-      // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-      // in that case the event will already have been scheduled.
-      // TODO: Cancel running tasks in the stage
-      logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-          s"$failedStage (${failedStage.name}) due to fetch failure")
-      messageScheduler.schedule(new Runnable {
-        override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-      }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
-    }
-    failedStages += failedStage
-    failedStages += mapStage
-    // Mark the map whose fetch failed as broken in the map stage
-    if (mapId != -1) {
-      mapStage.removeOutputLoc(mapId, bmAddress)
-      mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-    }
-
-    // TODO: mark the executor as failed only if there were lots of fetch failures on it
-    if (bmAddress != null) {
-      handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
-    }
-  }
-
-  private def processShuffleTask(event: CompletionEvent, stage: Stage, smt: ShuffleMapTask) {
-    val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-    updateAccumulators(event)
-    val status = event.result.asInstanceOf[MapStatus]
-    val execId = status.location.executorId
-    logDebug("ShuffleMapTask finished on " + execId)
-    if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-      logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
-    } else {
-      shuffleStage.addOutputLoc(smt.partitionId, status)
-    }
-    if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
-      markStageAsFinished(shuffleStage)
-      logInfo("looking for newly runnable stages")
-      logInfo("running: " + runningStages)
-      logInfo("waiting: " + waitingStages)
-      logInfo("failed: " + failedStages)
-
-      // We supply true to increment the epoch number here in case this is a
-      // recomputation of the map outputs. In that case, some nodes may have cached
-      // locations with holes (from when we detected the error) and will need the
-      // epoch incremented to refetch them.
-      // TODO: Only increment the epoch number if this is not the first time
-      //       we registered these map outputs.
-      mapOutputTracker.registerMapOutputs(
-        shuffleStage.shuffleDep.shuffleId,
-        shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-        changeEpoch = true)
-
-      clearCacheLocs()
-      if (shuffleStage.outputLocs.contains(Nil)) {
-        // Some tasks had failed; let's resubmit this shuffleStage
-        // TODO: Lower-level scheduler should also deal with this
-        logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
-            ") because some of its tasks had failed: " +
-            shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
-                .map(_._2).mkString(", "))
-        submitStage(shuffleStage)
-      } else {
-        val newlyRunnable = new ArrayBuffer[Stage]
-        for (shuffleStage <- waitingStages) {
-          logInfo("Missing parents for " + shuffleStage + ": " +
-              getMissingParentStages(shuffleStage))
-        }
-        for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage).isEmpty) {
-          newlyRunnable += shuffleStage
-        }
-        waitingStages --= newlyRunnable
-        runningStages ++= newlyRunnable
-        for {
-          shuffleStage <- newlyRunnable.sortBy(_.id)
-          jobId <- activeJobForStage(shuffleStage)
-        } {
-          logInfo("Submitting " + shuffleStage + " (" +
-              shuffleStage.rdd + "), which is now runnable")
-          submitMissingTasks(shuffleStage, jobId)
-        }
-      }
-    }
-  }
-
-  private def processResultTask(event: CompletionEvent, stage: Stage, rt: ResultTask[_, _]) {
-    // Cast to ResultStage here because it's part of the ResultTask
-    // TODO Refactor this out to a function that accepts a ResultStage
-    val resultStage = stage.asInstanceOf[ResultStage]
-    resultStage.resultOfJob match {
-      case Some(job) =>
-        if (!job.finished(rt.outputId)) {
-          updateAccumulators(event)
-          job.finished(rt.outputId) = true
-          job.numFinished += 1
-          // If the whole job has finished, remove it
-          if (job.numFinished == job.numPartitions) {
-            markStageAsFinished(resultStage)
-            cleanupStateForJobAndIndependentStages(job)
-            listenerBus.post(
-              SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
-          }
-
-          // taskSucceeded runs some user code that might throw an exception. Make sure
-          // we are resilient against that.
-          try {
-            job.listener.taskSucceeded(rt.outputId, event.result)
-          } catch {
-            case e: Exception =>
-              // TODO: Perhaps we want to mark the resultStage as failed?
-              job.listener.jobFailed(new SparkDriverExecutionException(e))
-          }
-        }
-      case None =>
-        logInfo("Ignoring result from " + rt + " because its job has finished")
-    }
   }
 
   /**
