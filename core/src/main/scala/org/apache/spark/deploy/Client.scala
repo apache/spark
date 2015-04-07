@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.HashSet
 import scala.concurrent._
 
 import akka.actor._
@@ -28,19 +29,21 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
-import scala.collection.mutable.HashSet
 
 /**
  * Proxy that relays messages to the driver.
+ *
+ * Now we don't support retry in case submission failed. In HA mode, client will submit request to
+ * all masters and see which one could handle it.
  */
 private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   extends Actor with ActorLogReceive with Logging {
 
-  val mastersActor = driverArgs.masters.map { m =>
+  private val masterActors = driverArgs.masters.map { m =>
     context.actorSelection(Master.toAkkaUrl(m, AkkaUtils.protocol(context.system)))
   }
-  val lostMasters = new HashSet[Address]
-  var activeMasterActor: ActorSelection = null
+  private val lostMasters = new HashSet[Address]
+  private var activeMasterActor: ActorSelection = null
 
   val timeout = AkkaUtils.askTimeout(conf)
 
@@ -80,15 +83,17 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.supervise,
           command)
 
-      for (masterActor <- mastersActor) {
-        masterActor ! RequestSubmitDriver(driverDescription)
-      }
+        // This assumes only one Master is active at a time
+        for (masterActor <- masterActors) {
+          masterActor ! RequestSubmitDriver(driverDescription)
+        }
 
       case "kill" =>
         val driverId = driverArgs.driverId
-      for (masterActor <- mastersActor) {
-        masterActor ! RequestKillDriver(driverId)
-      }
+        // This assumes only one Master is active at a time
+        for (masterActor <- masterActors) {
+          masterActor ! RequestKillDriver(driverId)
+        }
     }
   }
 
@@ -121,7 +126,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           System.exit(-1)
         }
         System.exit(0)
-      }
+    }
   }
 
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
@@ -131,7 +136,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (success) {
         activeMasterActor = context.actorSelection(sender.path)
         pollAndReportStatus(driverId.get)
-      } else if (!message.contains("Can only")) {
+      } else if (!message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
         System.exit(-1)
       }
 
@@ -141,7 +146,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (success) {
         activeMasterActor = context.actorSelection(sender.path)
         pollAndReportStatus(driverId)
-      } else if (!message.contains("Can only")) {
+      } else if (!message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
         System.exit(-1)
       }
 
@@ -149,8 +154,8 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (!lostMasters.contains(remoteAddress)) {
         println(s"Error connecting to master $remoteAddress.")
         lostMasters += remoteAddress
-        if (lostMasters.size >= mastersActor.size) {
-          println(s"No master is available, exiting.")
+        if (lostMasters.size >= masterActors.size) {
+          println("No master is available, exiting.")
           System.exit(-1)
         }
       }
@@ -160,8 +165,8 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         println(s"Error connecting to master ($remoteAddress).")
         println(s"Cause was: $cause")
         lostMasters += remoteAddress
-        if (lostMasters.size >= mastersActor.size) {
-          println(s"No master is available, exiting.")
+        if (lostMasters.size >= masterActors.size) {
+          println("No master is available, exiting.")
           System.exit(-1)
         }
       }

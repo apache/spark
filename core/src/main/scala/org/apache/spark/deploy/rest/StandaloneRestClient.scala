@@ -21,13 +21,14 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import javax.servlet.http.HttpServletResponse
 
+import scala.collection.mutable
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import scala.collection.mutable
+import org.apache.spark.util.Utils
 
 /**
  * A client that submits applications to the standalone Master using a REST protocol.
@@ -52,11 +53,14 @@ import scala.collection.mutable
  * is a mismatch, the server will respond with the highest protocol version it supports. A future
  * implementation of this client can use that information to retry using the version specified
  * by the server.
+ *
+ * Now we don't support retry in case submission failed. In HA mode, client will submit request to
+ * all masters and see which one could handle it.
  */
 private[deploy] class StandaloneRestClient(master: String) extends Logging {
   import StandaloneRestClient._
 
-  val masters: Array[String] = master.stripPrefix("spark://").split(",").map("spark://" + _)
+  private val masters: Array[String] = Utils.splitMasterAdress(master)
 
   private val lostMasters = new mutable.HashSet[String]
 
@@ -87,10 +91,15 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
-          if(handleSubmitRestConnectionException(m)) {
+        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+          if(handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
-              "No master is available for createSubmission.", new Throwable(""))
+              s"Unable to connect to server", unreachable)
+          }
+        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
+          if(handleConnectionException(m)) {
+            throw new SubmitRestProtocolException(
+              "Malformed response received from server", malformed)
           }
       }
     }
@@ -109,7 +118,7 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
         response = post(url)
         response match {
           case k: KillSubmissionResponse =>
-            if (!k.message.contains("Can only")) {
+            if (!k.message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
               handleRestResponse(k)
               suc = true
             }
@@ -117,10 +126,15 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
-          if(handleSubmitRestConnectionException(m)) {
+        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+          if(handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
-              "No master is available for killSubmission.", new Throwable(""))
+              s"Unable to connect to server", unreachable)
+          }
+        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
+          if(handleConnectionException(m)) {
+            throw new SubmitRestProtocolException(
+              "Malformed response received from server", malformed)
           }
       }
     }
@@ -149,10 +163,15 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case e @ (_: SubmitRestConnectionException | _: ConnectException) =>
-          if(handleSubmitRestConnectionException(m)) {
+        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+          if(handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
-              "No master is available for requestSubmissionStatus.", new Throwable(""))
+              s"Unable to connect to server", unreachable)
+          }
+        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
+          if(handleConnectionException(m)) {
+            throw new SubmitRestProtocolException(
+              "Malformed response received from server", malformed)
           }
       }
     }
@@ -213,39 +232,30 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
    * Exposed for testing.
    */
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
-    try {
-      val dataStream =
-        if (connection.getResponseCode == HttpServletResponse.SC_OK) {
-          connection.getInputStream
-        } else {
-          connection.getErrorStream
-        }
-      // If the server threw an exception while writing a response, it will not have a body
-      if (dataStream == null) {
-        throw new SubmitRestProtocolException("Server returned empty body")
+    val dataStream =
+      if (connection.getResponseCode == HttpServletResponse.SC_OK) {
+        connection.getInputStream
+      } else {
+        connection.getErrorStream
       }
-      val responseJson = Source.fromInputStream(dataStream).mkString
-      logDebug(s"Response from the server:\n$responseJson")
-      val response = SubmitRestProtocolMessage.fromJson(responseJson)
-      response.validate()
-      response match {
-        // If the response is an error, log the message
-        case error: ErrorResponse =>
-          logError(s"Server responded with error:\n${error.message}")
-          error
-        // Otherwise, simply return the response
-        case response: SubmitRestProtocolResponse => response
-        case unexpected =>
-          throw new SubmitRestProtocolException(
-            s"Message received from server was not a response:\n${unexpected.toJson}")
-      }
-    } catch {
-      case unreachable @ (_: FileNotFoundException | _: SocketException) =>
-        throw new SubmitRestConnectionException(
-          s"Unable to connect to server ${connection.getURL}", unreachable)
-      case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
+    // If the server threw an exception while writing a response, it will not have a body
+    if (dataStream == null) {
+      throw new SubmitRestProtocolException("Server returned empty body")
+    }
+    val responseJson = Source.fromInputStream(dataStream).mkString
+    logDebug(s"Response from the server:\n$responseJson")
+    val response = SubmitRestProtocolMessage.fromJson(responseJson)
+    response.validate()
+    response match {
+      // If the response is an error, log the message
+      case error: ErrorResponse =>
+        logError(s"Server responded with error:\n${error.message}")
+        error
+      // Otherwise, simply return the response
+      case response: SubmitRestProtocolResponse => response
+      case unexpected =>
         throw new SubmitRestProtocolException(
-          "Malformed response received from server", malformed)
+          s"Message received from server was not a response:\n${unexpected.toJson}")
     }
   }
 
@@ -338,10 +348,13 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     logError(s"Error: Server responded with message of unexpected type ${unexpected.messageType}.")
   }
 
-  private def handleSubmitRestConnectionException(url: String): Boolean = {
-    if (!lostMasters.contains(url)) {
-      logWarning(s"Unable to connect to server ${url}.")
-      lostMasters += url
+  /**
+   * When a connection exception was caught, we see whether all masters are lost.
+   */
+  private def handleConnectionException(masterUrl: String): Boolean = {
+    if (!lostMasters.contains(masterUrl)) {
+      logWarning(s"Unable to connect to server ${masterUrl}.")
+      lostMasters += masterUrl
     }
     lostMasters.size >= masters.size
   }

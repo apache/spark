@@ -2058,6 +2058,11 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getUserName())
   }
 
+  def splitMasterAdress(masterAddr: String): Array[String] = {
+    masterAddr.stripPrefix("spark://").split(",").map("spark://" + _)
+  }
+
+  val MASTER_NOT_ALIVE_STRING = "Current state is not alive: "
 }
 
 /**
