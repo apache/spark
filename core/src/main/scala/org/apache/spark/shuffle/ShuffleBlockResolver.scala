@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.shuffle
 
-import akka.actor.Actor
-import org.apache.spark.Logging
+import java.nio.ByteBuffer
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.storage.ShuffleBlockId
 
-import org.apache.spark.util.{Utils, ActorLogReceive}
-
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
-
-/**
- * Actor that runs inside of executors to enable driver -> executor RPC.
- */
 private[spark]
-class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
+/**
+ * Implementers of this trait understand how to retrieve block data for a logical shuffle block
+ * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
+ * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
+ * implementations when shuffle data is retrieved.
+ */
+trait ShuffleBlockResolver {
+  type ShuffleId = Int
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
-    case TriggerThreadDump =>
-      sender ! Utils.getThreadDump()
-  }
+  /**
+   * Retrieve the data for the specified block. If the data for that block is not available,
+   * throws an unspecified exception.
+   */
+  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 
+  def stop(): Unit
 }

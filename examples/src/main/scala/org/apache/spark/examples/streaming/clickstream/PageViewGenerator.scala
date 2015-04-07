@@ -94,7 +94,7 @@ object PageViewGenerator {
     while (true) {
       val socket = listener.accept()
       new Thread() {
-        override def run = {
+        override def run(): Unit = {
           println("Got client connected from: " + socket.getInetAddress)
           val out = new PrintWriter(socket.getOutputStream(), true)
 

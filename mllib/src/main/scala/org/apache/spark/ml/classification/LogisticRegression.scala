@@ -180,7 +180,6 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override protected def predict(features: Vector): Double = {
-    println(s"LR.predict with threshold: ${paramMap(threshold)}")
     if (score(features) > paramMap(threshold)) 1 else 0
   }
 

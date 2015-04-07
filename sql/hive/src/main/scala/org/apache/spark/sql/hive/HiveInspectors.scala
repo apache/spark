@@ -593,7 +593,7 @@ private[hive] trait HiveInspectors {
     case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
-    case _ if expr.foldable => toInspector(Literal(expr.eval(), expr.dataType))
+    case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))
     // For those non constant expression, map to object inspector according to its data type
     case _ => toInspector(expr.dataType)
   }

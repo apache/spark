@@ -90,7 +90,7 @@ class PRMessage() extends Message[String] with Serializable {
 }
 
 class CustomPartitioner(partitions: Int) extends Partitioner {
-  def numPartitions = partitions
+  def numPartitions: Int = partitions
 
   def getPartition(key: Any): Int = {
     val hash = key match {

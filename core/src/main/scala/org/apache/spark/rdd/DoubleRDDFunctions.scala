@@ -191,25 +191,23 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       }
     }
     // Determine the bucket function in constant time. Requires that buckets are evenly spaced
-    def fastBucketFunction(min: Double, increment: Double, count: Int)(e: Double): Option[Int] = {
+    def fastBucketFunction(min: Double, max: Double, count: Int)(e: Double): Option[Int] = {
       // If our input is not a number unless the increment is also NaN then we fail fast
-      if (e.isNaN()) {
-        return None
-      }
-      val bucketNumber = (e - min)/(increment)
-      // We do this rather than buckets.lengthCompare(bucketNumber)
-      // because Array[Double] fails to override it (for now).
-      if (bucketNumber > count || bucketNumber < 0) {
+      if (e.isNaN || e < min || e > max) {
         None
       } else {
-        Some(bucketNumber.toInt.min(count - 1))
+        // Compute ratio of e's distance along range to total range first, for better precision
+        val bucketNumber = (((e - min) / (max - min)) * count).toInt
+        // should be less than count, but will equal count if e == max, in which case
+        // it's part of the last end-range-inclusive bucket, so return count-1
+        Some(math.min(bucketNumber, count - 1))
       }
     }
     // Decide which bucket function to pass to histogramPartition. We decide here
-    // rather than having a general function so that the decission need only be made
+    // rather than having a general function so that the decision need only be made
     // once rather than once per shard
     val bucketFunction = if (evenBuckets) {
-      fastBucketFunction(buckets(0), buckets(1)-buckets(0), buckets.length-1) _
+      fastBucketFunction(buckets.head, buckets.last, buckets.length - 1) _
     } else {
       basicBucketFunction _
     }

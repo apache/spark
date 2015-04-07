@@ -118,7 +118,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     if (!fs.exists(path)) {
       var msg = s"Log directory specified does not exist: $logDir."
       if (logDir == DEFAULT_LOG_DIR) {
-        msg += " Did you configure the correct one through spark.fs.history.logDirectory?"
+        msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
       }
       throw new IllegalArgumentException(msg)
     }
