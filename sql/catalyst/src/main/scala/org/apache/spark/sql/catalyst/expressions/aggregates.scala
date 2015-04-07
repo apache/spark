@@ -693,7 +693,8 @@ case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(zero.eval(null), calcType)
 
-  private def addFunction(value: Any) = Add(sum, Cast(Literal.create(value, expr.dataType), calcType))
+  private def addFunction(value: Any) = Add(sum, 
+            Cast(Literal.create(value, expr.dataType), calcType))
 
   private def squaredAddFunction(value: Any) =  {
     val castValue = Cast(Literal.create(value, expr.dataType), calcType)
