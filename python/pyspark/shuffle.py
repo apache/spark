@@ -651,7 +651,7 @@ class GroupByKey(object):
 
 class ChainedIterable(object):
     """
-    Picklable chained iterator, similar to itertools.chain.fromiterable()
+    Picklable chained iterator, similar to itertools.chain.from_iterable()
     """
     def __init__(self, iterators):
         self.iterators = iterators
@@ -660,7 +660,7 @@ class ChainedIterable(object):
         return sum(len(vs) for vs in self.iterators)
 
     def __iter__(self):
-        return itertools.chain.fromiterable(self.iterators)
+        return itertools.chain.from_iterable(self.iterators)
 
 
 class ExternalGroupBy(ExternalMerger):
