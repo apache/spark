@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
+package org.apache.spark.shuffle
 
-package org.apache.spark.scalastyle
+import java.nio.ByteBuffer
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.storage.ShuffleBlockId
 
-import java.util.regex.Pattern
+private[spark]
+/**
+ * Implementers of this trait understand how to retrieve block data for a logical shuffle block
+ * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
+ * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
+ * implementations when shuffle data is retrieved.
+ */
+trait ShuffleBlockResolver {
+  type ShuffleId = Int
 
-import org.scalastyle.{PositionError, ScalariformChecker, ScalastyleError}
+  /**
+   * Retrieve the data for the specified block. If the data for that block is not available,
+   * throws an unspecified exception.
+   */
+  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 
-import scalariform.lexer.Token
-import scalariform.parser.CompilationUnit
-
-class NonASCIICharacterChecker extends ScalariformChecker {
-  val errorKey: String = "non.ascii.character.disallowed"
-
-  override def verify(ast: CompilationUnit): List[ScalastyleError] = {
-    ast.tokens.filter(hasNonAsciiChars).map(x => PositionError(x.offset)).toList
-  }
-
-  private def hasNonAsciiChars(x: Token) =
-    x.rawText.trim.nonEmpty && !Pattern.compile( """\p{ASCII}+""", Pattern.DOTALL)
-    .matcher(x.text.trim).matches()
-
+  def stop(): Unit
 }

@@ -15,23 +15,41 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.network;
 
-import java.nio.ByteBuffer
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
-private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+public class ByteArrayWritableChannel implements WritableByteChannel {
 
-  /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
-   */
-  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
+  private final byte[] data;
+  private int offset;
 
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
+  public ByteArrayWritableChannel(int size) {
+    this.data = new byte[size];
+    this.offset = 0;
+  }
 
-  def stop(): Unit
+  public byte[] getData() {
+    return data;
+  }
+
+  @Override
+  public int write(ByteBuffer src) {
+    int available = src.remaining();
+    src.get(data, offset, available);
+    offset += available;
+    return available;
+  }
+
+  @Override
+  public void close() {
+
+  }
+
+  @Override
+  public boolean isOpen() {
+    return true;
+  }
+
 }

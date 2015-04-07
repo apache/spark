@@ -34,7 +34,7 @@ object AttributeSet {
   def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
-  def apply(baseSet: Seq[Expression]): AttributeSet = {
+  def apply(baseSet: Iterable[Expression]): AttributeSet = {
     new AttributeSet(
       baseSet
         .flatMap(_.references)
@@ -58,7 +58,8 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
 
   /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any): Boolean = other match {
-    case otherSet: AttributeSet => baseSet.map(_.a).forall(otherSet.contains)
+    case otherSet: AttributeSet =>
+      otherSet.size == baseSet.size && baseSet.map(_.a).forall(otherSet.contains)
     case _ => false
   }
 
