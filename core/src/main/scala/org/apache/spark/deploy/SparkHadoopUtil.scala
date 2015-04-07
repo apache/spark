@@ -21,7 +21,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
@@ -200,18 +200,22 @@ class SparkHadoopUtil extends Logging {
     if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
 
-  private val varPattern = """(\$\{hadoop-[^\}\$\u0020]+\})""".r.unanchored
+  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
 
   /**
    * Substitute variables by looking them up in Hadoop configs. Only variables that match the
-   * ${hadoop- .. } pattern are substituted.
+   * ${hadoopconf- .. } pattern are substituted.
    */
   def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
     text match {
-      case varPattern(matched) => {
-        val key = matched.substring(9, matched.length() - 1) // remove ${hadoop- .. }
+      case HADOOP_CONF_PATTERN(matched) => {
+        logDebug(text + " matched " + HADOOP_CONF_PATTERN)
+        val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
-          .map { value => text.replace(matched, value) }
+          .map { value =>
+            logDebug("Substituted " + matched + " with " + value)
+            text.replace(matched, value)
+          }
         if (eval.isEmpty) {
           // The variable was not found in Hadoop configs, so return text as is.
           text
@@ -220,7 +224,10 @@ class SparkHadoopUtil extends Logging {
           substituteHadoopVariables(eval.get, hadoopConf)
         }
       }
-      case _ => text
+      case _ => {
+        logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
+        text
+      }
     }
   }
 }
