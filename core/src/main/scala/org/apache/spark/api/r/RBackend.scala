@@ -92,7 +92,7 @@ private[spark] class RBackend {
 }
 
 private[spark] object RBackend extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: RBackend <tempFilePath>")
       System.exit(-1)

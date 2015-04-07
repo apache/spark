@@ -84,6 +84,11 @@ class ApplicationMasterArguments(val args: Array[String]) {
       }
     }
 
+    if (primaryPyFile != null && primaryRFile != null) {
+      System.err.println("Cannot have primary-py-file and primary-r-file at the same time")
+      System.exit(-1)
+    }
+
     userArgs = userArgsBuffer.readOnly
   }
 

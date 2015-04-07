@@ -112,7 +112,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val stream = new BufferedOutputStream(output, bufferSize)
 
     new Thread("writer for R") {
-      override def run() {
+      override def run(): Unit = {
         try {
           SparkEnv.set(env)
           val dataOut = new DataOutputStream(stream)

@@ -54,10 +54,7 @@ private[r] object SQLUtils {
         case expr: Expression => Alias(expr, expr.simpleString)()
       }
     }
-    // TODO(davies): use internal API
-    val toDF = gd.getClass.getDeclaredMethods.filter(f => f.getName == "toDF").head
-    toDF.setAccessible(true)
-    toDF.invoke(gd, aggExprs).asInstanceOf[DataFrame]
+    gd.toDF(aggExprs)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {

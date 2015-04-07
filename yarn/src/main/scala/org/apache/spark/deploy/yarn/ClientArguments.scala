@@ -233,6 +233,11 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
+
+    if (primaryPyFile != null && primaryRFile != null) {
+      throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
+        " at the same time")
+    }
   }
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
