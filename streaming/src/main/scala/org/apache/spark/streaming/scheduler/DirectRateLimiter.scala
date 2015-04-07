@@ -26,11 +26,11 @@ private[streaming] trait DirectRateLimiter extends Serializable with Logging {
   self: RateLimiter =>
 
   // Map to record the number of processed records of each batch interval
-  private val processedRecordsMap = new mutable.HashMap[Time, Long]()
+  protected val processedRecordsMap = new mutable.HashMap[Time, Long]()
     with mutable.SynchronizedMap[Time, Long]
-  private val slideDurationInMs = streamingContext.graph.batchDuration.milliseconds
+  protected val slideDurationInMs = streamingContext.graph.batchDuration.milliseconds
   // To record the number of un-processed records
-  private var unProcessedRecords: Long = 0L
+  protected var unProcessedRecords: Long = 0L
 
   private val dynamicRateUpdater = new StreamingListener {
     override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
@@ -49,17 +49,44 @@ private[streaming] trait DirectRateLimiter extends Serializable with Logging {
 
   def streamingContext: StreamingContext
 
-  /** Record the number of processed records in this batch interval */
-  def updateProcessedRecords(batchTime: Time, processedRecords: Long): Unit = {
-    unProcessedRecords += processedRecords
-    processedRecordsMap += ((batchTime, processedRecords))
-  }
-
   /**
    * Get the max number of messages to process for the next batch.
    * @return None, no limitation of number of max messages to process. Some[Long]. number of
    *         messages to process in the next batch.
    */
+  def maxMessages: Option[Long]
+
+  /** Record the number of processed records in this batch interval */
+  def updateProcessedRecords(batchTime: Time, processedRecords: Long): Unit = {
+    unProcessedRecords += processedRecords
+    processedRecordsMap += ((batchTime, processedRecords))
+  }
+}
+
+private[streaming]
+class FixedDirectRateLimiter(
+    val defaultRate: Double,
+    @transient val streamingContext: StreamingContext)
+  extends FixedRateLimiter with DirectRateLimiter {
+  final def isDriver: Boolean = true
+
+  def maxMessages: Option[Long] = {
+    if (effectiveRate == Int.MaxValue.toDouble) {
+      None
+    } else {
+      Some((effectiveRate * slideDurationInMs / 1000).toLong)
+    }
+  }
+}
+
+private[streaming]
+class DynamicDirectRateLimiter(
+    val defaultRate: Double,
+    val slowStartInitialRate: Double,
+    @transient val streamingContext: StreamingContext)
+  extends DynamicRateLimiter with DirectRateLimiter {
+  final def isDriver: Boolean = true
+
   def maxMessages: Option[Long] = {
     if (effectiveRate == Int.MaxValue.toDouble) {
       return None
@@ -79,21 +106,4 @@ private[streaming] trait DirectRateLimiter extends Serializable with Logging {
     logDebug(s"Get the number of maximum messages ${optNumMaxMsgs.get} for the next batch")
     optNumMaxMsgs
   }
-}
-
-private[streaming]
-class FixedDirectRateLimiter(
-    val defaultRate: Double,
-    @transient val streamingContext: StreamingContext)
-  extends FixedRateLimiter with DirectRateLimiter {
-  final def isDriver: Boolean = true
-}
-
-private[streaming]
-class DynamicDirectRateLimiter(
-    val defaultRate: Double,
-    val slowStartInitialRate: Double,
-    @transient val streamingContext: StreamingContext)
-  extends DynamicRateLimiter with DirectRateLimiter {
-  final def isDriver: Boolean = true
 }
