@@ -795,9 +795,9 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(rdd.getNumPartitions() + 2, parted.union(rdd).getNumPartitions())
         self.assertEqual(rdd.getNumPartitions() + 2, rdd.union(parted).getNumPartitions())
 
-        self.sc.setJobGroup("test1", "test", True)
         tracker = self.sc.statusTracker()
 
+        self.sc.setJobGroup("test1", "test", True)
         d = sorted(parted.join(parted).collect())
         self.assertEqual(10, len(d))
         self.assertEqual((0, (0, 0)), d[0])
