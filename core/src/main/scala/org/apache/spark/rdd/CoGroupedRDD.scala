@@ -32,7 +32,7 @@ import org.apache.spark.serializer.Serializer
 
 /** The references to rdd and splitIndex are transient because redundant information is stored
   * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
-  * CoGrpupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
+  * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
   * task closure. */
 private[spark] case class NarrowCoGroupSplitDep(
     @transient rdd: RDD[_],
