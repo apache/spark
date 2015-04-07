@@ -133,6 +133,32 @@ class HiveUdfSuite extends QueryTest {
     TestHive.reset()
   }
 
+  test("UDFToListString") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
+    checkAnswer(
+      sql("SELECT testUDFToListString(s) FROM inputTable"), //.collect(),
+      Seq(Row("data1" :: "data2" :: "data3" :: Nil)))
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
+
+    TestHive.reset()
+  }
+
+  test("UDFToListInt") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
+    checkAnswer(
+      sql("SELECT testUDFToListInt(s) FROM inputTable"), //.collect(),
+      Seq(Row(1 :: 2 :: 3 :: Nil)))
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
+
+    TestHive.reset()
+  }
+
   test("UDFListListInt") {
     val testData = TestHive.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
