@@ -91,7 +91,11 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo, debugPortOpt: Option[Int] = None)
+case class SparkListenerExecutorAdded(
+    time: Long,
+    executorId: String,
+    executorInfo: ExecutorInfo,
+    debugPortOpt: Option[Int] = None)
   extends SparkListenerEvent
 
 @DeveloperApi

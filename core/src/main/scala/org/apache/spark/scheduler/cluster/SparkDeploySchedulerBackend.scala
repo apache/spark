@@ -65,7 +65,11 @@ private[spark] class SparkDeploySchedulerBackend(
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
     val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-
+    val jdwpOpts = if (sc.conf.getBoolean("spark.executor.jdwp.enabled", false)) {
+      Seq("-agentlib:jdwp=transport=dt_socket,suspend=n,server=y,address=0")
+    } else {
+      Seq.empty
+    }
     // When testing, expose the parent class path to the child. This is processed by
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
     // when the assembly is built with the "*-provided" profiles enabled.
@@ -78,7 +82,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts ++ jdwpOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")

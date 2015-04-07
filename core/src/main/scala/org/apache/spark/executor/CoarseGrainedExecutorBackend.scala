@@ -20,6 +20,8 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 
+import sun.misc.VMSupport
+
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
@@ -39,6 +41,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostPort: String,
     cores: Int,
     userClassPath: Seq[URL],
+    debugPortOpt: Option[Int],
     env: SparkEnv)
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
@@ -49,9 +52,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
-    import sun.misc.VMSupport
-    val agentProps = VMSupport.getAgentProperties
-    val debugPortOpt = Option(agentProps.get("sun.jdwp.listenerAddress").asInstanceOf[String]).map(_.split(":")(1).toInt)
 
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -168,6 +168,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+
+      debugPortOpt =
+        if (driverConf.getBoolean("spark.executor.jdwp.enabled", false)) {
+          val agentProps = VMSupport.getAgentProperties
+          Option(agentProps.get("sun.jdwp.listenerAddress").asInstanceOf[String])
+            .map(_.split(":")(1).toInt)
+        } else {
+          None
+        }
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -178,7 +188,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Start the CoarseGrainedExecutorBackend endpoint.
       val sparkHostPort = hostname + ":" + boundPort
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
-        env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
+        env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, debugPortOpt, env))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
