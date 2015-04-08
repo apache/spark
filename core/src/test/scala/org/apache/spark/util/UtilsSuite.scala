@@ -39,13 +39,13 @@ import org.apache.spark.SparkConf
 class UtilsSuite extends FunSuite with ResetSystemProperties {
   
   test("timeConversion") {
-    assert(Utils.timeStringAsS("1") === 1)
-    assert(Utils.timeStringAsS("1s") === 1)
-    assert(Utils.timeStringAsS("1000ms") === 1)
-    assert(Utils.timeStringAsS("1000000us") === 1)
-    assert(Utils.timeStringAsS("1min") === TimeUnit.MINUTES.toSeconds(1))
-    assert(Utils.timeStringAsS("1h") === TimeUnit.HOURS.toSeconds(1))
-    assert(Utils.timeStringAsS("1d") === TimeUnit.DAYS.toSeconds(1))
+    assert(Utils.timeStringAsSec("1") === 1)
+    assert(Utils.timeStringAsSec("1s") === 1)
+    assert(Utils.timeStringAsSec("1000ms") === 1)
+    assert(Utils.timeStringAsSec("1000000us") === 1)
+    assert(Utils.timeStringAsSec("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSec("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsSec("1d") === TimeUnit.DAYS.toSeconds(1))
     
     assert(Utils.timeStringAsMs("1") === 1)
     assert(Utils.timeStringAsMs("1ms") === 1)

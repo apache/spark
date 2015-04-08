@@ -129,6 +129,7 @@ public class JavaUtils {
       .put("us", TimeUnit.MICROSECONDS)
       .put("ms", TimeUnit.MILLISECONDS)
       .put("s", TimeUnit.SECONDS)
+      .put("m", TimeUnit.MINUTES)
       .put("min", TimeUnit.MINUTES)
       .put("h", TimeUnit.HOURS)
       .put("d", TimeUnit.DAYS)
@@ -144,9 +145,10 @@ public class JavaUtils {
     try {
       String suffix = "";
       for (String tail: timeSuffixes.keySet()) {
-        int charIdx = lower.length() - tail.length()-1;
+        int charIdx = lower.length() - tail.length() - 1;
         if (lower.endsWith(tail) && (charIdx >= 0 && Character.isDigit(lower.charAt(charIdx)))) {
           suffix = tail;
+          break;
         }
       }
       
@@ -154,7 +156,7 @@ public class JavaUtils {
         timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
-              "milliseconds (ms), microseconds (us), minutes (min) hour (h), or day(d). " +
+              "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +
               "E.g. 50s, 100ms, or 250us.";
       
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
@@ -181,7 +183,7 @@ public class JavaUtils {
    * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
-  public static long timeStringAsS(String str) {
+  public static long timeStringAsSec(String str) {
     return parseTimeString(str, TimeUnit.SECONDS);
   }
 
