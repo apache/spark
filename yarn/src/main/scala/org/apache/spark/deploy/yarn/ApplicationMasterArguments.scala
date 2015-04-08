@@ -92,7 +92,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --jar JAR_PATH       Path to your application's JAR file
       |  --class CLASS_NAME   Name of your application's main class
       |  --primary-py-file    A main Python file
-      |  --py-files PY_FILES  Comma-separated list of .zip, .egg, or .py files to
+      |  --py-files PY_FILES  Comma-separated list of .whl, .egg, .zip or .py files to
       |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.

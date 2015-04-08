@@ -252,7 +252,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           'default')
       |  --addJars jars           Comma separated list of local jars that want SparkContext.addJar
       |                           to work with.
-      |  --py-files PY_FILES      Comma-separated list of .zip, .egg, or .py files to
+      |  --py-files PY_FILES      Comma-separated list of .whl, .egg, .zip or .py files to
       |                           place on the PYTHONPATH for Python apps.
       |  --files files            Comma separated list of files to be distributed with the job.
       |  --archives archives      Comma separated list of archives to be distributed with the job.

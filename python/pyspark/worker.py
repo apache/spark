@@ -18,11 +18,14 @@
 """
 Worker that receives input from Piped RDD.
 """
+import fcntl
 import os
 import sys
 import time
 import socket
 import traceback
+
+from pip.commands.install import InstallCommand as pip_InstallCommand
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -66,12 +69,46 @@ def main(infile, outfile):
         SparkFiles._root_directory = spark_files_dir
         SparkFiles._is_running_on_worker = True
 
-        # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
         add_path(spark_files_dir)  # *.py files that were added will be copied here
+
+        # fetch names of includes and construct PYTHONPATH if the file extension
+        # is not '.whl'
         num_python_includes = read_int(infile)
+        wheel_files = set()
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
-            add_path(os.path.join(spark_files_dir, filename))
+            path = os.path.join(spark_files_dir, filename)
+            if os.path.splitext(filename)[1].lower() == '.whl':
+                wheel_files.add(path)
+            else:
+                add_path(path)
+
+        if wheel_files:
+            # Install wheel files
+
+            local_site_packages_dir = os.path.join(
+                spark_files_dir,
+                'site-packages',
+            )
+            with open(os.path.join(
+                spark_files_dir,
+                '.pyspark_pip_install.lock'
+            ), 'w') as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    if os.path.exists(local_site_packages_dir) is False:
+                        # '--no-deps' is not set.
+                        # All dependencies must be there.
+                        pip_InstallCommand().main(args=[
+                            '--quiet',
+                            '--upgrade',
+                            '--no-index',
+                            '--target', local_site_packages_dir,
+                            '--find-links', spark_files_dir,
+                        ] + list(wheel_files))
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            add_path(local_site_packages_dir)
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)

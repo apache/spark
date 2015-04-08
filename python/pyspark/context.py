@@ -21,6 +21,8 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
+from pip.commands.install import InstallCommand as pip_InstallCommand
+
 from py4j.java_collections import ListConverter
 
 from pyspark import accumulators
@@ -62,9 +64,9 @@ class SparkContext(object):
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
-    _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+    _python_includes = None  # whl, egg, zip and jar files that need to be added to PYTHONPATH
 
-    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
+    PACKAGE_EXTENSIONS = ('.whl', '.egg', '.zip', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
@@ -77,9 +79,9 @@ class SparkContext(object):
                (e.g. mesos://host:port, spark://host:port, local[4]).
         :param appName: A name for your job, to display on the cluster web UI.
         :param sparkHome: Location where Spark is installed on cluster nodes.
-        :param pyFiles: Collection of .zip or .py files to send to the cluster
-               and add to PYTHONPATH.  These can be paths on the local file
-               system or HDFS, HTTP, HTTPS, or FTP URLs.
+        :param pyFiles: Collection of .py, .whl, .egg or .zip files to send
+               to the cluster and add to PYTHONPATH.  These can be paths on
+               the local file system or HDFS, HTTP, HTTPS, or FTP URLs.
         :param environment: A dictionary of environment variables to set on
                worker nodes.
         :param batchSize: The number of Python objects represented as a single
@@ -178,18 +180,24 @@ class SparkContext(object):
         sys.path.insert(1, root_dir)
 
         # Deploy any code dependencies specified in the constructor
+        # Wheel files will be installed by pip later.
         self._python_includes = list()
-        for path in (pyFiles or []):
-            self.addPyFile(path)
+        if pyFiles:
+            for path in pyFiles:
+                self.addFile(path)
+            self._include_python_packages(paths=pyFiles)
+        else:
+            pyFiles = []
 
         # Deploy code dependencies set by spark-submit; these will already have been added
-        # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
-        for path in self._conf.get("spark.submit.pyFiles", "").split(","):
-            if path != "":
-                (dirname, filename) = os.path.split(path)
-                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                    self._python_includes.append(filename)
-                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+        # with SparkContext.addFile, so we just need to include them.
+        # Wheel files will be installed by pip later.
+        spark_submit_pyfiles = self._conf.get("spark.submit.pyFiles", "").split(",")
+        if spark_submit_pyfiles:
+            self._include_python_packages(paths=spark_submit_pyfiles)
+
+        # Install all wheel files at once.
+        self._install_wheel_files(paths=pyFiles + spark_submit_pyfiles)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -693,23 +701,71 @@ class SparkContext(object):
         Clear the job's list of files added by L{addFile} or L{addPyFile} so
         that they do not get downloaded to any new nodes.
         """
-        # TODO: remove added .py or .zip files from the PYTHONPATH?
+        # TODO: remove added .py, .whl, .egg or .zip files from the PYTHONPATH?
         self._jsc.sc().clearFiles()
 
     def addPyFile(self, path):
         """
-        Add a .py or .zip dependency for all tasks to be executed on this
-        SparkContext in the future.  The C{path} passed can be either a local
-        file, a file in HDFS (or other Hadoop-supported filesystems), or an
-        HTTP, HTTPS or FTP URI.
+        Add a .py, .whl, .egg or .zip dependency for all tasks to be
+        executed on this SparkContext in the future.  The C{path} passed can
+        be either a local file, a file in HDFS (or other Hadoop-supported
+        filesystems), or an HTTP, HTTPS or FTP URI.
         """
         self.addFile(path)
-        (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
+        self._include_python_packages(paths=(path,))
+        self._install_wheel_files(paths=(path,))
 
-        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-            self._python_includes.append(filename)
-            # for tests in local mode
-            sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+    def _include_python_packages(self, paths):
+        """
+        Add Python package dependencies. Python packages (except for .whl) are
+        added to PYTHONPATH.
+        """
+        root_dir = SparkFiles.getRootDirectory()
+        for path in paths:
+            basename = os.path.basename(path)
+            extname = os.path.splitext(basename)[1].lower()
+            if extname in self.PACKAGE_EXTENSIONS \
+                    and basename not in self._python_includes:
+                self._python_includes.append(basename)
+                if extname != '.whl':
+                    # Prepend the python package (except for *.whl) to sys.path
+                    sys.path.insert(1, os.path.join(root_dir, basename))
+
+    def _install_wheel_files(
+        self,
+        paths,
+        quiet=True,
+        upgrade=True,
+        no_deps=True,
+        no_index=True,
+    ):
+        """
+        Install .whl files at once by pip install.
+        """
+        root_dir = SparkFiles.getRootDirectory()
+        paths = {
+            os.path.join(root_dir, os.path.basename(path))
+            for path in paths
+            if os.path.splitext(path)[1].lower() == '.whl'
+        }
+        if not paths:
+            return
+
+        pip_args = [
+            '--find-links', root_dir,
+            '--target', os.path.join(root_dir, 'site-packages'),
+        ]
+        if quiet:
+            pip_args.append('--quiet')
+        if upgrade:
+            pip_args.append('--upgrade')
+        if no_deps:
+            pip_args.append('--no-deps')
+        if no_index:
+            pip_args.append('--no-index')
+        pip_args.extend(paths)
+
+        pip_InstallCommand().main(args=pip_args)
 
     def setCheckpointDir(self, dirName):
         """

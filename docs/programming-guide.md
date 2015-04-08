@@ -204,7 +204,7 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
-context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
+context connects to using the `--master` argument, and you can add Python .whl, .egg, .zip or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)

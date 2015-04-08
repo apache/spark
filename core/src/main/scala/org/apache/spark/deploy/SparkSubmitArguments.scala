@@ -447,8 +447,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              coordinates should be groupId:artifactId:version.
         |  --repositories              Comma-separated list of additional remote repositories to
         |                              search for the maven coordinates given with --packages.
-        |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
-        |                              on the PYTHONPATH for Python apps.
+        |  --py-files PY_FILES         Comma-separated list of .whl, .egg, .zip or .py files to
+        |                              place on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |
