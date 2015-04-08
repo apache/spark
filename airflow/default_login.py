@@ -49,7 +49,7 @@ del User
 @login_manager.user_loader
 def load_user(userid):
     session = settings.Session()
-    user = session.query(User).filter(User.id == userid).first()
+    user = session.query(models.User).filter(models.User.id == userid).first()
     session.expunge_all()
     session.commit()
     session.close()
@@ -58,10 +58,10 @@ def load_user(userid):
 
 def login(self, request):
     session = settings.Session()
-    user = session.query(User).filter(
-        User.username == DEFAULT_USERNAME).first()
+    user = session.query(models.User).filter(
+        models.User.username == DEFAULT_USERNAME).first()
     if not user:
-        user = User(
+        user = models.User(
             username=DEFAULT_USERNAME,
             has_access=True,
             is_superuser=True)
