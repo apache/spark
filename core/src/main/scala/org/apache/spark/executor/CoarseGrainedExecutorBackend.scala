@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.io.{ByteArrayInputStream, DataInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -26,6 +27,7 @@ import scala.concurrent.Await
 import akka.actor.{Actor, ActorSelection, Props}
 import akka.pattern.Patterns
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import org.apache.hadoop.security.{UserGroupInformation, Credentials}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
@@ -63,10 +65,17 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receiveWithLogging = {
-    case RegisteredExecutor =>
+    case RegisteredExecutor(tokens) =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+      tokens.foreach { x =>
+        val inStream = new DataInputStream(new ByteArrayInputStream(x.value.array()))
+        val creds = new Credentials()
+        creds.readFields(inStream)
+        inStream.close()
+        UserGroupInformation.getCurrentUser.addCredentials(creds)
+      }
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)

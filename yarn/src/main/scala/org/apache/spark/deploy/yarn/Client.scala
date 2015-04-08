@@ -572,15 +572,13 @@ private[spark] class Client(
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(args.principal, args.keytab)
-      credentials = ugi.getCredentials
+      UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
       loginFromKeytab = true
       sparkConf.set("spark.yarn.keytab", keytabFileName)
       sparkConf.set("spark.yarn.principal", args.principal)
       logInfo("Successfully logged into the KDC.")
-    } else {
-      credentials = UserGroupInformation.getCurrentUser.getCredentials
     }
+    credentials = UserGroupInformation.getCurrentUser.getCredentials
   }
 
   /**

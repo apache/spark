@@ -259,9 +259,6 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    // If a principal and keytab have been set, use that to create new credentials for executors
-    // periodically
-    delegationTokenRenewer.scheduleLoginFromKeytab()
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -280,6 +277,9 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      // If a principal and keytab have been set, use that to create new credentials for executors
+      // periodically
+      delegationTokenRenewer.scheduleLoginFromKeytab()
       userClassThread.join()
     }
   }
@@ -289,6 +289,9 @@ private[spark] class ApplicationMaster(
       conf = sparkConf, securityManager = securityMgr)._1
     waitForSparkDriver()
     addAmIpFilter()
+    // If a principal and keytab have been set, use that to create new credentials for executors
+    // periodically
+    delegationTokenRenewer.scheduleLoginFromKeytab()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
@@ -524,6 +527,7 @@ private[spark] class ApplicationMaster(
       if (!isClusterMode) {
         context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       }
+      delegationTokenRenewer.driverActor = driver
     }
 
     override def receive = {

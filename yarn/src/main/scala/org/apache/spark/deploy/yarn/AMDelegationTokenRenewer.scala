@@ -16,18 +16,19 @@
  */
 package org.apache.spark.deploy.yarn
 
+import java.io.{DataOutputStream, ByteArrayOutputStream}
+import java.nio.ByteBuffer
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConversions._
-import scala.concurrent.duration.Duration
-
+import akka.actor.ActorSelection
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.NewTokens
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 /*
  * The following methods are primarily meant to make sure long-running apps like Spark
@@ -58,6 +59,7 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
 
   private var loggedInViaKeytab = false
   private var loggedInUGI: UserGroupInformation = null
+  var driverActor: ActorSelection = null
 
   private lazy val hadoopUtil = YarnSparkHadoopUtil.get
 
@@ -175,12 +177,16 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
     val stream = Option(remoteFs.create(tempTokenPath, true))
     try {
       stream.foreach { s =>
+        val baos = new ByteArrayOutputStream()
+        val dataOutputStream = new DataOutputStream(baos)
+        loggedInUGI.getCredentials.writeTokenStorageToStream(dataOutputStream)
+        dataOutputStream.close()
         loggedInUGI.getCredentials.writeTokenStorageToStream(s)
         s.hflush()
         s.close()
         logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")
-
         remoteFs.rename(tempTokenPath, tokenPath)
+        driverActor ! NewTokens(new SerializableBuffer(ByteBuffer.wrap(baos.toByteArray)))
         logInfo("Delegation token file rename complete.")
       }
     } finally {

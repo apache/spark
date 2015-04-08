@@ -72,6 +72,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
+  private var latestTokens: Option[SerializableBuffer] = None
+
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
@@ -93,8 +95,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
-          sender ! RegisteredExecutor
 
+          latestTokens.fold(sender ! RegisteredExecutor(None)) {
+            x => sender ! RegisteredExecutor(Some(x))
+          }
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
@@ -161,6 +165,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
       case RetrieveSparkProps =>
         sender ! sparkProperties
+
+      case NewTokens(tokens) =>
+        latestTokens = Some(tokens)
     }
 
     // Make fake resource offers on all executors
