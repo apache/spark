@@ -516,7 +516,7 @@ object Graph {
    * @param vertexStorageLevel the desired storage level at which to cache the vertices if necessary
    *
    * @return a graph with edge attributes containing either the count of duplicate edges or 1
-   * (if `uniqueEdges` is `None`) and vertex attributes containing the total degree of each vertex.
+   * (if `uniqueEdges` is `None`) and all vertex attributes set to `defaultValue`.
    */
   def fromEdgeTuples[VD: ClassTag](
       rawEdges: RDD[(VertexId, VertexId)],
