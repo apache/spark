@@ -253,6 +253,7 @@ object CheckpointReader extends Logging {
     val compressionCodec = CompressionCodec.createCodec(conf)
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
+      var cpOption: Option[Checkpoint] = None
       var ois: ObjectInputStreamWithLoader = null
       try {
         val fis = fs.open(file)
@@ -263,12 +264,9 @@ object CheckpointReader extends Logging {
         // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
         val zis = compressionCodec.compressedInputStream(fis)
         ois = new ObjectInputStreamWithLoader(zis,
-          Thread.currentThread().getContextClassLoader)
-        val cp = ois.readObject.asInstanceOf[Checkpoint]
-        cp.validate()
+            Thread.currentThread().getContextClassLoader)
+        cpOption = Some(ois.readObject.asInstanceOf[Checkpoint])
         logInfo("Checkpoint successfully loaded from file " + file)
-        logInfo("Checkpoint was generated at time " + cp.checkpointTime)
-        return Some(cp)
       } catch {
         case e: Exception =>
           logWarning("Error reading checkpoint from file " + file, e)
@@ -278,6 +276,11 @@ object CheckpointReader extends Logging {
         }
         fs.close()
       }
+      cpOption.foreach { cp =>
+        cp.validate()
+        logInfo("Checkpoint was generated at time " + cp.checkpointTime)
+      }
+      return cpOption
     })
 
     // If none of checkpoint files could be read, then throw exception
