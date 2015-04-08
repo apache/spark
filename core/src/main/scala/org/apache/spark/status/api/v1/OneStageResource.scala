@@ -115,7 +115,7 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
       def getStatusInfoUi(status: StageStatus, infos: Seq[StageInfo]): Seq[StageStatusInfoUi] = {
         infos.filter { _.stageId == stageId }.map { info =>
           val ui = listener.stageIdToData.getOrElse((info.stageId, info.attemptId),
-            //this is an internal error -- we should always have uiData
+            // this is an internal error -- we should always have uiData
             throw new SparkException(
               s"no stage ui data found for stage: ${info.stageId}:${info.attemptId}")
           )
