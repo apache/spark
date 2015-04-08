@@ -146,7 +146,8 @@ private[parquet] class CatalystRowConverter(
       case DateType =>
         new PrimitiveConverter {
           override def addInt(value: Int): Unit = {
-            updater.setInt(value.asInstanceOf[DateType#JvmType])
+            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
+            updater.set(value.asInstanceOf[DateType#JvmType])
           }
         }
 
