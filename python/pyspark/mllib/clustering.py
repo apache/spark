@@ -81,7 +81,7 @@ class KMeansModel(Saveable, Loader):
 
     @property
     def k(self):
-        """Get the total number of clusters."""
+        """Total number of clusters."""
         return len(self.centers)
 
     def predict(self, x):
@@ -118,7 +118,7 @@ class KMeans(object):
 
     @classmethod
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              initializationSteps=5, epsilon=1e-4, seed=None):
+              seed=None, initializationSteps=5, epsilon=1e-4):
         """Train a k-means clustering model."""
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
                               runs, initializationMode, initializationSteps, epsilon, seed)

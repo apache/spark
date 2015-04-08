@@ -172,10 +172,10 @@ class ListTests(PySparkTestCase):
         data = [[x, y] for x, y in zip(X, Y)]
         clusters1 = KMeans.train(self.sc.parallelize(data),
                                  3, initializationMode="k-means||",
-                                 initializationSteps=7, epsilon=1e-4, seed=42)
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         clusters2 = KMeans.train(self.sc.parallelize(data),
                                  3, initializationMode="k-means||",
-                                 initializationSteps=7, epsilon=1e-4, seed=42)
+                                 seed=42, initializationSteps=7, epsilon=1e-4)
         centers1 = clusters1.centers
         centers2 = clusters2.centers
         for c1, c2 in zip(centers1, centers2):

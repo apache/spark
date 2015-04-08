@@ -315,9 +315,9 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib KMeansModel.computeCost()
    */
   def computeCostKmeansModel(
-    data: JavaRDD[Vector],
-    centers: java.util.ArrayList[Vector]): Double = {
-    new KMeansModel(centers).computeCost(data)
+      data: JavaRDD[Vector],
+      centers: java.util.ArrayList[Vector]): Double = {
+      new KMeansModel(centers).computeCost(data)
   }
 
   /**
