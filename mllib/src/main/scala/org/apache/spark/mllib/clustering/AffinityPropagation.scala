@@ -78,6 +78,29 @@ class AffinityPropagationModel(
 }
 
 /**
+ * The message exchanged on the node graph
+ */
+private case class EdgeMessage(
+    similarity: Double,
+    availability: Double,
+    responsibility: Double) extends Equals {
+  override def canEqual(that: Any): Boolean = {
+    that match {
+      case e: EdgeMessage =>
+        similarity == e.similarity && availability == e.availability &&
+          responsibility == e.responsibility
+      case _ =>
+        false
+    }
+  }
+}
+
+/**
+ * The data stored in each vertex on the graph
+ */
+private case class VertexData(availability: Double, responsibility: Double)
+
+/**
  * :: Experimental ::
  *
  * Affinity propagation (AP), a graph clustering algorithm based on the concept of "message passing"
@@ -86,6 +109,9 @@ class AffinityPropagationModel(
  * by [[http://doi.org/10.1126/science.1136800 Frey and Dueck]].
  *
  * @param maxIterations Maximum number of iterations of the AP algorithm.
+ * @param lambda lambda parameter used in the messaging iteration loop
+ * @param normalization Indication of performing normalization
+ * @param symmetric Indication of using symmetric similarity input
  *
  * @see [[http://en.wikipedia.org/wiki/Affinity_propagation Affinity propagation (Wikipedia)]]
  */
@@ -93,14 +119,15 @@ class AffinityPropagationModel(
 class AffinityPropagation private[clustering] (
     private var maxIterations: Int,
     private var lambda: Double,
-    private var normalization: Boolean) extends Serializable {
+    private var normalization: Boolean,
+    private var symmetric: Boolean) extends Serializable {
 
   import org.apache.spark.mllib.clustering.AffinityPropagation._
 
   /** Constructs a AP instance with default parameters: {maxIterations: 100, lambda: `0.5`,
-   *    normalization: false}.
+   *    normalization: false, symmetric: true}.
    */
-  def this() = this(maxIterations = 100, lambda = 0.5, normalization = false)
+  def this() = this(maxIterations = 100, lambda = 0.5, normalization = false, symmetric = true)
 
   /**
    * Set maximum number of iterations of the messaging iteration loop
@@ -146,6 +173,24 @@ class AffinityPropagation private[clustering] (
   def getNormalization(): Boolean = {
     this.normalization
   }
+
+  /**
+   * Set whether the input similarities are symmetric or not.
+   * When symmetric is set to true, we assume that input similarities only contain triangular
+   * matrix. That means, only s,,ij,, is included in the similarities. If both s,,ij,, and
+   * s,,ji,, are given in the similarities, it very possibly causes error.
+   */
+  def setSymmetric(symmetric: Boolean): this.type = {
+    this.symmetric = symmetric
+    this
+  }
+
+  /**
+   * Get whether the input similarities are symmetric or not
+   */
+  def getSymmetric(): Boolean = {
+    this.symmetric
+  }
  
   /**
    * Run the AP algorithm.
@@ -174,7 +219,7 @@ class AffinityPropagation private[clustering] (
    *          similarities and the initial availabilities and responsibilities as its edge
    *          properties.
    */
-  private def ap(s: Graph[Seq[Double], Seq[Double]]): AffinityPropagationModel = {
+  private def ap(s: Graph[VertexData, EdgeMessage]): AffinityPropagationModel = {
     val g = apIter(s, maxIterations, lambda)
     chooseExemplars(g)
   }
@@ -187,12 +232,12 @@ private[clustering] object AffinityPropagation extends Logging {
    */
   def constructGraph(similarities: RDD[(Long, Long, Double)],
       normalize: Boolean,
-      symmetric: Boolean): Graph[Seq[Double], Seq[Double]] = {
+      symmetric: Boolean): Graph[VertexData, EdgeMessage] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (symmetric && i != j) {
-        Seq(Edge(i, j, Seq(s, 0.0, 0.0)), Edge(j, i, Seq(s, 0.0, 0.0)))
+        Seq(Edge(i, j, new EdgeMessage(s, 0.0, 0.0)), Edge(j, i, new EdgeMessage(s, 0.0, 0.0)))
       } else {
-        Seq(Edge(i, j, Seq(s, 0.0, 0.0)))
+        Seq(Edge(i, j, new EdgeMessage(s, 0.0, 0.0)))
       }
     }
 
@@ -200,18 +245,18 @@ private[clustering] object AffinityPropagation extends Logging {
       val gA = Graph.fromEdges(edges, 0.0)
       val vD = gA.aggregateMessages[Double](
         sendMsg = ctx => {
-          ctx.sendToSrc(ctx.attr(0))
+          ctx.sendToSrc(ctx.attr.similarity)
         },
         mergeMsg = (s1, s2) => s1 + s2,
         TripletFields.EdgeOnly)
       val normalized = GraphImpl.fromExistingRDDs(vD, gA.edges)
         .mapTriplets({ e =>
-            val s = if (e.srcAttr == 0.0) e.attr(0) else e.attr(0) / e.srcAttr
-            Seq(s, 0.0, 0.0)
+            val s = if (e.srcAttr == 0.0) e.attr.similarity else e.attr.similarity / e.srcAttr
+            new EdgeMessage(s, 0.0, 0.0)
         }, TripletFields.Src)
-      Graph.fromEdges(normalized.edges, Seq(0.0, 0.0))
+      Graph.fromEdges(normalized.edges, new VertexData(0.0, 0.0))
     } else {
-      Graph.fromEdges(edges, Seq(0.0, 0.0))
+      Graph.fromEdges(edges, new VertexData(0.0, 0.0))
     }
   }
 
@@ -223,9 +268,9 @@ private[clustering] object AffinityPropagation extends Logging {
    * @return a [[Graph]] representing the final graph.
    */
   def apIter(
-      g: Graph[Seq[Double], Seq[Double]],
+      g: Graph[VertexData, EdgeMessage],
       maxIterations: Int,
-      lambda: Double): Graph[Seq[Double], Seq[Double]] = {
+      lambda: Double): Graph[VertexData, EdgeMessage] = {
     val tol = math.max(1e-5 / g.vertices.count(), 1e-8)
     var prevDelta = (Double.MaxValue, Double.MaxValue)
     var diffDelta = (Double.MaxValue, Double.MaxValue)
@@ -236,65 +281,73 @@ private[clustering] object AffinityPropagation extends Logging {
 
       // update responsibilities
       val vD_r = curG.aggregateMessages[Seq[Double]](
-        sendMsg = ctx => ctx.sendToSrc(Seq(ctx.attr(0) + ctx.attr(1))),
+        sendMsg = ctx => ctx.sendToSrc(Seq(ctx.attr.similarity + ctx.attr.availability)),
         mergeMsg = _ ++ _,
         TripletFields.EdgeOnly)
-    
-      val updated_r = GraphImpl.fromExistingRDDs(vD_r, curG.edges)
+
+      val updated_r = GraphImpl(vD_r, curG.edges)
         .mapTriplets({ e =>
-          val filtered = e.srcAttr.filter(_ != (e.attr(0) + e.attr(1)))
+          val filtered = e.srcAttr.filter(_ != (e.attr.similarity + e.attr.availability))
           val pool = if (filtered.size < e.srcAttr.size - 1) {
-            filtered :+ (e.attr(0) + e.attr(1))
+            filtered :+ (e.attr.similarity + e.attr.availability)
           } else {
             filtered
           }
           val maxValue = if (pool.isEmpty) 0.0 else pool.max
-          Seq(e.attr(0), e.attr(1), lambda * (e.attr(0) - maxValue) + (1.0 - lambda) * e.attr(2))
+          new EdgeMessage(e.attr.similarity,
+            e.attr.availability,
+            lambda * (e.attr.similarity - maxValue) + (1.0 - lambda) * e.attr.responsibility)
         }, TripletFields.Src)
 
-      var iterG = Graph.fromEdges(updated_r.edges, Seq(0.0))
+      var iterG = Graph.fromEdges(updated_r.edges, new VertexData(0.0, 0.0))
 
       // update availabilities
-      val vD_a = iterG.aggregateMessages[Seq[Double]](
+      val vD_a = iterG.aggregateMessages[Double](
         sendMsg = ctx => {
           if (ctx.srcId != ctx.dstId) {
-            ctx.sendToDst(Seq(math.max(ctx.attr(2), 0.0)))
+            ctx.sendToDst(math.max(ctx.attr.responsibility, 0.0))
           } else {
-            ctx.sendToDst(Seq(ctx.attr(2)))
+            ctx.sendToDst(ctx.attr.responsibility)
           }
-        }, mergeMsg = (s1, s2) => Seq(s1(0) + s2(0)),
+        }, mergeMsg = (s1, s2) => s1 + s2,
         TripletFields.EdgeOnly)
 
-      val updated_a = GraphImpl.fromExistingRDDs(vD_a, iterG.edges)
+      val updated_a = GraphImpl(vD_a, iterG.edges)
         .mapTriplets(
           (e) => {
             if (e.srcId != e.dstId) {
-              val newA = lambda * math.min(0.0, e.dstAttr(0) - math.max(e.attr(2), 0.0)) +
-                         (1.0 - lambda) * e.attr(1)
-              Seq(e.attr(0), newA, e.attr(2))
+              val newA = lambda * math.min(0.0, e.dstAttr - math.max(e.attr.responsibility, 0.0)) +
+                         (1.0 - lambda) * e.attr.availability
+              new EdgeMessage(e.attr.similarity, newA, e.attr.responsibility)
             } else {
-              val newA = lambda * (e.dstAttr(0) - e.attr(2)) + (1.0 - lambda) * e.attr(1)
-              Seq(e.attr(0), newA, e.attr(2))
+              val newA = lambda * (e.dstAttr - e.attr.responsibility) + (1.0 - lambda) * e.attr.availability
+              new EdgeMessage(e.attr.similarity, newA, e.attr.responsibility)
             }
           }, TripletFields.Dst)
 
-      iterG = Graph.fromEdges(updated_a.edges, Seq(0.0))
+      iterG = Graph.fromEdges(updated_a.edges, new VertexData(0.0, 0.0))
 
       // compare difference
       if (iter % 10 == 0) {
-        val vaD = iterG.aggregateMessages[Seq[Double]](
-          sendMsg = ctx => ctx.sendToSrc(Seq(ctx.attr(1), ctx.attr(2))),
-          mergeMsg = (s1, s2) => Seq(s1(0) + s2(0), s1(1) + s2(1)),
+        val vaD = iterG.aggregateMessages[VertexData](
+          sendMsg = ctx =>
+            ctx.sendToSrc(new VertexData(ctx.attr.availability, ctx.attr.responsibility)),
+          mergeMsg = (s1, s2) =>
+            new VertexData(s1.availability + s2.availability,
+              s1.responsibility + s2.responsibility),
           TripletFields.EdgeOnly)
 
-        val prev_vaD = curG.aggregateMessages[Seq[Double]](
-          sendMsg = ctx => ctx.sendToSrc(Seq(ctx.attr(1), ctx.attr(2))),
-          mergeMsg = (s1, s2) => Seq(s1(0) + s2(0), s1(1) + s2(1)),
+        val prev_vaD = curG.aggregateMessages[VertexData](
+          sendMsg = ctx =>
+            ctx.sendToSrc(new VertexData(ctx.attr.availability, ctx.attr.responsibility)),
+          mergeMsg = (s1, s2) =>
+            new VertexData(s1.availability + s2.availability,
+              s1.responsibility + s2.responsibility),
           TripletFields.EdgeOnly)
 
-        val delta = vaD.join(prev_vaD).values.collect().map { x =>
-          (x._1(0) - x._2(0), x._1(1) - x._2(1))
-        }.foldLeft((0.0, 0.0)) {(s, t) => (s._1 + t._1, s._2 + t._2)}
+        val delta = vaD.join(prev_vaD).values.map { x =>
+          (x._1.availability - x._2.availability, x._1.responsibility - x._2.responsibility)
+        }.collect().foldLeft((0.0, 0.0)) {(s, t) => (s._1 + t._1, s._2 + t._2)}
 
         logInfo(s"$msgPrefix: availability delta = ${delta._1}.")
         logInfo(s"$msgPrefix: responsibility delta = ${delta._2}.")
@@ -316,8 +369,8 @@ private[clustering] object AffinityPropagation extends Logging {
    * @return a [[AffinityPropagationModel]] representing the clustering results.
    */
   def chooseExemplars(
-      g: Graph[Seq[Double], Seq[Double]]): AffinityPropagationModel = {
-    val accum = g.edges.map(a => (a.srcId, (a.dstId, a.attr(1) + a.attr(2))))
+      g: Graph[VertexData, EdgeMessage]): AffinityPropagationModel = {
+    val accum = g.edges.map(a => (a.srcId, (a.dstId, a.attr.availability + a.attr.responsibility)))
     val clusterMembers = accum.reduceByKey((ar1, ar2) => {
       if (ar1._2 > ar2._2) {
         (ar1._1, ar1._2)

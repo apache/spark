@@ -90,7 +90,7 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
       Array(1.0/2.0,     0.0, 1.0/2.0,     0.0))
     val s = constructGraph(sc.parallelize(similarities, 2), true, false)
     s.edges.collect().foreach { case Edge(i, j, x) =>
-      assert(x(0) ~== expected(i.toInt)(j.toInt) absTol 1e-14)
+      assert(x.similarity ~== expected(i.toInt)(j.toInt) absTol 1e-14)
     }
   }
 }
