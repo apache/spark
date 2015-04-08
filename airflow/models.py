@@ -813,7 +813,13 @@ class BaseOperator(Base):
     :param depends_on_past: when set to true, task instances will run
         sequentially while relying on the previous task's schedule to
         succeed. The task instance for the start_date is allowed to run.
-    :type depends_on_past: boolean
+    :type depends_on_past: bool
+    :param wait_for_downstream: when set to true, the task instances
+        of task X will wait for the dependencies of the previous instance
+        of task X to finish before it moves on the to next schedule.
+        This is useful if the different instances of a task X alter
+        the same asset, and this asset is used by the dependencies of task X.
+    :type wait_for_downstream: bool
     :param dag: a reference to the dag the task is attached to (if any)
     :type dag: DAG
     """
