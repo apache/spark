@@ -182,7 +182,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      """"
+      """
         |SELECT time FROM timestamps
         |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
       """.stripMargin),
