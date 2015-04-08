@@ -69,8 +69,8 @@ private[spark] class AppClient(
       new SynchronousQueue[Runnable](),
       Utils.namedThreadFactory("appclient-register-master-threadpool"))
 
-    private val registrationRetryThread = Executors.newScheduledThreadPool(1,
-      Utils.namedThreadFactory("appclient-registration-retry-thread"))
+    private val registrationRetryThread =
+      Utils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
 
     override def onStart(): Unit = {
       try {

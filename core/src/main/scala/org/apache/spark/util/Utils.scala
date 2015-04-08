@@ -22,7 +22,7 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConversions._
@@ -909,6 +909,25 @@ private[spark] object Utils extends Logging {
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Wrapper over newSingleThreadExecutor. Thread names are formatted as prefix-ID, where ID is a
+   * unique, sequentially assigned integer.
+   */
+  def newDaemonSingleThreadExecutor(prefix: String): ThreadPoolExecutor = {
+    val threadFactory = namedThreadFactory(prefix)
+    Executors.newSingleThreadExecutor(threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Wrapper over newSingleThreadScheduledExecutor. Thread names are formatted as prefix-ID, where
+   * ID is a unique, sequentially assigned integer.
+   */
+  def newDaemonSingleThreadScheduledExecutor(prefix: String): ScheduledThreadPoolExecutor = {
+    val threadFactory = namedThreadFactory(prefix)
+    Executors.newSingleThreadScheduledExecutor(threadFactory).
+      asInstanceOf[ScheduledThreadPoolExecutor]
   }
 
   /**

@@ -58,9 +58,9 @@ private[worker] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  private val forwordMessageScheduler = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("worker-forward-message-scheduler"))
-  private val cleanupThread = Utils.newDaemonFixedThreadPool(1, "worker-cleanup-thread")
+  private val forwordMessageScheduler =
+    Utils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
+  private val cleanupThread = Utils.newDaemonSingleThreadExecutor("worker-cleanup-thread")
   private val cleanupThreadExecutor = ExecutionContext.fromExecutor(cleanupThread)
 
   // For worker and executor IDs

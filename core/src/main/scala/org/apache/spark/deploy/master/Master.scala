@@ -21,7 +21,7 @@ import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.language.postfixOps
@@ -55,8 +55,8 @@ private[master] class Master(
     val conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging with LeaderElectable {
 
-  private val forwardMessageThread = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("master-forward-message-thread"))
+  private val forwardMessageThread =
+    Utils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
   // TODO Remove it once we don't use akka.serialization.Serialization
   private val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem

@@ -38,7 +38,8 @@ private class ClientEndpoint(
     conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  private val forwardMessageThread = Utils.newDaemonFixedThreadPool(1, "client-forward-message")
+  private val forwardMessageThread =
+    Utils.newDaemonSingleThreadScheduledExecutor("client-forward-message")
   private implicit val forwardMessageExecutionContext =
     ExecutionContext.fromExecutor(forwardMessageThread,
       t => t match {
