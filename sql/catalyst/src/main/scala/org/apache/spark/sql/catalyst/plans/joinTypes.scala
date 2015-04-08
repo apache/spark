@@ -38,14 +38,14 @@ case object RightOuter extends JoinType
 case object FullOuter extends JoinType
 
 abstract class LeftSemiType extends JoinType {
-  def exists = true
+  def exists: Boolean = true
 }
 
 case object LeftSemi extends LeftSemiType
 
 // This is for internal used only for the [NOT] EXISTS | [NOT] IN clauses
 case object LeftSemiNotExist extends LeftSemiType {
-  override def exists = false
+  override def exists: Boolean = false
 }
 
 case object LeftSemiExist extends LeftSemiType

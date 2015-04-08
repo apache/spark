@@ -290,7 +290,7 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
 }
 
 case class Exists(left: LogicalPlan, right: LogicalPlan, exist: Boolean) extends BinaryNode {
-  override def output = Nil
+  override def output: Seq[Attribute] = Nil
   override lazy val resolved = false
 }
 
