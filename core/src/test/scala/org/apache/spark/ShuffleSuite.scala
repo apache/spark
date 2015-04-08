@@ -244,14 +244,14 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
       shuffleSpillCompress <- Set(true, false);
       shuffleCompress <- Set(true, false)
     ) {
-      val conf = new SparkConf()
+      val myConf = conf.clone()
         .setAppName("test")
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
         .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
-      sc = new SparkContext(conf)
+      sc = new SparkContext(myConf)
       try {
         sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
       } catch {
