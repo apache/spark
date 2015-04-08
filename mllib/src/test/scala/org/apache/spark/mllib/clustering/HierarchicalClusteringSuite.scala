@@ -25,29 +25,6 @@ import org.scalatest.FunSuite
 
 
 class HierarchicalClusteringAppSuite extends FunSuite with MLlibTestSparkContext {
-
-  test("train") {
-    val numClusters = 9
-    val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
-    val data = sc.parallelize(localSeed, 1)
-    val model = HierarchicalClustering.train(data, numClusters)
-    assert(model.getClusters().size === numClusters)
-    assert(model.tree.getHeight() ~== 67.1751 absTol 10E-4)
-  }
-
-  test("train with full arguments") {
-    val numClusters = 9
-    val subIterations = 20
-    val maxRetries = 20
-    val seed = 321
-
-    val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
-    val data = sc.parallelize(localSeed, 1)
-
-    val model = HierarchicalClustering.train(data, numClusters, subIterations, maxRetries, seed)
-    assert(model.getClusters().size === numClusters)
-    assert(model.tree.getHeight() ~== 67.1751 absTol 10E-4)
-  }
 }
 
 

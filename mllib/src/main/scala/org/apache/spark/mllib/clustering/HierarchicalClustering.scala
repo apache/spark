@@ -26,47 +26,9 @@ import org.apache.spark.{Logging, SparkException}
 import scala.collection.{Map, mutable}
 
 
-/**
- * Top-level methods for calling the hierarchical clustering algorithm
- */
 object HierarchicalClustering extends Logging {
 
   private[clustering] val ROOT_INDEX_KEY: Long = 1
-
-  /**
-   * Trains a hierarchical clustering model with the given data
-   *
-   * @param data trained data
-   * @param numClusters the maximum number of clusters you want
-   * @return a hierarchical clustering model
-   */
-  def train(data: RDD[Vector], numClusters: Int): HierarchicalClusteringModel = {
-    val algo = new HierarchicalClustering().setNumClusters(numClusters)
-    algo.run(data)
-  }
-
-  /**
-   * Trains a hierarchical clustering model with the given data
-   *
-   * @param data training data
-   * @param numClusters the maximum number of clusters you want
-   * @param maxIterations the number of maximal iterations
-   * @param maxRetries the number of maximum retries when the clustering can't be succeeded
-   * @param seed the randomseed to generate the initial vectors for each bisecting
-   * @return a hierarchical clustering model
-   */
-  def train(data: RDD[Vector],
-    numClusters: Int,
-    maxIterations: Int,
-    maxRetries: Int,
-    seed: Int): HierarchicalClusteringModel = {
-
-    val algo = new HierarchicalClustering().setNumClusters(numClusters)
-        .setMaxIterations(maxIterations)
-        .setMaxRetries(maxRetries)
-        .setSeed(seed)
-    algo.run(data)
-  }
 
   /**
    * Finds the closes cluster's center
