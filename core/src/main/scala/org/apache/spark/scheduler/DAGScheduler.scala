@@ -843,7 +843,7 @@ class DAGScheduler(
       */
     def serializeTask(stage: Stage): Option[Broadcast[Array[Byte]]] = {
       // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
-      // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
+      // Broadcasted binary for the task, used to dispatch tasks to executors. Note: we broadcast
       // the serialized copy of the RDD and for each task we will deserialize it, which means each
       // task gets a different copy of the RDD. This provides stronger isolation between tasks that
       // might modify state of objects referenced in their closures. This is necessary in Hadoop
