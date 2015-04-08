@@ -41,7 +41,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       generateBasicStats() ++ <br></br> ++
       <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateReceiverStats() ++
-      generateBatchStatsTable()
+      generateBatchStatsTable() ++
+      generateBatchListTables()
     UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
   }
 
@@ -188,6 +189,22 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <tr> {data.map(d => <td>{d}</td>)} </tr>
     }
     UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
+  }
+
+  private def generateBatchListTables(): Seq[Node] = {
+    val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
+    val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
+    var content =
+      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
+        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
+
+    val completedBatches = listener.retainedCompletedBatches.
+      sortBy(_.batchTime.milliseconds).reverse
+    content ++=
+      <h4 id="active">Completed Batches ({completedBatches.size})</h4> ++
+        new CompletedBatchTable(completedBatches).toNodeSeq
+
+    content
   }
 }
 
