@@ -48,7 +48,7 @@ class MySqlToHiveTransfer(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'MySqlToHiveOperator'
     }
-    template_fields = ('sql', 'partition')
+    template_fields = ('sql', 'partition', 'hive_table')
     template_ext = ('.sql',)
     ui_color = '#a0e08c'
 
