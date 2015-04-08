@@ -108,7 +108,7 @@ class SQLTests(ReusedPySparkTestCase):
         os.unlink(cls.tempdir.name)
         cls.sqlCtx = SQLContext(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = cls.sc.parallelize(cls.testData)
+        rdd = cls.sc.parallelize(cls.testData, 2)
         cls.df = rdd.toDF()
 
     @classmethod
@@ -282,7 +282,7 @@ class SQLTests(ReusedPySparkTestCase):
             StructField("struct1", StructType([StructField("b", ShortType(), False)]), False),
             StructField("list1", ArrayType(ByteType(), False), False),
             StructField("null1", DoubleType(), True)])
-        df = self.sqlCtx.applySchema(rdd, schema)
+        df = self.sqlCtx.createDataFrame(rdd, schema)
         results = df.map(lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1, x.date1,
                                     x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
         r = (127, -128, -32768, 32767, 2147483647, 1.0, date(2010, 1, 1),
@@ -302,7 +302,7 @@ class SQLTests(ReusedPySparkTestCase):
         abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
         schema = _parse_schema_abstract(abstract)
         typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.sqlCtx.applySchema(rdd, typedSchema)
+        df = self.sqlCtx.createDataFrame(rdd, typedSchema)
         r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
         self.assertEqual(r, tuple(df.first()))
 
