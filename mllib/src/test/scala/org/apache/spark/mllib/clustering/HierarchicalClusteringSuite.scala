@@ -25,6 +25,25 @@ import org.scalatest.FunSuite
 
 
 class HierarchicalClusteringAppSuite extends FunSuite with MLlibTestSparkContext {
+
+  test("the root index is equal to 1") {
+    assert(HierarchicalClustering.ROOT_INDEX_KEY === 1)
+  }
+
+  test("findClosestCenter") {
+    val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
+    val centers = Seq(
+      Vectors.sparse(5, Array(0, 1, 2), Array(0.0, 1.0, 2.0)).toBreeze,
+      Vectors.sparse(5, Array(1, 2, 3), Array(1.0, 2.0, 3.0)).toBreeze,
+      Vectors.sparse(5, Array(2, 3, 4), Array(2.0, 3.0, 4.0)).toBreeze
+    )
+
+    for (i <- 0 to (centers.size - 1)) {
+      val point = centers(i)
+      val closestIndex = HierarchicalClustering.findClosestCenter(metric)(centers)(point)
+      assert(closestIndex === i)
+    }
+  }
 }
 
 
