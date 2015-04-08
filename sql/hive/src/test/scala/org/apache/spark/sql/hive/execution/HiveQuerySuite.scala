@@ -238,11 +238,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   createQueryTest("modulus",
-    """
-      |SELECT 11 % 10,
-      |       IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, "true", "false"), (101 / 2) % 10
-      |FROM src LIMIT 1
-    """.stripMargin)
+    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
+      "(101 / 2) % 10 FROM src LIMIT 1"))
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
@@ -314,10 +311,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
   createQueryTest("small.cartesian",
-    """
-      |SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a
-      |JOIN (SELECT key FROM src WHERE key = 2) b
-    """.stripMargin)
+    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
+      "(SELECT key FROM src WHERE key = 2) b"))
 
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
@@ -465,17 +460,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("lateral view3",
     "FROM src SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX")
 
+  // scalastyle:off
   createQueryTest("lateral view4",
     """
       |create table src_lv1 (key string, value string);
       |create table src_lv2 (key string, value string);
       |
       |FROM src
-      |insert overwrite table src_lv1
-      |  SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
-      |insert overwrite table src_lv2
-      |  SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
+      |insert overwrite table src_lv1 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
+      |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
     """.stripMargin)
+  // scalastyle:on
 
   createQueryTest("lateral view5",
     "FROM src SELECT explode(array(key+3, key+4))")

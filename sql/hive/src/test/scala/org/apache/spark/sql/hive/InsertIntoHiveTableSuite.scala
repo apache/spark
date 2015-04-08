@@ -228,7 +228,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
       s"""
          |CREATE TABLE table_with_partition(key int,value string)
          |PARTITIONED by (ds string) location '${tmpDir.toURI.toString}'
-        """.stripMargin)
+       """.stripMargin)
     sql(
       """
         |INSERT OVERWRITE TABLE table_with_partition

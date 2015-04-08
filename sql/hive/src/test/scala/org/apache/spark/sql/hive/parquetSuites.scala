@@ -890,7 +890,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
           s"""
              |SELECT p, structField.intStructField, structField.stringStructField
              |FROM $table WHERE p = 1
-            """.stripMargin),
+           """.stripMargin),
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
