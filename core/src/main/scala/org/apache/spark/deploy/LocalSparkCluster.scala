@@ -17,9 +17,12 @@
 
 package org.apache.spark.deploy
 
+import java.net.InetAddress
+
 import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorSystem
+import com.google.common.net.InetAddresses
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
@@ -53,7 +56,8 @@ class LocalSparkCluster(
     /* Start the Master */
     val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
     masterActorSystems += masterSystem
-    val masterUrl = "spark://" + localHostname + ":" + masterPort
+    val hostUri = InetAddresses.toUriString(InetAddress.getByName(localHostname))
+    val masterUrl = "spark://" + hostUri + ":" + masterPort
     val masters = Array(masterUrl)
 
     /* Start the Workers */
