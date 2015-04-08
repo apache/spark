@@ -104,7 +104,7 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Returns all params. The default implementation uses Java reflection to list all public methods
-   * that have return type [[Param]].
+   * that return [[Param]] and have no arguments.
    */
   def params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
@@ -264,12 +264,13 @@ private[spark] object Params {
  * A param to value map.
  */
 @AlphaComponent
-class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) extends Serializable {
+final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
+  extends Serializable {
 
   /**
    * Creates an empty param map.
    */
-  def this() = this(mutable.Map.empty[Param[Any], Any])
+  def this() = this(mutable.Map.empty)
 
   /**
    * Puts a (param, value) pair (overwrites if the input param exists).
@@ -291,10 +292,17 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   }
 
   /**
-   * Optionally returns the value associated with a param or its default.
+   * Optionally returns the value associated with a param.
    */
   def get[T](param: Param[T]): Option[T] = {
     map.get(param.asInstanceOf[Param[Any]]).asInstanceOf[Option[T]]
+  }
+
+  /**
+   * Returns the value associated with a param or a default value.
+   */
+  def getOrElse[T](param: Param[T], default: T): T = {
+    get(param).getOrElse(default)
   }
 
   /**
@@ -302,10 +310,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
    * Raises a NoSuchElementException if there is no value associated with the input param.
    */
   def apply[T](param: Param[T]): T = {
-    val value = get(param)
-    if (value.isDefined) {
-      value.get
-    } else {
+    get(param).getOrElse {
       throw new NoSuchElementException(s"Cannot find param ${param.name}.")
     }
   }
@@ -326,7 +331,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   }
 
   /**
-   * Make a copy of this param map.
+   * Creates a copy of this param map.
    */
   def copy: ParamMap = new ParamMap(map.clone())
 
@@ -364,7 +369,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   }
 
   /**
-   * Number of param pairs in this set.
+   * Number of param pairs in this map.
    */
   def size: Int = map.size
 }
