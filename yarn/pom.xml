@@ -58,10 +58,6 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
     </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-exec</artifactId>
-    </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
     <dependency>
