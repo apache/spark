@@ -416,13 +416,15 @@ class DAGScheduler(
         s.jobIds += jobId
         jobIdToStageIds.getOrElseUpdate(jobId, new HashSet[Int]()) += s.id
         val parents: List[Stage] = getParentStages(s.rdd, jobId)
-        val parentsWithoutThisJobId = parents.filter { ! _.jobIds.contains(jobId) }
+        val parentsWithoutThisJobId = parents.filter {
+          !_.jobIds.contains(jobId)
+        }
         updateJobIdStageIdMapsList(parentsWithoutThisJobId ++ stages.tail)
       }
     }
     updateJobIdStageIdMapsList(List(stage))
   }
-  
+
   /**
    * Removes state for job and any stages that are not needed by any other job.  Does not
    * handle cancelling tasks or notifying the SparkListener about finished jobs/stages/tasks.
@@ -801,7 +803,7 @@ class DAGScheduler(
       abortStage(stage, "No active job for stage " + stage.id)
     }
   }
-  
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     /**
@@ -985,13 +987,12 @@ class DAGScheduler(
       }
     }
   }
-  
+
   /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
-
     /**
      * Define helper functions to modularize handleTaskCompletion
      */
