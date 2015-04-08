@@ -251,8 +251,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     // map. If an attempt has been updated, it replaces the old attempt in the list.
     val newAppMap = new mutable.HashMap[String, FsApplicationHistoryInfo]()
     newAttempts.foreach { attempt =>
-      val appInfo = applications.get(attempt.appId)
-        .orElse(newAppMap.get(attempt.appId))
+      val appInfo = newAppMap.get(attempt.appId)
+        .orElse(applications.get(attempt.appId))
         .map { app =>
           val attempts =
             app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
