@@ -150,12 +150,9 @@ public class JavaUtils {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
       if (m.matches()) {
         val = Long.parseLong(m.group(1));
-        if (m.group(2) != null) {
-          suffix = m.group(2);
-        }
-        else {
-          throw new NumberFormatException("Failed to parse time string: " + str);  
-        }
+        suffix = m.group(2);
+      } else {
+        throw new NumberFormatException("Failed to parse time string: " + str);
       }
       
       return unit.convert(val, (suffix != null) && timeSuffixes.containsKey(suffix) ? 
