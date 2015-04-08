@@ -22,7 +22,7 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
@@ -104,13 +104,7 @@ private[spark] class MesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = new ListBuffer[String]
-    extraJavaOpts ++= sc.conf.getOption("spark.executor.extraJavaOptions")
-      .map(Utils.splitCommandString).getOrElse(Seq.empty)
-
-    if (sc.conf.getBoolean("spark.executor.jdwp.enabled", false)) {
-      extraJavaOpts +=
-    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
@@ -277,7 +271,8 @@ private[spark] class MesosSchedulerBackend(
         slaveIdToWorkerOffer.get(slaveId).foreach(o =>
           listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
             // TODO: Add support for log urls for Mesos
-            new ExecutorInfo(o.host, o.cores, Map.empty)))
+            // TODO: Add support for debug port for Mesos
+            new ExecutorInfo(o.host, o.cores, Map.empty, None)))
         )
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }

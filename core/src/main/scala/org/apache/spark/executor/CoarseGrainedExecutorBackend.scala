@@ -52,7 +52,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
-
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
@@ -169,7 +168,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      debugPortOpt =
+      val debugPortOpt =
         if (driverConf.getBoolean("spark.executor.jdwp.enabled", false)) {
           val agentProps = VMSupport.getAgentProperties
           Option(agentProps.get("sun.jdwp.listenerAddress").asInstanceOf[String])

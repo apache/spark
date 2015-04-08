@@ -77,8 +77,9 @@ class JsonProtocolSuite extends FunSuite {
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val debugPortOpt = Some(9876)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, debugPortOpt))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -102,13 +103,14 @@ class JsonProtocolSuite extends FunSuite {
 
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val debugPortOpt = Some(9876)
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
-    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, debugPortOpt))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -1522,7 +1524,8 @@ class JsonProtocolSuite extends FunSuite {
       |    "Log Urls" : {
       |      "stderr" : "mystderr",
       |      "stdout" : "mystdout"
-      |    }
+      |    },
+      |    "Debug Port" : 9876
       |  }
       |}
     """

@@ -61,7 +61,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
-    executorAdded.debugPortOpt.foreach(port => executorToDebugPort(eid) = port)
+    executorAdded.executorInfo.debugPortOpt.foreach(port => executorToDebugPort(eid) = port)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
