@@ -105,6 +105,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
+      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)
@@ -135,9 +136,13 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private def handleJobStart(job: Job) {
     val jobSet = jobSets.get(job.time)
     if (!jobSet.hasStarted) {
+      jobSet.handleJobStart(job)
+      // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
+      // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
+    } else {
+      jobSet.handleJobStart(job)
     }
-    jobSet.handleJobStart(job)
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
