@@ -67,8 +67,8 @@ private[spark] object AllRDDResource {
       .flatMap { _.rddBlocksById(rddId) }
       .sortWith { _._1.name < _._1.name }
       .map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
+        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+      }
 
 
     val dataDistribution = if (includeDetails) {

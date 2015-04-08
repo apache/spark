@@ -33,21 +33,24 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
-  private val port = 18080
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
+  private var port: Int = -1
 
   def init(): Unit = {
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
       .set("spark.history.fs.updateInterval", "0")
+      .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
+    provider.checkForLogs()
     val securityManager = new SecurityManager(conf)
 
-    server = new HistoryServer(conf, provider, securityManager, port)
+    server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
+    port = server.boundPort
   }
   def stop(): Unit = {
     server.stop()
@@ -181,7 +184,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val ui = mock[SparkUI]
     val link = "/history/app1"
     val info = new ApplicationHistoryInfo("app1", "app1", 0, 2, 1, "xxx", true)
-    when(historyServer.getApplicationList(true)).thenReturn(Seq(info))
+    when(historyServer.getApplicationList(false)).thenReturn(Seq(info))
     when(ui.basePath).thenReturn(link)
     when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
     val page = new HistoryPage(historyServer)

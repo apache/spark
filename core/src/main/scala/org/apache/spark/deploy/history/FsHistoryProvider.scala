@@ -140,17 +140,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   override def getListing(refresh: Boolean): Iterable[FsApplicationHistoryInfo] = {
-    if (refresh) checkForLogs()
     applications.values
   }
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
-      val appOpt = applications.get(appId).orElse {
-        getListing(true)
-        applications.get(appId)
-      }
-      appOpt.map { info =>
+      applications.get(appId).map { info =>
         val replayBus = new ReplayListenerBus()
         val ui = {
           val conf = this.conf.clone()

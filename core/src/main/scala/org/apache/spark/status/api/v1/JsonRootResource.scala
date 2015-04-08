@@ -139,7 +139,7 @@ private[v1] trait UIRootFromServletContext {
 }
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
-  new IllegalArgumentException(msg),
+  new NoSuchElementException(msg),
     Response
       .status(Response.Status.NOT_FOUND)
       .entity(msg)
@@ -154,7 +154,6 @@ private[v1] class BadParameterException(msg: String) extends WebApplicationExcep
     .build()
 ) {
   def this(param: String, exp: String, actual: String) = {
-    this("Bad value for parameter \"" + param + "\".  Expected a " + exp + ", got \"" +
-      actual + "\"")
+    this(raw"""Bad value for parameter "$param".  Expected a $exp, got "$actual"""")
   }
 }

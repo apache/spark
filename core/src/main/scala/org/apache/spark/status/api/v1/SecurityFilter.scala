@@ -29,8 +29,8 @@ private[v1] class SecurityFilter extends ContainerRequestFilter with UIRootFromS
     } else {
       throw new WebApplicationException(
         Response
-          .status(Response.Status.UNAUTHORIZED)
-          .entity("user \"" + user + "\"is not authorized")
+          .status(Response.Status.FORBIDDEN)
+          .entity(raw"""user "$user"is not authorized""")
           .build()
       )
     }

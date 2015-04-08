@@ -481,6 +481,11 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       goToUi(sc, "/jobs/job/?id=7")
       find("no-info").get.text should be ("No information to display for job 7")
 
+      val badJob = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get, "jobs/7"))
+      badJob._1 should be (HttpServletResponse.SC_NOT_FOUND)
+      badJob._2 should be (None)
+      badJob._3 should be (Some("unknown job: 7"))
+
       val expStageInfo = Seq(
         ("19", "collect"),
         ("18", "count"),
@@ -519,20 +524,18 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
       goToUi(sc, "/stages/stage/?id=12&attempt=0")
       find("no-info").get.text should be ("No information to display for Stage 12 (Attempt 0)")
-      val badStage = HistoryServerSuite.getContentAndCode(
-        new URL(sc.ui.get.appUIAddress + "/json/v1/applications/test/stages/12/0"))
+      val badStage = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/12/0"))
       badStage._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStage._2 should be (None)
       badStage._3 should be (Some("unknown stage: 12"))
 
-      val badAttempt = HistoryServerSuite.getContentAndCode(
-        new URL(sc.ui.get.appUIAddress + "/json/v1/applications/test/stages/19/15"))
+      val badAttempt = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/19/15"))
       badAttempt._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badAttempt._2 should be (None)
       badAttempt._3 should be (Some("unknown attempt for stage 19.  Found attempts: [0]"))
 
       val badStageAttemptList = HistoryServerSuite.getContentAndCode(
-        new URL(sc.ui.get.appUIAddress + "/json/v1/applications/test/stages/12"))
+        jsonUrl(sc.ui.get, "stages/12"))
       badStageAttemptList._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStageAttemptList._2 should be (None)
       badStageAttemptList._3 should be (Some("unknown stage: 12"))
@@ -565,7 +568,10 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   }
 
   def getJson(ui: SparkUI, path: String): JValue = {
-    JsonMethods.parse(HistoryServerSuite.getUrl(
-      new URL(ui.appUIAddress + "/json/v1/applications/test/" + path)))
+    JsonMethods.parse(HistoryServerSuite.getUrl(jsonUrl(ui, path)))
+  }
+
+  def jsonUrl(ui: SparkUI, path: String): URL = {
+    new URL(ui.appUIAddress + "/json/v1/applications/test/" + path)
   }
 }

@@ -16,13 +16,12 @@
  */
 package org.apache.spark
 
-import org.json4s.JsonMethods
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 trait JsonTestUtils {
   def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
-    val Diff(c, a, d) = validateJson diff expectedJson
+    val Diff(c, a, d) = validateJson.diff(expectedJson)
     val validatePretty = JsonMethods.pretty(validateJson)
     val expectedPretty = JsonMethods.pretty(expectedJson)
     val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"

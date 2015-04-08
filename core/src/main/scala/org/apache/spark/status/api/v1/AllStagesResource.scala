@@ -65,12 +65,12 @@ private[v1] object AllStagesResource {
     includeDetails: Boolean
   ): StageData = {
 
-    val taskData = if(includeDetails) {
+    val taskData = if (includeDetails) {
       Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )
     } else {
       None
     }
-    val executorSummary = if(includeDetails) {
+    val executorSummary = if (includeDetails) {
       Some(stageUiData.executorSummary.map { case (k, summary) =>
         k -> new ExecutorStageSummary(
           taskTime = summary.taskTime,
@@ -129,7 +129,6 @@ private[v1] object AllStagesResource {
     }
   }
 
-
   def convertTaskData(uiData: TaskUIData): TaskData = {
     new TaskData(
       taskId = uiData.taskInfo.taskId,
@@ -153,10 +152,10 @@ private[v1] object AllStagesResource {
     val rawMetrics = allTaskData.flatMap{_.taskMetrics}.toSeq
 
     def getMetric[T](data: Seq[T], f: T => Double): IndexedSeq[Double] =
-      Distribution(data.map{d=> f(d)}).get.getQuantiles(quantiles)
+      Distribution(data.map { d => f(d) }).get.getQuantiles(quantiles)
 
     abstract class MetricHelper[I,O](f: InternalTaskMetrics => Option[I]) {
-      val data: Seq[I] = rawMetrics.flatMap{x => f(x)}
+      val data: Seq[I] = rawMetrics.flatMap { x => f(x) }  // expanded to keep the compiler happy
       def build: O
       def m(f: I => Double): IndexedSeq[Double] = getMetric(data, f)
       def metricOption: Option[O] = {
@@ -211,7 +210,6 @@ private[v1] object AllStagesResource {
         )
       }.metricOption
 
-
     new TaskMetricDistributions(
       quantiles = quantiles,
       executorDeserializeTime = m(_.executorDeserializeTime),
@@ -231,7 +229,6 @@ private[v1] object AllStagesResource {
   def convertAccumulableInfo(acc: InternalAccumulableInfo): AccumulableInfo = {
     new AccumulableInfo(acc.id, acc.name, acc.update, acc.value)
   }
-
 
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
     new TaskMetrics(

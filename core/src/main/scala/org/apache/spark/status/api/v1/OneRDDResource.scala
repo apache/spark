@@ -29,7 +29,7 @@ private[v1] class OneRDDResource(uiRoot: UIRoot) {
     ): RDDStorageInfo  = {
       uiRoot.withSparkUI(appId) { ui =>
         AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
-          throw new IllegalArgumentException("no rdd found w/ id " + rddId)
+          throw new NotFoundException(s"no rdd found w/ id $rddId")
         )
       }
     }
