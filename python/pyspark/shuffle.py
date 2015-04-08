@@ -548,10 +548,7 @@ class ExternalList(object):
 
     def __init__(self, values):
         self.values = values
-        if values and isinstance(values[0], list):
-            self.count = sum(len(i) for i in values)
-        else:
-            self.count = len(values)
+        self.count = len(values)
         self._file = None
         self._ser = None
 
@@ -592,7 +589,7 @@ class ExternalList(object):
 
     def append(self, value):
         self.values.append(value)
-        self.count += len(value) if isinstance(value, list) else 1
+        self.count += 1
         # dump them into disk if the key is huge
         if len(self.values) >= self.LIMIT:
             self._spill()
@@ -622,9 +619,23 @@ class ExternalList(object):
         MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
 
 
+class ExternalListOfList(ExternalList):
+    """
+    An external list for list.
+    """
+    def __init__(self, values):
+        ExternalList.__init__(self, values)
+        self.count = sum(len(i) for i in values)
+
+    def append(self, value):
+        ExternalList.append(self, value)
+        # already counted 1 in ExternalList.append
+        self.count += len(value) - 1
+
+
 class GroupByKey(object):
     """
-    group a sorted iterator into [(k1, it1), (k2, it2), ...]
+    Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 
     >>> k = [i/3 for i in range(6)]
     >>> v = [i for i in range(6)]
@@ -632,6 +643,9 @@ class GroupByKey(object):
     >>> [(k, list(it)) for k, it in g]
     [(0, [0, 1, 2]), (1, [3, 4, 5])]
     """
+
+    external_class = ExternalList
+
     def __init__(self, iterator):
         self.iterator = iterator
         self.next_item = None
@@ -641,7 +655,7 @@ class GroupByKey(object):
 
     def next(self):
         key, value = self.next_item if self.next_item else next(self.iterator)
-        values = ExternalList([value])
+        values = self.external_class([value])
         try:
             while True:
                 k, v = next(self.iterator)
@@ -654,6 +668,13 @@ class GroupByKey(object):
         return key, values
 
 
+class GroupListsByKey(GroupByKey):
+    """
+    Group a sorted iterator of list as [(k1, it1), (k2, it2), ...]
+    """
+    external_class = ExternalListOfList
+
+
 class ChainedIterable(object):
     """
     Picklable chained iterator, similar to itertools.chain.from_iterable()
@@ -664,7 +685,7 @@ class ChainedIterable(object):
     def __len__(self):
         try:
             return len(self.iterators)
-        except:
+        except TypeError:
             return sum(len(i) for i in self.iterators)
 
     def __iter__(self):
@@ -814,7 +835,7 @@ class ExternalGroupBy(ExternalMerger):
             sorter = ExternalSorter(self.memory_limit, ser)
             sorted_items = sorter.sorted(itertools.chain(*disk_items),
                                          key=operator.itemgetter(0))
-        return ((k, ChainedIterable(vs)) for k, vs in GroupByKey(sorted_items))
+        return ((k, ChainedIterable(vs)) for k, vs in GroupListsByKey(sorted_items))
 
 
 if __name__ == "__main__":
