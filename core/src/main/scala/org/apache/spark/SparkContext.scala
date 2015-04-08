@@ -103,17 +103,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  private var classLoader = Thread.currentThread().getContextClassLoader();
-  if (classLoader == null) {
-    classLoader = this.getClass.getClassLoader()
-  }
-
-  def getClassLoader: ClassLoader = classLoader
-
-  def setClassLoader(cl: ClassLoader) = {
-    classLoader = cl
-  }
-
   /**
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).

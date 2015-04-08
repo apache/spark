@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.commons.lang.StringUtils
-import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
@@ -83,20 +79,7 @@ case class AddJar(path: String) extends RunnableCommand {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
-    try {
-      val loader = Thread.currentThread().getContextClassLoader()
-      val newLoader = Utilities.addToClassPath(loader, StringUtils.split(path, ","))
-      Thread.currentThread().setContextClassLoader(newLoader)
-      sqlContext.sparkContext.setClassLoader(newLoader)
-      logInfo("Added " + path + " to class path")
-      Seq(Row(0))
-    } catch {
-      case e: Throwable =>
-        logError("Unable to register " + path + "\nException: "
-          + e.getMessage() + "\n"
-          + org.apache.hadoop.util.StringUtils.stringifyException(e), e)
-        Seq(Row(1))
-    }
+    Seq(Row(0))
   }
 }
 
