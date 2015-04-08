@@ -106,6 +106,18 @@ private[ml] trait HasProbabilityCol extends Params {
   def getProbabilityCol: String = get(probabilityCol)
 }
 
+private[ml] trait HasFitIntercept extends Params {
+  /**
+   * param for fitting the intercept term, defaults to true
+   * @group param
+   */
+  val fitIntercept: BooleanParam =
+    new BooleanParam(this, "fitIntercept", "indicates whether to fit an intercept term", Some(true))
+
+  /** @group getParam */
+  def getFitIntercept: Boolean = get(fitIntercept)
+}
+
 private[ml] trait HasThreshold extends Params {
   /**
    * param for threshold in (binary) prediction

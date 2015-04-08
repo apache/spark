@@ -66,6 +66,8 @@ private[spark] class Client(
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
+  private val fireAndForget = isClusterMode &&
+    !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
 
   def stop(): Unit = yarnClient.stop()
@@ -564,31 +566,13 @@ private[spark] class Client(
 
       if (logApplicationReport) {
         logInfo(s"Application report for $appId (state: $state)")
-        val details = Seq[(String, String)](
-          ("client token", getClientToken(report)),
-          ("diagnostics", report.getDiagnostics),
-          ("ApplicationMaster host", report.getHost),
-          ("ApplicationMaster RPC port", report.getRpcPort.toString),
-          ("queue", report.getQueue),
-          ("start time", report.getStartTime.toString),
-          ("final status", report.getFinalApplicationStatus.toString),
-          ("tracking URL", report.getTrackingUrl),
-          ("user", report.getUser)
-        )
-
-        // Use more loggable format if value is null or empty
-        val formattedDetails = details
-          .map { case (k, v) =>
-          val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
-          s"\n\t $k: $newValue" }
-          .mkString("")
 
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(formattedDetails)
+          logDebug(formatReportDetails(report))
         } else if (lastState != state) {
-          logInfo(formattedDetails)
+          logInfo(formatReportDetails(report))
         }
       }
 
@@ -609,24 +593,57 @@ private[spark] class Client(
     throw new SparkException("While loop is depleted! This should never happen...")
   }
 
+  private def formatReportDetails(report: ApplicationReport): String = {
+    val details = Seq[(String, String)](
+      ("client token", getClientToken(report)),
+      ("diagnostics", report.getDiagnostics),
+      ("ApplicationMaster host", report.getHost),
+      ("ApplicationMaster RPC port", report.getRpcPort.toString),
+      ("queue", report.getQueue),
+      ("start time", report.getStartTime.toString),
+      ("final status", report.getFinalApplicationStatus.toString),
+      ("tracking URL", report.getTrackingUrl),
+      ("user", report.getUser)
+    )
+
+    // Use more loggable format if value is null or empty
+    details.map { case (k, v) =>
+      val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
+      s"\n\t $k: $newValue"
+    }.mkString("")
+  }
+
   /**
-   * Submit an application to the ResourceManager and monitor its state.
-   * This continues until the application has exited for any reason.
+   * Submit an application to the ResourceManager.
+   * If set spark.yarn.submit.waitAppCompletion to true, it will stay alive
+   * reporting the application's status until the application has exited for any reason.
+   * Otherwise, the client process will exit after submission.
    * If the application finishes with a failed, killed, or undefined status,
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
-    if (yarnApplicationState == YarnApplicationState.FAILED ||
-      finalApplicationStatus == FinalApplicationStatus.FAILED) {
-      throw new SparkException("Application finished with failed status")
-    }
-    if (yarnApplicationState == YarnApplicationState.KILLED ||
-      finalApplicationStatus == FinalApplicationStatus.KILLED) {
-      throw new SparkException("Application is killed")
-    }
-    if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
-      throw new SparkException("The final status of application is undefined")
+    val appId = submitApplication()
+    if (fireAndForget) {
+      val report = getApplicationReport(appId)
+      val state = report.getYarnApplicationState
+      logInfo(s"Application report for $appId (state: $state)")
+      logInfo(formatReportDetails(report))
+      if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+        throw new SparkException(s"Application $appId finished with status: $state")
+      }
+    } else {
+      val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
+      if (yarnApplicationState == YarnApplicationState.FAILED ||
+        finalApplicationStatus == FinalApplicationStatus.FAILED) {
+        throw new SparkException(s"Application $appId finished with failed status")
+      }
+      if (yarnApplicationState == YarnApplicationState.KILLED ||
+        finalApplicationStatus == FinalApplicationStatus.KILLED) {
+        throw new SparkException(s"Application $appId is killed")
+      }
+      if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+        throw new SparkException(s"The final status of application $appId is undefined")
+      }
     }
   }
 }
