@@ -181,7 +181,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     buffer.get(bytes)
     bytes.foreach(x => print(x + " "))
     buffer.position(curPosition)
-    print(" (" + bytes.size + ")")
+    print(" (" + bytes.length + ")")
   }
 
   def printBuffer(buffer: ByteBuffer, position: Int, length: Int) {

@@ -70,7 +70,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   @Experimental
   def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new MeanEvaluator(self.partitions.size, confidence)
+    val evaluator = new MeanEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
@@ -81,7 +81,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   @Experimental
   def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new SumEvaluator(self.partitions.size, confidence)
+    val evaluator = new SumEvaluator(self.partitions.length, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 

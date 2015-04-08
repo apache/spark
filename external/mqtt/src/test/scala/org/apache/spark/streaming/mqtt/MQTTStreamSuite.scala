@@ -139,7 +139,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
             msgTopic.publish(message)
           } catch {
             case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
-              Thread.sleep(50) // wait for Spark streaming to consume something from the message queue
+              // wait for Spark streaming to consume something from the message queue
+              Thread.sleep(50)
           }
         }
       }

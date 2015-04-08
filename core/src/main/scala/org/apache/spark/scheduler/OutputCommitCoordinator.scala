@@ -60,6 +60,13 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   private type CommittersByStageMap = mutable.Map[StageId, mutable.Map[PartitionId, TaskAttemptId]]
 
   /**
+   * Returns whether the OutputCommitCoordinator's internal data structures are all empty.
+   */
+  def isEmpty: Boolean = {
+    authorizedCommittersByStage.isEmpty
+  }
+
+  /**
    * Called by tasks to ask whether they can commit their output to HDFS.
    *
    * If a task attempt has been authorized to commit, then all other attempts to commit the same
