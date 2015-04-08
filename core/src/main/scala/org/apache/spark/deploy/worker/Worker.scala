@@ -27,17 +27,16 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
+import scala.util.control.NonFatal
 
-import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc._
 import org.apache.spark.util.{SignalLogger, Utils}
-
-import scala.util.control.NonFatal
 
 private[worker] class Worker(
     override val rpcEnv: RpcEnv,

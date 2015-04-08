@@ -19,15 +19,14 @@ package org.apache.spark.deploy.client
 
 import java.util.concurrent._
 
-import org.apache.spark.deploy.master.Master
+import scala.util.control.NonFatal
 
-import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
-
-import scala.util.control.NonFatal
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -56,8 +55,9 @@ private[spark] class AppClient(
   private class ClientEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint
     with Logging {
 
-    var master: Option[RpcEndpointRef] = None
-    var alreadyDisconnected = false // To avoid calling listener.disconnected() multiple times
+    private var master: Option[RpcEndpointRef] = None
+    // To avoid calling listener.disconnected() multiple times
+    private var alreadyDisconnected = false
     @volatile private var alreadyDead = false // To avoid calling listener.dead() multiple times
     @volatile private var registerMasterFutures: Array[Future[_]] = null
     @volatile private var registrationRetryTimer: ScheduledFuture[_] = null
