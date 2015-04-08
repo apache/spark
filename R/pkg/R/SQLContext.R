@@ -54,9 +54,9 @@ infer_type <- function(x) {
       # StructType
       types <- lapply(x, infer_type)
       fields <- lapply(1:length(x), function(i) {
-        field(names[[i]], types[[i]], TRUE)
+        structField(names[[i]], types[[i]], TRUE)
       })
-      do.call(buildSchema, fields)
+      do.call(structType, fields)
     }
   } else if (length(x) > 1) {
     list(type = "array", elementType = type, containsNull = TRUE)
@@ -110,7 +110,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || (!inherits(schema, "struct") && is.null(names(schema)))) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
     row <- first(rdd)
     names <- if (is.null(schema)) {
       names(row)
@@ -135,18 +135,18 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
 
     types <- lapply(row, infer_type)
     fields <- lapply(1:length(row), function(i) {
-      field(names[[i]], types[[i]], TRUE)
+      structField(names[[i]], types[[i]], TRUE)
     })
-    schema <- do.call(buildSchema, fields)
+    schema <- do.call(structType, fields)
   }
 
-  stopifnot(class(schema) == "struct")
-  schemaString <- tojson(schema)
+  stopifnot(class(schema) == "structType")
+  # schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schemaString, sqlCtx)
+                     srdd, schema$jobj, sqlCtx)
   dataFrame(sdf)
 }
 
