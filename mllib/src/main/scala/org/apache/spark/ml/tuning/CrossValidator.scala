@@ -94,7 +94,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     val schema = dataset.schema
     transformSchema(dataset.schema, paramMap, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -132,7 +132,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     map(estimator).transformSchema(schema, paramMap)
   }
 }

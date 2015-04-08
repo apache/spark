@@ -43,7 +43,7 @@ private[spark] trait ClassifierParams extends PredictorParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     addOutputColumn(parentSchema, map(rawPredictionCol), new VectorUDT)
   }
 }
@@ -109,7 +109,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {

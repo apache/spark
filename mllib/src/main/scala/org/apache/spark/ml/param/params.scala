@@ -136,7 +136,7 @@ trait Params extends Identifiable with Serializable {
   /** Checks whether a param is explicitly set. */
   def isSet(param: Param[_]): Boolean = {
     require(param.parent.eq(this))
-    paramMap.contains(param)
+    values.contains(param)
   }
 
   /** Gets a param by its name. */
@@ -153,7 +153,7 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
-    paramMap.put(param.asInstanceOf[Param[Any]], value)
+    values.put(param.asInstanceOf[Param[Any]], value)
     this
   }
 
@@ -169,26 +169,23 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
-    paramMap(param)
+    values(param)
   }
 
   /**
    * Internal param map.
    */
-  protected final val paramMap: ParamMap = ParamMap.empty
+  private val values: ParamMap = ParamMap.empty
 
   /**
    * Internal param map for default values.
    */
-  protected final val defaultValues: ParamMap = ParamMap.empty
+  private val defaultValues: ParamMap = ParamMap.empty
 
   /**
    * Sets a default value.
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
-    println(s"param: $param")
-    println(param.parent)
-    println(value)
     require(param.parent.eq(this))
     defaultValues.put(param, value)
     this
@@ -204,6 +201,10 @@ trait Params extends Identifiable with Serializable {
   protected final def getDefault[T](param: Param[T]): Option[T] = {
     require(param.parent.eq(this))
     defaultValues.get(param)
+  }
+
+  protected final def extractValues(extraValues: ParamMap = ParamMap.empty): ParamMap = {
+    defaultValues ++ values ++ extraValues
   }
 
   /**

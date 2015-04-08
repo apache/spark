@@ -54,7 +54,7 @@ private[spark] trait PredictorParams extends Params
       paramMap: ParamMap,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     checkInputColumn(schema, map(featuresCol), featuresDataType)
     if (fitting) {
@@ -99,7 +99,7 @@ private[spark] abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     val model = train(dataset, map)
     Params.inheritValues(map, this, model) // copy params to model
     model
@@ -142,7 +142,7 @@ private[spark] abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame, paramMap: ParamMap): RDD[LabeledPoint] = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     dataset.select(map(labelCol), map(featuresCol))
       .map { case Row(label: Double, features: Vector) =>
       LabeledPoint(label, features)
@@ -202,7 +202,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {

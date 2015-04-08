@@ -117,7 +117,7 @@ class LogisticRegressionModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
 
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -178,7 +178,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override protected def predict(features: Vector): Double = {
-    if (score(features) > paramMap(threshold)) 1 else 0
+    if (score(features) > getThreshold) 1 else 0
   }
 
   override protected def predictProbabilities(features: Vector): Vector = {
@@ -193,7 +193,7 @@ class LogisticRegressionModel private[ml] (
 
   override protected def copy(): LogisticRegressionModel = {
     val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(this.extractValues(), this, m)
     m
   }
 }

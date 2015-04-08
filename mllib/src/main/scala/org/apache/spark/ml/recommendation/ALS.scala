@@ -146,7 +146,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     assert(schema(map(userCol)).dataType == IntegerType)
     assert(schema(map(itemCol)).dataType== IntegerType)
     val ratingType = schema(map(ratingCol)).dataType
@@ -175,7 +175,7 @@ class ALSModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     import dataset.sqlContext.implicits._
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     val users = userFactors.toDF("id", "features")
     val items = itemFactors.toDF("id", "features")
 
@@ -287,7 +287,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
     val ratings = dataset
       .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
       .map { row =>

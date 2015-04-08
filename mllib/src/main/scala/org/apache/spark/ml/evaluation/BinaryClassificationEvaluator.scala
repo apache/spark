@@ -36,8 +36,6 @@ import org.apache.spark.sql.types.DoubleType
 class BinaryClassificationEvaluator extends Evaluator with Params
   with HasRawPredictionCol with HasLabelCol {
 
-  setDefault(metricName -> "areaUnderROC")
-
   /**
    * param for metric name in evaluation
    * @group param
@@ -57,8 +55,10 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  setDefault(metricName -> "areaUnderROC")
+
   override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
-    val map = this.paramMap ++ paramMap
+    val map = extractValues(paramMap)
 
     val schema = dataset.schema
     checkInputColumn(schema, map(rawPredictionCol), new VectorUDT)
