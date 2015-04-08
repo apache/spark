@@ -33,7 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -282,10 +282,10 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 }
 
-private class SaveExecutorInfo extends SparkListener {
+private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
 
-  override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 }
@@ -293,7 +293,6 @@ private class SaveExecutorInfo extends SparkListener {
 private object YarnClusterDriver extends Logging with Matchers {
 
   val WAIT_TIMEOUT_MILLIS = 10000
-  var listener: SaveExecutorInfo = null
 
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
@@ -306,10 +305,9 @@ private object YarnClusterDriver extends Logging with Matchers {
       System.exit(1)
     }
 
-    listener = new SaveExecutorInfo
     val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", "org.apache.spark.deploy.yarn.SaveExecutorInfo")
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
-    sc.addSparkListener(listener)
     val status = new File(args(0))
     var result = "failure"
     try {
@@ -323,7 +321,15 @@ private object YarnClusterDriver extends Logging with Matchers {
     }
 
     // verify log urls are present
-    listener.addedExecutorInfos.values.foreach { info =>
+    val listenerOpt = sc.listenerBus.listeners.find {
+      case _: SaveExecutorInfo => true
+      case _ => false
+    }.map(_.asInstanceOf[SaveExecutorInfo])
+    assert(listenerOpt.isDefined)
+    val listener = listenerOpt.get
+    val executorInfos = listener.addedExecutorInfos.values
+    assert(executorInfos.nonEmpty)
+    executorInfos.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
     }
   }
