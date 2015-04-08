@@ -642,19 +642,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case None => OneRowRelation
         }
 
-        val not = "(?i)not".r
-        val exists = "(?i)exists".r
-
         val withWhere = whereClause.map { whereNode =>
           val Seq(clause) = whereNode.getChildren.toSeq
           clause match {
-            case Token(not(),
+            case Token(NOT(),
                    Token("TOK_SUBQUERY_EXPR",
-                     Token("TOK_SUBQUERY_OP", Token(exists(), Nil) :: Nil) ::
+                     Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
                      subquery :: Nil) :: Nil) =>
               Exists(relations, nodeToPlan(subquery), false)
             case Token("TOK_SUBQUERY_EXPR",
-                   Token("TOK_SUBQUERY_OP", Token(exists(), Nil) :: Nil) ::
+                   Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
                    subquery :: Nil) =>
               Exists(relations, nodeToPlan(subquery), true)
             // TODO add IN and NOT IN
@@ -1088,8 +1085,22 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
   val SQRT = "(?i)SQRT".r
+  val EXISTS = "(?i)EXISTS".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
+    case Token(NOT(),
+           Token("TOK_SUBQUERY_EXPR", _)) =>
+      // TODO
+      throw new NotImplementedError(
+        s"""Subquery combines filter is not supported yet.
+            | ${node.getName}: text: ${node}
+         """.stripMargin)
+    case Token("TOK_SUBQUERY_EXPR", _) =>
+      // TODO
+      throw new NotImplementedError(
+        s"""Subquery combines filter is not supported yet.
+            | ${node.getName}: text: ${node}
+         """.stripMargin)
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
