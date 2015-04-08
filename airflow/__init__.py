@@ -1,4 +1,4 @@
-__version__ = "0.4.7"
+__version__ = "0.4.7.1"
 
 '''
 Authentication is implemented using flask_login and different environments can
