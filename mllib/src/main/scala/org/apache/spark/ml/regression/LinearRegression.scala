@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
+import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam, HasStepSize}
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.sql.DataFrame
@@ -29,7 +29,7 @@ import org.apache.spark.storage.StorageLevel
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends RegressorParams
-  with HasRegParam with HasMaxIter
+  with HasRegParam with HasMaxIter with HasStepSize
 
 
 /**
@@ -43,12 +43,16 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 
   setRegParam(0.1)
   setMaxIter(100)
+  setStepSize(1.0)
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -63,6 +67,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     lr.optimizer
       .setRegParam(paramMap(regParam))
       .setNumIterations(paramMap(maxIter))
+      .setStepSize(paramMap(stepSize))
     val model = lr.run(oldDataset)
     val lrm = new LinearRegressionModel(this, paramMap, model.weights, model.intercept)
 

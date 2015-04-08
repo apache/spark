@@ -45,6 +45,17 @@ private[ml] trait HasMaxIter extends Params {
   def getMaxIter: Int = get(maxIter)
 }
 
+private[ml] trait HasStepSize extends Params {
+  /**
+   * param for max number of iterations
+   * @group param
+   */
+  val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "size of step")
+
+  /** @group getParam */
+  def getStepSize: Double = get(stepSize)
+}
+
 private[ml] trait HasFeaturesCol extends Params {
   /**
    * param for features column name
