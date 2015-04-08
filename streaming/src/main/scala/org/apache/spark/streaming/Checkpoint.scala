@@ -233,7 +233,7 @@ object CheckpointReader extends Logging {
 
   /**
    * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
-   * files, then return None, else try to return the latest valid checkpoint object. If no 
+   * files, then return None, else try to return the latest valid checkpoint object. If no
    * checkpoint files could be read correctly, then return None (if ignoreReadError = true),
    * or throw exception (if ignoreReadError = false).
    */
@@ -281,7 +281,6 @@ object CheckpointReader extends Logging {
       }
     })
 
-    
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {
       throw new SparkException("Failed to read checkpoint from directory " + checkpointPath)

@@ -55,7 +55,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       sc = null
     }
   }
-/*
+
   test("from no conf constructor") {
     ssc = new StreamingContext(master, appName, batchDuration)
     assert(ssc.sparkContext.conf.get("spark.master") === master)
@@ -329,7 +329,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       assert(ssc.awaitTerminationOrTimeout(10000) === true)
     }
   }
-*/
+
   test("getOrCreate") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("newContext", "true")  // to identify the context as new
@@ -361,7 +361,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
 
     val corrutedCheckpointPath = createCorruptedCheckpoint()
-    
+
     // getOrCreate should throw exception with fake checkpoint file and createOnError = false
     intercept[Exception] {
       ssc = StreamingContext.getOrCreate(corrutedCheckpointPath, creatingFunction _)
