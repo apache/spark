@@ -337,10 +337,12 @@ private object YarnClusterDriver extends Logging with Matchers {
     }
 
     // verify log urls are present
-    val listener = sc.listenerBus.listeners.filter {
+    val listenerOpt = sc.listenerBus.listeners.find {
       case _: SaveExecutorInfo => true
       case _ => false
-    }(0).asInstanceOf[SaveExecutorInfo]
+    }.map(_.asInstanceOf[SaveExecutorInfo])
+    assert(listenerOpt.isDefined)
+    val listener = listenerOpt.get
     val executorInfos = listener.addedExecutorInfos.values
     assert(executorInfos.nonEmpty)
     executorInfos.foreach { info =>
