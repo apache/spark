@@ -66,6 +66,15 @@ private[r] object SQLUtils {
     StructField(name, dtObj, nullable)
   }
 
+  // cfreeman: I don't think we need this anymore since we can pass structType from R
+  // def createDF(rdd: RDD[Array[Byte]], schemaString: String, sqlContext: SQLContext): DataFrame = {
+  //   val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+  //   val num = schema.fields.size
+  //   val rowRDD = rdd.map(bytesToRow)
+  //   sqlContext.createDataFrame(rowRDD, schema)
+  // }
+
+  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
     val num = schema.fields.size
     val rowRDD = rdd.map(bytesToRow)
     sqlContext.createDataFrame(rowRDD, schema)
