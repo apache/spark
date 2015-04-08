@@ -186,6 +186,9 @@ trait Params extends Identifiable with Serializable {
    * Sets a default value.
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
+    println(s"param: $param")
+    println(param.parent)
+    println(value)
     require(param.parent.eq(this))
     defaultValues.put(param, value)
     this

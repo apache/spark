@@ -104,8 +104,8 @@ private[shared] object SharedParamCodeGen {
     }.getOrElse("")
     val setDefault = defaultValue.map { v =>
       s"""
-        |  setDefault($name, $v)
-        |""".stripMargin
+         |  setDefault($name, $v)
+         |""".stripMargin
     }.getOrElse("")
 
     s"""
@@ -115,13 +115,13 @@ private[shared] object SharedParamCodeGen {
       | */
       |@DeveloperApi
       |trait Has$Name extends Params {
-      |$setDefault
+      |
       |  /**
       |   * Param for $doc.
       |   * @group param
       |   */
       |  final val $name: $Param = new $Param(this, "$name", "$doc")
-      |
+      |$setDefault
       |  /** @group getParam */
       |  final def get$Name: $T = get($name)
       |}

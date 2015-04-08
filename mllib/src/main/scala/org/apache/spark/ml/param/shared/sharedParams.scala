@@ -65,13 +65,13 @@ trait HasMaxIter extends Params {
 @DeveloperApi
 trait HasFeaturesCol extends Params {
 
-  setDefault(featuresCol, "features")
-
   /**
    * Param for features column name.
    * @group param
    */
   final val featuresCol: Param[String] = new Param[String](this, "featuresCol", "features column name")
+
+  setDefault(featuresCol, "features")
 
   /** @group getParam */
   final def getFeaturesCol: String = get(featuresCol)
@@ -84,13 +84,13 @@ trait HasFeaturesCol extends Params {
 @DeveloperApi
 trait HasLabelCol extends Params {
 
-  setDefault(labelCol, "label")
-
   /**
    * Param for label column name.
    * @group param
    */
   final val labelCol: Param[String] = new Param[String](this, "labelCol", "label column name")
+
+  setDefault(labelCol, "label")
 
   /** @group getParam */
   final def getLabelCol: String = get(labelCol)
@@ -103,13 +103,13 @@ trait HasLabelCol extends Params {
 @DeveloperApi
 trait HasPredictionCol extends Params {
 
-  setDefault(predictionCol, "prediction")
-
   /**
    * Param for prediction column name.
    * @group param
    */
   final val predictionCol: Param[String] = new Param[String](this, "predictionCol", "prediction column name")
+
+  setDefault(predictionCol, "prediction")
 
   /** @group getParam */
   final def getPredictionCol: String = get(predictionCol)
@@ -122,13 +122,13 @@ trait HasPredictionCol extends Params {
 @DeveloperApi
 trait HasRawPredictionCol extends Params {
 
-  setDefault(rawPredictionCol, "rawPrediction")
-
   /**
    * Param for raw prediction (a.k.a. confidence) column name.
    * @group param
    */
   final val rawPredictionCol: Param[String] = new Param[String](this, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
+
+  setDefault(rawPredictionCol, "rawPrediction")
 
   /** @group getParam */
   final def getRawPredictionCol: String = get(rawPredictionCol)
@@ -141,13 +141,13 @@ trait HasRawPredictionCol extends Params {
 @DeveloperApi
 trait HasProbabilityCol extends Params {
 
-  setDefault(probabilityCol, "probability")
-
   /**
    * Param for column name for predicted class conditional probabilities.
    * @group param
    */
   final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "column name for predicted class conditional probabilities")
+
+  setDefault(probabilityCol, "probability")
 
   /** @group getParam */
   final def getProbabilityCol: String = get(probabilityCol)
