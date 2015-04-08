@@ -19,15 +19,18 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.ui.SparkUI
 
-private[history] case class ApplicationHistoryInfo(
-    id: String,
+private[history] case class ApplicationAttemptInfo(
+    attemptId: String,
     name: String,
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = false,
-    appAttemptId: String = "") 
+    completed: Boolean = false)
+
+private[history] case class ApplicationHistoryInfo(
+    id: String,
+    attempts: List[ApplicationAttemptInfo])
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -42,9 +45,11 @@ private[history] abstract class ApplicationHistoryProvider {
    * Returns the Spark UI for a specific application.
    *
    * @param appId The application ID.
+   * @param attemptId The application attempt ID for apps with multiple attempts (or an empty
+   *                  string for apps with a single attempt).
    * @return The application's UI, or None if application is not found.
    */
-  def getAppUI(appId: String): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: String): Option[SparkUI]
 
   /**
    * Called when the server is shutting down.

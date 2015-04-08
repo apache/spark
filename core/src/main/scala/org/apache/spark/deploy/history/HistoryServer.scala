@@ -52,7 +52,11 @@ class HistoryServer(
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val ui = provider.getAppUI(key).getOrElse(throw new NoSuchElementException())
+      val parts = key.split("/")
+      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
+      val ui = provider
+        .getAppUI(parts(0), if (parts.length > 1) parts(1) else "")
+        .getOrElse(throw new NoSuchElementException())
       attachSparkUI(ui)
       ui
     }

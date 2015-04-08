@@ -50,7 +50,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       inProgress: Boolean,
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId)
+    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, "")
     val logPath = new URI(logUri).getPath + ip
     new File(logPath)
   }
@@ -106,22 +106,28 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val list = provider.getListing().toSeq
     list should not be (null)
     list.size should be (5)
-    list.count(_.completed) should be (3)
+    list.count(_.attempts.head.completed) should be (3)
 
-    list(0) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,
+    def makeAppInfo(id: String, name: String, start: Long, end: Long, lastMod: Long,
+      user: String, completed: Boolean): ApplicationHistoryInfo = {
+      ApplicationHistoryInfo(id,
+        List(ApplicationAttemptInfo("", name, start, end, lastMod, user, completed)))
+    }
+
+    list(0) should be (makeAppInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,
       newAppComplete.lastModified(), "test", true))
-    list(1) should be (ApplicationHistoryInfo(newAppCompressedComplete.getName(),
+    list(1) should be (makeAppInfo(newAppCompressedComplete.getName(),
       "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
-    list(2) should be (ApplicationHistoryInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
+    list(2) should be (makeAppInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
       oldAppComplete.lastModified(), "test", true))
-    list(3) should be (ApplicationHistoryInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L,
-      -1L, oldAppIncomplete.lastModified(), "test", false))
-    list(4) should be (ApplicationHistoryInfo(newAppIncomplete.getName(), "new-app-incomplete", 1L,
-      -1L, newAppIncomplete.lastModified(), "test", false))
+    list(3) should be (makeAppInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L, -1L,
+      oldAppIncomplete.lastModified(), "test", false))
+    list(4) should be (makeAppInfo(newAppIncomplete.getName(), "new-app-incomplete", 1L, -1L,
+      newAppIncomplete.lastModified(), "test", false))
 
     // Make sure the UI can be rendered.
     list.foreach { case info =>
-      val appUi = provider.getAppUI(info.id)
+      val appUi = provider.getAppUI(info.id, "")
       appUi should not be null
     }
   }
@@ -190,13 +196,14 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     provider.checkForLogs()
     val appListBeforeRename = provider.getListing()
     appListBeforeRename.size should be (1)
-    appListBeforeRename.head.logPath should endWith(EventLoggingListener.IN_PROGRESS)
+    appListBeforeRename.head.attempts.head.logPath should endWith(EventLoggingListener.IN_PROGRESS)
 
     logFile1.renameTo(newLogFile("app1", inProgress = false))
     provider.checkForLogs()
     val appListAfterRename = provider.getListing()
     appListAfterRename.size should be (1)
-    appListAfterRename.head.logPath should not endWith(EventLoggingListener.IN_PROGRESS)
+    appListAfterRename.head.attempts.head.logPath should not
+      endWith(EventLoggingListener.IN_PROGRESS)
   }
 
   test("SPARK-5582: empty log directory") {

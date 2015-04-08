@@ -37,18 +37,13 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allCompletedAppsNAttempts = 
-        parent.getApplicationList().filter(_.completed != requestedIncomplete)
-    val (hasAttemptInfo, appToAttemptMap)  = getApplicationLevelList(allCompletedAppsNAttempts)
-    
-    val allAppsSize = allCompletedAppsNAttempts.size
-    
+    val allApps = parent.getApplicationList()
+      .filter(_.attempts.exists(_.completed != requestedIncomplete))
+    val allAppsSize = allApps.size
+
     val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
-    val apps = 
-        allCompletedAppsNAttempts.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
-    val appWithAttemptsDisplayList = 
-        appToAttemptMap.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
-        
+    val appsToShow = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
+
     val actualPage = (actualFirst / pageSize) + 1
     val last = Math.min(actualFirst + pageSize, allAppsSize) - 1
     val pageCount = allAppsSize / pageSize + (if (allAppsSize % pageSize > 0) 1 else 0)
@@ -56,12 +51,14 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val secondPageFromLeft = 2
     val secondPageFromRight = pageCount - 1
 
-    val appTable = 
-      if (hasAttemptInfo) {
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appWithAttemptsDisplayList)
+    val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
+    val appTable =
+      if (hasMultipleAttempts) {
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appsToShow)
       } else {
-        UIUtils.listingTable(appHeader, appRow, apps) 
+        UIUtils.listingTable(appHeader, appRow, appsToShow)
       }
+
     val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
@@ -129,36 +126,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       </div>
     UIUtils.basicSparkPage(content, "History Server")
   }
-  
-  private def getApplicationLevelList (appNattemptList: Iterable[ApplicationHistoryInfo])  ={
-    // Create HashMap as per the multiple attempts for one application. 
-    // If there is no attempt specific stuff, then
-    // do return false, to indicate the same, so that previous UI gets displayed.
-    var hasAttemptInfo = false
-    val appToAttemptInfo = new HashMap[String, ArrayBuffer[ApplicationHistoryInfo]]
-    for( appAttempt <- appNattemptList) {
-      if(!appAttempt.appAttemptId.equals("")){
-        hasAttemptInfo = true
-        val attemptId = appAttempt.appAttemptId.toInt
-         if(appToAttemptInfo.contains(appAttempt.id)){
-           val currentAttempts = appToAttemptInfo.get(appAttempt.id).get
-           currentAttempts += appAttempt
-           appToAttemptInfo.put( appAttempt.id, currentAttempts) 
-         } else {
-           val currentAttempts = new ArrayBuffer[ApplicationHistoryInfo]()
-           currentAttempts += appAttempt
-           appToAttemptInfo.put( appAttempt.id, currentAttempts )
-         }
-      }else {
-        val currentAttempts = new ArrayBuffer[ApplicationHistoryInfo]()
-           currentAttempts += appAttempt
-        appToAttemptInfo.put(appAttempt.id, currentAttempts)
-      }
-    } 
-    val sortedMap = ListMap(appToAttemptInfo.toSeq.sortWith(_._1 > _._1):_*)
-    (hasAttemptInfo, sortedMap)
-  } 
-  
 
   private val appHeader = Seq(
     "App ID",
@@ -169,12 +136,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     "Spark User",
     "Last Updated")
 
-  private def rangeIndices(range: Seq[Int], condition: Int => Boolean, showIncomplete: Boolean):
-  Seq[Node] = {
-    range.filter(condition).map(nextPage =>
-      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
-  }
-    
   private val appWithAttemptHeader = Seq(
     "App ID",
     "App Name",
@@ -185,85 +146,70 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     "Spark User",
     "Last Updated")
 
-  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
+  private def rangeIndices(
+      range: Seq[Int],
+      condition: Int => Boolean,
+      showIncomplete: Boolean): Seq[Node] = {
+    range.filter(condition).map(nextPage =>
+      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
+  }
+
+  private def getAttemptURI(appId: String, attemptInfo: ApplicationAttemptInfo): String = {
+    val attemptSuffix = if (!attemptInfo.attemptId.isEmpty) s"/${attemptInfo.attemptId}" else ""
+    s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
+  }
+
+  private def attemptRow(
+      info: ApplicationHistoryInfo,
+      attempt: ApplicationAttemptInfo,
+      isFirst: Boolean): Seq[Node] = {
+    val attemptInfo = info.attempts.head
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
-    val startTime = UIUtils.formatDate(info.startTime)
-    val endTime = if (info.endTime > 0) UIUtils.formatDate(info.endTime) else "-"
-    val duration =
-      if (info.endTime > 0) UIUtils.formatDuration(info.endTime - info.startTime) else "-"
-    val lastUpdated = UIUtils.formatDate(info.lastUpdated)
-    <tr>
-      <td><a href={uiAddress}>{info.id}</a></td>
-      <td>{info.name}</td>
-      <td sorttable_customkey={info.startTime.toString}>{startTime}</td>
-      <td sorttable_customkey={info.endTime.toString}>{endTime}</td>
-      <td sorttable_customkey={(info.endTime - info.startTime).toString}>{duration}</td>
-      <td>{info.sparkUser}</td>
-      <td sorttable_customkey={info.lastUpdated.toString}>{lastUpdated}</td>
-    </tr>
-  }
-  
-  private def getAttemptURI(attemptInfo: ApplicationHistoryInfo, 
-                            returnEmptyIfAttemptInfoNull: Boolean = true ) = {
-    if (attemptInfo.appAttemptId.equals("")) { 
-      if(returnEmptyIfAttemptInfoNull) {
-        attemptInfo.appAttemptId
-      } else {
-        HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}"
-      }
-   } else {
-     HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}" + "_" +  s"${attemptInfo.appAttemptId}"
-     }
-  }
-  
-  private def firstAttemptRow(attemptInfo : ApplicationHistoryInfo)  = {
-    val uiAddress = 
-      if (attemptInfo.appAttemptId.equals("")) {
-       attemptInfo.appAttemptId
-      } else {
-       HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}" + "_" +  s"${attemptInfo.appAttemptId}"
-      }
-              
     val startTime = UIUtils.formatDate(attemptInfo.startTime)
-    val endTime = UIUtils.formatDate(attemptInfo.endTime)
-    val duration = UIUtils.formatDuration(attemptInfo.endTime - attemptInfo.startTime)
+    val endTime = if (attemptInfo.endTime > 0) UIUtils.formatDate(attemptInfo.endTime) else "-"
+    val duration =
+      if (attemptInfo.endTime > 0) {
+        UIUtils.formatDuration(attemptInfo.endTime - attemptInfo.startTime)
+        } else {
+          "-"
+        }
     val lastUpdated = UIUtils.formatDate(attemptInfo.lastUpdated)
-    val attemptId = attemptInfo.appAttemptId
-       <td><a href={uiAddress}>{attemptId}</a></td>
-       <td sorttable_customkey={attemptInfo.startTime.toString}>{startTime}</td>
-      <td sorttable_customkey={attemptInfo.endTime.toString}>{endTime}</td>
-      <td sorttable_customkey={(attemptInfo.endTime - attemptInfo.startTime).toString}>
-                  {duration}</td>
-      <td>{attemptInfo.sparkUser}</td>
-      <td sorttable_customkey={attemptInfo.lastUpdated.toString}>{lastUpdated}</td>
-  }
-  
-  private def attemptRow(attemptInfo: ApplicationHistoryInfo)  = {
     <tr>
-      {firstAttemptRow(attemptInfo)}
+      {
+        if (isFirst) {
+          if (info.attempts.size > 1) {
+            <td rowspan={info.attempts.size.toString}><a href={uiAddress}>{info.id}</a></td>
+          } else {
+            <td><a href={uiAddress}>{info.id}</a></td>
+          }
+        } else {
+          new xml.Comment("")
+        }
+      }
+      {
+        if (info.attempts.size > 1 && !attempt.attemptId.isEmpty) {
+          <td><a href={getAttemptURI(info.id, attempt)}>{attempt.attemptId}</a></td>
+        } else {
+          Nil
+        }
+      }
+      <td>{attempt.name}</td>
+      <td sorttable_customkey={attempt.startTime.toString}>{startTime}</td>
+      <td sorttable_customkey={attempt.endTime.toString}>{endTime}</td>
+      <td sorttable_customkey={(attempt.endTime - attempt.startTime).toString}>
+        {duration}</td>
+      <td>{attempt.sparkUser}</td>
+      <td sorttable_customkey={attempt.lastUpdated.toString}>{lastUpdated}</td>
     </tr>
   }
-    
-  private def appWithAttemptRow(
-      appAttemptsInfo: (String,ArrayBuffer[ApplicationHistoryInfo])): Seq[Node] = {
-    val applicationId = appAttemptsInfo._1
-    val info  = appAttemptsInfo._2
-    val rowSpan = info.length
-    val rowSpanString = rowSpan.toString
-    val applicatioName = info(0).name
-    val lastAttemptURI = getAttemptURI(info(0), false)
-    val ttAttempts = info.slice(1, rowSpan -1)
-    val x = new xml.NodeBuffer
-    x += 
-    <tr>
-      <td rowspan={rowSpanString}><a href={lastAttemptURI}>{applicationId}</a></td>
-      <td rowspan={rowSpanString}>{applicatioName}</td>
-      { firstAttemptRow(info(0)) }
-    </tr>;
-    for( i <- 1 until rowSpan ){
-      x += attemptRow(info(i))
-    }
-      x
+
+  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
+    attemptRow(info, info.attempts.head, true)
+  }
+
+  private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
+    attemptRow(info, info.attempts.head, true) ++
+      info.attempts.drop(1).flatMap(attemptRow(info, _, false))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
