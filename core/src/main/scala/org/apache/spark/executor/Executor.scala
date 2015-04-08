@@ -439,7 +439,7 @@ private[spark] class Executor(
     val intervalMs = Utils.timeStringAsMs(conf.get("spark.executor.heartbeatInterval", "10s"))
     val thread = new Thread() {
       override def run() {
-        // Sleep a random intervalMs so the heartbeats don't end up in sync
+        // Sleep a random interval so the heartbeats don't end up in sync
         Thread.sleep(intervalMs + (math.random * intervalMs).asInstanceOf[Int])
         while (!isStopped) {
           reportHeartBeat()

@@ -62,18 +62,17 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
-  private val networkTimeoutS = Utils.timeStringAsS(sc.conf.get("spark.network.timeout", "120s"))
-  private val executorTimeoutMs = Utils.timeStringAsMs(
-    sc.conf.get("spark.storage.blockManagerSlaveTimeoutMs", 
-      s"${networkTimeoutS}s"))
-
+  private val slaveTimeoutMs = Utils.timeStringAsMs(
+    sc.conf.get("spark.storage.blockManagerSlaveTimeoutMs", "120s"))
+  private val executorTimeoutMs = Utils.timeStringAsS(sc.conf.get("spark.network.timeout",
+    s"${slaveTimeoutMs}ms")) * 1000
+  
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
-  private val timeoutIntervalS = Utils.timeStringAsS(sc.conf
-      .get("spark.network.timeoutInterval", "60s"))
-  private val checkTimeoutIntervalMs = Utils.timeStringAsMs(
-    sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", 
-      s"${timeoutIntervalS}s"))
+  private val timeoutIntervalMs = Utils.timeStringAsMs(
+    sc.conf.get("spark.storage.blockManagerTimeoutIntervalMs", "60s"))
+  private val checkTimeoutIntervalMs =  Utils.timeStringAsS(
+    sc.conf.get("spark.network.timeoutInterval", s"${timeoutIntervalMs}ms")) * 1000
   
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
