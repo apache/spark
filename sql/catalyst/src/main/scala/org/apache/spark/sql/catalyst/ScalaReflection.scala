@@ -84,8 +84,10 @@ trait ScalaReflection {
 
   /**
    *  Converts Scala objects to catalyst rows / types.
+   *
    *  Note: This should be called before do evaluation on Row
    *        (It does not support UDT)
+   *  This is used to create an RDD or test results with correct types for Catalyst.
    */
   def convertToCatalyst(a: Any): Any = a match {
     case s: String => UTF8String(s)

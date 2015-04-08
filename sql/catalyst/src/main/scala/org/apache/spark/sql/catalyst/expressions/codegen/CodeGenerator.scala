@@ -220,7 +220,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         q"""
           val $nullTerm = ${value == null}
           val $primitiveTerm: ${termForType(dataType)} =
-            org.apache.spark.sql.types.UTF8String(${value.toString})
+            org.apache.spark.sql.types.UTF8String(${value.getBytes})
          """.children
 
       case expressions.Literal(value: Int, dataType) =>
@@ -278,6 +278,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             else
               org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.toString)
         """.children
+
+      case EqualTo(e1: BinaryType, e2: BinaryType) =>
+        (e1, e2).evaluateAs (BooleanType) {
+          case (eval1, eval2) =>
+            q"""
+              java.util.Arrays.equals($eval1.asInstanceOf[Array[Byte]],
+                 $eval2.asInstanceOf[Array[Byte]])
+            """
+        }
 
       case EqualTo(e1, e2) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 == $eval2" }

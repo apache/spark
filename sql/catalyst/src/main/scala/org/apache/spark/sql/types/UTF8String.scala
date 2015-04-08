@@ -48,10 +48,14 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     this
   }
 
+  /**
+   * Return the number of bytes for a code point with the first byte as `b`
+   * @param b The first byte of a code point
+   */
   @inline
   private[this] def numOfBytes(b: Byte): Int = {
     val offset = (b & 0xFF) - 192
-    if (offset >= 0) UTF8String.tailBytesOfUTF8(offset) else 1
+    if (offset >= 0) UTF8String.bytesOfCodePointInUTF8(offset) else 1
   }
 
   /**
@@ -164,6 +168,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     case s: UTF8String =>
       Arrays.equals(bytes, s.getBytes)
     case s: String =>
+      // This is only used for Catalyst unit tests
       // fail fast
       bytes.length >= s.length && length() == s.length && toString() == s
     case _ =>
@@ -178,7 +183,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 object UTF8String {
   // number of tailing bytes in a UTF8 sequence for a code point
   // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
-  private[types] val tailBytesOfUTF8: Array[Int] = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  private[types] val bytesOfCodePointInUTF8: Array[Int] = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,

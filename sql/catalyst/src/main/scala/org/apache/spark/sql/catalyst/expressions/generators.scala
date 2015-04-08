@@ -86,9 +86,10 @@ case class UserDefinedGenerator(
 
   override def eval(input: Row): TraversableOnce[Row] = {
     // TODO(davies): improve this
-    val input_schema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+    // Convert the objects into Scala Type before calling function, we need schema to support UDT
+    val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
     val inputRow = new InterpretedProjection(children)
-    function(ScalaReflection.convertToScala(inputRow(input), input_schema).asInstanceOf[Row])
+    function(ScalaReflection.convertToScala(inputRow(input), inputSchema).asInstanceOf[Row])
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"

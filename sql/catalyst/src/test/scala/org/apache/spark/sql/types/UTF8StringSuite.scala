@@ -28,6 +28,8 @@ class UTF8StringSuite extends FunSuite {
 
       assert(UTF8String(str) == str)
       assert(UTF8String(str.getBytes("utf8")) == str)
+      assert(UTF8String(str).toString == str)
+      assert(UTF8String(str.getBytes("utf8")).toString == str)
       assert(UTF8String(str.getBytes("utf8")) == UTF8String(str))
 
       assert(UTF8String(str).hashCode() == UTF8String(str.getBytes("utf8")).hashCode())

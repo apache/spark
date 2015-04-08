@@ -39,7 +39,6 @@ object DateUtils {
     millisToDays(d.getTime)
   }
 
-  // TODO(davies): This is buggy, it will be wrong if the date is not aligned with day
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisLocal: Long): Int = {
     ((millisLocal + LOCAL_TIMEZONE.get().getOffset(millisLocal)) / MILLIS_PER_DAY).toInt

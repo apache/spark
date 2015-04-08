@@ -52,6 +52,10 @@ object RDDConversions {
       }
     }
   }
+
+  /**
+   * Convert the objects inside Row into the types Catalyst expected.
+   */
   def rowToRowRdd(data: RDD[Row], schema: StructType): RDD[Row] = {
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
