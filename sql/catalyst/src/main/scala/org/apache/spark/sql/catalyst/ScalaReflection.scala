@@ -95,10 +95,14 @@ trait ScalaReflection {
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
-    // TODO: This is very slow!!!
-    new GenericRowWithSchema(
-      r.toSeq.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray, schema)
+    val fields = schema.fields
+    val values = new Array[Any](r.length)
+    var i = 0
+    while (i < values.length) {
+      values(i) = convertToScala(r(i), fields(i).dataType)
+      i += 1
+    }
+    new GenericRowWithSchema(values, schema)
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
