@@ -17,12 +17,6 @@
 
 package test.org.apache.spark.sql;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -30,6 +24,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
 
 public class JavaRowSuite {
   private byte byteValue;
