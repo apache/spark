@@ -1099,4 +1099,27 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
+  
+  test("Support float/double union decimal and decimal(a ,b) union decimal(c, d)") {
+    checkAnswer(
+      sql("""
+            |select cast(12.2056999 as float) from testData limit 1
+            |union
+            |select cast(12.2041 as decimal(7, 4)) from testData limit 1""".stripMargin),
+      Row(12.2056999.toFloat) :: Row(12.2041.toFloat) :: Nil)
+
+    checkAnswer(
+      sql("""
+            |select cast(12.2056999 as double) from testData limit 1
+            |union
+            |select cast(12.2041 as decimal(7, 4)) from testData limit 1""".stripMargin),
+      Row(12.2056999) :: Row(12.2041) :: Nil)
+
+    checkAnswer(
+      sql("""
+            |select cast(1241.20 as decimal(6, 2)) from testData limit 1
+            |union
+            |select cast(1.204 as decimal(5, 3)) from testData limit 1""".stripMargin),
+      Row(BigDecimal(1241.2)) :: Row(BigDecimal(1.204)) :: Nil)
+  }
 }
