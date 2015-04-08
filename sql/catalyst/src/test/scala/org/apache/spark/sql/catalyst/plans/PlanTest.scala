@@ -50,8 +50,8 @@ class PlanTest extends FunSuite {
         s"""
           |== FAIL: Plans do not match ===
           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-        """.stripMargin)
-      }
+         """.stripMargin)
+    }
   }
 
   /** Fails the test if the two expressions do not match */
