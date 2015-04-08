@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.{ReflectionConverters, ScalaReflection, expressions}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -404,8 +404,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      val converters = ReflectionConverters.createCatalystConvertersForStruct(schema)
-      rowRDD.map(ReflectionConverters.convertRowWithConverters(_, schema, converters))
+      val converters = schema.fields.map {
+        f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
+      }
+      rowRDD.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
     } else {
       rowRDD
     }
@@ -460,7 +462,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { row =>
         new GenericRow(
           extractors.zip(attributeSeq).map { case (e, attr) =>
-            ReflectionConverters.convertToCatalyst(e.invoke(row), attr.dataType)
+            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
           }.toArray[Any]
         ) : Row
       }

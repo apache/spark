@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ReflectionConverters
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 
@@ -34,14 +34,18 @@ case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNo
 
 
   override def executeCollect(): Array[Row] = {
-    val converters = ReflectionConverters.createScalaConvertersForStruct(schema)
-    rows.map(ReflectionConverters.convertRowWithConverters(_, schema, converters)).toArray
+    val converters = schema.fields.map {
+      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
+    }
+    rows.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters)).toArray
   }
 
 
   override def executeTake(limit: Int): Array[Row] = {
-    val converters = ReflectionConverters.createScalaConvertersForStruct(schema)
-    rows.map(ReflectionConverters.convertRowWithConverters(_, schema, converters))
+    val converters = schema.fields.map {
+      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
+    }
+    rows.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
       .take(limit).toArray
   }
 }

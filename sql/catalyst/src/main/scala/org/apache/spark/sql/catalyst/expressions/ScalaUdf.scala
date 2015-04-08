@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.ReflectionConverters
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -40,7 +40,7 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     (1 to 22).map { x =>
       val anys = (1 to x).map(x => "Any").reduce(_ + ", " + _)
       val childs = (0 to x - 1).map(x => s"val child$x = children($x)").reduce(_ + "\n      " + _)
-      val evals = (0 to x - 1).map(x => s"ReflectionConverters.convertToScala(child$x.eval(input), child$x.dataType)").reduce(_ + ",\n          " + _)
+      val evals = (0 to x - 1).map(x => s"CatalystTypeConverters.convertToScala(child$x.eval(input), child$x.dataType)").reduce(_ + ",\n          " + _)
 
       s"""    case $x =>
       val func = function.asInstanceOf[($anys) => Any]
@@ -66,7 +66,7 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child0 = children(0)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType))
       }
       
     case 2 =>
@@ -75,8 +75,8 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child1 = children(1)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType))
       }
       
     case 3 =>
@@ -86,9 +86,9 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child2 = children(2)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType))
       }
       
     case 4 =>
@@ -99,10 +99,10 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child3 = children(3)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType))
       }
       
     case 5 =>
@@ -114,11 +114,11 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child4 = children(4)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType))
       }
       
     case 6 =>
@@ -131,12 +131,12 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child5 = children(5)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType))
       }
       
     case 7 =>
@@ -150,13 +150,13 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child6 = children(6)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType))
       }
       
     case 8 =>
@@ -171,14 +171,14 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child7 = children(7)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType))
       }
       
     case 9 =>
@@ -194,15 +194,15 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child8 = children(8)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType))
       }
       
     case 10 =>
@@ -219,16 +219,16 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child9 = children(9)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType))
       }
       
     case 11 =>
@@ -246,17 +246,17 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child10 = children(10)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType))
       }
       
     case 12 =>
@@ -275,18 +275,18 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child11 = children(11)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType))
       }
       
     case 13 =>
@@ -306,19 +306,19 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child12 = children(12)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType))
       }
       
     case 14 =>
@@ -339,20 +339,20 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child13 = children(13)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType))
       }
       
     case 15 =>
@@ -374,21 +374,21 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child14 = children(14)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType))
       }
       
     case 16 =>
@@ -411,22 +411,22 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child15 = children(15)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType))
       }
       
     case 17 =>
@@ -450,23 +450,23 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child16 = children(16)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType))
       }
       
     case 18 =>
@@ -491,24 +491,24 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child17 = children(17)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType),
-          ReflectionConverters.convertToScala(child17.eval(input), child17.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType),
+          CatalystTypeConverters.convertToScala(child17.eval(input), child17.dataType))
       }
       
     case 19 =>
@@ -534,25 +534,25 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child18 = children(18)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType),
-          ReflectionConverters.convertToScala(child17.eval(input), child17.dataType),
-          ReflectionConverters.convertToScala(child18.eval(input), child18.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType),
+          CatalystTypeConverters.convertToScala(child17.eval(input), child17.dataType),
+          CatalystTypeConverters.convertToScala(child18.eval(input), child18.dataType))
       }
       
     case 20 =>
@@ -579,26 +579,26 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child19 = children(19)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType),
-          ReflectionConverters.convertToScala(child17.eval(input), child17.dataType),
-          ReflectionConverters.convertToScala(child18.eval(input), child18.dataType),
-          ReflectionConverters.convertToScala(child19.eval(input), child19.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType),
+          CatalystTypeConverters.convertToScala(child17.eval(input), child17.dataType),
+          CatalystTypeConverters.convertToScala(child18.eval(input), child18.dataType),
+          CatalystTypeConverters.convertToScala(child19.eval(input), child19.dataType))
       }
       
     case 21 =>
@@ -626,27 +626,27 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child20 = children(20)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType),
-          ReflectionConverters.convertToScala(child17.eval(input), child17.dataType),
-          ReflectionConverters.convertToScala(child18.eval(input), child18.dataType),
-          ReflectionConverters.convertToScala(child19.eval(input), child19.dataType),
-          ReflectionConverters.convertToScala(child20.eval(input), child20.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType),
+          CatalystTypeConverters.convertToScala(child17.eval(input), child17.dataType),
+          CatalystTypeConverters.convertToScala(child18.eval(input), child18.dataType),
+          CatalystTypeConverters.convertToScala(child19.eval(input), child19.dataType),
+          CatalystTypeConverters.convertToScala(child20.eval(input), child20.dataType))
       }
       
     case 22 =>
@@ -675,33 +675,33 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
       val child21 = children(21)
       (input: Row) => {
         func(
-          ReflectionConverters.convertToScala(child0.eval(input), child0.dataType),
-          ReflectionConverters.convertToScala(child1.eval(input), child1.dataType),
-          ReflectionConverters.convertToScala(child2.eval(input), child2.dataType),
-          ReflectionConverters.convertToScala(child3.eval(input), child3.dataType),
-          ReflectionConverters.convertToScala(child4.eval(input), child4.dataType),
-          ReflectionConverters.convertToScala(child5.eval(input), child5.dataType),
-          ReflectionConverters.convertToScala(child6.eval(input), child6.dataType),
-          ReflectionConverters.convertToScala(child7.eval(input), child7.dataType),
-          ReflectionConverters.convertToScala(child8.eval(input), child8.dataType),
-          ReflectionConverters.convertToScala(child9.eval(input), child9.dataType),
-          ReflectionConverters.convertToScala(child10.eval(input), child10.dataType),
-          ReflectionConverters.convertToScala(child11.eval(input), child11.dataType),
-          ReflectionConverters.convertToScala(child12.eval(input), child12.dataType),
-          ReflectionConverters.convertToScala(child13.eval(input), child13.dataType),
-          ReflectionConverters.convertToScala(child14.eval(input), child14.dataType),
-          ReflectionConverters.convertToScala(child15.eval(input), child15.dataType),
-          ReflectionConverters.convertToScala(child16.eval(input), child16.dataType),
-          ReflectionConverters.convertToScala(child17.eval(input), child17.dataType),
-          ReflectionConverters.convertToScala(child18.eval(input), child18.dataType),
-          ReflectionConverters.convertToScala(child19.eval(input), child19.dataType),
-          ReflectionConverters.convertToScala(child20.eval(input), child20.dataType),
-          ReflectionConverters.convertToScala(child21.eval(input), child21.dataType))
+          CatalystTypeConverters.convertToScala(child0.eval(input), child0.dataType),
+          CatalystTypeConverters.convertToScala(child1.eval(input), child1.dataType),
+          CatalystTypeConverters.convertToScala(child2.eval(input), child2.dataType),
+          CatalystTypeConverters.convertToScala(child3.eval(input), child3.dataType),
+          CatalystTypeConverters.convertToScala(child4.eval(input), child4.dataType),
+          CatalystTypeConverters.convertToScala(child5.eval(input), child5.dataType),
+          CatalystTypeConverters.convertToScala(child6.eval(input), child6.dataType),
+          CatalystTypeConverters.convertToScala(child7.eval(input), child7.dataType),
+          CatalystTypeConverters.convertToScala(child8.eval(input), child8.dataType),
+          CatalystTypeConverters.convertToScala(child9.eval(input), child9.dataType),
+          CatalystTypeConverters.convertToScala(child10.eval(input), child10.dataType),
+          CatalystTypeConverters.convertToScala(child11.eval(input), child11.dataType),
+          CatalystTypeConverters.convertToScala(child12.eval(input), child12.dataType),
+          CatalystTypeConverters.convertToScala(child13.eval(input), child13.dataType),
+          CatalystTypeConverters.convertToScala(child14.eval(input), child14.dataType),
+          CatalystTypeConverters.convertToScala(child15.eval(input), child15.dataType),
+          CatalystTypeConverters.convertToScala(child16.eval(input), child16.dataType),
+          CatalystTypeConverters.convertToScala(child17.eval(input), child17.dataType),
+          CatalystTypeConverters.convertToScala(child18.eval(input), child18.dataType),
+          CatalystTypeConverters.convertToScala(child19.eval(input), child19.dataType),
+          CatalystTypeConverters.convertToScala(child20.eval(input), child20.dataType),
+          CatalystTypeConverters.convertToScala(child21.eval(input), child21.dataType))
       }
   }
   
   // scalastyle:on
   
-  override def eval(input: Row): Any = ReflectionConverters.convertToCatalyst(f(input), dataType)
+  override def eval(input: Row): Any = CatalystTypeConverters.convertToCatalyst(f(input), dataType)
 
 }

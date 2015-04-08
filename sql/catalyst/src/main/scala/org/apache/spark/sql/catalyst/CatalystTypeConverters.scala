@@ -19,13 +19,15 @@ package org.apache.spark.sql.catalyst
 
 import java.util.{Map => JavaMap}
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
  */
-object ReflectionConverters {
+object CatalystTypeConverters {
   // The Predef.Map is scala.collection.immutable.Map.
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
@@ -37,14 +39,23 @@ object ReflectionConverters {
    */
   def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     // Check UDT first since UDTs can override other types
-    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
-    case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
+    case (obj, udt: UserDefinedType[_]) =>
+      udt.serialize(obj)
+
+    case (o: Option[_], _) =>
+      o.map(convertToCatalyst(_, dataType)).orNull
+
+    case (s: Seq[_], arrayType: ArrayType) =>
+      s.map(convertToCatalyst(_, arrayType.elementType))
+
     case (s: Array[_], arrayType: ArrayType) =>
       s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
-    }
+
+    case (m: Map[_, _], mapType: MapType) =>
+      m.map { case (k, v) =>
+        convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
+      }
+
     case (jmap: JavaMap[_, _], mapType: MapType) =>
       val iter = jmap.entrySet.iterator
       var listOfEntries: List[(Any, Any)] = List()
@@ -54,6 +65,7 @@ object ReflectionConverters {
           convertToCatalyst(entry.getValue, mapType.valueType))
       }
       listOfEntries.toMap
+
     case (p: Product, structType: StructType) =>
       val ar = new Array[Any](structType.size)
       val iter = p.productIterator
@@ -63,36 +75,45 @@ object ReflectionConverters {
         idx += 1
       }
       new GenericRowWithSchema(ar, structType)
-    case (d: BigDecimal, _) => Decimal(d)
-    case (d: java.math.BigDecimal, _) => Decimal(d)
-    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
+
+    case (d: BigDecimal, _) =>
+      Decimal(d)
+
+    case (d: java.math.BigDecimal, _) =>
+      Decimal(d)
+
+    case (d: java.sql.Date, _) =>
+      DateUtils.fromJavaDate(d)
+
     case (r: Row, structType: StructType) =>
       val converters = structType.fields.map {
         f => (item: Any) => convertToCatalyst(item, f.dataType)
       }
       convertRowWithConverters(r, structType, converters)
-    case (other, _) => other
+
+    case (other, _) =>
+      other
   }
 
   /**
    * Creates a converter function that will convert Scala objects to the specified catalyst type.
    */
-  private[sql] def createCatalystConverter(dataType: DataType): Any => Any = {
+  private[sql] def createToCatalystConverter(dataType: DataType): Any => Any = {
     def extractOption(item: Any): Any = item match {
-      case s: Some[_] => s.get
-      case None => null
+      case opt: Option[_] => opt.orNull
       case other => other
     }
 
     dataType match {
       // Check UDT first since UDTs can override other types
       case udt: UserDefinedType[_] =>
-        (item) => {
-          if (item == None) null else udt.serialize(extractOption(item))
+        (item) => extractOption(item) match {
+          case null => null
+          case other => udt.serialize(other)
         }
 
       case arrayType: ArrayType =>
-        val elementConverter = createCatalystConverter(arrayType.elementType)
+        val elementConverter = createToCatalystConverter(arrayType.elementType)
         (item: Any) => {
           extractOption(item) match {
             case a: Array[_] => a.toSeq.map(elementConverter)
@@ -102,8 +123,8 @@ object ReflectionConverters {
         }
 
       case mapType: MapType =>
-        val keyConverter = createCatalystConverter(mapType.keyType)
-        val valueConverter = createCatalystConverter(mapType.valueType)
+        val keyConverter = createToCatalystConverter(mapType.keyType)
+        val valueConverter = createToCatalystConverter(mapType.valueType)
         (item: Any) => {
           extractOption(item) match {
             case m: Map[_, _] =>
@@ -113,28 +134,23 @@ object ReflectionConverters {
 
             case jmap: JavaMap[_, _] =>
               val iter = jmap.entrySet.iterator
-              var listOfEntries: List[(Any, Any)] = List()
+              val convertedMap: HashMap[Any, Any] = HashMap()
               while (iter.hasNext) {
                 val entry = iter.next()
-                listOfEntries :+= (keyConverter(entry.getKey), valueConverter(entry.getValue))
+                convertedMap += Tuple2(keyConverter(entry.getKey), valueConverter(entry.getValue))
               }
-              listOfEntries.toMap
+              convertedMap
 
             case null => null
           }
         }
 
       case structType: StructType =>
-        val converters = new Array[Any => Any](structType.length)
-        val iter = structType.fields.iterator
-        var idx = 0
-        while (iter.hasNext) {
-          converters(idx) = createCatalystConverter(iter.next().dataType)
-          idx += 1
-        }
+        val converters = structType.fields.map(f => createToCatalystConverter(f.dataType))
         (item: Any) => {
           extractOption(item) match {
-            case r: Row => convertRowWithConverters(r, structType, converters)
+            case r: Row =>
+              convertRowWithConverters(r, structType, converters)
 
             case p: Product =>
               val ar = new Array[Any](structType.size)
@@ -146,15 +162,20 @@ object ReflectionConverters {
               }
               new GenericRowWithSchema(ar, structType)
 
-            case null => null
+            case null =>
+              null
           }
         }
+
+      case dateType: DateType => (item: Any) => extractOption(item) match {
+        case d: java.sql.Date => DateUtils.fromJavaDate(d)
+        case other => other
+      }
 
       case _ =>
         (item: Any) => extractOption(item) match {
           case d: BigDecimal => Decimal(d)
           case d: java.math.BigDecimal => Decimal(d)
-          case d: java.sql.Date => DateUtils.fromJavaDate(d)
           case other => other
         }
     }
@@ -163,32 +184,45 @@ object ReflectionConverters {
   /** Converts Catalyst types used internally in rows to standard Scala types */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
     // Check UDT first since UDTs can override other types
-    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
-    }
-    case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
-    case (i: Int, DateType) => DateUtils.toJavaDate(i)
-    case (other, _) => other
+    case (d, udt: UserDefinedType[_]) =>
+      udt.deserialize(d)
+
+    case (s: Seq[_], arrayType: ArrayType) =>
+      s.map(convertToScala(_, arrayType.elementType))
+
+    case (m: Map[_, _], mapType: MapType) =>
+      m.map { case (k, v) =>
+        convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
+      }
+
+    case (r: Row, s: StructType) =>
+      convertRowToScala(r, s)
+
+    case (d: Decimal, _: DecimalType) =>
+      d.toJavaBigDecimal
+
+    case (i: Int, DateType) =>
+      DateUtils.toJavaDate(i)
+
+    case (other, _) =>
+      other
   }
 
   /**
    * Creates a converter function that will convert Catalyst types to Scala type.
    */
-  private[sql] def createScalaConverter(dataType: DataType): Any => Any = dataType match {
+  private[sql] def createToScalaConverter(dataType: DataType): Any => Any = dataType match {
     // Check UDT first since UDTs can override other types
     case udt: UserDefinedType[_] =>
       (item: Any) => if (item == null) null else udt.deserialize(item)
 
     case arrayType: ArrayType =>
-      val elementConverter = createScalaConverter(arrayType.elementType)
+      val elementConverter = createToScalaConverter(arrayType.elementType)
       (item: Any) => if (item == null) null else item.asInstanceOf[Seq[_]].map(elementConverter)
 
     case mapType: MapType =>
-      val keyConverter = createScalaConverter(mapType.keyType)
-      val valueConverter = createScalaConverter(mapType.valueType)
+      val keyConverter = createToScalaConverter(mapType.keyType)
+      val valueConverter = createToScalaConverter(mapType.valueType)
       (item: Any) => if (item == null) {
         null
       } else {
@@ -198,10 +232,13 @@ object ReflectionConverters {
       }
 
     case s: StructType =>
-      val converters = createScalaConvertersForStruct(s)
-      (item: Any) => item match {
-        case r: Row => convertRowWithConverters(r, s, converters)
-        case other => other
+      val converters = s.fields.map(f => createToScalaConverter(f.dataType))
+      (item: Any) => {
+        if (item == null) {
+          null
+        } else {
+          convertRowWithConverters(item.asInstanceOf[Row], s, converters)
+        }
       }
 
     case _: DecimalType =>
@@ -228,20 +265,6 @@ object ReflectionConverters {
       idx += 1
     }
     new GenericRowWithSchema(ar, schema)
-  }
-
-  /**
-   * Creates Catalyst->Scala converter functions for each field of the given StructType.
-   */
-  private[sql] def createScalaConvertersForStruct(s: StructType): Array[Any => Any] = {
-    s.fields.map(f => createScalaConverter(f.dataType))
-  }
-
-  /**
-   * Creates Scala->Catalyst converter functions for each field of the given StructType.
-   */
-  private[sql] def createCatalystConvertersForStruct(s: StructType): Array[Any => Any] = {
-    s.fields.map(f => createCatalystConverter(f.dataType))
   }
 
   /**
