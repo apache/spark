@@ -20,7 +20,9 @@ package org.apache.spark.ml.param
 /** A subclass of Params for testing. */
 class TestParams extends Params {
 
-  val maxIter = new IntParam(this, "maxIter", "max number of iterations", Some(100))
+  setDefault(maxIter -> 10)
+
+  val maxIter = new IntParam(this, "maxIter", "max number of iterations")
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
   def getMaxIter: Int = get(maxIter)
 

@@ -52,7 +52,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   /** @group setParam */
   def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
 
-  /** @goup setParam */
+  /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {

@@ -66,7 +66,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
   /** @group setParam */
   def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]
 
-  /** @goup setParam */
+  /** @group setParam */
   def setOutputCol(value: String): T = set(outputCol, value).asInstanceOf[T]
 
   /**

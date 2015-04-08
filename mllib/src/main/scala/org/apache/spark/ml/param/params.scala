@@ -140,7 +140,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Gets a param by its name. */
-  protected final def getParam(paramName: String): Param[Any] = {
+  def getParam(paramName: String): Param[Any] = {
     val m = this.getClass.getMethod(paramName)
     assert(Modifier.isPublic(m.getModifiers) &&
       classOf[Param[_]].isAssignableFrom(m.getReturnType) &&

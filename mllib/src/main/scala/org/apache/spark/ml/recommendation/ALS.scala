@@ -257,9 +257,6 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   def setRatingCol(value: String): this.type = set(ratingCol, value)
 
   /** @group setParam */
-  def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
-
-  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
@@ -267,6 +264,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
+  def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
   /** @group setParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
