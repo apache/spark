@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.scheduler
 
-import java.nio.ByteBuffer
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.CallSite
 
-private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+/**
+ * The ResultStage represents the final stage in a job.
+ */
+private[spark] class ResultStage(
+    id: Int,
+    rdd: RDD[_],
+    numTasks: Int,
+    parents: List[Stage],
+    jobId: Int,
+    callSite: CallSite)
+  extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
-   */
-  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
+  // The active job for this result stage. Will be empty if the job has already finished
+  // (e.g., because the job was cancelled).
+  var resultOfJob: Option[ActiveJob] = None
 
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
-
-  def stop(): Unit
+  override def toString: String = "ResultStage " + id
 }

@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
-import akka.actor.Actor
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, SparkConf}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 
-import org.apache.spark.util.{Utils, ActorLogReceive}
+object RpcUtils {
 
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
-
-/**
- * Actor that runs inside of executors to enable driver -> executor RPC.
- */
-private[spark]
-class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
-
-  override def receiveWithLogging = {
-    case TriggerThreadDump =>
-      sender ! Utils.getThreadDump()
+  /**
+   * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
+   */
+  def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
+    val driverActorSystemName = SparkEnv.driverActorSystemName
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
   }
-
 }

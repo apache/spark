@@ -387,7 +387,7 @@ private[spark] class MesosSchedulerBackend(
   }
 
   // TODO: query Mesos for number of cores
-  override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+  override def defaultParallelism(): Int = sc.conf.getInt("spark.default.parallelism", 8)
 
   override def applicationId(): String =
     Option(appId).getOrElse {

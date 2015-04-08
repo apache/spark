@@ -29,9 +29,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   override lazy val resolved = childrenResolved && resolve(child.dataType, dataType)
 
-  override def foldable = child.foldable
+  override def foldable: Boolean = child.foldable
 
-  override def nullable = forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = forceNullable(child.dataType, dataType) || child.nullable
 
   private[this] def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (StringType, _: NumericType) => true
@@ -103,7 +103,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
   }
 
-  override def toString = s"CAST($child, $dataType)"
+  override def toString: String = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
 
@@ -394,10 +394,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val casts = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
-    // TODO: This is very slow!
-    buildCast[Row](_, row => Row(row.toSeq.zip(casts).map {
-      case (v, cast) => if (v == null) null else cast(v)
-    }: _*))
+    // TODO: Could be faster?
+    val newRow = new GenericMutableRow(from.fields.size)
+    buildCast[Row](_, row => {
+      var i = 0
+      while (i < row.length) {
+        val v = row(i)
+        newRow.update(i, if (v == null) null else casts(i)(v))
+        i += 1
+      }
+      newRow.copy()
+    })
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
@@ -430,14 +437,14 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 object Cast {
   // `SimpleDateFormat` is not thread-safe.
   private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue() = {
+    override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
   private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue() = {
+    override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd")
     }
   }

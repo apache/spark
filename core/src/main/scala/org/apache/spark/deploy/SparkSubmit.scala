@@ -777,7 +777,7 @@ private[deploy] object SparkSubmitUtils {
   }
 
   /** A nice function to use in tests as well. Values are dummy strings. */
-  def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
+  def getModuleDescriptor: DefaultModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
 
   /**

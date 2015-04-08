@@ -36,5 +36,5 @@ class Job(val time: Time, func: () => _) {
     id = "streaming job " + time + "." + number
   }
 
-  override def toString = id
+  override def toString: String = id
 }

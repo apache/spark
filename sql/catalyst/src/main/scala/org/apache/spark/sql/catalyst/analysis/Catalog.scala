@@ -86,12 +86,12 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables += ((getDbTableName(tableIdent), plan))
   }
 
-  override def unregisterTable(tableIdentifier: Seq[String]) = {
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     tables -= getDbTableName(tableIdent)
   }
 
-  override def unregisterAllTables() = {
+  override def unregisterAllTables(): Unit = {
     tables.clear()
   }
 
@@ -147,8 +147,8 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def lookupRelation(
-    tableIdentifier: Seq[String],
-    alias: Option[String] = None): LogicalPlan = {
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val overriddenTable = overrides.get(getDBTable(tableIdent))
     val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.last, r))
@@ -205,15 +205,15 @@ trait OverrideCatalog extends Catalog {
  */
 object EmptyCatalog extends Catalog {
 
-  val caseSensitive: Boolean = true
+  override val caseSensitive: Boolean = true
 
-  def tableExists(tableIdentifier: Seq[String]): Boolean = {
+  override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException
   }
 
-  def lookupRelation(
-    tableIdentifier: Seq[String],
-    alias: Option[String] = None) = {
+  override def lookupRelation(
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan = {
     throw new UnsupportedOperationException
   }
 
@@ -221,11 +221,11 @@ object EmptyCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
 
-  def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     throw new UnsupportedOperationException
   }
 

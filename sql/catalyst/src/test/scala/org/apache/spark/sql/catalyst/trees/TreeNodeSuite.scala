@@ -90,7 +90,7 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("transform works on nodes with Option children") {
-    val dummy1 = Dummy(Some(Literal("1", StringType)))
+    val dummy1 = Dummy(Some(Literal.create("1", StringType)))
     val dummy2 = Dummy(None)
     val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
 
