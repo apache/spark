@@ -239,7 +239,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("modulus",
     "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
-      "(101 / 2) % 10 FROM src LIMIT 1"))
+      "(101 / 2) % 10 FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
