@@ -20,6 +20,7 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -40,7 +41,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
    * @group param
    */
   val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
+    "metric name in evaluation (areaUnderROC|areaUnderPR)")
 
   /** @group getParam */
   def getMetricName: String = get(metricName)
@@ -51,7 +52,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   /** @group setParam */
   def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
 
-  /** @group setParam */
+  /** @goup setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {

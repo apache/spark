@@ -22,6 +22,7 @@ import scala.annotation.varargs
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -65,7 +66,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
   /** @group setParam */
   def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]
 
-  /** @group setParam */
+  /** @goup setParam */
   def setOutputCol(value: String): T = set(outputCol, value).asInstanceOf[T]
 
   /**

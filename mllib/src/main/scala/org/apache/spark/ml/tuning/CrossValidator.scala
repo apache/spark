@@ -31,6 +31,9 @@ import org.apache.spark.sql.types.StructType
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
 private[ml] trait CrossValidatorParams extends Params {
+
+  setDefault(numFolds -> 3)
+
   /**
    * param for the estimator to be cross-validated
    * @group param
@@ -63,8 +66,7 @@ private[ml] trait CrossValidatorParams extends Params {
    * param for number of folds for cross validation
    * @group param
    */
-  val numFolds: IntParam =
-    new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
+  val numFolds: IntParam = new IntParam(this, "numFolds", "number of folds for cross validation")
 
   /** @group getParam */
   def getNumFolds: Int = get(numFolds)

@@ -34,6 +34,7 @@ import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -50,11 +51,14 @@ import org.apache.spark.util.random.XORShiftRandom
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
   with HasPredictionCol with HasCheckpointInterval {
 
+  setDefault(rank -> 10, numUserBlocks -> 10, numItemBlocks -> 10, implicitPrefs -> false,
+    alpha -> 1.0, userCol -> "user", itemCol -> "item", ratingCol -> "rating", nonnegative -> false)
+
   /**
    * Param for rank of the matrix factorization.
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization", Some(10))
+  val rank = new IntParam(this, "rank", "rank of the factorization")
 
   /** @group getParam */
   def getRank: Int = get(rank)
@@ -63,7 +67,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for number of user blocks.
    * @group param
    */
-  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
+  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks")
 
   /** @group getParam */
   def getNumUserBlocks: Int = get(numUserBlocks)
@@ -73,7 +77,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
+    new IntParam(this, "numItemBlocks", "number of item blocks")
 
   /** @group getParam */
   def getNumItemBlocks: Int = get(numItemBlocks)
@@ -83,7 +87,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val implicitPrefs =
-    new BooleanParam(this, "implicitPrefs", "whether to use implicit preference", Some(false))
+    new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
 
   /** @group getParam */
   def getImplicitPrefs: Boolean = get(implicitPrefs)
@@ -92,7 +96,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for the alpha parameter in the implicit preference formulation.
    * @group param
    */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference", Some(1.0))
+  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference")
 
   /** @group getParam */
   def getAlpha: Double = get(alpha)
@@ -101,7 +105,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for the column name for user ids.
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
+  val userCol = new Param[String](this, "userCol", "column name for user ids")
 
   /** @group getParam */
   def getUserCol: String = get(userCol)
@@ -110,8 +114,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for the column name for item ids.
    * @group param
    */
-  val itemCol =
-    new Param[String](this, "itemCol", "column name for item ids", Some("item"))
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
 
   /** @group getParam */
   def getItemCol: String = get(itemCol)
@@ -120,7 +123,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for the column name for ratings.
    * @group param
    */
-  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
+  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
 
   /** @group getParam */
   def getRatingCol: String = get(ratingCol)
@@ -130,7 +133,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @group param
    */
   val nonnegative = new BooleanParam(
-    this, "nonnegative", "whether to use nonnegative constraint for least squares", Some(false))
+    this, "nonnegative", "whether to use nonnegative constraint for least squares")
 
   /** @group getParam */
   val getNonnegative: Boolean = get(nonnegative)
@@ -254,6 +257,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   def setRatingCol(value: String): this.type = set(ratingCol, value)
 
   /** @group setParam */
+  def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
+
+  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
@@ -261,9 +267,6 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
-
-  /** @group setParam */
-  def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
   /** @group setParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)

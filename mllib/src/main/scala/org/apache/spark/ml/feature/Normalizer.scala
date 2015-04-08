@@ -31,11 +31,13 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
+  setDefault(p -> 2.0)
+
   /**
    * Normalization in L^p^ space, p = 2 by default.
    * @group param
    */
-  val p = new DoubleParam(this, "p", "the p norm value", Some(2))
+  val p = new DoubleParam(this, "p", "the p norm value")
 
   /** @group getParam */
   def getP: Double = get(p)
@@ -50,4 +52,3 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
   override protected def outputDataType: DataType = new VectorUDT()
 }
-

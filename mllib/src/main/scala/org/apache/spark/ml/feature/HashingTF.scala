@@ -31,11 +31,13 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
 
+  setDefault(numFeatures -> (1 << 18))
+
   /**
    * number of features
    * @group param
    */
-  val numFeatures = new IntParam(this, "numFeatures", "number of features", Some(1 << 18))
+  val numFeatures = new IntParam(this, "numFeatures", "number of features")
 
   /** @group getParam */
   def getNumFeatures: Int = get(numFeatures)

@@ -109,9 +109,6 @@ private[shared] object SharedParamCodeGen {
       |
       |  /** @group getParam */
       |  final def get$Name: $T = get($name)
-      |
-      |  /** @group setParam */
-      |  protected def set$Name(value: $T): this.type = set($name, value)
       |}
     """.stripMargin
   }

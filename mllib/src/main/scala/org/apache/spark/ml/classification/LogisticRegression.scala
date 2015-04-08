@@ -19,11 +19,11 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -31,7 +31,11 @@ import org.apache.spark.storage.StorageLevel
  * Params for logistic regression.
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
-  with HasRegParam with HasMaxIter with HasThreshold
+  with HasRegParam with HasMaxIter with HasThreshold {
+
+  setDefault(regParam -> 0.1, maxIter -> 100, threshold -> 0.5)
+}
+
 
 
 /**
@@ -44,10 +48,6 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 class LogisticRegression
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
-
-  setRegParam(0.1)
-  setMaxIter(100)
-  setThreshold(0.5)
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
@@ -95,8 +95,6 @@ class LogisticRegressionModel private[ml] (
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
-
-  setThreshold(0.5)
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)

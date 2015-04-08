@@ -26,7 +26,6 @@ import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
-
 /**
  * :: AlphaComponent ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -38,12 +37,7 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
  * @tparam T param value type
  */
 @AlphaComponent
-class Param[T] (
-    val parent: Params,
-    val name: String,
-    val doc: String,
-    val defaultValue: Option[T] = None)
-  extends Serializable {
+class Param[T] (val parent: Params, val name: String, val doc: String) extends Serializable {
 
   /**
    * Creates a param pair with the given value (for Java).
@@ -55,58 +49,42 @@ class Param[T] (
    */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
-  override def toString: String = {
-    if (defaultValue.isDefined) {
-      s"$name: $doc (default: ${defaultValue.get})"
-    } else {
-      s"$name: $doc"
-    }
-  }
+  override def toString: String = s"$name: $doc"
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /** Specialized version of [[Param[Double]]] for Java. */
-class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double])
-  extends Param[Double](parent, name, doc, defaultValue) {
-
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
+class DoubleParam(parent: Params, name: String, doc: String)
+  extends Param[Double](parent, name, doc) {
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
-class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int])
-  extends Param[Int](parent, name, doc, defaultValue) {
-
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
+class IntParam(parent: Params, name: String, doc: String)
+  extends Param[Int](parent, name, doc) {
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
-class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float])
-  extends Param[Float](parent, name, doc, defaultValue) {
-
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
+class FloatParam(parent: Params, name: String, doc: String)
+  extends Param[Float](parent, name, doc) {
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
-class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long])
-  extends Param[Long](parent, name, doc, defaultValue) {
-
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
+class LongParam(parent: Params, name: String, doc: String)
+  extends Param[Long](parent, name, doc) {
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
-class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean])
-  extends Param[Boolean](parent, name, doc, defaultValue) {
-
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
+class BooleanParam(parent: Params, name: String, doc: String)
+  extends Param[Boolean](parent, name, doc) {
 
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
@@ -124,7 +102,10 @@ case class ParamPair[T](param: Param[T], value: T)
 @AlphaComponent
 trait Params extends Identifiable with Serializable {
 
-  /** Returns all params. */
+  /**
+   * Returns all params. The default implementation uses Java reflection to list all public methods
+   * that have return type [[Param]].
+   */
   def params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
     methods.filter { m =>
@@ -159,7 +140,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Gets a param by its name. */
-  private[ml] def getParam(paramName: String): Param[Any] = {
+  protected final def getParam(paramName: String): Param[Any] = {
     val m = this.getClass.getMethod(paramName)
     assert(Modifier.isPublic(m.getModifiers) &&
       classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
@@ -170,7 +151,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter in the embedded param map.
    */
-  protected def set[T](param: Param[T], value: T): this.type = {
+  protected final def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
@@ -179,14 +160,14 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter (by name) in the embedded param map.
    */
-  private[ml] def set(param: String, value: Any): this.type = {
+  protected final def set(param: String, value: Any): this.type = {
     set(getParam(param), value)
   }
 
   /**
    * Gets the value of a parameter in the embedded param map.
    */
-  protected def get[T](param: Param[T]): T = {
+  protected final def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
     paramMap(param)
   }
@@ -194,7 +175,33 @@ trait Params extends Identifiable with Serializable {
   /**
    * Internal param map.
    */
-  protected val paramMap: ParamMap = ParamMap.empty
+  protected final val paramMap: ParamMap = ParamMap.empty
+
+  /**
+   * Internal param map for default values.
+   */
+  protected final val defaultValues: ParamMap = ParamMap.empty
+
+  /**
+   * Sets a default value.
+   */
+  protected final def setDefault[T](param: Param[T], value: T): this.type = {
+    require(param.parent.eq(this))
+    defaultValues.put(param, value)
+    this
+  }
+
+  protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
+    paramPairs.foreach { p =>
+      setDefault(p.param.asInstanceOf[Param[Any]], p.value)
+    }
+    this
+  }
+
+  protected final def getDefault[T](param: Param[T]): Option[T] = {
+    require(param.parent.eq(this))
+    defaultValues.get(param)
+  }
 
   /**
    * Check whether the given schema contains an input column.
@@ -283,9 +290,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
    * Optionally returns the value associated with a param or its default.
    */
   def get[T](param: Param[T]): Option[T] = {
-    map.get(param.asInstanceOf[Param[Any]])
-      .orElse(param.defaultValue)
-      .asInstanceOf[Option[T]]
+    map.get(param.asInstanceOf[Param[Any]]).asInstanceOf[Option[T]]
   }
 
   /**

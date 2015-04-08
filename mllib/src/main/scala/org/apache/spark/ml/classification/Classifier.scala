@@ -19,7 +19,8 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
+import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.DataFrame
@@ -35,6 +36,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 @DeveloperApi
 private[spark] trait ClassifierParams extends PredictorParams
   with HasRawPredictionCol {
+
+  setDefault(rawPredictionCol, "rawPrediction")
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -67,8 +70,7 @@ private[spark] abstract class Classifier[
   with ClassifierParams {
 
   /** @group setParam */
-  def setRawPredictionCol(value: String): E =
-    set(rawPredictionCol, value).asInstanceOf[E]
+  def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
   // TODO: defaultEvaluator (follow-up PR)
 }
