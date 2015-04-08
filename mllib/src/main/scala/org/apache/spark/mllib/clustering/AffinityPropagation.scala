@@ -320,7 +320,8 @@ private[clustering] object AffinityPropagation extends Logging {
                          (1.0 - lambda) * e.attr.availability
               new EdgeMessage(e.attr.similarity, newA, e.attr.responsibility)
             } else {
-              val newA = lambda * (e.dstAttr - e.attr.responsibility) + (1.0 - lambda) * e.attr.availability
+              val newA = lambda * (e.dstAttr - e.attr.responsibility) +
+                (1.0 - lambda) * e.attr.availability
               new EdgeMessage(e.attr.similarity, newA, e.attr.responsibility)
             }
           }, TripletFields.Dst)
