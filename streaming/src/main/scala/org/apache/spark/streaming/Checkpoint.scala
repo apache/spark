@@ -137,10 +137,7 @@ class CheckpointWriter(
             + "'")
 
           // Write checkpoint to temp file
-          fs.delete(tempFile, true)   // just in case it exists
-          val fos = fs.create(tempFile)
-          fos.write(bytes)
-          fos.close()
+          writeCheckpoint(tempFile)
 
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
@@ -181,15 +178,29 @@ class CheckpointWriter(
       logWarning("Could not write checkpoint for time " + checkpointTime + " to file "
         + checkpointFile + "'")
     }
+
+    private def writeCheckpoint(tempFile: Path): Unit = {
+      fs.delete(tempFile, true) // just in case it exists
+      val fos = fs.create(tempFile)
+      try {
+        fos.write(bytes)
+      }
+      finally {
+        fos.close()
+      }
+    }
   }
 
   def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
     val bos = new ByteArrayOutputStream()
     val zos = compressionCodec.compressedOutputStream(bos)
     val oos = new ObjectOutputStream(zos)
-    oos.writeObject(checkpoint)
-    oos.close()
-    bos.close()
+    try {
+      oos.writeObject(checkpoint)
+    }
+    finally {
+       oos.close() //zos & bos will be closed by oss.close()
+    }
     try {
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
@@ -247,6 +258,7 @@ object CheckpointReader extends Logging {
     val compressionCodec = CompressionCodec.createCodec(conf)
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
+      var ois:ObjectInputStream=null
       try {
         val fis = fs.open(file)
         // ObjectInputStream uses the last defined user-defined class loader in the stack
@@ -255,11 +267,10 @@ object CheckpointReader extends Logging {
         // loader to find and load classes. This is a well know Java issue and has popped up
         // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
         val zis = compressionCodec.compressedInputStream(fis)
-        val ois = new ObjectInputStreamWithLoader(zis,
+        ois = new ObjectInputStreamWithLoader(zis,
           Thread.currentThread().getContextClassLoader)
         val cp = ois.readObject.asInstanceOf[Checkpoint]
-        ois.close()
-        fs.close()
+
         cp.validate()
         logInfo("Checkpoint successfully loaded from file " + file)
         logInfo("Checkpoint was generated at time " + cp.checkpointTime)
@@ -267,6 +278,12 @@ object CheckpointReader extends Logging {
       } catch {
         case e: Exception =>
           logWarning("Error reading checkpoint from file " + file, e)
+      }
+      finally {
+        if(null != ois) {
+         ois.close()
+        }
+        fs.close()
       }
     })
 
