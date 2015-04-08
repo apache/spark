@@ -1159,10 +1159,13 @@ setMethod("intersect",
 #' df2 <- jsonFile(sqlCtx, path2)
 #' subtractDF <- subtract(df, df2)
 #' }
+
+#' @rdname subtract
+#' @export
 setMethod("subtract",
-          signature(x = "DataFrame", y = "DataFrame"),
-          function(x, y) {
-            subtracted <- callJMethod(x@sdf, "except", y@sdf)
+          signature(x = "DataFrame", other = "DataFrame"),
+          function(x, other) {
+            subtracted <- callJMethod(x@sdf, "except", other@sdf)
             dataFrame(subtracted)
           })
 
