@@ -122,7 +122,7 @@ case class GeneratedAggregate(
           }
 
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal(null, calcType)
+        val initialValue = Literal.create(null, calcType)
 
         // Coalasce avoids double calculation...
         // but really, common sub expression elimination would be better....
