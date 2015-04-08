@@ -54,6 +54,7 @@ exportMethods(
               "repartition",
               "rightOuterJoin",
               "sampleRDD",
+              "sampleByKey",
               "saveAsTextFile",
               "saveAsObjectFile",
               "sortBy",
