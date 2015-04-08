@@ -17,11 +17,11 @@ License: Apache License (== 2.0)
 Collate:
     'generics.R'
     'jobj.R'
-    'SQLTypes.R'
     'RDD.R'
     'pairRDD.R'
     'column.R'
     'group.R'
+    'schema.R'
     'DataFrame.R'
     'SQLContext.R'
     'broadcast.R'
