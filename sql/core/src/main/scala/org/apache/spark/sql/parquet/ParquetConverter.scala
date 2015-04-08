@@ -57,7 +57,7 @@ private[parquet] object NoopUpdater extends ParentContainerUpdater
  * This Parquet converter converts Parquet records to Spark SQL rows.
  *
  * @param parquetType Parquet type of Parquet records
- * @param sparkType A Spark SQL struct type that corresponds to the Parquet record type
+ * @param sparkType Spark SQL schema that corresponds to the Parquet record type
  * @param updater An updater which takes care of the converted row object
  */
 private[parquet] class CatalystRowConverter(
@@ -67,10 +67,8 @@ private[parquet] class CatalystRowConverter(
   extends GroupConverter {
 
   /**
-   * Updater used together with [[CatalystRowConverter]].
-   *
-   * @constructor Constructs a [[RowUpdater]] which sets converted filed values to the `ordinal`-th
-   *              cell in `row`.
+   * Updater used together with [[CatalystRowConverter]].  It sets converted filed values to the
+   * `ordinal`-th cell in `row`.
    */
   private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
@@ -83,15 +81,14 @@ private[parquet] class CatalystRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  /**
-   * Represents the converted row object once an entire Parquet record is converted.
-   */
+  /** Represents the converted row object once an entire Parquet record is converted. */
   val currentRow = new SpecificMutableRow(sparkType.map(_.dataType))
 
   // Converters for each field.
   private val fieldConverters: Array[Converter] = {
     parquetType.getFields.zip(sparkType).zipWithIndex.map {
       case ((parquetFieldType, sparkField), ordinal) =>
+        // Converted field value should be set to the `ordinal`-th cell of `currentRow`
         newConverter(parquetFieldType, sparkField.dataType, new RowUpdater(currentRow, ordinal))
     }.toArray
   }
@@ -190,7 +187,7 @@ private[parquet] class CatalystRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to avoid minimize string decoding cost.
+   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
    */
   private final class CatalystStringConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
