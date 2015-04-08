@@ -460,6 +460,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = {
       testRelationWithArrayType
         .where(('b >= 5) && ('a > 6))
+        .select('c_arr)
         .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr")).analyze
     }
 
@@ -477,6 +478,7 @@ class FilterPushdownSuite extends PlanTest {
     val referenceResult = {
       testRelationWithArrayType
         .where('b >= 5)
+        .select('c_arr)
         .generate(generator, true, false, Some("arr"))
         .where('c > 6).analyze
     }
@@ -502,7 +504,12 @@ class FilterPushdownSuite extends PlanTest {
         .where(('c > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize(originalQuery)
-
-    comparePlans(optimized, originalQuery)
+    val correctAnswer = {
+      testRelationWithArrayType
+        .select('c_arr,'b)
+        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .where(('c > 6) || ('b > 5)).analyze
+    }
+    comparePlans(optimized, correctAnswer)
   }
 }

@@ -171,10 +171,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
-    case gen@Generate(generator: Explode, isJoin, isOuter, alias, child) =>
+    case gen@Generate(_: Explode, _, _, _, c) =>
       val allReferences = gen.references ++ gen.parentReferences
-      val pruneProject = prunedChild(child, allReferences)
-      Generate(generator, isJoin, isOuter, alias, pruneProject)
+      if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
+        gen.copy(child = Project(allReferences.filter(c.outputSet.contains).toSeq, c))
+      } else {
+        gen
+      }
 
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child

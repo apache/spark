@@ -94,9 +94,10 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq.empty)
 
   createPruningTest("Column pruning - outer explode with limit",
-    "SELECT name FROM person LATERAL VIEW OUTER explode(data) outd AS d limit 3",
+    "SELECT name FROM person LATERAL VIEW OUTER explode(data) outd AS d" +
+      " where  name < \"C\" limit 3",
     Seq("name"),
-    Seq("data","name"),
+    Seq("data", "name"),
     Seq.empty)
 
 
