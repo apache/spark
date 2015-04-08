@@ -344,10 +344,24 @@ setGeneric("rightOuterJoin", function(x, y, numPartitions) { standardGeneric("ri
 
 #' @rdname sortByKey
 #' @export
-setGeneric("sortByKey", function(x, ascending = TRUE, numPartitions = 1L) {
-  standardGeneric("sortByKey")
-})
+setGeneric("sortByKey",
+           function(x, ascending = TRUE, numPartitions = 1L) {
+             standardGeneric("sortByKey")
+           })
 
+#' @rdname subtractByKey
+#' @export
+setGeneric("subtractByKey", 
+           function(x, other, numPartitions = 1L) {
+             standardGeneric("subtractByKey")
+           })
+
+#' @rdname subtract
+#' @export
+setGeneric("subtract", 
+           function(x, other, numPartitions = 1L) {
+             standardGeneric("subtract")
+           })
 
 ################### Broadcast Variable Methods #################
 

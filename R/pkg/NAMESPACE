@@ -59,6 +59,8 @@ exportMethods(
               "saveAsObjectFile",
               "sortBy",
               "sortByKey",
+              "subtract",
+              "subtractByKey",
               "sumRDD",
               "take",
               "takeOrdered",

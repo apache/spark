@@ -1561,6 +1561,34 @@ setMethod("zipRDD",
             PipelinedRDD(zippedRDD, partitionFunc)
           })
 
+#' Subtract an RDD with another RDD.
+#'
+#' Return an RDD with the elements from this that are not in other.
+#'
+#' @param x An RDD.
+#' @param other An RDD.
+#' @param numPartitions Number of the partitions in the result RDD.
+#' @return An RDD with the elements from this that are not in other.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(1, 1, 2, 2, 3, 4))
+#' rdd2 <- parallelize(sc, list(2, 4))
+#' collect(subtract(rdd1, rdd2))
+#' # list(1, 1, 3)
+#'}
+#' @rdname subtract
+#' @aliases subtract,RDD
+setMethod("subtract",
+          signature(x = "RDD", other = "RDD"),
+          function(x, other, numPartitions = SparkR::numPartitions(x)) {
+            mapFunction <- function(e) { list(e, NA) }
+            rdd1 <- map(x, mapFunction)
+            rdd2 <- map(other, mapFunction)
+            
+            keys(subtractByKey(rdd1, rdd2, numPartitions))
+          })
+
 #' Intersection of this RDD and another one.
 #'
 #' Return the intersection of this RDD and another one.

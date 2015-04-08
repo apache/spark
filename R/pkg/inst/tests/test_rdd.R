@@ -468,6 +468,62 @@ test_that("zipRDD() on RDDs", {
   unlink(fileName)
 })
 
+test_that("subtract() on RDDs", {
+  l <- list(1, 1, 2, 2, 3, 4)
+  rdd1 <- parallelize(sc, l)
+
+  # subtract by itself
+  actual <- collect(subtract(rdd1, rdd1))
+  expect_equal(actual, list())
+
+  # subtract by an empty RDD
+  rdd2 <- parallelize(sc, list())
+  actual <- collect(subtract(rdd1, rdd2))
+  expect_equal(as.list(sort(as.vector(actual, mode="integer"))),
+               l)
+  
+  rdd2 <- parallelize(sc, list(2, 4))
+  actual <- collect(subtract(rdd1, rdd2))
+  expect_equal(as.list(sort(as.vector(actual, mode="integer"))),
+               list(1, 1, 3))
+  
+  l <- list("a", "a", "b", "b", "c", "d")
+  rdd1 <- parallelize(sc, l)
+  rdd2 <- parallelize(sc, list("b", "d"))
+  actual <- collect(subtract(rdd1, rdd2))
+  expect_equal(as.list(sort(as.vector(actual, mode="character"))),
+               list("a", "a", "c"))
+})
+
+test_that("subtractByKey() on pairwise RDDs", {
+  l <- list(list("a", 1), list("b", 4),
+            list("b", 5), list("a", 2))
+  rdd1 <- parallelize(sc, l)
+  
+  # subtractByKey by itself
+  actual <- collect(subtractByKey(rdd1, rdd1))
+  expect_equal(actual, list())
+  
+  # subtractByKey by an empty RDD
+  rdd2 <- parallelize(sc, list())
+  actual <- collect(subtractByKey(rdd1, rdd2))
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(l))
+  
+  rdd2 <- parallelize(sc, list(list("a", 3), list("c", 1)))
+  actual <- collect(subtractByKey(rdd1, rdd2))
+  expect_equal(actual,
+               list(list("b", 4), list("b", 5)))  
+
+  l <- list(list(1, 1), list(2, 4),
+            list(2, 5), list(1, 2))
+  rdd1 <- parallelize(sc, l)
+  rdd2 <- parallelize(sc, list(list(1, 3), list(3, 1)))
+  actual <- collect(subtractByKey(rdd1, rdd2))
+  expect_equal(actual,
+               list(list(2, 4), list(2, 5)))
+})
+
 test_that("intersection() on RDDs", {
   # intersection with self
   actual <- collect(intersection(rdd, rdd))
