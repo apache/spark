@@ -37,8 +37,6 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 private[spark] trait ClassifierParams extends PredictorParams
   with HasRawPredictionCol {
 
-  setDefault(rawPredictionCol, "rawPrediction")
-
   override protected def validateAndTransformSchema(
       schema: StructType,
       paramMap: ParamMap,

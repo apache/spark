@@ -51,8 +51,9 @@ import org.apache.spark.util.random.XORShiftRandom
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
   with HasPredictionCol with HasCheckpointInterval {
 
-  setDefault(rank -> 10, numUserBlocks -> 10, numItemBlocks -> 10, implicitPrefs -> false,
-    alpha -> 1.0, userCol -> "user", itemCol -> "item", ratingCol -> "rating", nonnegative -> false)
+  setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
+    implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
+    ratingCol -> "rating", nonnegative -> false)
 
   /**
    * Param for rank of the matrix factorization.

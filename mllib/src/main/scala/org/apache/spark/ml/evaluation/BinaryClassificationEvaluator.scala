@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.DoubleType
 class BinaryClassificationEvaluator extends Evaluator with Params
   with HasRawPredictionCol with HasLabelCol {
 
+  setDefault(metricName -> "areaUnderROC")
+
   /**
    * param for metric name in evaluation
    * @group param
