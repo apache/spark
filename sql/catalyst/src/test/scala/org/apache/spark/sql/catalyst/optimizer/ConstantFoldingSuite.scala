@@ -182,33 +182,33 @@ class ConstantFoldingSuite extends PlanTest {
           IsNull(Literal(null)) as 'c1,
           IsNotNull(Literal(null)) as 'c2,
 
-          GetItem(Literal(null, ArrayType(IntegerType)), 1) as 'c3,
-          GetItem(Literal(Seq(1), ArrayType(IntegerType)), Literal(null, IntegerType)) as 'c4,
+          GetItem(Literal.create(null, ArrayType(IntegerType)), 1) as 'c3,
+          GetItem(Literal.create(Seq(1), ArrayType(IntegerType)), Literal.create(null, IntegerType)) as 'c4,
           UnresolvedGetField(
-            Literal(null, StructType(Seq(StructField("a", IntegerType, true)))),
+            Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
             "a") as 'c5,
 
-          UnaryMinus(Literal(null, IntegerType)) as 'c6,
+          UnaryMinus(Literal.create(null, IntegerType)) as 'c6,
           Cast(Literal(null), IntegerType) as 'c7,
-          Not(Literal(null, BooleanType)) as 'c8,
+          Not(Literal.create(null, BooleanType)) as 'c8,
 
-          Add(Literal(null, IntegerType), 1) as 'c9,
-          Add(1, Literal(null, IntegerType)) as 'c10,
+          Add(Literal.create(null, IntegerType), 1) as 'c9,
+          Add(1, Literal.create(null, IntegerType)) as 'c10,
 
-          EqualTo(Literal(null, IntegerType), 1) as 'c11,
-          EqualTo(1, Literal(null, IntegerType)) as 'c12,
+          EqualTo(Literal.create(null, IntegerType), 1) as 'c11,
+          EqualTo(1, Literal.create(null, IntegerType)) as 'c12,
 
-          Like(Literal(null, StringType), "abc") as 'c13,
-          Like("abc", Literal(null, StringType)) as 'c14,
+          Like(Literal.create(null, StringType), "abc") as 'c13,
+          Like("abc", Literal.create(null, StringType)) as 'c14,
 
-          Upper(Literal(null, StringType)) as 'c15,
+          Upper(Literal.create(null, StringType)) as 'c15,
 
-          Substring(Literal(null, StringType), 0, 1) as 'c16,
-          Substring("abc", Literal(null, IntegerType), 1) as 'c17,
-          Substring("abc", 0, Literal(null, IntegerType)) as 'c18,
+          Substring(Literal.create(null, StringType), 0, 1) as 'c16,
+          Substring("abc", Literal.create(null, IntegerType), 1) as 'c17,
+          Substring("abc", 0, Literal.create(null, IntegerType)) as 'c18,
 
-          Contains(Literal(null, StringType), "abc") as 'c19,
-          Contains("abc", Literal(null, StringType)) as 'c20
+          Contains(Literal.create(null, StringType), "abc") as 'c19,
+          Contains("abc", Literal.create(null, StringType)) as 'c20
         )
 
     val optimized = Optimize(originalQuery.analyze)
@@ -219,31 +219,31 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(true) as 'c1,
           Literal(false) as 'c2,
 
-          Literal(null, IntegerType) as 'c3,
-          Literal(null, IntegerType) as 'c4,
-          Literal(null, IntegerType) as 'c5,
+          Literal.create(null, IntegerType) as 'c3,
+          Literal.create(null, IntegerType) as 'c4,
+          Literal.create(null, IntegerType) as 'c5,
 
-          Literal(null, IntegerType) as 'c6,
-          Literal(null, IntegerType) as 'c7,
-          Literal(null, BooleanType) as 'c8,
+          Literal.create(null, IntegerType) as 'c6,
+          Literal.create(null, IntegerType) as 'c7,
+          Literal.create(null, BooleanType) as 'c8,
 
-          Literal(null, IntegerType) as 'c9,
-          Literal(null, IntegerType) as 'c10,
+          Literal.create(null, IntegerType) as 'c9,
+          Literal.create(null, IntegerType) as 'c10,
 
-          Literal(null, BooleanType) as 'c11,
-          Literal(null, BooleanType) as 'c12,
+          Literal.create(null, BooleanType) as 'c11,
+          Literal.create(null, BooleanType) as 'c12,
 
-          Literal(null, BooleanType) as 'c13,
-          Literal(null, BooleanType) as 'c14,
+          Literal.create(null, BooleanType) as 'c13,
+          Literal.create(null, BooleanType) as 'c14,
 
-          Literal(null, StringType) as 'c15,
+          Literal.create(null, StringType) as 'c15,
 
-          Literal(null, StringType) as 'c16,
-          Literal(null, StringType) as 'c17,
-          Literal(null, StringType) as 'c18,
+          Literal.create(null, StringType) as 'c16,
+          Literal.create(null, StringType) as 'c17,
+          Literal.create(null, StringType) as 'c18,
 
-          Literal(null, BooleanType) as 'c19,
-          Literal(null, BooleanType) as 'c20
+          Literal.create(null, BooleanType) as 'c19,
+          Literal.create(null, BooleanType) as 'c20
         ).analyze
 
     comparePlans(optimized, correctAnswer)

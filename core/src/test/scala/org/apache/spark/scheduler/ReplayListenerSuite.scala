@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
+import java.net.URI
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -145,7 +146,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", "testdir", conf) {
+    extends EventLoggingListener("test", new URI("testdir"), conf) {
 
     override def start() { }
 

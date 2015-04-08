@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
@@ -120,6 +120,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   @transient
@@ -177,7 +181,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   @transient
-  lazy val emptyDataFrame = DataFrame(this, NoRelation)
+  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -388,9 +392,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema, needsConversion = true)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
+    val catalystRows = if (needsConversion) {
+      rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+    } else {
+      rowRDD
+    }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
 
@@ -600,7 +618,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**
@@ -629,7 +647,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**
@@ -1065,14 +1083,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
-  @transient
-  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
-    override val extendedCheckRules = Seq(
-      sources.PreWriteCheck(catalog)
-    )
-  }
-
-
   protected[sql] def openSession(): SQLSession = {
     detachSession()
     val session = createSession()
@@ -1105,7 +1115,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = checkAnalysis(analyzed)
+    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {

@@ -47,6 +47,35 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("minus") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 75, 2).map(i => (i.toLong, 0))).cache()
+      val vertexB = VertexRDD(sc.parallelize(25 until 100, 2).map(i => (i.toLong, 1))).cache()
+      val vertexC = vertexA.minus(vertexB)
+      assert(vertexC.map(_._1).collect.toSet === (0 until 25).toSet)
+    }
+  }
+
+  test("minus with RDD[(VertexId, VD)]") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 75, 2).map(i => (i.toLong, 0))).cache()
+      val vertexB: RDD[(VertexId, Int)] =
+        sc.parallelize(25 until 100, 2).map(i => (i.toLong, 1)).cache()
+      val vertexC = vertexA.minus(vertexB)
+      assert(vertexC.map(_._1).collect.toSet === (0 until 25).toSet)
+    }
+  }
+
+  test("minus with non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 75, 5).map(i => (i.toLong, 0)))
+      val vertexB = VertexRDD(sc.parallelize(50 until 100, 2).map(i => (i.toLong, 1)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.minus(vertexB)
+      assert(vertexC.map(_._1).collect.toSet === (0 until 50).toSet)
+    }
+  }
+
   test("diff") {
     withSpark { sc =>
       val n = 100
@@ -71,7 +100,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("diff vertices with the non-equal number of partitions") {
+  test("diff vertices with non-equal number of partitions") {
     withSpark { sc =>
       val vertexA = VertexRDD(sc.parallelize(0 until 24, 3).map(i => (i.toLong, 0)))
       val vertexB = VertexRDD(sc.parallelize(8 until 16, 2).map(i => (i.toLong, 1)))
@@ -96,7 +125,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("leftJoin vertices with the non-equal number of partitions") {
+  test("leftJoin vertices with non-equal number of partitions") {
     withSpark { sc =>
       val vertexA = VertexRDD(sc.parallelize(0 until 100, 2).map(i => (i.toLong, 1)))
       val vertexB = VertexRDD(

@@ -41,6 +41,8 @@ object Literal {
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
+
+  def create(v: Any, dataType: DataType): Literal = Literal(v, dataType)
 }
 
 /**
@@ -62,7 +64,10 @@ object IntegerLiteral {
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+/**
+ * In order to do type checking, use Literal.create() instead of constructor
+ */
+case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null

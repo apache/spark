@@ -308,7 +308,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val errors = new ArrayBuffer[Throwable]
 
     /** Check if all data structures are clean */
-    def isAllEmpty = {
+    def isAllEmpty: Boolean = {
       singles.isEmpty && byteBuffers.isEmpty && iterators.isEmpty &&
         arrayBuffers.isEmpty && errors.isEmpty
     }
@@ -320,24 +320,21 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def pushBytes(
         bytes: ByteBuffer,
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       byteBuffers += bytes
     }
 
     def pushIterator(
         iterator: Iterator[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       iterators += iterator
     }
 
     def pushArrayBuffer(
         arrayBuffer: ArrayBuffer[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       arrayBuffers +=  arrayBuffer
     }
 

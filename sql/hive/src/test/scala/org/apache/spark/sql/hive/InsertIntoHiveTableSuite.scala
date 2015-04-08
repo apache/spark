@@ -198,7 +198,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     val testDatawithNull = TestHive.sparkContext.parallelize(
       (1 to 10).map(i => ThreeCloumntable(i, i.toString,null))).toDF()
 
-    val tmpDir = Files.createTempDir()
+    val tmpDir = Utils.createTempDir()
     sql(s"CREATE TABLE table_with_partition(key int,value string) PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
     sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') SELECT key,value FROM testData")
 

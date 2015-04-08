@@ -52,7 +52,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
+    def output: ArrayBuffer[String] = outputBuffer.flatMap(x => x)
     outputStream.register()
     ssc.start()
 
@@ -164,7 +164,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val countStream = networkStream.count
     val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
     val outputStream = new TestOutputStream(countStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
+    def output: ArrayBuffer[Long] = outputBuffer.flatMap(x => x)
     outputStream.register()
     ssc.start()
 
@@ -196,7 +196,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val queueStream = ssc.queueStream(queue, oneAtATime = true)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(queueStream, outputBuffer)
-    def output = outputBuffer.filter(_.size > 0)
+    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
     outputStream.register()
     ssc.start()
 
@@ -204,7 +204,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
-    //Thread.sleep(1000)
+
     val inputIterator = input.toIterator
     for (i <- 0 until input.size) {
       // Enqueue more than 1 item per tick but they should dequeue one at a time
@@ -239,7 +239,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val queueStream = ssc.queueStream(queue, oneAtATime = false)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(queueStream, outputBuffer)
-    def output = outputBuffer.filter(_.size > 0)
+    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
     outputStream.register()
     ssc.start()
 
@@ -352,7 +352,8 @@ class TestServer(portToBind: Int = 0) extends Logging {
           logInfo("New connection")
           try {
             clientSocket.setTcpNoDelay(true)
-            val outputStream = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream))
+            val outputStream = new BufferedWriter(
+              new OutputStreamWriter(clientSocket.getOutputStream))
 
             while(clientSocket.isConnected) {
               val msg = queue.poll(100, TimeUnit.MILLISECONDS)
@@ -384,7 +385,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
 
   def stop() { servingThread.interrupt() }
 
-  def port = serverSocket.getLocalPort
+  def port: Int = serverSocket.getLocalPort
 }
 
 /** This is a receiver to test multiple threads inserting data using block generator */
