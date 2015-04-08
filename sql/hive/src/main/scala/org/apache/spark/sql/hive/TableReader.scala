@@ -77,7 +77,8 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
-      Class.forName(relation.tableDesc.getSerdeClassName, true, sc.sessionState.getConf.getClassLoader)
+      Class.forName(
+        relation.tableDesc.getSerdeClassName, true, sc.sessionState.getConf.getClassLoader)
         .asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
