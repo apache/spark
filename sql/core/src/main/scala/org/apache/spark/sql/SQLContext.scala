@@ -404,10 +404,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      val converters = schema.fields.map {
-        f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
-      }
-      rowRDD.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      rowRDD.map(converter(_).asInstanceOf[Row])
     } else {
       rowRDD
     }

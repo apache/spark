@@ -34,18 +34,13 @@ case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNo
 
 
   override def executeCollect(): Array[Row] = {
-    val converters = schema.fields.map {
-      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-    }
-    rows.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters)).toArray
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).toArray
   }
 
 
   override def executeTake(limit: Int): Array[Row] = {
-    val converters = schema.fields.map {
-      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-    }
-    rows.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
-      .take(limit).toArray
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).take(limit).toArray
   }
 }

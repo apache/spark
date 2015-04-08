@@ -140,10 +140,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   private def collectData(): Array[Row] = child.execute().map(_.copy()).takeOrdered(limit)(ord)
 
   override def executeCollect(): Array[Row] = {
-    val converters = schema.fields.map {
-      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-    }
-    collectData().map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    collectData().map(converter(_).asInstanceOf[Row])
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.

@@ -83,10 +83,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   def executeCollect(): Array[Row] = {
     execute().mapPartitions { iter =>
-      val converters = schema.fields.map {
-        f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-      }
-      iter.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      iter.map(converter(_).asInstanceOf[Row])
     }.collect()
   }
 
@@ -131,10 +129,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    val converters = schema.fields.map {
-      f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-    }
-    buf.toArray.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    buf.toArray.map(converter(_).asInstanceOf[Row])
   }
 
   protected def newProjection(

@@ -962,10 +962,8 @@ class DataFrame private[sql](
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().mapPartitions { rows =>
-      val converters = schema.fields.map {
-        f => CatalystTypeConverters.createToScalaConverter(f.dataType)
-      }
-      rows.map(CatalystTypeConverters.convertRowWithConverters(_, schema, converters))
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      rows.map(converter(_).asInstanceOf[Row])
     }
   }
 

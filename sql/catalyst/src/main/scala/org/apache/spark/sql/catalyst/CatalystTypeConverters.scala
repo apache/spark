@@ -33,7 +33,8 @@ object CatalystTypeConverters {
   import scala.collection.Map
 
   /**
-   * Converts Scala objects to catalyst rows / types.
+   * Converts Scala objects to catalyst rows / types. This method is slow, and for batch
+   * conversion you should be using converter produced by createToCatalystConverter.
    * Note: This is always called after schemaFor has been called.
    *       This ordering is important for UDT registration.
    */
@@ -97,6 +98,8 @@ object CatalystTypeConverters {
 
   /**
    * Creates a converter function that will convert Scala objects to the specified catalyst type.
+   * Typical use case would be converting a collection of rows that have the same schema. You will
+   * call this function once to get a converter, and apply it to every row.
    */
   private[sql] def createToCatalystConverter(dataType: DataType): Any => Any = {
     def extractOption(item: Any): Any = item match {
@@ -181,7 +184,10 @@ object CatalystTypeConverters {
     }
   }
 
-  /** Converts Catalyst types used internally in rows to standard Scala types */
+  /** Converts Catalyst types used internally in rows to standard Scala types
+    * This method is slow, and for batch conversion you should be using converter
+    * produced by createToScalaConverter.
+    */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
     // Check UDT first since UDTs can override other types
     case (d, udt: UserDefinedType[_]) =>
@@ -210,6 +216,8 @@ object CatalystTypeConverters {
 
   /**
    * Creates a converter function that will convert Catalyst types to Scala type.
+   * Typical use case would be converting a collection of rows that have the same schema. You will
+   * call this function once to get a converter, and apply it to every row.
    */
   private[sql] def createToScalaConverter(dataType: DataType): Any => Any = dataType match {
     // Check UDT first since UDTs can override other types

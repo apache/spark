@@ -25,18 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 
 
 private[sql] object DataTypeConversions {
-
-  def productToRow(product: Product, schema: StructType): Row = {
-    val converted = new Array[Any](schema.length)
-    var i = 0
-    while (i < schema.length) {
-      converted(i) = CatalystTypeConverters.convertToCatalyst(product.productElement(i),
-        schema.fields(i).dataType)
-      i += 1
-    }
-    new GenericRowWithSchema(converted, schema)
-  }
-
   def stringToTime(s: String): java.util.Date = {
     if (!s.contains('T')) {
       // JDBC escape string
