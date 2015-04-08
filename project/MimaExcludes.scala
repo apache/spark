@@ -66,7 +66,8 @@ object MimaExcludes {
                 "apache$spark$SparkContext$$SPARK_CONTEXT_CONSTRUCTOR_LOCK")
           )++ Seq(
             // SPARK-6693 add tostring with max lines and width for matrix
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.toString")
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.toString")
           )
 
 
