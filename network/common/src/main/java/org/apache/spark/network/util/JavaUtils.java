@@ -150,14 +150,16 @@ public class JavaUtils {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
       if (m.matches()) {
         val = Long.parseLong(m.group(1));
-        if(m.groupCount() > 1) {
+        if (m.group(2) != null) {
           suffix = m.group(2);
         }
-      } else {
-        throw new NumberFormatException("Failed to parse time string.");
+        else {
+          throw new NumberFormatException("Failed to parse time string: " + str);  
+        }
       }
       
-      return unit.convert(val, timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
+      return unit.convert(val, (suffix != null) && timeSuffixes.containsKey(suffix) ? 
+              timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +
