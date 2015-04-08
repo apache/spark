@@ -588,8 +588,7 @@ private[spark] class Client(
         val formattedDetails = details
           .map { case (k, v) =>
           val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
-          s"\n\t $k: $newValue"
-        }
+          s"\n\t $k: $newValue" }
           .mkString("")
 
         // If DEBUG is enabled, log report details every iteration
