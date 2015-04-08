@@ -12,7 +12,11 @@
 <div id="svg_container">
   <img id='loading' width="50" 
     src="{{ url_for('static', filename='loading.gif') }}">
-  <svg class='tree' width="100%"></svg>
+    <svg class='tree' width="100%">
+        <filter id="blur-effect-1">
+            <feGaussianBlur stdDeviation="3" />
+        </filter>
+    </svg>
 </div>
 {% endblock %}
 
@@ -152,10 +156,13 @@ function update(source) {
       .attr("task_id", function(d){return d.name})
       .on("click", toggles);
 
-  nodeEnter.append("text")
+  text = nodeEnter.append("text")
       .attr("dy", 3.5)
       .attr("dx", barHeight/2)
       .text(function(d) { return d.name; });
+  {% if blur %}
+  text.attr("class", "blur");
+  {% endif %}
 
   nodeEnter.append('g')
       .attr("class", "stateboxes")
