@@ -915,19 +915,18 @@ private[spark] object Utils extends Logging {
    * Wrapper over newSingleThreadExecutor. Thread names are formatted as prefix-ID, where ID is a
    * unique, sequentially assigned integer.
    */
-  def newDaemonSingleThreadExecutor(prefix: String): ThreadPoolExecutor = {
+  def newDaemonSingleThreadExecutor(prefix: String): ExecutorService = {
     val threadFactory = namedThreadFactory(prefix)
-    Executors.newSingleThreadExecutor(threadFactory).asInstanceOf[ThreadPoolExecutor]
+    Executors.newSingleThreadExecutor(threadFactory)
   }
 
   /**
    * Wrapper over newSingleThreadScheduledExecutor. Thread names are formatted as prefix-ID, where
    * ID is a unique, sequentially assigned integer.
    */
-  def newDaemonSingleThreadScheduledExecutor(prefix: String): ScheduledThreadPoolExecutor = {
+  def newDaemonSingleThreadScheduledExecutor(prefix: String): ScheduledExecutorService = {
     val threadFactory = namedThreadFactory(prefix)
-    Executors.newSingleThreadScheduledExecutor(threadFactory).
-      asInstanceOf[ScheduledThreadPoolExecutor]
+    Executors.newSingleThreadScheduledExecutor(threadFactory)
   }
 
   /**
