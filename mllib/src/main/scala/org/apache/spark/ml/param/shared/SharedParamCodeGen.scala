@@ -33,12 +33,13 @@ private[shared] object SharedParamCodeGen {
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter"),
       ParamDesc[Int]("maxIter", "max number of iterations"),
-      ParamDesc[String]("featuresCol", "features column name"),
-      ParamDesc[String]("labelCol", "label column name"),
-      ParamDesc[String]("predictionCol", "prediction column name"),
-      ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name"),
-      ParamDesc[String](
-        "probabilityCol", "column name for predicted class conditional probabilities"),
+      ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
+      ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
+      ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
+      ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
+        Some("\"rawPrediction\"")),
+      ParamDesc[String]("probabilityCol",
+        "column name for predicted class conditional probabilities", Some("\"probability\"")),
       ParamDesc[Double]("threshold", "threshold in prediction"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[String]("outputCol", "output column name"),
@@ -52,7 +53,11 @@ private[shared] object SharedParamCodeGen {
   }
 
   /** Description of a param. */
-  private case class ParamDesc[T: ClassTag](name: String, doc: String) {
+  private case class ParamDesc[T: ClassTag](
+      name: String,
+      doc: String,
+      defaultValueStr: Option[String] = None) {
+
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
 
@@ -93,14 +98,24 @@ private[shared] object SharedParamCodeGen {
     val Param = param.paramTypeName
     val T = param.valueTypeName
     val doc = param.doc
+    val defaultValue = param.defaultValueStr
+    val defaultValueDoc = defaultValue.map { v =>
+      s" (default: $v)"
+    }.getOrElse("")
+    val setDefault = defaultValue.map { v =>
+      s"""
+        |  setDefault($name, $v)
+      """.stripMargin
+    }.getOrElse("")
 
     s"""
       |/**
       | * :: DeveloperApi ::
-      | * Trait for shared param $name.
+      | * Trait for shared param $name$defaultValueDoc.
       | */
       |@DeveloperApi
       |trait Has$Name extends Params {
+      |$setDefault
       |  /**
       |   * Param for $doc.
       |   * @group param

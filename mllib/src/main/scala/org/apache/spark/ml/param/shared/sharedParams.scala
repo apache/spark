@@ -31,6 +31,7 @@ import org.apache.spark.ml.param._
  */
 @DeveloperApi
 trait HasRegParam extends Params {
+
   /**
    * Param for regularization parameter.
    * @group param
@@ -47,6 +48,7 @@ trait HasRegParam extends Params {
  */
 @DeveloperApi
 trait HasMaxIter extends Params {
+
   /**
    * Param for max number of iterations.
    * @group param
@@ -59,10 +61,13 @@ trait HasMaxIter extends Params {
     
 /**
  * :: DeveloperApi ::
- * Trait for shared param featuresCol.
+ * Trait for shared param featuresCol (default: "features").
  */
 @DeveloperApi
 trait HasFeaturesCol extends Params {
+
+  setDefault(featuresCol, "features")
+      
   /**
    * Param for features column name.
    * @group param
@@ -75,10 +80,13 @@ trait HasFeaturesCol extends Params {
     
 /**
  * :: DeveloperApi ::
- * Trait for shared param labelCol.
+ * Trait for shared param labelCol (default: "label").
  */
 @DeveloperApi
 trait HasLabelCol extends Params {
+
+  setDefault(labelCol, "label")
+      
   /**
    * Param for label column name.
    * @group param
@@ -91,10 +99,13 @@ trait HasLabelCol extends Params {
     
 /**
  * :: DeveloperApi ::
- * Trait for shared param predictionCol.
+ * Trait for shared param predictionCol (default: "prediction").
  */
 @DeveloperApi
 trait HasPredictionCol extends Params {
+
+  setDefault(predictionCol, "prediction")
+      
   /**
    * Param for prediction column name.
    * @group param
@@ -107,10 +118,13 @@ trait HasPredictionCol extends Params {
     
 /**
  * :: DeveloperApi ::
- * Trait for shared param rawPredictionCol.
+ * Trait for shared param rawPredictionCol (default: "rawPrediction").
  */
 @DeveloperApi
 trait HasRawPredictionCol extends Params {
+
+  setDefault(rawPredictionCol, "rawPrediction")
+      
   /**
    * Param for raw prediction (a.k.a. confidence) column name.
    * @group param
@@ -123,10 +137,13 @@ trait HasRawPredictionCol extends Params {
     
 /**
  * :: DeveloperApi ::
- * Trait for shared param probabilityCol.
+ * Trait for shared param probabilityCol (default: "probability").
  */
 @DeveloperApi
 trait HasProbabilityCol extends Params {
+
+  setDefault(probabilityCol, "probability")
+      
   /**
    * Param for column name for predicted class conditional probabilities.
    * @group param
@@ -143,6 +160,7 @@ trait HasProbabilityCol extends Params {
  */
 @DeveloperApi
 trait HasThreshold extends Params {
+
   /**
    * Param for threshold in prediction.
    * @group param
@@ -159,6 +177,7 @@ trait HasThreshold extends Params {
  */
 @DeveloperApi
 trait HasInputCol extends Params {
+
   /**
    * Param for input column name.
    * @group param
@@ -175,6 +194,7 @@ trait HasInputCol extends Params {
  */
 @DeveloperApi
 trait HasOutputCol extends Params {
+
   /**
    * Param for output column name.
    * @group param
@@ -191,6 +211,7 @@ trait HasOutputCol extends Params {
  */
 @DeveloperApi
 trait HasCheckpointInterval extends Params {
+
   /**
    * Param for checkpoint interval.
    * @group param
@@ -202,3 +223,4 @@ trait HasCheckpointInterval extends Params {
 }
     
 // scalastyle:on
+      
