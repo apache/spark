@@ -1,0 +1,169 @@
+#' structType
+#'
+#' Create a structType object that contains the metadata for a DataFrame. Intended for 
+#' use with createDataFrame and toDF.
+#'
+#' @param x a Field object (created with the field() function)
+#' @param ... additional Field objects
+#' @return a structType object
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
+#' schema <- buildSchema(field("a", "integer"), field("b", "string"))
+#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' }
+structType <- function(x, ...) {
+  UseMethod("structType", x)
+}
+
+structType.jobj <- function(x) {
+  obj <- structure(list(), class = "structType")
+  obj$jobj <- x
+  obj$fields <- function() { lapply(callJMethod(x, "fields"), structField) }
+  obj
+}
+
+structType.structField <- function(x, ...) {
+  fields <- list(x, ...)
+  if (!all(sapply(fields, inherits, "structField"))) {
+    stop("All arguments must be structField objects.")
+  }
+  sfObjList <- lapply(fields, function(field) {
+    field$jobj
+  })
+  stObj <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+                       "createStructType",
+                       listToSeq(sfObjList))
+  structType(stObj)
+}
+
+#' Print a Spark StructType.
+#'
+#' This function prints the contents of a StructType returned from the
+#' SparkR JVM backend.
+#'
+#' @param x A StructType object
+#' @param ... further arguments passed to or from other methods
+print.structType <- function(x, ...) {
+  cat("StructType\n",
+      sapply(x$fields(), function(field) { paste("|-", "name = \"", field$name(),
+                                           "\", type = \"", field$dataType.toString(),
+                                           "\", nullable = ", field$nullable(), "\n",
+                                           sep = "") })
+      , sep = "")
+}
+
+#' structField
+#'
+#' Create a structField object that contains the metadata for a single field in a schema.
+#'
+#' @param x The name of the field
+#' @param type The data type of the field
+#' @param nullable A logical vector indicating whether or not the field is nullable
+#' @return a Field object
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
+#' field1 <- field("a", "integer", TRUE)
+#' field2 <- field("b", "string", TRUE)
+#' schema <- buildSchema(field1, field2)
+#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' }
+
+structField <- function(x, ...) {
+  UseMethod("structField", x)
+}
+
+structField.jobj <- function(x) {
+  obj <- structure(list(), class = "structField")
+  obj$jobj <- x
+  obj$name <- function() { callJMethod(x, "name") }
+  obj$dataType <- function() { callJMethod(x, "dataType") }
+  obj$dataType.toString <- function() { callJMethod(obj$dataType(), "toString") }
+  obj$dataType.simpleString <- function() { callJMethod(obj$dataType(), "simpleString") }
+  obj$nullable <- function() { callJMethod(x, "nullable") }
+  obj
+}
+
+structField.character <- function(x, type, nullable = TRUE) {
+  if (class(x) != "character") {
+    stop("Field name must be a string.")
+  }
+  if (class(type) != "character") {
+    stop("Field type must be a string.")
+  }
+  if (class(nullable) != "logical") {
+    stop("nullable must be either TRUE or FALSE")
+  }
+  options <- c("byte",
+               "integer",
+               "double",
+               "numeric",
+               "character",
+               "string",
+               "binary",
+               "raw",
+               "logical",
+               "boolean",
+               "timestamp",
+               "date")
+  dataType <- if (type %in% options) {
+    type
+  } else {
+    stop(paste("Unsupported type for Dataframe:", type))
+  }
+  sfObj <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+                       "createStructField",
+                       x,
+                       dataType,
+                       nullable)
+  structField(sfObj)
+}
+
+#' Print a Spark StructField.
+#'
+#' This function prints the contents of a StructField returned from the
+#' SparkR JVM backend.
+#'
+#' @param x A StructField object
+#' @param ... further arguments passed to or from other methods
+print.structField <- function(x, ...) {
+  cat("StructField(name = \"", x$name(),
+      "\", type = \"", x$dataType.toString(),
+      "\", nullable = ", x$nullable(),
+      ")",
+      sep = "")
+}
+
+# cfreeman: Don't think we need this function since we can create
+# structType in R and pass to createDataFrame
+#
+# #' dump the schema into JSON string
+# tojson <- function(x) {
+#   if (inherits(x, "struct")) {
+#     # schema object
+#     l <- paste(lapply(x, tojson), collapse = ", ")
+#     paste('{\"type\":\"struct\", \"fields\":','[', l, ']}', sep = '')
+#   } else if (inherits(x, "field")) {
+#     # field object
+#     names <- names(x)
+#     items <- lapply(names, function(n) {
+#       safe_n <- gsub('"', '\\"', n)
+#       paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
+#     })
+#     d <- paste(items, collapse = ", ")
+#     paste('{', d, '}', sep = '')
+#   } else if (is.character(x)) {
+#     paste('"', x, '"', sep = '')
+#   } else if (is.logical(x)) {
+#     if (x) "true" else "false"
+#   } else {
+#     stop(paste("unexpected type:", class(x)))
+#   }
+# }
