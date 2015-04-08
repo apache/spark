@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import scala.concurrent.ExecutionContext
+import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 
 import org.apache.log4j.{Level, Logger}
@@ -26,7 +27,7 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcEnv, ThreadSafeRpcEn
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkExitCode, Utils}
 
 /**
  * Proxy that relays messages to the driver.
@@ -45,8 +46,8 @@ private class ClientEndpoint(
       t => t match {
         case ie: InterruptedException => // Exit normally
         case e =>
-          e.printStackTrace()
-          System.exit(-1)
+          logError(e.getMessage, e)
+          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 
   override def onStart(): Unit = {
@@ -84,25 +85,25 @@ private class ClientEndpoint(
           driverArgs.cores,
           driverArgs.supervise,
           command)
-
-        masterEndpoint.sendWithReply[SubmitDriverResponse](RequestSubmitDriver(driverDescription)).
-          onComplete {
-            case Success(v) => self.send(v)
-            case Failure(e) =>
-              println(s"Error sending messages to master ${driverArgs.master}, exiting.")
-              e.printStackTrace()
-              System.exit(-1)
-        }
+        ayncSendToMasterAndForwardReply[SubmitDriverResponse](
+          RequestSubmitDriver(driverDescription))
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        masterEndpoint.sendWithReply[KillDriverResponse](RequestKillDriver(driverId)).onComplete {
-          case Success(v) => self.send(v)
-          case Failure(e) =>
-            println(s"Error sending messages to master ${driverArgs.master}, exiting.")
-            e.printStackTrace()
-            System.exit(-1)
-        }
+        ayncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
+    }
+  }
+
+  /**
+   * Send the message to master and forward the reply to self asynchronously.
+   */
+  private def ayncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
+    masterEndpoint.sendWithReply[T](message).onComplete {
+      case Success(v) => self.send(v)
+      case Failure(e) =>
+        println(s"Error sending messages to master ${driverArgs.master}, exiting.")
+        logError(e.getMessage, e)
+        System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
     }
   }
 
