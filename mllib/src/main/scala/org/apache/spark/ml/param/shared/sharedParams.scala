@@ -38,7 +38,7 @@ trait HasRegParam extends Params {
   final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")
 
   /** @group getParam */
-  final def getRegParam: Double = get(regParam)
+  final def getRegParam: Double = getOrDefault(regParam)
 }
 
 /**
@@ -55,7 +55,7 @@ trait HasMaxIter extends Params {
   final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
 
   /** @group getParam */
-  final def getMaxIter: Int = get(maxIter)
+  final def getMaxIter: Int = getOrDefault(maxIter)
 }
 
 /**
@@ -74,7 +74,7 @@ trait HasFeaturesCol extends Params {
   setDefault(featuresCol, "features")
 
   /** @group getParam */
-  final def getFeaturesCol: String = get(featuresCol)
+  final def getFeaturesCol: String = getOrDefault(featuresCol)
 }
 
 /**
@@ -93,7 +93,7 @@ trait HasLabelCol extends Params {
   setDefault(labelCol, "label")
 
   /** @group getParam */
-  final def getLabelCol: String = get(labelCol)
+  final def getLabelCol: String = getOrDefault(labelCol)
 }
 
 /**
@@ -112,7 +112,7 @@ trait HasPredictionCol extends Params {
   setDefault(predictionCol, "prediction")
 
   /** @group getParam */
-  final def getPredictionCol: String = get(predictionCol)
+  final def getPredictionCol: String = getOrDefault(predictionCol)
 }
 
 /**
@@ -131,7 +131,7 @@ trait HasRawPredictionCol extends Params {
   setDefault(rawPredictionCol, "rawPrediction")
 
   /** @group getParam */
-  final def getRawPredictionCol: String = get(rawPredictionCol)
+  final def getRawPredictionCol: String = getOrDefault(rawPredictionCol)
 }
 
 /**
@@ -150,7 +150,7 @@ trait HasProbabilityCol extends Params {
   setDefault(probabilityCol, "probability")
 
   /** @group getParam */
-  final def getProbabilityCol: String = get(probabilityCol)
+  final def getProbabilityCol: String = getOrDefault(probabilityCol)
 }
 
 /**
@@ -167,7 +167,7 @@ trait HasThreshold extends Params {
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in prediction")
 
   /** @group getParam */
-  final def getThreshold: Double = get(threshold)
+  final def getThreshold: Double = getOrDefault(threshold)
 }
 
 /**
@@ -184,7 +184,7 @@ trait HasInputCol extends Params {
   final val inputCol: Param[String] = new Param[String](this, "inputCol", "input column name")
 
   /** @group getParam */
-  final def getInputCol: String = get(inputCol)
+  final def getInputCol: String = getOrDefault(inputCol)
 }
 
 /**
@@ -201,7 +201,7 @@ trait HasOutputCol extends Params {
   final val outputCol: Param[String] = new Param[String](this, "outputCol", "output column name")
 
   /** @group getParam */
-  final def getOutputCol: String = get(outputCol)
+  final def getOutputCol: String = getOrDefault(outputCol)
 }
 
 /**
@@ -218,6 +218,6 @@ trait HasCheckpointInterval extends Params {
   final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval")
 
   /** @group getParam */
-  final def getCheckpointInterval: Int = get(checkpointInterval)
+  final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 }
 // scalastyle:on

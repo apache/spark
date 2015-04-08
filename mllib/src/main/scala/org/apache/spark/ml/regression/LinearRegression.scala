@@ -93,7 +93,7 @@ class LinearRegressionModel private[ml] (
 
   override protected def copy(): LinearRegressionModel = {
     val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(extractValues(), this, m)
+    Params.inheritValues(extractParamMap(), this, m)
     m
   }
 }

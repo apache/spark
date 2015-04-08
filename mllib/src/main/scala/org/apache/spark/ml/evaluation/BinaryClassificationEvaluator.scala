@@ -21,11 +21,11 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
-
 
 /**
  * :: AlphaComponent ::
@@ -44,7 +44,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
     "metric name in evaluation (areaUnderROC|areaUnderPR)")
 
   /** @group getParam */
-  def getMetricName: String = get(metricName)
+  def getMetricName: String = getOrDefault(metricName)
 
   /** @group setParam */
   def setMetricName(value: String): this.type = set(metricName, value)
@@ -58,11 +58,11 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   setDefault(metricName -> "areaUnderROC")
 
   override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
-    val map = extractValues(paramMap)
+    val map = extractParamMap(paramMap)
 
     val schema = dataset.schema
-    checkInputColumn(schema, map(rawPredictionCol), new VectorUDT)
-    checkInputColumn(schema, map(labelCol), DoubleType)
+    SchemaUtils.checkColumnType(schema, map(rawPredictionCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, map(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabels = dataset.select(map(rawPredictionCol), map(labelCol))

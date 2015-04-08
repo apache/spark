@@ -81,7 +81,7 @@ class Pipeline extends Estimator[PipelineModel] {
   /** param for pipeline stages */
   val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
-  def getStages: Array[PipelineStage] = get(stages)
+  def getStages: Array[PipelineStage] = getOrDefault(stages)
 
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
@@ -98,7 +98,7 @@ class Pipeline extends Estimator[PipelineModel] {
    */
   override def fit(dataset: DataFrame, paramMap: ParamMap): PipelineModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractValues(paramMap)
+    val map = extractParamMap(paramMap)
     val theStages = map(stages)
     // Search for the last estimator.
     var indexOfLastEstimator = -1
@@ -135,7 +135,7 @@ class Pipeline extends Estimator[PipelineModel] {
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractValues(paramMap)
+    val map = extractParamMap(paramMap)
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
       "Cannot have duplicate components in a pipeline.")
@@ -174,14 +174,14 @@ class PipelineModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
-    val map = fittingParamMap ++ extractValues(paramMap)
+    val map = fittingParamMap ++ extractParamMap(paramMap)
     transformSchema(dataset.schema, map, logging = true)
     stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
-    val map = fittingParamMap ++ extractValues(paramMap)
+    val map = fittingParamMap ++ extractParamMap(paramMap)
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))
   }
 }

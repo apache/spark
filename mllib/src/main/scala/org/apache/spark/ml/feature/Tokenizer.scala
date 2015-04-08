@@ -52,8 +52,6 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 @AlphaComponent
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
-  setDefault(minTokenLength -> 1, gaps -> false, pattern -> "\\p{L}+|[^\\p{L}\\s]+")
-
   /**
    * param for minimum token length, default is one to avoid returning empty strings
    * @group param
@@ -64,7 +62,7 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
 
   /** @group getParam */
-  def getMinTokenLength: Int = get(minTokenLength)
+  def getMinTokenLength: Int = getOrDefault(minTokenLength)
 
   /**
    * param sets regex as splitting on gaps (true) or matching tokens (false)
@@ -76,7 +74,7 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def setGaps(value: Boolean): this.type = set(gaps, value)
 
   /** @group getParam */
-  def getGaps: Boolean = get(gaps)
+  def getGaps: Boolean = getOrDefault(gaps)
 
   /**
    * param sets regex pattern used by tokenizer 
@@ -88,7 +86,9 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def setPattern(value: String): this.type = set(pattern, value)
 
   /** @group getParam */
-  def getPattern: String = get(pattern)
+  def getPattern: String = getOrDefault(pattern)
+
+  setDefault(minTokenLength -> 1, gaps -> false, pattern -> "\\p{L}+|[^\\p{L}\\s]+")
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { str =>
     val re = paramMap(pattern).r

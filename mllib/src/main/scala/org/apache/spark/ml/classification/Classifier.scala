@@ -17,15 +17,15 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-
 
 /**
  * :: DeveloperApi ::
@@ -43,8 +43,8 @@ private[spark] trait ClassifierParams extends PredictorParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = extractValues(paramMap)
-    addOutputColumn(parentSchema, map(rawPredictionCol), new VectorUDT)
+    val map = extractParamMap(paramMap)
+    SchemaUtils.appendColumn(parentSchema, map(rawPredictionCol), new VectorUDT)
   }
 }
 
@@ -109,7 +109,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractValues(paramMap)
+    val map = extractParamMap(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {

@@ -99,7 +99,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-  def getMaxIter: Int = get(maxIter)
+  def getMaxIter: Int = getOrDefault(maxIter)
 }
 
 /**

@@ -123,7 +123,7 @@ private[shared] object SharedParamCodeGen {
       |  final val $name: $Param = new $Param(this, "$name", "$doc")
       |$setDefault
       |  /** @group getParam */
-      |  final def get$Name: $T = get($name)
+      |  final def get$Name: $T = getOrDefault($name)
       |}
       |""".stripMargin
   }

@@ -78,13 +78,13 @@ class ParamsSuite extends FunSuite {
 
   test("params") {
     val params = solver.params
-    assert(params.size === 2)
+    assert(params.length === 2)
     assert(params(0).eq(inputCol), "params must be ordered by name")
     assert(params(1).eq(maxIter))
     assert(solver.explainParams() === Seq(inputCol, maxIter).mkString("\n"))
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
-    intercept[NoSuchMethodException] {
+    intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
     assert(!solver.isSet(inputCol))

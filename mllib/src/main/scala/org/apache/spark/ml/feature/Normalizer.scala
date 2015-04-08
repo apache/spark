@@ -31,8 +31,6 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
-  setDefault(p -> 2.0)
-
   /**
    * Normalization in L^p^ space, p = 2 by default.
    * @group param
@@ -40,10 +38,12 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
   val p = new DoubleParam(this, "p", "the p norm value")
 
   /** @group getParam */
-  def getP: Double = get(p)
+  def getP: Double = getOrDefault(p)
 
   /** @group setParam */
   def setP(value: Double): this.type = set(p, value)
+
+  setDefault(p -> 2.0)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
     val normalizer = new feature.Normalizer(paramMap(p))

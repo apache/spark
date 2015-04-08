@@ -117,7 +117,7 @@ class LogisticRegressionModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
 
-    val map = extractValues(paramMap)
+    val map = extractParamMap(paramMap)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -193,7 +193,7 @@ class LogisticRegressionModel private[ml] (
 
   override protected def copy(): LogisticRegressionModel = {
     val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.extractValues(), this, m)
+    Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
 }

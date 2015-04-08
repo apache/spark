@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.param
 
+import java.lang.reflect.Modifier
+import java.util.NoSuchElementException
+
 import scala.annotation.varargs
 import scala.collection.mutable
-
-import java.lang.reflect.Modifier
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
@@ -103,10 +104,10 @@ case class ParamPair[T](param: Param[T], value: T)
 trait Params extends Identifiable with Serializable {
 
   /**
-   * Returns all params. The default implementation uses Java reflection to list all public methods
-   * that return [[Param]] and have no arguments.
+   * Returns all params sorted by their names. The default implementation uses Java reflection to
+   * list all public methods that have no arguments and return [[Param]].
    */
-  def params: Array[Param[_]] = {
+  lazy val params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
     methods.filter { m =>
         Modifier.isPublic(m.getModifiers) &&
@@ -135,25 +136,29 @@ trait Params extends Identifiable with Serializable {
 
   /** Checks whether a param is explicitly set. */
   def isSet(param: Param[_]): Boolean = {
-    require(param.parent.eq(this))
-    values.contains(param)
+    shouldOwn(param)
+    paramMap.contains(param)
+  }
+
+  /** Checks whether a param is explicitly set or has a default value. */
+  def isDefined(param: Param[_]): Boolean = {
+    shouldOwn(param)
+    defaultParamMap.contains(param) || paramMap.contains(param)
   }
 
   /** Gets a param by its name. */
   def getParam(paramName: String): Param[Any] = {
-    val m = this.getClass.getMethod(paramName)
-    assert(Modifier.isPublic(m.getModifiers) &&
-      classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
-      m.getParameterTypes.isEmpty)
-    m.invoke(this).asInstanceOf[Param[Any]]
+    params.find(_.name == paramName).getOrElse {
+      throw new NoSuchElementException(s"Param $paramName does not exist.")
+    }.asInstanceOf[Param[Any]]
   }
 
   /**
    * Sets a parameter in the embedded param map.
    */
   protected final def set[T](param: Param[T], value: T): this.type = {
-    require(param.parent.eq(this))
-    values.put(param.asInstanceOf[Param[Any]], value)
+    shouldOwn(param)
+    paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
   }
 
@@ -165,32 +170,33 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Gets the value of a parameter in the embedded param map.
+   * Optionally returns the user-supplied value of a param.
    */
-  protected final def get[T](param: Param[T]): T = {
-    require(param.parent.eq(this))
-    values(param)
+  protected final def get[T](param: Param[T]): Option[T] = {
+    paramMap.get(param)
   }
 
   /**
-   * Internal param map.
+   * Gets the value of a param in the embedded param map or its default value. Throws an exception
+   * if neither is set.
    */
-  private val values: ParamMap = ParamMap.empty
+  protected final def getOrDefault[T](param: Param[T]): T = {
+    shouldOwn(param)
+    get(param).orElse(getDefault(param)).get
+  }
 
   /**
-   * Internal param map for default values.
-   */
-  private val defaultValues: ParamMap = ParamMap.empty
-
-  /**
-   * Sets a default value.
+   * Sets a default value. Make sure that the input param is initialized before this gets called.
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
-    require(param.parent.eq(this))
-    defaultValues.put(param, value)
+    shouldOwn(param)
+    defaultParamMap.put(param, value)
     this
   }
 
+  /**
+   * Sets default values. Make sure that the input params are initialized before this gets called.
+   */
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -198,36 +204,42 @@ trait Params extends Identifiable with Serializable {
     this
   }
 
+  /**
+   * Gets the default value of a parameter.
+   */
   protected final def getDefault[T](param: Param[T]): Option[T] = {
-    require(param.parent.eq(this))
-    defaultValues.get(param)
-  }
-
-  protected final def extractValues(extraValues: ParamMap = ParamMap.empty): ParamMap = {
-    defaultValues ++ values ++ extraValues
+    shouldOwn(param)
+    defaultParamMap.get(param)
   }
 
   /**
-   * Check whether the given schema contains an input column.
-   * @param colName  Parameter name for the input column.
-   * @param dataType  SQL DataType of the input column.
+   * Tests whether the input param has a default value set.
    */
-  protected def checkInputColumn(schema: StructType, colName: String, dataType: DataType): Unit = {
-    val actualDataType = schema(colName).dataType
-    require(actualDataType.equals(dataType),
-      s"Input column $colName must be of type $dataType" +
-        s" but was actually $actualDataType.  Column param description: ${getParam(colName)}")
+  protected final def hasDefault[T](param: Param[T]): Boolean = {
+    shouldOwn(param)
+    defaultParamMap.contains(param)
   }
 
-  protected def addOutputColumn(
-      schema: StructType,
-      colName: String,
-      dataType: DataType): StructType = {
-    if (colName.length == 0) return schema
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(colName), s"Prediction column $colName already exists.")
-    val outputFields = schema.fields ++ Seq(StructField(colName, dataType, nullable = false))
-    StructType(outputFields)
+  /**
+   * Extracts the embedded default param values and user-supplied values, and then merges them with
+   * extra values from input into a flat param map, where the latter value is used if there exist
+   * conflicts.
+   */
+  protected final def extractParamMap(extraParamMap: ParamMap = ParamMap.empty): ParamMap = {
+    defaultParamMap ++ paramMap ++ extraParamMap
+  }
+
+
+
+  /** Internal param map for user-supplied values. */
+  private val paramMap: ParamMap = ParamMap.empty
+
+  /** Internal param map for default values. */
+  private val defaultParamMap: ParamMap = ParamMap.empty
+
+  /** Validates that the input param belongs to this instance. */
+  private def shouldOwn(param: Param[_]): Unit = {
+    require(param.parent.eq(this), s"Param $param does not belong to $this.")
   }
 }
 
@@ -343,7 +355,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
 
   /**
    * Returns a new param map that contains parameters in this map and the given map,
-   * where the latter overwrites this if there exists conflicts.
+   * where the latter overwrites this if there exist conflicts.
    */
   def ++(other: ParamMap): ParamMap = {
     // TODO: Provide a better method name for Java users.
