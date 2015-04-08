@@ -68,7 +68,7 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-print("SparkContext available as sc, %s available as sqlContext." % sqlCtx.__class__.__name__)
+print("SparkContext available as sc, %s available as sqlContext." % sqlContext.__class__.__name__)
 
 if add_files is not None:
     print("Warning: ADD_FILES environment variable is deprecated, use --py-files argument instead")
