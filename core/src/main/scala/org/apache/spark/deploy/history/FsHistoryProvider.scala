@@ -139,7 +139,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getListing(refresh: Boolean): Iterable[FsApplicationHistoryInfo] = {
+  override def getListing(): Iterable[FsApplicationHistoryInfo] = {
     applications.values
   }
 

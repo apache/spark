@@ -184,7 +184,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val ui = mock[SparkUI]
     val link = "/history/app1"
     val info = new ApplicationHistoryInfo("app1", "app1", 0, 2, 1, "xxx", true)
-    when(historyServer.getApplicationList(false)).thenReturn(Seq(info))
+    when(historyServer.getApplicationList()).thenReturn(Seq(info))
     when(ui.basePath).thenReturn(link)
     when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
     val page = new HistoryPage(historyServer)

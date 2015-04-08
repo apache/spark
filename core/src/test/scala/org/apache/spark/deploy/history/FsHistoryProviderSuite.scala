@@ -103,7 +103,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     // Take the opportunity to check that the offset checks work as expected.
     provider.checkForLogs()
 
-    val list = provider.getListing(false).toSeq
+    val list = provider.getListing().toSeq
     list should not be (null)
     list.size should be (5)
     list.count(_.completed) should be (3)
@@ -174,7 +174,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val provider = new FsHistoryProvider(createTestConf())
     provider.checkForLogs()
 
-    val list = provider.getListing(false).toSeq
+    val list = provider.getListing().toSeq
     list should not be (null)
     list.size should be (1)
   }
@@ -188,13 +188,13 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       SparkListenerApplicationEnd(2L)
     )
     provider.checkForLogs()
-    val appListBeforeRename = provider.getListing(false)
+    val appListBeforeRename = provider.getListing()
     appListBeforeRename.size should be (1)
     appListBeforeRename.head.logPath should endWith(EventLoggingListener.IN_PROGRESS)
 
     logFile1.renameTo(newLogFile("app1", inProgress = false))
     provider.checkForLogs()
-    val appListAfterRename = provider.getListing(false)
+    val appListAfterRename = provider.getListing()
     appListAfterRename.size should be (1)
     appListAfterRename.head.logPath should not endWith(EventLoggingListener.IN_PROGRESS)
   }
@@ -211,7 +211,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldLog.mkdir()
 
     provider.checkForLogs()
-    val appListAfterRename = provider.getListing(false)
+    val appListAfterRename = provider.getListing()
     appListAfterRename.size should be (1)
   }
 

@@ -159,12 +159,12 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(refresh: Boolean): Iterable[ApplicationHistoryInfo] = {
-    provider.getListing(refresh)
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+    provider.getListing()
   }
 
   def getApplicationInfoList: Seq[ApplicationInfo] = {
-    getApplicationList(true).map { ApplicationsListResource.appHistoryInfoToPublicAppInfo }.toSeq
+    getApplicationList().map { ApplicationsListResource.appHistoryInfoToPublicAppInfo }.toSeq
   }
 
   /**
