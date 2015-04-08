@@ -1129,17 +1129,20 @@ def get_partition(total, num_partitions, current_partitions):
         num_slaves_this_zone += 1
     return num_slaves_this_zone
 
+
 # Gets the IP address, taking into account the --private-ips flag
 def get_ip_address(instance, private_ips=False):
     ip = instance.ip_address if not private_ips else \
-         instance.private_ip_address
+        instance.private_ip_address
     return ip
+
 
 # Gets the DNS name, taking into account the --private-ips flag
 def get_dns_name(instance, private_ips=False):
     dns = instance.public_dns_name if not private_ips else \
-          instance.private_ip_address
+        instance.private_ip_address
     return dns
+
 
 def real_main():
     (opts, action, cluster_name) = parse_args()
