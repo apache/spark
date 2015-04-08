@@ -43,6 +43,7 @@ acquire_rat_jar () {
     unzip -tq $JAR &> /dev/null
     if [ $? -ne 0 ]; then
       # We failed to download
+      rm $JAR
       printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
       exit -1
     fi
@@ -70,6 +71,11 @@ mkdir -p "$FWDIR"/lib
 }
 
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
+
+if [ $? -ne 0 ]; then
+   echo "Error happen when running rat, pls checking the rat jar"
+   exit 1
+fi
 
 ERRORS="$(cat rat-results.txt | grep -e "??")"
 
