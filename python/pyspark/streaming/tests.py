@@ -591,7 +591,8 @@ class KafkaStreamTests(PySparkStreamingTestCase):
                                          {"auto.offset.reset": "smallest"})
 
         result = {}
-        for i in sum(self._collect(stream.map(lambda x: x[1]), 18), []):
+        for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
+                                                   sum(sendData.values()))):
             result[i] = result.get(i, 0) + 1
 
         self.assertEqual(sendData, result)

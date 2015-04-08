@@ -26,11 +26,9 @@ import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.language.postfixOps
-import scala.util.Random
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
-import kafka.common.KafkaException
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
@@ -38,7 +36,7 @@ import kafka.utils.ZKStringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.I0Itec.zkclient.ZkClient
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 
@@ -105,24 +103,16 @@ private class KafkaTestUtils extends Logging {
   // Set up the Embedded Kafka server
   private def setupEmbeddedKafkaServer(): Unit = {
     assert(zkReady, "Zookeeper should be set up beforehand")
-    // Kafka broker startup
-    var bindSuccess: Boolean = false
-    while(!bindSuccess) {
-      try {
-        brokerConf = new KafkaConfig(brokerConfigure)
-        server = new KafkaServer(brokerConf)
-        server.startup()
-        bindSuccess = true
-      } catch {
-        case e: KafkaException =>
-          if (e.getMessage != null && e.getMessage.contains("Socket server failed to bind to")) {
-            brokerPort += 1
-          }
-        case e: Exception => throw new Exception("Kafka server create failed", e)
-      }
-    }
 
-    Thread.sleep(2000)
+    // Kafka broker startup
+    Utils.startServiceOnPort(brokerPort, port => {
+      brokerPort = port
+      brokerConf = new KafkaConfig(brokerConfiguration)
+      server = new KafkaServer(brokerConf)
+      server.startup()
+      (server, port)
+    }, new SparkConf(), "KafkaBroker")
+
     brokerReady = true
   }
 
@@ -181,13 +171,13 @@ private class KafkaTestUtils extends Logging {
 
   /** Send the array of messages to the Kafka broker */
   def sendMessages(topic: String, messages: Array[String]): Unit = {
-    producer = new Producer[String, String](new ProducerConfig(producerConfigure))
+    producer = new Producer[String, String](new ProducerConfig(producerConfiguration))
     producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
     producer.close()
     producer = null
   }
 
-  private def brokerConfigure: Properties = {
+  private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")
@@ -199,45 +189,45 @@ private class KafkaTestUtils extends Logging {
     props
   }
 
-  private def producerConfigure: Properties = {
+  private def producerConfiguration: Properties = {
     val props = new Properties()
     props.put("metadata.broker.list", brokerAddress)
     props.put("serializer.class", classOf[StringEncoder].getName)
     props
   }
 
-  private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    // A simplified version of scalatest eventually, rewrite here is to avoid adding extra test
+    // A simplified version of scalatest eventually, rewritten here is to avoid adding extra test
     // dependency
-    def eventually[T](timeout: Time, interval: Time)(func: => T): T = {
-      def makeAttempt(): Either[Throwable, T] = {
-        try {
-          Right(func)
-        } catch {
-          case e if NonFatal(e) => Left(e)
-        }
+  def eventually[T](timeout: Time, interval: Time)(func: => T): T = {
+    def makeAttempt(): Either[Throwable, T] = {
+      try {
+        Right(func)
+      } catch {
+        case e if NonFatal(e) => Left(e)
       }
-
-      val startTime = System.currentTimeMillis()
-      @tailrec
-      def tryAgain(attempt: Int): T = {
-        makeAttempt() match {
-          case Right(result) => result
-          case Left(e) =>
-            val duration = System.currentTimeMillis() - startTime
-            if (duration < timeout.milliseconds) {
-              Thread.sleep(interval.milliseconds)
-            } else {
-              throw new TimeoutException(e.getMessage)
-            }
-
-            tryAgain(attempt + 1)
-        }
-      }
-
-      tryAgain(1)
     }
 
+    val startTime = System.currentTimeMillis()
+    @tailrec
+    def tryAgain(attempt: Int): T = {
+      makeAttempt() match {
+        case Right(result) => result
+        case Left(e) =>
+          val duration = System.currentTimeMillis() - startTime
+          if (duration < timeout.milliseconds) {
+            Thread.sleep(interval.milliseconds)
+          } else {
+            throw new TimeoutException(e.getMessage)
+          }
+
+          tryAgain(attempt + 1)
+      }
+    }
+
+    tryAgain(1)
+  }
+
+  private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
     eventually(Time(10000), Time(100)) {
       assert(
         server.apis.metadataCache.containsTopicAndPartition(topic, partition),
@@ -247,7 +237,6 @@ private class KafkaTestUtils extends Logging {
   }
 
   private class EmbeddedZookeeper(val zkConnect: String) {
-    val random = new Random()
     val snapshotDir = Utils.createTempDir()
     val logDir = Utils.createTempDir()
 
