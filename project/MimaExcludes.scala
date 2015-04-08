@@ -70,7 +70,6 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.toString")
           )
 
-
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
