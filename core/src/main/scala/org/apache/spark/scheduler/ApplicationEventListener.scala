@@ -36,7 +36,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = Some(applicationStart.appName)
     appId = applicationStart.appId
-    appAttemptId = Some(applicationStart.appAttemptId)
+    appAttemptId = applicationStart.appAttemptId
     startTime = Some(applicationStart.time)
     sparkUser = Some(applicationStart.sparkUser)
   }

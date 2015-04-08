@@ -62,20 +62,20 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", "", inProgress = false)
     writeFile(newAppComplete, true, None,
-      SparkListenerApplicationStart("new-app-complete", None, 1L, "test"),
+      SparkListenerApplicationStart("new-app-complete", None, 1L, "test", None),
       SparkListenerApplicationEnd(5L)
       )
 
     // Write a new-style application log.
     val newAppCompressedComplete = newLogFile("new1compressed", "", inProgress = false, Some("lzf"))
     writeFile(newAppCompressedComplete, true, None,
-      SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test"),
+      SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test", None),
       SparkListenerApplicationEnd(4L))
 
     // Write an unfinished app, new-style.
     val newAppIncomplete = newLogFile("new2", "", inProgress = true)
     writeFile(newAppIncomplete, true, None,
-      SparkListenerApplicationStart("new-app-incomplete", None, 1L, "test")
+      SparkListenerApplicationStart("new-app-incomplete", None, 1L, "test", None)
       )
 
     // Write an old-style application log.
@@ -83,7 +83,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldAppComplete.mkdir()
     createEmptyFile(new File(oldAppComplete, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldAppComplete, provider.LOG_PREFIX + "1"), false, None,
-      SparkListenerApplicationStart("old-app-complete", None, 2L, "test"),
+      SparkListenerApplicationStart("old-app-complete", None, 2L, "test", None),
       SparkListenerApplicationEnd(3L)
       )
     createEmptyFile(new File(oldAppComplete, provider.APPLICATION_COMPLETE))
@@ -97,7 +97,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldAppIncomplete.mkdir()
     createEmptyFile(new File(oldAppIncomplete, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldAppIncomplete, provider.LOG_PREFIX + "1"), false, None,
-      SparkListenerApplicationStart("old-app-incomplete", None, 2L, "test")
+      SparkListenerApplicationStart("old-app-incomplete", None, 2L, "test", None)
       )
 
     // Force a reload of data from the log directory, and check that both logs are loaded.
@@ -144,7 +144,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       logDir.mkdir()
       createEmptyFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
       writeFile(new File(logDir, provider.LOG_PREFIX + "1"), false, Option(codec),
-        SparkListenerApplicationStart("app2", None, 2L, "test"),
+        SparkListenerApplicationStart("app2", None, 2L, "test", None),
         SparkListenerApplicationEnd(3L)
         )
       createEmptyFile(new File(logDir, provider.COMPRESSION_CODEC_PREFIX + codecName))
@@ -167,12 +167,12 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("SPARK-3697: ignore directories that cannot be read.") {
     val logFile1 = newLogFile("new1", "", inProgress = false)
     writeFile(logFile1, true, None,
-      SparkListenerApplicationStart("app1-1", None, 1L, "test"),
+      SparkListenerApplicationStart("app1-1", None, 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
     val logFile2 = newLogFile("new2", "", inProgress = false)
     writeFile(logFile2, true, None,
-      SparkListenerApplicationStart("app1-2", None, 1L, "test"),
+      SparkListenerApplicationStart("app1-2", None, 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
@@ -188,7 +188,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val logFile1 = newLogFile("app1", "", inProgress = true)
     writeFile(logFile1, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
       SparkListenerApplicationEnd(2L)
     )
     updateAndCheck(provider) { list =>
@@ -210,7 +210,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val logFile1 = newLogFile("app1", "", inProgress = true)
     writeFile(logFile1, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
       SparkListenerApplicationEnd(2L))
 
     val oldLog = new File(testDir, "old1")
@@ -226,7 +226,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val attempt1 = newLogFile("app1", "attempt1", inProgress = false)
     writeFile(attempt1, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", "attempt1"),
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(2L)
       )
 
@@ -237,7 +237,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val attempt2 = newLogFile("app1", "attempt2", inProgress = true)
     writeFile(attempt2, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", "attempt2")
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2"))
       )
 
     updateAndCheck(provider) { list =>
@@ -249,7 +249,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val completedAttempt2 = newLogFile("app1", "attempt2", inProgress = false)
     attempt2.delete()
     writeFile(attempt2, true, None,
-      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", "attempt2"),
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
       SparkListenerApplicationEnd(4L)
       )
 
@@ -262,7 +262,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val app2Attempt1 = newLogFile("app2", "attempt1", inProgress = false)
     writeFile(attempt2, true, None,
-      SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", "attempt1"),
+      SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(6L)
       )
 

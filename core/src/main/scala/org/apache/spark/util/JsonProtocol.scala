@@ -563,7 +563,7 @@ private[spark] object JsonProtocol {
     val appId = Utils.jsonOption(json \ "App ID").map(_.extract[String])
     val time = (json \ "Timestamp").extract[Long]
     val sparkUser = (json \ "User").extract[String]
-    val appAttemptId = (json \ "appAttemptId").extract[String]
+    val appAttemptId = Utils.jsonOption(json \ "appAttemptId").map(_.extract[String])
     SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId)
   }
 

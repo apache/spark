@@ -1404,17 +1404,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def stop() {
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
-    
+
     if (!stopped.compareAndSet(false, true)) {
       logInfo("SparkContext already stopped.")
       return
     }
-    
+
     postApplicationEnd()
     ui.foreach(_.stop())
     env.metricsSystem.report()
     metadataCleaner.cancel()
-    cleaner.foreach(_.stop()) 
+    cleaner.foreach(_.stop())
     executorAllocationManager.foreach(_.stop())
     dagScheduler.stop()
     dagScheduler = null
@@ -1757,7 +1757,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId))
+      startTime, sparkUser, Some(applicationAttemptId)))
   }
 
   /** Post the application end event */
