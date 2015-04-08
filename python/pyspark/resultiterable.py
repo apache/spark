@@ -15,24 +15,25 @@
 # limitations under the License.
 #
 
+import collections
+
 __all__ = ["ResultIterable"]
 
 
-class ResultIterable(object):
+class ResultIterable(collections.Iterable):
 
     """
     A special result iterable. This is used because the standard
     iterator can not be pickled
     """
 
-    def __init__(self, it):
-        self.it = it
+    def __init__(self, data):
+        self.data = data
+        self.index = 0
+        self.maxindex = len(data)
 
     def __iter__(self):
-        return iter(self.it)
+        return iter(self.data)
 
     def __len__(self):
-        try:
-            return len(self.it)
-        except TypeError:
-            return sum(1 for _ in self.it)
+        return len(self.data)

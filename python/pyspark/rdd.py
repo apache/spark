@@ -1765,11 +1765,6 @@ class RDD(object):
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with numPartitions partitions.
 
-        The values in the resulting RDD is iterable object L{ResultIterable},
-        they can be iterated only once. The `len(values)` will result in
-        iterating values, so they can not be iterable after calling
-        `len(values)`.
-
         Note: If you are grouping in order to perform an aggregation (such as a
         sum or average) over each key, using reduceByKey or aggregateByKey will
         provide much better performance.

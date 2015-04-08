@@ -220,7 +220,7 @@ class BatchedSerializer(Serializer):
         return "BatchedSerializer(%s, %d)" % (str(self.serializer), self.batchSize)
 
 
-class FlattedValuesSerializer(BatchedSerializer):
+class FlattenedValuesSerializer(BatchedSerializer):
 
     """
     Serializes a stream of list of pairs, split the list of values
@@ -240,7 +240,7 @@ class FlattedValuesSerializer(BatchedSerializer):
         return self.serializer.load_stream(stream)
 
     def __repr__(self):
-        return "FlattedValuesSerializer(%d)" % self.batchSize
+        return "FlattenedValuesSerializer(%d)" % self.batchSize
 
 
 class AutoBatchedSerializer(BatchedSerializer):

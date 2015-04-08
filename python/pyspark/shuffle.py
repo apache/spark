@@ -25,7 +25,7 @@ import operator
 import random
 
 import pyspark.heapq3 as heapq
-from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattedValuesSerializer, \
+from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
 
 
@@ -372,8 +372,10 @@ class ExternalMerger(Merger):
 
     def _external_items(self):
         """ Return all partitioned items as iterator """
+        assert not self.data
         if any(self.pdata):
             self._spill()
+        # disable partitioning and spilling when merge combiners from disk
         self.pdata = []
 
         try:
@@ -546,7 +548,10 @@ class ExternalList(object):
 
     def __init__(self, values):
         self.values = values
-        self.disk_count = 0
+        if values and isinstance(values[0], list):
+            self.count = sum(len(i) for i in values)
+        else:
+            self.count = len(values)
         self._file = None
         self._ser = None
 
@@ -555,16 +560,16 @@ class ExternalList(object):
             self._file.flush()
             f = os.fdopen(os.dup(self._file.fileno()))
             f.seek(0)
-            bytes = f.read()
+            serialized = f.read()
         else:
-            bytes = ''
-        return self.values, self.disk_count, bytes
+            serialized = ''
+        return self.values, self.count, serialized
 
     def __setstate__(self, item):
-        self.values, self.disk_count, bytes = item
-        if bytes:
+        self.values, self.count, serialized = item
+        if serialized:
             self._open_file()
-            self._file.write(bytes)
+            self._file.write(serialized)
         else:
             self._file = None
             self._ser = None
@@ -583,10 +588,11 @@ class ExternalList(object):
             yield v
 
     def __len__(self):
-        return self.disk_count + len(self.values)
+        return self.count
 
     def append(self, value):
         self.values.append(value)
+        self.count += len(value) if isinstance(value, list) else 1
         # dump them into disk if the key is huge
         if len(self.values) >= self.LIMIT:
             self._spill()
@@ -610,7 +616,6 @@ class ExternalList(object):
         used_memory = get_used_memory()
         pos = self._file.tell()
         self._ser.dump_stream([self.values], self._file)
-        self.disk_count += len(self.values)
         self.values = []
         gc.collect()
         DiskBytesSpilled += self._file.tell() - pos
@@ -657,7 +662,10 @@ class ChainedIterable(object):
         self.iterators = iterators
 
     def __len__(self):
-        return sum(len(vs) for vs in self.iterators)
+        try:
+            return len(self.iterators)
+        except:
+            return sum(len(i) for i in self.iterators)
 
     def __iter__(self):
         return itertools.chain.from_iterable(self.iterators)
@@ -702,10 +710,10 @@ class ExternalGroupBy(ExternalMerger):
     """
     SORT_KEY_LIMIT = 1000
 
-    def _flatted_serializer(self):
+    def flattened_serializer(self):
         assert isinstance(self.serializer, BatchedSerializer)
         ser = self.serializer
-        return FlattedValuesSerializer(ser, 20)
+        return FlattenedValuesSerializer(ser, 20)
 
     def _object_size(self, obj):
         return len(obj)
@@ -734,7 +742,7 @@ class ExternalGroupBy(ExternalMerger):
             # sort them before dumping into disks
             self._sorted = len(self.data) < self.SORT_KEY_LIMIT
             if self._sorted:
-                self.serializer = self._flatted_serializer()
+                self.serializer = self.flattened_serializer()
                 for k in sorted(self.data.keys()):
                     h = self._partition(k)
                     self.serializer.dump_stream([(k, self.data[k])], streams[h])
@@ -802,7 +810,7 @@ class ExternalGroupBy(ExternalMerger):
         else:
             # Flatten the combined values, so it will not consume huge
             # memory during merging sort.
-            ser = self._flatted_serializer()
+            ser = self.flattened_serializer()
             sorter = ExternalSorter(self.memory_limit, ser)
             sorted_items = sorter.sorted(itertools.chain(*disk_items),
                                          key=operator.itemgetter(0))
