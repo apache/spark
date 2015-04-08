@@ -45,8 +45,17 @@ object HiveTypeCoercion {
         if (t1 == DecimalType.Unlimited || t2 == DecimalType.Unlimited) {
           Some(DecimalType.Unlimited)
         } else {
-          None
+          val (d1, d2) = (t1.asInstanceOf[DecimalType], t2.asInstanceOf[DecimalType])
+          val (p1, s1) = (d1.precision, d1.scale)
+          val (p2, s2) = (d2.precision, d2.scale)
+          Some(DecimalType((math.max(p1-s1, p2-s2) + math.max(s1, s2)), math.max(s1, s2)))
         }
+      } else if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[FloatType] ||
+          t2.isInstanceOf[DecimalType] && t1.isInstanceOf[FloatType]) {
+        Some(FloatType)
+      } else if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[DoubleType] ||
+          t2.isInstanceOf[DecimalType] && t1.isInstanceOf[DoubleType]) {
+        Some(DoubleType)
       } else {
         None
       }
