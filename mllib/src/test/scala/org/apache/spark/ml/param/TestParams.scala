@@ -28,7 +28,7 @@ class TestParams extends Params {
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
   def getInputCol: String = get(inputCol)
 
-  override def validate(paramMap: ParamMap) = {
+  override def validate(paramMap: ParamMap): Unit = {
     val m = this.paramMap ++ paramMap
     require(m(maxIter) >= 0)
     require(m.contains(inputCol))
