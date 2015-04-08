@@ -80,18 +80,23 @@ class HistoryServer(
         return
       }
 
-      val appId = parts(1)
+      val appKey =
+        if (parts.length == 3) {
+          s"${parts(1)}/${parts(2)}"
+        } else {
+          parts(1)
+        }
 
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
       try {
-        appCache.get(appId)
+        appCache.get(appKey)
         res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
       } catch {
         case e: Exception => e.getCause() match {
           case nsee: NoSuchElementException =>
-            val msg = <div class="row-fluid">Application {appId} not found.</div>
+            val msg = <div class="row-fluid">Application {appKey} not found.</div>
             res.setStatus(HttpServletResponse.SC_NOT_FOUND)
             UIUtils.basicSparkPage(msg, "Not Found").foreach(
               n => res.getWriter().write(n.toString))

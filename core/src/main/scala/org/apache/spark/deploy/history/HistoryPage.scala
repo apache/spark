@@ -160,6 +160,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   private def attemptRow(
+      renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
       isFirst: Boolean): Seq[Node] = {
@@ -178,22 +179,27 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       {
         if (isFirst) {
           if (info.attempts.size > 1) {
-            <td rowspan={info.attempts.size.toString}><a href={uiAddress}>{info.id}</a></td>
+            <td rowspan={info.attempts.size.toString}><a href={uiAddress}>{info.id}</a></td> ++
+            <td rowspan={info.attempts.size.toString}>{attempt.name}</td>
           } else {
-            <td><a href={uiAddress}>{info.id}</a></td>
+            <td><a href={uiAddress}>{info.id}</a></td> ++
+            <td>{attempt.name}</td>
           }
-        } else {
-          new xml.Comment("")
-        }
-      }
-      {
-        if (info.attempts.size > 1 && !attempt.attemptId.isEmpty) {
-          <td><a href={getAttemptURI(info.id, attempt)}>{attempt.attemptId}</a></td>
         } else {
           Nil
         }
       }
-      <td>{attempt.name}</td>
+      {
+        if (renderAttemptIdColumn) {
+          if (info.attempts.size > 1 && !attempt.attemptId.isEmpty) {
+            <td><a href={getAttemptURI(info.id, attempt)}>{attempt.attemptId}</a></td>
+          } else {
+            <td>&nbsp;</td>
+          }
+        } else {
+          Nil
+        }
+      }
       <td sorttable_customkey={attempt.startTime.toString}>{startTime}</td>
       <td sorttable_customkey={attempt.endTime.toString}>{endTime}</td>
       <td sorttable_customkey={(attempt.endTime - attempt.startTime).toString}>
@@ -204,12 +210,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(info, info.attempts.head, true)
+    attemptRow(false, info, info.attempts.head, true)
   }
 
   private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(info, info.attempts.head, true) ++
-      info.attempts.drop(1).flatMap(attemptRow(info, _, false))
+    attemptRow(true, info, info.attempts.head, true) ++
+      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
