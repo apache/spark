@@ -107,6 +107,9 @@ div.form-inline{
 body div.panel {
     padding: 0px;
 }
+.blur { 
+    filter:url(#blur-effect-1); 
+}
 
 .hll { background-color: #ffffcc }
 .c { color: #408080; font-style: italic } /* Comment */

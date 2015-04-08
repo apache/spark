@@ -852,6 +852,7 @@ class Airflow(BaseView):
     @wwwutils.gzipped
     def tree(self):
         dag_id = request.args.get('dag_id')
+        blur = request.args.get('blur') == 'true'
         dag = dagbag.dags[dag_id]
         root = request.args.get('root')
         if root:
@@ -935,13 +936,14 @@ class Airflow(BaseView):
 
         return self.render(
             'airflow/tree.html',
-            dag=dag, data=data)
+            dag=dag, data=data, blur=blur)
 
     @expose('/graph')
     @login_required
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
+        blur = request.args.get('blur') == 'true'
         arrange = request.args.get('arrange', "LR")
         if dag_id not in dagbag.dags:
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
@@ -1007,6 +1009,7 @@ class Airflow(BaseView):
             form=form,
             execution_date=dttm.isoformat(),
             arrange=arrange,
+            blur=blur,
             task_instances=json.dumps(task_instances, indent=2),
             tasks=json.dumps(tasks, indent=2),
             nodes=json.dumps(nodes, indent=2),
