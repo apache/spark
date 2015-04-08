@@ -15,25 +15,29 @@
  * limitations under the License.
  */
 
+package org.apache.spark.executor
 
-package org.apache.spark.scalastyle
+import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.util.Utils
 
-import java.util.regex.Pattern
+/**
+ * Driver -> Executor message to trigger a thread dump.
+ */
+private[spark] case object TriggerThreadDump
 
-import org.scalastyle.{PositionError, ScalariformChecker, ScalastyleError}
+/**
+ * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
+ */
+private[spark]
+class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
 
-import scalariform.lexer.Token
-import scalariform.parser.CompilationUnit
-
-class NonASCIICharacterChecker extends ScalariformChecker {
-  val errorKey: String = "non.ascii.character.disallowed"
-
-  override def verify(ast: CompilationUnit): List[ScalastyleError] = {
-    ast.tokens.filter(hasNonAsciiChars).map(x => PositionError(x.offset)).toList
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case TriggerThreadDump =>
+      context.reply(Utils.getThreadDump())
   }
 
-  private def hasNonAsciiChars(x: Token) =
-    x.rawText.trim.nonEmpty && !Pattern.compile( """\p{ASCII}+""", Pattern.DOTALL)
-    .matcher(x.text.trim).matches()
+}
 
+object ExecutorEndpoint {
+  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
 }
