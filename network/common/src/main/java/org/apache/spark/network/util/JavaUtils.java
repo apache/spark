@@ -22,6 +22,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
@@ -144,16 +146,18 @@ public class JavaUtils {
     
     try {
       String suffix = "";
-      for (String tail: timeSuffixes.keySet()) {
-        int charIdx = lower.length() - tail.length() - 1;
-        if (lower.endsWith(tail) && (charIdx >= 0 && Character.isDigit(lower.charAt(charIdx)))) {
-          suffix = tail;
-          break;
+      long val = -1;
+      Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
+      if (m.matches()) {
+        val = Long.parseLong(m.group(1));
+        if(m.groupCount() > 1) {
+          suffix = m.group(2);
         }
+      } else {
+        throw new NumberFormatException("Failed to parse time string.");
       }
       
-      return unit.convert(Long.parseLong(str.substring(0, str.length() - suffix.length())),
-        timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
+      return unit.convert(val, timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +

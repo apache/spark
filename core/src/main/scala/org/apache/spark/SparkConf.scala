@@ -174,6 +174,35 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).getOrElse(defaultValue)
   }
 
+  /** Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no 
+    * suffix is provided then seconds are assumed. 
+    */
+  def getTimeAsSec(key: String): Long = {
+    Utils.timeStringAsSec(getOption(key).getOrElse(throw new NoSuchElementException(key)))
+  }
+
+  /** Get a time parameter as seconds, falling back to a default if not set. If no 
+    * suffix is provided then seconds are assumed. 
+    */
+  def getTimeAsSec(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsSec(getOption(key).getOrElse(defaultValue))
+  }
+
+  /** Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no 
+    * suffix is provided then milliseconds are assumed. 
+    */
+  def getTimeAsMs(key: String): Long = {
+    Utils.timeStringAsMs(getOption(key).getOrElse(throw new NoSuchElementException(key)))
+  }
+
+  /** Get a time parameter as milliseconds, falling back to a default if not set. If no 
+    * suffix is provided then milliseconds are assumed. 
+    */
+  def getTimeAsMs(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsMs(getOption(key).getOrElse(defaultValue))
+  }
+  
+
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
     Option(settings.get(key))

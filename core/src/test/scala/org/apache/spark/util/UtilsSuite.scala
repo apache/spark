@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.lang.NumberFormatException
 import java.util.concurrent.TimeUnit
 
 import scala.util.Random
@@ -62,6 +63,30 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.timeStringAsUs("1min") === TimeUnit.MINUTES.toMicros(1))
     assert(Utils.timeStringAsUs("1h") === TimeUnit.HOURS.toMicros(1))
     assert(Utils.timeStringAsUs("1d") === TimeUnit.DAYS.toMicros(1))
+    
+    // Test invalid strings
+    try {
+      Utils.timeStringAsMs("This breaks 600s")
+      assert(false) // We should never reach this
+    } catch {
+      case e: NumberFormatException => assert(true)
+    }
+
+    // Test invalid strings
+    try {
+      Utils.timeStringAsMs("600s This breaks")
+      assert(false) // We should never reach this
+    } catch {
+      case e: NumberFormatException => assert(true)
+    }
+
+    // Test invalid strings
+    try {
+      Utils.timeStringAsMs("This 123s breaks")
+      assert(false) // We should never reach this
+    } catch {
+      case e: NumberFormatException => assert(true)
+    }
   }
   
   test("bytesToString") {

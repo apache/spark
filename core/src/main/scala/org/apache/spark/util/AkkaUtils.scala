@@ -20,7 +20,6 @@ package org.apache.spark.util
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.util.Try
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -66,8 +65,8 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-    val akkaTimeoutS = Utils.timeStringAsSec(conf.get("spark.akka.timeout",
-      conf.get("spark.network.timeout", "120s")))
+    val akkaTimeoutS = conf.getTimeAsSec("spark.akka.timeout",
+      conf.get("spark.network.timeout", "120s"))
     val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
@@ -79,10 +78,10 @@ private[spark] object AkkaUtils extends Logging {
 
     val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
-    val akkaHeartBeatPausesS = Utils.timeStringAsSec(conf.get("spark.akka.heartbeat.pauses", 
-      "6000s"))
+    val akkaHeartBeatPausesS = conf.getTimeAsSec("spark.akka.heartbeat.pauses", 
+      "6000s")
     val akkaHeartBeatIntervalS =
-      Utils.timeStringAsSec(conf.get("spark.akka.heartbeat.interval", "1000s"))
+      conf.getTimeAsSec("spark.akka.heartbeat.interval", "1000s")
 
     val secretKey = securityManager.getSecretKey()
     val isAuthOn = securityManager.isAuthenticationEnabled()

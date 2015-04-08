@@ -855,7 +855,7 @@ private[spark] class TaskSetManager(
       case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
       case _ => ""
     }
-    Utils.timeStringAsMs(conf.get(localityWaitKey, defaultWait))
+    conf.getTimeAsMs(localityWaitKey, defaultWait)
   }
 
   /**

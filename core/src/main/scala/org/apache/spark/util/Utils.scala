@@ -613,8 +613,8 @@ private[spark] object Utils extends Logging {
         }
         Utils.setupSecureURLConnection(uc, securityMgr)
 
-        val timeoutMs = Utils.timeStringAsSec(
-          conf.get("spark.files.fetchTimeout", "60s")).toInt * 1000
+        val timeoutMs = 
+          conf.getTimeAsSec("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
         uc.setReadTimeout(timeoutMs)
         uc.connect()
