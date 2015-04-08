@@ -26,8 +26,9 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
 
-  override def beforeAll() = {
+  override def beforeAll(): Unit = {
     TestHive.cacheTables = false
+    super.beforeAll()
   }
 
   createQueryTest(
