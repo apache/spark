@@ -87,8 +87,8 @@ sealed trait Matrix extends Serializable {
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
-  /** A human readable representation of the matrix with specific lines and width */
-  def toString(maxLines: Int, maxWidth: Int): String = toBreeze.toString(maxLines, maxWidth)
+  /** A human readable representation of the matrix with maximum lines and width */
+  def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
