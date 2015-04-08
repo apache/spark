@@ -40,6 +40,7 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
   override def serialize(obj: Any): Seq[Double] = {
+    println("ser " + obj)
     obj match {
       case p: ExamplePoint =>
         Seq(p.x, p.y)
@@ -47,6 +48,7 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   }
 
   override def deserialize(datum: Any): ExamplePoint = {
+    println("A " + datum)
     datum match {
       case values: Seq[_] =>
         val xy = values.asInstanceOf[Seq[Double]]

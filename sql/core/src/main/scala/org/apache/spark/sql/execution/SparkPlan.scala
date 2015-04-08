@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.{ScalaReflection, trees}
+import org.apache.spark.sql.catalyst.{ReflectionConverters, trees}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -83,8 +83,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   def executeCollect(): Array[Row] = {
     execute().mapPartitions { iter =>
-      val converters = ScalaReflection.createConvertersForStruct(schema)
-      iter.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+      val converters = ReflectionConverters.createScalaConvertersForStruct(schema)
+      iter.map(ReflectionConverters.convertRowWithConverters(_, schema, converters))
     }.collect()
   }
 
@@ -129,8 +129,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    val converters = ScalaReflection.createConvertersForStruct(schema)
-    buf.toArray.map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+    val converters = ReflectionConverters.createScalaConvertersForStruct(schema)
+    buf.toArray.map(ReflectionConverters.convertRowWithConverters(_, schema, converters))
   }
 
   protected def newProjection(

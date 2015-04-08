@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ReflectionConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
@@ -39,7 +39,9 @@ object RDDConversions {
         val bufferedIterator = iterator.buffered
         val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
         val schemaFields = schema.fields.toArray
-        val converters = schemaFields.map(f => ScalaReflection.createCatalystConverter(f.dataType))
+        val converters = schemaFields.map {
+          f => ReflectionConverters.createCatalystConverter(f.dataType)
+        }
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {

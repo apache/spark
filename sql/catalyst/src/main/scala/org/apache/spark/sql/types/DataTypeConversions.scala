@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ReflectionConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 
 
@@ -30,8 +30,8 @@ private[sql] object DataTypeConversions {
     val ar = new Array[Any](schema.length)
     var i = 0
     while (i < schema.length) {
-      ar(i) =
-        ScalaReflection.convertToCatalyst(product.productElement(i), schema.fields(i).dataType)
+      ar(i) = ReflectionConverters.convertToCatalyst(product.productElement(i),
+        schema.fields(i).dataType)
       i += 1
     }
     new GenericRowWithSchema(ar, schema)
@@ -63,12 +63,5 @@ private[sql] object DataTypeConversions {
       val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
       ISO8601GMT.parse(s)
     }
-  }
-
-  /** Converts Java objects to catalyst rows / types */
-  def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
-    case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
-    case (d: java.math.BigDecimal, _) => Decimal(d)
-    case (other, _) => other
   }
 }

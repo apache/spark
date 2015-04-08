@@ -21,7 +21,7 @@ import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ReflectionConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -140,8 +140,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   private def collectData(): Array[Row] = child.execute().map(_.copy()).takeOrdered(limit)(ord)
 
   override def executeCollect(): Array[Row] = {
-    val converters = ScalaReflection.createConvertersForStruct(this.schema)
-    collectData().map(ScalaReflection.convertRowToScalaWithConverters(_, schema, converters))
+    val converters = ReflectionConverters.createScalaConvertersForStruct(this.schema)
+    collectData().map(ReflectionConverters.convertRowWithConverters(_, schema, converters))
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
