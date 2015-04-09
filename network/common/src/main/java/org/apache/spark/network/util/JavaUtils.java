@@ -145,8 +145,8 @@ public class JavaUtils {
     String lower = str.toLowerCase().trim();
     
     try {
-      String suffix = "";
-      long val = -1;
+      String suffix;
+      long val;
       Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
       if (m.matches()) {
         val = Long.parseLong(m.group(1));
@@ -155,8 +155,13 @@ public class JavaUtils {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
       
-      return unit.convert(val, (suffix != null) && timeSuffixes.containsKey(suffix) ? 
-              timeSuffixes.get(suffix) : unit);
+      // Check for invalid suffixes
+      if(!timeSuffixes.containsKey(suffix) && suffix != null) {
+        throw new NumberFormatException("Invalid suffix: " + suffix);
+      }
+      
+      // If suffix is valid use that, otherwise none was provided and use the default passed
+      return unit.convert(val, timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +

@@ -80,6 +80,15 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     // Test invalid strings
     try {
+      Utils.timeStringAsMs("600ds")
+      assert(false) // We should never reach this
+    } catch {
+      case e: NumberFormatException => assert(true)
+    }
+
+
+    // Test invalid strings
+    try {
       Utils.timeStringAsMs("600s This breaks")
       assert(false) // We should never reach this
     } catch {
