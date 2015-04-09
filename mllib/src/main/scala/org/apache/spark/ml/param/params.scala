@@ -25,7 +25,6 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * :: AlphaComponent ::
@@ -130,9 +129,24 @@ trait Params extends Identifiable with Serializable {
   def validate(): Unit = validate(ParamMap.empty)
 
   /**
+   * Explain a param and optionally its default value and the user-supplied value.
+   */
+  def explain(param: Param[_]): String = {
+    shouldOwn(param)
+    val valueStr = if (isDefined(param)) {
+      val defaultValueStr = getDefault(param).map("default: " + _)
+      val currentValueStr = get(param).map("current: " + _)
+      (defaultValueStr ++ currentValueStr).flatten.mkString("(", ", ", ")")
+    } else {
+      "(undefined)"
+    }
+    s"${param.name}: ${param.doc} $valueStr"
+  }
+
+  /**
    * Returns the documentation of all params.
    */
-  def explainParams(): String = params.mkString("\n")
+  def explainParams(): String = params.map(explain).mkString("\n")
 
   /** Checks whether a param is explicitly set. */
   def isSet(param: Param[_]): Boolean = {
@@ -173,7 +187,17 @@ trait Params extends Identifiable with Serializable {
    * Optionally returns the user-supplied value of a param.
    */
   protected final def get[T](param: Param[T]): Option[T] = {
+    shouldOwn(param)
     paramMap.get(param)
+  }
+
+  /**
+   * Clears the user-supplied value for the input param.
+   */
+  protected final def clear(param: Param[_]): this.type = {
+    shouldOwn(param)
+    paramMap.remove(param)
+    this
   }
 
   /**
@@ -228,8 +252,6 @@ trait Params extends Identifiable with Serializable {
   protected final def extractParamMap(extraParamMap: ParamMap = ParamMap.empty): ParamMap = {
     defaultParamMap ++ paramMap ++ extraParamMap
   }
-
-
 
   /** Internal param map for user-supplied values. */
   private val paramMap: ParamMap = ParamMap.empty
@@ -332,6 +354,13 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
    */
   def contains(param: Param[_]): Boolean = {
     map.contains(param.asInstanceOf[Param[Any]])
+  }
+
+  /**
+   * Removes a key from this map and returns its value associated previously as an option.
+   */
+  def remove[T](param: Param[T]): Option[T] = {
+    map.remove(param.asInstanceOf[Param[Any]]).asInstanceOf[Option[T]]
   }
 
   /**
