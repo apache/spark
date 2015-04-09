@@ -154,17 +154,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
   }
 
-  private def getAttemptURI(appId: String, attemptInfo: ApplicationAttemptInfo): String = {
-    val attemptSuffix = if (!attemptInfo.attemptId.isEmpty) s"/${attemptInfo.attemptId}" else ""
-    s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
-  }
-
   private def attemptRow(
       renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
       isFirst: Boolean): Seq[Node] = {
-    val uiAddress = getAttemptURI(info.id, attempt)
+    val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
     val duration =
@@ -191,7 +186,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && !attempt.attemptId.isEmpty) {
-            <td><a href={getAttemptURI(info.id, attempt)}>{attempt.attemptId}</a></td>
+            <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
+              {attempt.attemptId}</a></td>
           } else {
             <td>&nbsp;</td>
           }

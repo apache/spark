@@ -225,9 +225,10 @@ private[spark] class ApplicationMaster(
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
+    val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
     allocator = client.register(yarnConf,

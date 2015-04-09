@@ -224,4 +224,9 @@ object HistoryServer extends Logging {
     }
   }
 
+  private[history] def getAttemptURI(appId: String, attemptId: String): String = {
+    val attemptSuffix = if (!attemptId.isEmpty) s"/${attemptId}" else ""
+    s"${HistoryServer.UI_PATH_PREFIX}/${appId}${attemptSuffix}"
+  }
+
 }
