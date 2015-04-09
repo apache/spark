@@ -659,7 +659,7 @@ class GroupByKey(object):
     """
 
     def __init__(self, iterator):
-        self.iterator = iterator
+        self.iterator = iter(iterator)
         self.next_item = None
 
     def __iter__(self):
