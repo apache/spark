@@ -56,7 +56,8 @@ private[spark] class EventLoggingListener(
   import EventLoggingListener._
 
   def this(appId: String, appAttemptId : String, logBaseDir: URI, sparkConf: SparkConf) =
-    this(appId, appAttemptId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+    this(appId, appAttemptId, logBaseDir, sparkConf,
+      SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
