@@ -64,6 +64,10 @@ object MimaExcludes {
             // SPARK-6492 Fix deadlock in SparkContext.stop()
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$" +
                 "apache$spark$SparkContext$$SPARK_CONTEXT_CONSTRUCTOR_LOCK")
+		  ) ++ Seq(
+            // SPARK-5205
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskInterruptionListener")
           )
 
         case v if v.startsWith("1.3") =>

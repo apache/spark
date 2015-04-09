@@ -28,11 +28,12 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{TaskContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.scheduler.{Task, TaskLocation}
 import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
@@ -126,6 +127,44 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       // The thread that started the executor should complete
       // as stop() stops everything
       executingThread.join()
+    }
+  }
+
+  test("check the state of `Receiver` and `ReceiverSupervisor` when receivers are killed") {
+    val sparkConf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName(framework)
+    val batchDuration = Milliseconds(1000)
+    withStreamingContext(new StreamingContext(sparkConf, batchDuration)) { ssc =>
+      val receiver = new FakeReceiver
+      val executor = new FakeReceiverSupervisor(receiver)
+      val task = new FakeReceiverTask(0, executor)
+
+      new Thread("Receiver Task") {
+        override def run(): Unit = {
+          task.run(0, 0)
+        }
+      }.start()
+
+      eventually(timeout(500 millis), interval(100 millis)) {
+        // Verify that receiver was started
+        assert(receiver.onStartCalled)
+        assert(executor.isReceiverStarted)
+        assert(receiver.isStarted)
+        assert(!receiver.isStopped())
+        assert(receiver.otherThread.isAlive)
+      }
+
+      task.kill(false)
+
+      eventually(timeout(500 millis), interval(100 millis)) {
+        // Verify that receiver was stopped
+        assert(receiver.onStopCalled)
+        assert(executor.isReceiverStopped)
+        assert(receiver.isStopped)
+        assert(!receiver.isStarted())
+        assert(!receiver.otherThread.isAlive)
+      }
     }
   }
 
@@ -292,6 +331,27 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       assert(sortedAllLogFiles1.takeRight(1).forall(leftLogFiles1.contains))
       assert(sortedAllLogFiles2.takeRight(3).forall(leftLogFiles2.contains))
     }
+  }
+
+  /**
+   * An implementation of Task running a NetworkReceiver used for testing whether
+   * we can start/stop receiver properly.
+   */
+  class FakeReceiverTask(
+    stageId: Int,
+    executor: FakeReceiverSupervisor,
+    prefLocs: Seq[TaskLocation] = Nil) extends Task[Unit](stageId, 0) {
+    override def runTask(context: TaskContext): Unit = {
+      context.addTaskInterruptionListener { context =>
+        if (context.isInterrupted()) {
+          executor.stop("Receiver was killed by user.", None)
+        }
+      }
+      executor.start()
+      executor.awaitTermination()
+    }
+
+    override def preferredLocations: Seq[TaskLocation] = prefLocs
   }
 
   /**

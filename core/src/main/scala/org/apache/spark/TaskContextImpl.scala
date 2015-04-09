@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
-
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.util.{TaskInterruptionListener, TaskInterruptionListenerException, TaskCompletionListener, TaskCompletionListenerException}
 
 private[spark] class TaskContextImpl(
     val stageId: Int,
@@ -34,6 +35,9 @@ private[spark] class TaskContextImpl(
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId(): Long = taskAttemptId
+
+  // List of callback functions to execute when interrupt the task.
+  @transient private val onInterruptionCallbacks = new ArrayBuffer[TaskInterruptionListener]
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -63,6 +67,18 @@ private[spark] class TaskContextImpl(
     }
   }
 
+  override def addTaskInterruptionListener(listener: TaskInterruptionListener): this.type = {
+    onInterruptionCallbacks += listener
+    this
+  }
+
+  override def addTaskInterruptionListener(f: TaskContext => Unit): this.type = {
+    onInterruptionCallbacks += new TaskInterruptionListener {
+      override def onTaskInterruption(context: TaskContext): Unit = f(context)
+    }
+    this
+  }
+
   /** Marks the task as completed and triggers the listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
@@ -72,7 +88,7 @@ private[spark] class TaskContextImpl(
       try {
         listener.onTaskCompletion(this)
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           errorMsgs += e.getMessage
           logError("Error in TaskCompletionListener", e)
       }
@@ -82,9 +98,23 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task for interruption, i.e. cancellation. */
+  /** Marks the task as interrupted and triggers the listeners. */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process interruption callbacks in the reverse order of registration
+    onInterruptionCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskInterruption(this)
+      } catch {
+        case NonFatal(e) =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskInterruptionListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskInterruptionListenerException(errorMsgs)
+    }
   }
 
   override def isCompleted(): Boolean = completed

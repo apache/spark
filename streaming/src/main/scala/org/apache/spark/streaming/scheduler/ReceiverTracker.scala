@@ -20,10 +20,11 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
+import scala.Some
 
 import akka.actor._
 
-import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
 
@@ -286,7 +287,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiver = (iterator: Iterator[Receiver[_]]) => {
+      val startReceiver = (context: TaskContext, iterator: Iterator[Receiver[_]]) => {
         if (!iterator.hasNext) {
           throw new SparkException(
             "Could not start receiver as object not found.")
@@ -294,6 +295,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val receiver = iterator.next()
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+
+        // To ensure that receivers are stopped properly when their tasks / stages are killed,
+        // register a callback to stop the receiver when its task is interrupted.
+        // See SPARK-5205 for more details.
+        context.addTaskInterruptionListener { context => {
+          if (context.isInterrupted()) {
+            supervisor.stop("Receiver was killed by user.", None)
+          }
+        }}
         supervisor.start()
         supervisor.awaitTermination()
       }
