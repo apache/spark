@@ -33,7 +33,7 @@ pipeline in Python. Run with:
 
 if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
-    sqlCtx = SQLContext(sc)
+    sqlContext = SQLContext(sc)
 
     # Prepare training documents, which are labeled.
     LabeledDocument = Row("id", "text", "label")

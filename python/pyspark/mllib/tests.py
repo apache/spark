@@ -357,6 +357,19 @@ class StatTests(PySparkTestCase):
         summary = Statistics.colStats(data)
         self.assertEqual(10, summary.count())
 
+    def test_col_norms(self):
+        data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, len(summary.normL1()))
+        self.assertEqual(10, len(summary.normL2()))
+
+        data2 = self.sc.parallelize(xrange(10)).map(lambda x: Vectors.dense(x))
+        summary2 = Statistics.colStats(data2)
+        self.assertEqual(array([45.0]), summary2.normL1())
+        import math
+        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, xrange(10))))
+        self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
+
 
 class VectorUDTTests(PySparkTestCase):
 

@@ -45,7 +45,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
         result
       },
-      Range(0, self.partitions.size),
+      Range(0, self.partitions.length),
       (index: Int, data: Long) => totalCount.addAndGet(data),
       totalCount.get())
   }
@@ -54,8 +54,8 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = {
-    val results = new Array[Array[T]](self.partitions.size)
-    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.size),
+    val results = new Array[Array[T]](self.partitions.length)
+    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),
       (index, data) => results(index) = data, results.flatten.toSeq)
   }
 
@@ -111,7 +111,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    */
   def foreachAsync(f: T => Unit): FutureAction[Unit] = {
     val cleanF = self.context.clean(f)
-    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.size),
+    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.length),
       (index, data) => Unit, Unit)
   }
 
@@ -119,7 +119,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartitionAsync(f: Iterator[T] => Unit): FutureAction[Unit] = {
-    self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.size),
+    self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
       (index, data) => Unit, Unit)
   }
 }

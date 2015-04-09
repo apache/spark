@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.sql.{Timestamp, Date}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -35,10 +36,10 @@ class SimpleScanSource extends RelationProvider {
 case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
   extends BaseRelation with TableScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
+  override def buildScan(): RDD[Row] = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
@@ -57,9 +58,9 @@ case class AllDataTypesScan(
   extends BaseRelation
   with TableScan {
 
-  override def schema = userSpecifiedSchema
+  override def schema: StructType = userSpecifiedSchema
 
-  override def buildScan() = {
+  override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",

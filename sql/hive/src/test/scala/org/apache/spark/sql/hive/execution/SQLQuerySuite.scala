@@ -422,7 +422,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("resolve udtf with single alias") {
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
@@ -435,7 +435,7 @@ class SQLQuerySuite extends QueryTest {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
     setConf("spark.sql.hive.convertCTAS", "false")
