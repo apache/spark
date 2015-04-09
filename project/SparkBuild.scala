@@ -119,7 +119,7 @@ object SparkBuild extends PomBuild {
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
-    javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
+    javaHome   := sys.props.get("java.home").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -426,8 +426,10 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
-      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
+    envVars in Test ++= Map(
+      "SPARK_DIST_CLASSPATH" -> 
+        (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
+      "JAVA_HOME" -> sys.props("java.home")),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
