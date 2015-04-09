@@ -28,7 +28,7 @@ class ExecutorDebugPortSuite extends FunSuite with LocalSparkContext {
   /** Length of time to wait while draining listener events. */
   private val WAIT_TIMEOUT_MILLIS = 10000
 
-  test("verify that correct log urls get propagated from workers") {
+  test("verify that debug port is opened when spark.executor.jdwp.enabled is true") {
     try {
       val conf = new SparkConf()
         .set("spark.executor.jdwp.enabled", "true")
@@ -38,15 +38,23 @@ class ExecutorDebugPortSuite extends FunSuite with LocalSparkContext {
       sc.parallelize(1 to 10, 10).collect
       val url = sc.ui.get.appUIAddress.stripSuffix("/") + "/executors"
       val html = Source.fromURL(url).mkString
-      println(html)
-      /*      listener.addedExecutorInfos.values.foreach { info =>
-              assert(info.logUrlMap.nonEmpty)
-              // Browse to each URL to check that it's valid
-              info.logUrlMap.foreach { case (logType, logUrl) =>
-                val html = Source.fromURL(logUrl).mkString
-                assert(html.contains(s"$logType log page"))
-              }
-            }*/
+      assert(html.contains("Debug Port"))
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("verify that debug port is not opened when spark.executor.jdwp.enabled is false") {
+    try {
+      val conf = new SparkConf()
+        .set("spark.executor.jdwp.enabled", "false")
+        .set("spark.ui.enabled", "true")
+        .set("spark.ui.port", "0")
+      sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+      sc.parallelize(1 to 10, 10).collect
+      val url = sc.ui.get.appUIAddress.stripSuffix("/") + "/executors"
+      val html = Source.fromURL(url).mkString
+      assert(!html.contains("Debug Port"))
     } finally {
       sc.stop()
     }
