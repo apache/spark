@@ -24,29 +24,43 @@ __all__ = ['FPGrowth', 'FPGrowthModel']
 @inherit_doc
 class FPGrowthModel(JavaModelWrapper):
 
-    """A FP-Growth model for mining frequent itemsets using the Parallel FP-Growth algorithm.
+    """
+    .. note:: Experimental
+
+    A FP-Growth model for mining frequent itemsets
+    using the Parallel FP-Growth algorithm.
 
     >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = FPGrowth.train(rdd, 0.6, 2)
-    >>> result = model.freqItemsets().collect()
     >>> sorted(model.freqItemsets().collect())
     [([u'a'], 4), ([u'c'], 3), ([u'c', u'a'], 3)]
     """
+
     def freqItemsets(self):
+        """
+        Get the frequent itemsets of this model
+        """
         return self.call("getFreqItemsets")
 
 
 class FPGrowth(object):
+    """
+    .. note:: Experimental
+
+    A parallel FP-growth algorithm to mine frequent itemsets.
+    """
 
     @classmethod
     def train(cls, data, minSupport=0.3, numPartitions=-1):
         """
         Computes an FP-Growth model that contains frequent itemsets.
-        :param data:            The input data set, each element contains a transaction.
-        :param minSupport:      The minimal support level (default: `0.3`).
-        :param numPartitions:   The number of partitions used by parallel FP-growth
-                                (default: same as input data).
+        :param data:            The input data set, each element
+                                contains a transaction.
+        :param minSupport:      The minimal support level
+                                (default: `0.3`).
+        :param numPartitions:   The number of partitions used by parallel
+                                FP-growth (default: same as input data).
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
