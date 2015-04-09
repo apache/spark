@@ -83,7 +83,8 @@ options for deployment:
 
 * [Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
 * [Spark Java API (Javadoc)](api/java/index.html)
-* [Spark Python API (Epydoc)](api/python/index.html)
+* [Spark Python API (Sphinx)](api/python/index.html)
+* [Spark R API (Roxygen2)](api/R/index.html)
 
 **Deployment Guides:**
 

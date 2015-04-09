@@ -24,8 +24,8 @@
   library(SparkR)
   sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
   assign("sc", sc, envir=.GlobalEnv)
-  sqlCtx <- sparkRSQL.init(sc)
-  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
+  sqlContext <- sparkRSQL.init(sc)
+  assign("sqlContext", sqlContext, envir=.GlobalEnv)
   cat("\n Welcome to SparkR!")
-  cat("\n Spark context is available as sc, SQL context is available as sqlCtx\n")
+  cat("\n Spark context is available as sc, SQL context is available as sqlContext\n")
 }

@@ -313,7 +313,7 @@ setMethod("groupByKey",
 #' @rdname reduceByKey
 #' @aliases reduceByKey,RDD,integer-method
 setMethod("reduceByKey",
-          signature(x = "RDD", combineFunc = "ANY", numPartitions = "integer"),
+          signature(x = "RDD", combineFunc = "ANY", numPartitions = "numeric"),
           function(x, combineFunc, numPartitions) {
             reduceVals <- function(part) {
               vals <- new.env()
@@ -327,7 +327,7 @@ setMethod("reduceByKey",
               convertEnvsToList(keys, vals)
             }
             locallyReduced <- lapplyPartition(x, reduceVals)
-            shuffled <- partitionBy(locallyReduced, numPartitions)
+            shuffled <- partitionBy(locallyReduced, as.integer(numPartitions))
             lapplyPartition(shuffled, reduceVals)
           })
 
