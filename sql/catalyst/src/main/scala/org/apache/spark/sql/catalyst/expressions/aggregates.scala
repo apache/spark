@@ -265,7 +265,7 @@ private[sql] case object HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
   override def deserialize(datum: Any): HyperLogLog =
     HyperLogLog.Builder.build(datum.asInstanceOf[Array[Byte]])
 
-  override def userClass = classOf[HyperLogLog]
+  override def userClass: Class[HyperLogLog] = classOf[HyperLogLog]
 }
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)

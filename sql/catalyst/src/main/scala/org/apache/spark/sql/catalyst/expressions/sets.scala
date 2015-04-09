@@ -42,7 +42,7 @@ private[sql] class OpenHashSetUDT(
     set
   }
 
-  override def userClass = classOf[OpenHashSet[Any]]
+  override def userClass: Class[OpenHashSet[Any]] = classOf[OpenHashSet[Any]]
 
   private[spark] override def asNullable: OpenHashSetUDT = this
 }
@@ -55,7 +55,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 
   override def nullable: Boolean = false
 
-  override def dataType = new OpenHashSetUDT(elementType)
+  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(elementType)
 
   override def eval(input: Row): Any = {
     new OpenHashSet[Any]()
@@ -75,7 +75,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 
   override def nullable: Boolean = set.nullable
 
-  override def dataType = set.dataType.asInstanceOf[OpenHashSetUDT]
+  override def dataType: OpenHashSetUDT = set.dataType.asInstanceOf[OpenHashSetUDT]
 
   override def eval(input: Row): Any = {
     val itemEval = item.eval(input)
@@ -105,7 +105,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def dataType = left.dataType.asInstanceOf[OpenHashSetUDT]
+  override def dataType: OpenHashSetUDT = left.dataType.asInstanceOf[OpenHashSetUDT]
 
   override def symbol: String = "++="
 
