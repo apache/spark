@@ -191,7 +191,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           try {
             getModificationTime(entry).map { time =>
               newLastModifiedTime = math.max(newLastModifiedTime, time)
-              time >= lastModifiedTime
+              time > lastModifiedTime
             }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
