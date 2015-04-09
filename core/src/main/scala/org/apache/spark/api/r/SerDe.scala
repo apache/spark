@@ -100,8 +100,7 @@ private[spark] object SerDe {
   }
 
   def readDate(in: DataInputStream): Date = {
-    val d = in.readInt()
-    new Date(d.toLong * 24 * 3600 * 1000)
+    Date.valueOf(readString(in))
   }
 
   def readTime(in: DataInputStream): Time = {
@@ -277,7 +276,7 @@ private[spark] object SerDe {
   }
 
   def writeDate(out: DataOutputStream, value: Date): Unit = {
-    out.writeInt((value.getTime / 1000 / 3600 / 24).toInt)
+    writeString(out, value.toString)
   }
 
   def writeTime(out: DataOutputStream, value: Time): Unit = {

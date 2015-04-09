@@ -76,7 +76,7 @@ readType <- function(con) {
 }
 
 readDate <- function(con) {
-  as.Date(readInt(con), origin = "1970-01-01")
+  as.Date(readString(con))
 }
 
 readTime <- function(con) {
