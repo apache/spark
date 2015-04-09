@@ -356,4 +356,33 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       }
     }
   }
+
+  test("debug port numbers for each executor should be appeared when spark.executor.jdwp.enabled is true") {
+    def getSparkContext(jdwpEnabled: Boolean): SparkContext = {
+      val conf = new SparkConf()
+        .setMaster("local-cluster[2,1,512]")
+        .setAppName("test")
+        .set("spark.ui.enabled", "true")
+        .set("spark.executor.jdwp.enabled", jdwpEnabled.toString)
+      new SparkContext(conf)
+    }
+
+    withSpark(getSparkContext(jdwpEnabled = true)) { sc =>
+      sc.parallelize(1 to 10, 10).collect
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/executors")
+        val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
+        tableHeaders should contain("Debug Port")
+      }
+    }
+
+    withSpark(getSparkContext(jdwpEnabled = false)) { sc =>
+      sc.parallelize(1 to 10, 10).collect
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/executors")
+        val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
+        tableHeaders should not contain("Debug Port")
+      }
+    }
+  }
 }
