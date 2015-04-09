@@ -46,17 +46,54 @@ public class WrappedLargeByteBufferSuite {
 
   @Test
   public void asByteBuffer() throws BufferTooLargeException {
-    //test that it works when buffer is small, and the right error when buffer is big
+    // test that it works when buffer is small
     LargeByteBuffer buf = LargeByteBufferHelper.asLargeByteBuffer(new byte[100]);
     ByteBuffer nioBuf = buf.asByteBuffer();
+    assertEquals(0, nioBuf.position());
     assertEquals(100, nioBuf.remaining());
+    // if we move the large byte buffer, the nio.ByteBuffer we have doesn't change
+    buf.skip(10);
+    assertEquals(0, nioBuf.position());
+    assertEquals(100, nioBuf.remaining());
+    // if we grab another byte buffer while the large byte buffer's position != 0,
+    // the returned buffer still has position 0
+    ByteBuffer nioBuf2 = buf.asByteBuffer();
+    assertEquals(0, nioBuf2.position());
+    assertEquals(100, nioBuf2.remaining());
+    // the two byte buffers we grabbed are independent
+    nioBuf2.position(20);
+    assertEquals(0, nioBuf.position());
+    assertEquals(100, nioBuf.remaining());
+    assertEquals(20, nioBuf2.position());
+    assertEquals(80, nioBuf2.remaining());
 
+    // merges the data from multiple buffers
     ByteBuffer[] bufs = new ByteBuffer[2];
     for (int i = 0; i < 2; i++) {
-      bufs[i] = ByteBuffer.allocate(10);
+      bufs[i] = ByteBuffer.allocate(250);
+      bufs[i].get(data, i * 250, 250);
+      bufs[i].rewind();
     }
+    WrappedLargeByteBuffer wrappedBB = new WrappedLargeByteBuffer(bufs);
+    ByteBuffer mergedBuffer = wrappedBB.asByteBuffer(500);
+    assertConsistent(wrappedBB);
+    assertEquals(0, mergedBuffer.position());
+    byte[] copyData = new byte[500];
+    mergedBuffer.get(copyData);
+    mergedBuffer.rewind();
+    assertArrayEquals(data, copyData);
+    wrappedBB.skip(20);
+    assertConsistent(wrappedBB);
+    ByteBuffer mergedBuffer2 = wrappedBB.asByteBuffer(500);
+    assertEquals(0, mergedBuffer2.position());
+    mergedBuffer2.get(copyData);
+    assertArrayEquals(data, copyData);
+    assertEquals(0, mergedBuffer.position());
+    assertEquals(20, wrappedBB.position());
+
+    // the right error when the buffer is too big
     try {
-      new WrappedLargeByteBuffer(bufs).asByteBuffer();
+      wrappedBB.asByteBuffer(499);
       fail("expected an exception");
     } catch (BufferTooLargeException btl) {
     }
@@ -102,21 +139,6 @@ public class WrappedLargeByteBufferSuite {
       assertConsistent(b);
       b.skip(position);
       assertConsistent(b);
-    }
-  }
-
-  private void assertConsistent(WrappedLargeByteBuffer buffer) {
-    long pos = buffer.position();
-    long bufferStartPos = 0;
-    for (ByteBuffer p: buffer.nioBuffers()) {
-      if (pos < bufferStartPos) {
-        assertEquals(0, p.position());
-      } else if (pos < bufferStartPos + p.capacity()) {
-        assertEquals(pos - bufferStartPos, p.position());
-      } else {
-        assertEquals(p.capacity(), p.position());
-      }
-      bufferStartPos += p.capacity();
     }
   }
 
@@ -218,7 +240,32 @@ public class WrappedLargeByteBufferSuite {
       fail("expected exception");
     } catch (IllegalArgumentException ex) {
     }
+  }
 
+  @Test(expected=IllegalArgumentException.class)
+  public void testRequireAtLeastOneBuffer() {
+    new WrappedLargeByteBuffer( new ByteBuffer[0]);
+  }
+
+
+  private void assertConsistent(WrappedLargeByteBuffer buffer) {
+    long pos = buffer.position();
+    long bufferStartPos = 0;
+    if (buffer.currentBufferIdx < buffer.underlying.length) {
+      assertEquals(buffer.currentBuffer, buffer.underlying[buffer.currentBufferIdx]);
+    } else {
+      assertNull(buffer.currentBuffer);
+    }
+    for (ByteBuffer p: buffer.nioBuffers()) {
+      if (pos < bufferStartPos) {
+        assertEquals(0, p.position());
+      } else if (pos < bufferStartPos + p.capacity()) {
+        assertEquals(pos - bufferStartPos, p.position());
+      } else {
+        assertEquals(p.capacity(), p.position());
+      }
+      bufferStartPos += p.capacity();
+    }
   }
 
   private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {
@@ -228,6 +275,5 @@ public class WrappedLargeByteBufferSuite {
     System.arraycopy(act, actOffset, actCopy, 0, length);
     assertArrayEquals(expCopy, actCopy);
   }
-
 
 }

@@ -16,6 +16,7 @@
 */
 package org.apache.spark.network.buffer;
 
+import com.google.common.annotations.VisibleForTesting;
 import sun.nio.ch.DirectBuffer;
 
 import java.io.IOException;
@@ -28,53 +29,36 @@ import java.util.List;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
-  //only public for tests
+  @VisibleForTesting
   public final ByteBuffer[] underlying;
 
   private final long size;
   private long _pos;
-  private int currentBufferIdx;
-  private ByteBuffer currentBuffer;
+  @VisibleForTesting
+  int currentBufferIdx;
+  @VisibleForTesting
+  ByteBuffer currentBuffer;
 
 
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
-    this(underlying, findExpectedInitialPosition(underlying));
-  }
-
-  private static long findExpectedInitialPosition(ByteBuffer[] bufs) {
-    long sum = 0L;
-    for (ByteBuffer b: bufs) {
-      if (b.position() > 0) {
-        // this could still lead to a mix of positions half-way through buffers that
-        // would be inconsistent -- but we'll discover that in the constructor checks
-        sum += b.position();
-      } else {
-        break;
-      }
+    if (underlying.length == 0) {
+      throw new IllegalArgumentException("must wrap at least one ByteBuffer");
     }
-    return sum;
-  }
-
-  private WrappedLargeByteBuffer(ByteBuffer[] underlying, long initialPosition) {
     this.underlying = underlying;
     long sum = 0L;
+    boolean startFound = false;
+    long initialPosition = -1;
     for (int i = 0; i < underlying.length; i++) {
       ByteBuffer b = underlying[i];
-      long nextSum = sum + b.capacity();
-      int expectedPosition;
-      if (nextSum < initialPosition) {
-        expectedPosition = b.capacity();
-      } else if (sum > initialPosition) {
-        expectedPosition = 0;
-      } else {
-        expectedPosition = (int) (initialPosition - sum);
+      if (startFound) {
+        if (b.position() != 0) {
+          throw new IllegalArgumentException("ByteBuffers have inconsistent positions");
+        }
+      } else if (b.position() != b.capacity()) {
+        startFound = true;
+        initialPosition = sum + b.position();
       }
-      if (b.position() != expectedPosition) {
-        throw new IllegalArgumentException("ByteBuffer[" + i + "]:" + b + " was expected to have" +
-          " position = " + expectedPosition + " to be consistent with the overall " +
-          "initialPosition = " + initialPosition);
-      }
-      sum = nextSum;
+      sum += b.capacity();
     }
     _pos = initialPosition;
     currentBufferIdx = 0;
@@ -84,8 +68,9 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public void get(byte[] dest, int offset, int length) {
-    if (length > remaining())
+    if (length > remaining()) {
       throw new BufferUnderflowException();
+    }
     int moved = 0;
     while (moved < length) {
       int toRead = Math.min(length - moved, currentBuffer.remaining());
@@ -117,7 +102,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       ByteBuffer b = underlying[i];
       dataCopy[i] = ByteBuffer.allocate(b.capacity());
       int originalPosition = b.position();
-      b.position(0);
+      b.rewind();
       dataCopy[i].put(b);
       dataCopy[i].position(0);
       b.position(originalPosition);
@@ -193,7 +178,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     for (int i = 0; i < underlying.length; i++) {
       duplicates[i] = underlying[i].duplicate();
     }
-    return new WrappedLargeByteBuffer(duplicates, _pos);
+    return new WrappedLargeByteBuffer(duplicates);
   }
 
   @Override
@@ -216,13 +201,29 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public ByteBuffer asByteBuffer() throws BufferTooLargeException {
-    if (underlying.length > 1) {
-      throw new BufferTooLargeException(size());
-    }
-    return underlying[0];
+    return asByteBuffer(LargeByteBufferHelper.MAX_CHUNK);
   }
 
-  // only needed for tests
+  @VisibleForTesting
+  ByteBuffer asByteBuffer(int maxChunkSize) throws BufferTooLargeException {
+    if (underlying.length == 1) {
+      ByteBuffer b = underlying[0].duplicate();
+      b.rewind();
+      return b;
+    } else if (size() > maxChunkSize) {
+      throw new BufferTooLargeException(size(), maxChunkSize);
+    } else {
+      byte[] merged = new byte[(int) size()];
+      long initialPosition = position();
+      rewind();
+      get(merged, 0, merged.length);
+      rewind();
+      skip(initialPosition);
+      return ByteBuffer.wrap(merged);
+    }
+  }
+
+  @VisibleForTesting
   public List<ByteBuffer> nioBuffers() {
     return Arrays.asList(underlying);
   }
@@ -234,7 +235,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
    * unfortunately no standard API to do this.
    */
   private static void dispose(ByteBuffer buffer) {
-    if (buffer != null && buffer instanceof MappedByteBuffer) {
+    if (buffer != null && buffer instanceof DirectBuffer) {
       DirectBuffer db = (DirectBuffer) buffer;
       if (db.cleaner() != null) {
         db.cleaner().clean();

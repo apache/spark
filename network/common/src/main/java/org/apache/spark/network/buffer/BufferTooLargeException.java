@@ -21,12 +21,14 @@ import java.io.IOException;
 public class BufferTooLargeException extends IOException {
   public final long actualSize;
   public final long extra;
+  public final long maxSize;
 
-  public BufferTooLargeException(long actualSize) {
-    super("LargeByteBuffer is too large to convert.  Size: " + actualSize + "; Size Limit: "
-      + LargeByteBufferHelper.MAX_CHUNK + " (" +
-      (actualSize - LargeByteBufferHelper.MAX_CHUNK) + " too big)");
-    this.extra = actualSize - LargeByteBufferHelper.MAX_CHUNK;
+  public BufferTooLargeException(long actualSize, long maxSize) {
+    super(String.format("LargeByteBuffer is too large to convert.  Size: %d; Size Limit: %d (%d " +
+      "too big)", actualSize, maxSize,
+      actualSize - maxSize));
+    this.extra = actualSize - maxSize;
     this.actualSize = actualSize;
+    this.maxSize = maxSize;
   }
 }

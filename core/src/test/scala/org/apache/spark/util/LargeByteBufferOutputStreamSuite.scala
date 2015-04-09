@@ -53,7 +53,7 @@ class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
     Random.nextBytes(bytes)
     out.write(bytes)
 
-    (10 to 100 by 10).foreach{chunkSize =>
+    (10 to 100 by 10).foreach { chunkSize =>
       val buffer = out.largeBuffer(chunkSize).asInstanceOf[WrappedLargeByteBuffer]
       buffer.position() should be (0)
       buffer.size() should be (100)

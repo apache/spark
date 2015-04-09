@@ -29,15 +29,12 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
 
   private[util] val output = new ByteArrayChunkOutputStream(chunkSize)
 
-  private var _pos = 0
-
   override def write(b: Int): Unit = {
     output.write(b)
   }
 
   override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
     output.write(bytes, offs, len)
-    _pos += len
   }
 
   def largeBuffer: LargeByteBuffer = {
@@ -51,17 +48,17 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
     // as much as possible.  This is necessary b/c there are a number of parts of spark that
     // can only deal w/ one nio.ByteBuffer, and can't use a LargeByteBuffer yet.
     val totalSize = output.size
-    val chunksNeeded = ((totalSize + maxChunk -1) / maxChunk).toInt
+    val chunksNeeded = ((totalSize + maxChunk - 1) / maxChunk).toInt
     val chunks = new Array[Array[Byte]](chunksNeeded)
     var remaining = totalSize
     var pos = 0
-    (0 until chunksNeeded).foreach{idx =>
+    (0 until chunksNeeded).foreach { idx =>
       val nextSize = math.min(maxChunk, remaining).toInt
       chunks(idx) = output.slice(pos, pos + nextSize)
       pos += nextSize
       remaining -= nextSize
     }
-    new WrappedLargeByteBuffer(chunks.map{ByteBuffer.wrap})
+    new WrappedLargeByteBuffer(chunks.map(ByteBuffer.wrap))
   }
 
   override def close(): Unit = {

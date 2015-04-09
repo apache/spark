@@ -16,6 +16,8 @@
  */
 package org.apache.spark.network.buffer;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -23,51 +25,58 @@ import java.util.ArrayList;
 
 public class LargeByteBufferHelper {
 
-    public static final int MAX_CHUNK = Integer.MAX_VALUE - 1000000;
+  public static final int MAX_CHUNK = Integer.MAX_VALUE - 1000000;
 
-    public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
-        return new WrappedLargeByteBuffer(new ByteBuffer[]{buffer});
+  public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
+    return new WrappedLargeByteBuffer(new ByteBuffer[] { buffer } );
+  }
+
+  public static LargeByteBuffer asLargeByteBuffer(byte[] bytes) {
+    return new WrappedLargeByteBuffer(new ByteBuffer[] { ByteBuffer.wrap(bytes) } );
+  }
+
+  public static LargeByteBuffer allocate(long size) {
+    return allocate(size, MAX_CHUNK);
+  }
+
+  @VisibleForTesting
+  static LargeByteBuffer allocate(long size, int maxChunk) {
+    int chunksNeeded = (int) ((size + maxChunk - 1) / maxChunk);
+    ByteBuffer[] chunks = new ByteBuffer[chunksNeeded];
+    long remaining = size;
+    for (int i = 0; i < chunksNeeded; i++) {
+      int nextSize = (int) Math.min(remaining, maxChunk);
+      ByteBuffer next = ByteBuffer.allocate(nextSize);
+      remaining -= nextSize;
+      chunks[i] = next;
     }
+    if (remaining != 0) throw new IllegalStateException("remaining = " + remaining);
+    return new WrappedLargeByteBuffer(chunks);
+  }
 
-    public static LargeByteBuffer asLargeByteBuffer(byte[] bytes) {
-        return new WrappedLargeByteBuffer(new ByteBuffer[]{ByteBuffer.wrap(bytes)});
+
+  public static LargeByteBuffer mapFile(
+    FileChannel channel,
+    FileChannel.MapMode mode,
+    long offset,
+    long length
+  ) throws IOException {
+    int maxChunk = MAX_CHUNK;
+    ArrayList<Long> offsets = new ArrayList<Long>();
+    long curOffset = offset;
+    long end = offset + length;
+    while (curOffset < end) {
+      offsets.add(curOffset);
+      int chunkLength = (int) Math.min((end - curOffset), maxChunk);
+      curOffset += chunkLength;
     }
-
-    public static LargeByteBuffer allocate(long size) {
-        ArrayList<ByteBuffer> chunks = new ArrayList<ByteBuffer>();
-        long remaining = size;
-        while (remaining > 0) {
-            int nextSize = (int)Math.min(remaining, MAX_CHUNK);
-            ByteBuffer next = ByteBuffer.allocate(nextSize);
-            remaining -= nextSize;
-            chunks.add(next);
-        }
-        return new WrappedLargeByteBuffer(chunks.toArray(new ByteBuffer[chunks.size()]));
+    offsets.add(end);
+    ByteBuffer[] chunks = new ByteBuffer[offsets.size() - 1];
+    for (int i = 0; i < offsets.size() - 1; i++) {
+      chunks[i] = channel.map(mode, offsets.get(i), offsets.get(i + 1) - offsets.get(i));
     }
-
-
-    public static LargeByteBuffer mapFile(
-            FileChannel channel,
-            FileChannel.MapMode mode,
-            long offset,
-            long length
-    ) throws IOException {
-        int maxChunk = MAX_CHUNK;
-        ArrayList<Long> offsets = new ArrayList<Long>();
-        long curOffset = offset;
-        long end = offset + length;
-        while (curOffset < end) {
-            offsets.add(curOffset);
-            int chunkLength = (int) Math.min((end - curOffset), maxChunk);
-            curOffset += chunkLength;
-        }
-        offsets.add(end);
-        ByteBuffer[] chunks = new ByteBuffer[offsets.size() - 1];
-        for (int i = 0; i< offsets.size() - 1; i++) {
-            chunks[i] = channel.map(mode, offsets.get(i), offsets.get(i+ 1) - offsets.get(i));
-        }
-        return new WrappedLargeByteBuffer(chunks);
-    }
+    return new WrappedLargeByteBuffer(chunks);
+  }
 
 
 }

@@ -110,8 +110,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
       val nextSize = chunkStart + chunks(chunkIdx).size
       if (nextSize > start) {
         foundStart = true
-      }
-      else {
+      } else {
         chunkStart = nextSize
         chunkIdx += 1
       }
