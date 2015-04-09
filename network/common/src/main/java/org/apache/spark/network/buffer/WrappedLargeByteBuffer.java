@@ -83,14 +83,14 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public LargeByteBuffer rewind() {
+    if (currentBuffer != null) {
+      currentBuffer.rewind();
+    }
     while (currentBufferIdx > 0) {
-      if (currentBuffer != null) {
-        currentBuffer.rewind();
-      }
       currentBufferIdx -= 1;
       currentBuffer = underlying[currentBufferIdx];
+      currentBuffer.rewind();
     }
-    currentBuffer.rewind();
     _pos = 0;
     return this;
   }
@@ -151,7 +151,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     } else if (n > 0) {
       final long moveTotal = Math.min(n, remaining());
       long toMove = moveTotal;
-      // move forwards-- set the position to the end of every buffer as we go forwards
+      // move forwards -- set the position to the end of every buffer as we go forwards
       currentBufferIdx -= 1;
       while (toMove > 0) {
         currentBufferIdx += 1;
