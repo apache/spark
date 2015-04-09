@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.SerializableWritable
+import org.apache.spark.{SparkConf, SerializableWritable}
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.util.{TimeStampedHashMap, Utils}
@@ -331,11 +331,13 @@ private[streaming]
 object FileInputDStream {
 
   /**
-   * Minimum duration of remembering the information of selected files. Files with mod times
-   * older than this "window" of remembering will be ignored. So if new files are visible
-   * within this window, then the file will get selected in the next batch.
+   * Minimum duration of remembering the information of selected files. Defaults to 1 minute.
+   *
+   * Files with mod times older than this "window" of remembering will be ignored. So if new
+   * files are visible within this window, then the file will get selected in the next batch.
    */
-  private val MIN_REMEMBER_DURATION = Minutes(1)
+  private val minRememberDuration = new SparkConf().get("spark.streaming.minRememberDuration", "1")
+  private val MIN_REMEMBER_DURATION = Minutes(minRememberDuration.toLong)
 
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
