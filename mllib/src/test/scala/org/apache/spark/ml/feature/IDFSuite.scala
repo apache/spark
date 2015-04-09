@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseVector, SparseVector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -46,36 +46,29 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
       case data: SparseVector =>
         val res = data.indices.zip(data.values).map { case (id, value) =>
           (id, value * model(id))
-        }.filter(_._2 != 0.0)
-        Vectors.sparse(res.size, res)
+        }
+        Vectors.sparse(data.size, res)
     }
   }
 
   test("Normalization with default parameter") {
-    val n = 4
-
+    val numOfFeatures = 4
     val data = Array(
-      Vectors.sparse(n, Array(1, 3), Array(1.0, 2.0)),
+      Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
-      Vectors.sparse(n, Array(1), Array(1.0))
+      Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-
-    val m = data.size
+    val numOfData = data.size
 
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
-
     val dataFrame = sc.parallelize(data, 2).map(Tuple1.apply).toDF("features")
 
-    val idf = new IDF()
-      .setInputCol("features")
-      .setOutputCol("idf_value")
+    val idfModel = new IDF().setInputCol("features").setOutputCol("idf_value").fit(dataFrame)
 
     val expectedModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
-      math.log((m + 1.0) / (x + 1.0))
+      math.log((numOfData + 1.0) / (x + 1.0))
     })
-
-    val idfModel = idf.fit(dataFrame)
 
     assertValues(
       getResultFromDF(idfModel.transform(dataFrame)),
@@ -83,34 +76,24 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Normalization with setter") {
-    val n = 4
-
+    val numOfFeatures = 4
     val data = Array(
-      Vectors.sparse(n, Array(1, 3), Array(1.0, 2.0)),
+      Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
-      Vectors.sparse(n, Array(1), Array(1.0))
+      Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-
-    val m = data.size
+    val numOfData = data.size
 
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
-
     val dataFrame = sc.parallelize(data, 2).map(Tuple1.apply).toDF("features")
 
-    val idf = new IDF()
-      .setInputCol("features")
-      .setOutputCol("idf_value")
+    val idfModel = new IDF().setInputCol("features").setOutputCol("idf_value").setMinDocFreq(1)
+      .fit(dataFrame)
 
     val expectedModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
-      if (x > 0) {
-        math.log((m + 1.0) / (x + 1.0))
-       } else {
-        0
-       }
+      if (x > 0) math.log((numOfData + 1.0) / (x + 1.0)) else 0
     })
-
-    val idfModel = idf.setMinDocFreq(1).fit(dataFrame)
 
     assertValues(
       getResultFromDF(idfModel.transform(dataFrame)),
