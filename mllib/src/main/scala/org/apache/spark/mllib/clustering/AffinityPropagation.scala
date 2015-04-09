@@ -240,12 +240,11 @@ class AffinityPropagation private[clustering] (
    *                     The data points with larger values of s,,ii,, are more likely to be chosen
    *                     as exemplars.
    *
-   * @param symmetric the given similarity matrix is symmetric or not. Default value: true
    * @return a [[AffinityPropagationModel]] that contains the clustering result
    */
-  def run(similarities: RDD[(Long, Long, Double)], symmetric: Boolean = true)
+  def run(similarities: RDD[(Long, Long, Double)])
     : AffinityPropagationModel = {
-    val s = constructGraph(similarities, normalization, symmetric)
+    val s = constructGraph(similarities, normalization, this.symmetric)
     ap(s)
   }
 
