@@ -65,6 +65,19 @@ object Partitioner {
       new HashPartitioner(bySize.head.partitions.size)
     }
   }
+
+  /**
+   * Throw SparkException if the given class's hashCode method is not well-behaved (e.g. if it is
+   * based on object identity rather than object equality).  This was introduced to prevent Java
+   * arrays from being used as keys for PairRDDFunctions methods, since Array.hashCode is
+   * Object.hashCode, which means that hashmaps for aggregating keys.
+   */
+  private[spark] def assertHashCodeIsWellBehaved(cls: Class[_]): Unit = {
+    if (cls.isArray) {
+      throw new SparkException(
+        "Arrays are unsafe to use as keys and may lead to incorrect results (see SPARK-597)")
+    }
+  }
 }
 
 /**
@@ -73,13 +86,15 @@ object Partitioner {
  *
  * Java arrays have hashCodes that are based on the arrays' identities rather than their contents,
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
- * produce an unexpected or incorrect result.
+ * produce an unexpected or incorrect result.  See SPARK-597 for more details.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions: Int = partitions
 
   def getPartition(key: Any): Int = key match {
     case null => 0
+    // Java enumeration's hashCodes are not comparable across JVMs (see SPARK-3847):
+    case enum: Enum[_] => Utils.nonNegativeMod(enum.ordinal(), numPartitions)
     case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
   }
 
