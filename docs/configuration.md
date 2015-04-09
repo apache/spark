@@ -714,12 +714,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.deploy.maxCoresPerExecutor</code></td>
+  <td><code>spark.executor.cores</code></td>
   <td>(infinite)</td>
   <td>
-    The maximum number of cores given to the executor. When this parameter is set, Spark will try to 
-    run more than 1 executors on each worker in standalone mode; otherwise, only one executor is 
-    launched on each worker.
+    Default: 1 in YARN mode, all the available cores on the worker in standalone mode.
+    
+    The number of cores to use on each executor. For YARN and standalone mode only.
+    
+    In standalone mode, setting this parameter allows an application to run multiple executors on 
+    the same worker, provided that there are enough cores on that worker. Otherwise, only one 
+    executor per application will run on each worker.
   </td>
 </tr>
 <tr>

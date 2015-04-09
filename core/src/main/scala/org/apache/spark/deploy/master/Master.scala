@@ -528,7 +528,7 @@ private[master] class Master(
    */
   private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
     val enoughResources = worker.memoryFree >= app.desc.memoryPerExecutorMB && worker.coresFree > 0
-    val allowToExecute = app.desc.maxCorePerExecutor.isDefined || !worker.hasExecutor(app)
+    val allowToExecute = app.desc.coresPerExecutor.isDefined || !worker.hasExecutor(app)
     allowToExecute && enoughResources
   }
 
@@ -539,7 +539,7 @@ private[master] class Master(
    * limit the maximum number of cores to allocate to each executor on each worker; if the parameter
    * is not defined, then only one executor will be launched on a worker.
    */
-  private def startExecutorsOnWorkers() {
+  private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {
@@ -576,25 +576,24 @@ private[master] class Master(
   /**
    * allocate resources in a certain worker to one or more executors
    * @param app the info of the application which the executors belong to
-   * @param coresDemand the total number of cores to be allocated to this application
+   * @param coresToAllocate cores on this worker to be allocated to this application
    * @param worker the worker info
    */
   private def allocateWorkerResourceToExecutors(
       app: ApplicationInfo,
-      coresDemand: Int,
+      coresToAllocate: Int,
       worker: WorkerInfo): Unit = {
-      if (canUse(app, worker)) {
-        val memoryPerExecutor = app.desc.memoryPerExecutorMB
-        val maxCoresPerExecutor = app.desc.maxCorePerExecutor.getOrElse(Int.MaxValue)
-        var coresToAssign = coresDemand
-        while (coresToAssign > 0 && worker.memoryFree >= memoryPerExecutor) {
-          val coresForThisExecutor = math.min(maxCoresPerExecutor, coresToAssign)
-          val exec = app.addExecutor(worker, coresForThisExecutor)
-          coresToAssign -= coresForThisExecutor
-          launchExecutor(worker, exec)
-          app.state = ApplicationState.RUNNING
-        }
+    if (canUse(app, worker)) {
+      val memoryPerExecutor = app.desc.memoryPerExecutorMB
+      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
+      var coresLeft = coresToAllocate
+      while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
+        val exec = app.addExecutor(worker, coresPerExecutor)
+        coresLeft -= coresPerExecutor
+        launchExecutor(worker, exec)
+        app.state = ApplicationState.RUNNING
       }
+    }
   }
 
   private def startDriversOnWorkers(): Unit = {
@@ -621,7 +620,7 @@ private[master] class Master(
     startExecutorsOnWorkers()
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit =  {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
