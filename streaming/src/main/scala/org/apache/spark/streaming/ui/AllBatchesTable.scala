@@ -22,7 +22,7 @@ import scala.xml.Node
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.ui.UIUtils
 
-private[ui] class BatchTableBase {
+private[ui] class BatchTableBase(tableId: String) {
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
@@ -53,7 +53,7 @@ private[ui] class BatchTableBase {
   }
 
   private def batchTable: Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
+    <table id={tableId} class="table table-bordered table-striped table-condensed sortable">
       <thead>
         {columns}
       </thead>
@@ -74,7 +74,7 @@ private[ui] class BatchTableBase {
 }
 
 private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatches: Seq[BatchInfo])
-  extends BatchTableBase {
+  extends BatchTableBase("active-batches-table") {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
 
@@ -94,7 +94,8 @@ private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatche
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchInfo]) extends BatchTableBase {
+private[ui] class CompletedBatchTable(batches: Seq[BatchInfo])
+  extends BatchTableBase("completed-batches-table") {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Total Delay</th>
 
