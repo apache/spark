@@ -25,7 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
@@ -144,5 +145,16 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       filters,
       parts)
+  }
+
+  override def supportPredicate(filter: Expression): Boolean = {
+    filter match {
+      case e: expressions.EqualTo => true
+      case e: expressions.LessThan => true
+      case e: expressions.GreaterThan => true
+      case e: expressions.LessThanOrEqual => true
+      case e: expressions.GreaterThanOrEqual => true
+      case o => false
+    }
   }
 }

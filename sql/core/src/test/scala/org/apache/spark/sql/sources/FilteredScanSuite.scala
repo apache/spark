@@ -19,7 +19,10 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.types._
 
 
@@ -40,6 +43,28 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) ::
       StructField("c", StringType, nullable = false) :: Nil)
+
+  override def supportPredicate(filter: Expression): Boolean = {
+    filter match {
+      case expressions.EqualTo(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.LessThan(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.LessThanOrEqual(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.GreaterThan(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.GreaterThanOrEqual(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.InSet(l: NamedExpression, _) if l.name == "a" => true
+      case expressions.IsNull(e: NamedExpression) if e.name == "a" => true
+      case expressions.IsNotNull(e: NamedExpression) if e.name == "a" => true
+      case expressions.Not(pred) => supportPredicate(pred)
+      case expressions.And(left, right) =>
+        supportPredicate(left) && supportPredicate(right)
+      case expressions.Or(left, right) =>
+        supportPredicate(left) && supportPredicate(right)
+      case e: expressions.StartsWith => true
+      case e: expressions.EndsWith => true
+      case e: expressions.Contains => true
+      case o => false
+    }
+  }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
     val rowBuilders = requiredColumns.map {
@@ -233,6 +258,73 @@ class FilteredScanSuite extends DataSourceTest {
 
   testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'", 1)
   testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0)
+ 
+  // Filter should not be duplicate with pushdown predicate 
+  // This query should not have Filter node and have 1 row
+  testNotFilter("SELECT a, b FROM oneToTenFiltered WHERE a = 1", 1)
+  // This query have Filter node which filters 10 rows to 1 row
+  testFilter("SELECT a, b FROM oneToTenFiltered WHERE b = 2", 10, 1)
+ 
+  def testNotFilter(sqlString: String, count: Int): Unit = {
+    test(s"Without Filter: $sqlString") {
+      val queryExecution = sql(sqlString).queryExecution
+      val filterPlan = queryExecution.executedPlan.collect {
+        case f: execution.Filter => f
+      } match {
+        case Seq(f) => fail(s"Shouldn't find Filter\n$queryExecution")
+        case _ =>
+      }
+ 
+      val physicalRDDPlan = queryExecution.executedPlan.collect {
+        case p: execution.PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"Can't find PhysicalRDD\n$queryExecution")
+      }
+ 
+      val rawCount = physicalRDDPlan.execute().count()
+
+      if (rawCount != count) {
+        fail(
+          s"Wrong # of results for filter. Got $rawCount, Expected $count\n" +
+            queryExecution)
+      }
+    }
+  }
+ 
+  def testFilter(sqlString: String, countRDD: Int, countFilter: Int): Unit = {
+    test(s"Filter: $sqlString") {
+      val queryExecution = sql(sqlString).queryExecution
+      val filterPlan = queryExecution.executedPlan.collect {
+        case f: execution.Filter => f
+      } match {
+        case Seq(f) => Some(f)
+        case _ => fail(s"Can't find Filter\n$queryExecution")
+      }
+ 
+      val physicalRDDPlan = queryExecution.executedPlan.collect {
+        case p: execution.PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"Can't find PhysicalRDD\n$queryExecution")
+      }
+
+      val rawCount = filterPlan.get.execute().count() 
+      val rawCountRDD = physicalRDDPlan.execute().count()
+
+      if (rawCount != countFilter) {
+        fail(
+          s"Wrong # of results for Filter Plan. Got $rawCount, Expected $countFilter\n" +
+            queryExecution)
+      }
+      if (rawCountRDD != countRDD) {
+        fail(
+          s"Wrong # of results for PhysicalRDD Plan. Got $rawCountRDD, Expected $countRDD\n" +
+            queryExecution)
+      }
+ 
+    }
+  }
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {

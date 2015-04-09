@@ -85,8 +85,11 @@ private[sql] object DataSourceStrategy extends Strategy {
       scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[Row]) = {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
-    val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition = filterPredicates.reduceLeftOption(expressions.And)
+
+    // eliminate the filters which are supported in the BaseRelation
+    val filteredPredicates = eliminateFilters(filterPredicates, relation)
+    val filterSet = AttributeSet(filteredPredicates.flatMap(_.references))
+    val filterCondition = filteredPredicates.reduceLeftOption(expressions.And)
 
     val pushedFilters = filterPredicates.map { _ transform {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
@@ -114,6 +117,18 @@ private[sql] object DataSourceStrategy extends Strategy {
         execution.PhysicalRDD(requestedColumns, scanBuilder(requestedColumns, pushedFilters))
       execution.Project(projectList, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
+  }
+
+  // Eliminate the filters supported in the BaseRelation 
+  protected[sql] def eliminateFilters(
+      filters: Seq[Expression], relation: LogicalRelation): Seq[Expression] = {
+    val newFilters = relation match {
+      case LogicalRelation(t: PrunedFilteredScan) =>
+        filters.filterNot(t.supportPredicate(_))
+      case _ =>
+        filters 
+    }
+    newFilters
   }
 
   /**
