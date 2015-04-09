@@ -137,18 +137,12 @@ class GradientBoostedTreesModel(
 
     evaluationArray(0) = predictionAndError.values.mean()
 
-    // Avoid the model being copied across numIterations.
-    val broadcastTrees = sc.broadcast(trees)
-    val broadcastWeights = sc.broadcast(treeWeights)
-
     (1 until numIterations).map { nTree =>
       predictionAndError = GradientBoostedTreesModel.updatePredictionError(
-        remappedData, predictionAndError, nTree, broadcastWeights, broadcastTrees, loss)
+        remappedData, predictionAndError, treeWeights(nTree), trees(nTree), loss)
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
-    broadcastTrees.unpersist()
-    broadcastWeights.unpersist()
     evaluationArray
   }
 
@@ -184,8 +178,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param training data.
    * @param predictionAndError: predictionError RDD
    * @param nTree: tree index.
-   * @param TreeWeights: Broadcasted learning rates.
-   * @param Trees: Broadcasted trees.
+   * @param treeWeight: Learning rate.
+   * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
@@ -193,14 +187,17 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
-    nTree: Int,
-    TreeWeights: Broadcast[Array[Double]],
-    Trees: Broadcast[Array[DecisionTreeModel]],
+    treeWeight: Double,
+    tree: DecisionTreeModel,
     loss: Loss): RDD[(Double, Double)] = {
 
-    data.zip(predictionAndError).mapPartitions { iter =>
-      val currentTreeWeight = TreeWeights.value(nTree)
-      val currentTree = Trees.value(nTree)
+    val sc = data.sparkContext
+    val broadcastedTreeWeight = sc.broadcast(treeWeight)
+    val broadcastedTree = sc.broadcast(tree)
+
+    val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
+      val currentTreeWeight = broadcastedTreeWeight.value
+      val currentTree = broadcastedTree.value
       iter.map {
         case (lp, (pred, error)) => {
           val newPred = pred + currentTree.predict(lp.features) * currentTreeWeight
@@ -209,6 +206,10 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
         }
       }
     }
+
+    broadcastedTreeWeight.unpersist()
+    broadcastedTree.unpersist()
+    newPredError
   }
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
