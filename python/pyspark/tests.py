@@ -745,7 +745,7 @@ class RDDTests(ReusedPySparkTestCase):
                          filtered.values().map(lambda x: (len(x), len(list(x)))).collect())
         result = filtered.collect()[0][1]
         self.assertEqual(N/3, len(result))
-        self.assertTrue(isinstance(result.data, shuffle.ChainedIterable))
+        self.assertTrue(isinstance(result.data, shuffle.ExternalList))
 
     def test_sort_on_empty_rdd(self):
         self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
