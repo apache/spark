@@ -84,7 +84,7 @@ else
     rev | \
     sort > ${MASTER_CP_FILE}
 
-  DIFF_RESULTS="`diff my-classpath.txt master-classpath.txt`"
+  DIFF_RESULTS="`diff ${CURR_CP_FILE} ${MASTER_CP_FILE}`"
 
   if [ -z "${DIFF_RESULTS}" ]; then
     echo " * This patch does not change any dependencies."
