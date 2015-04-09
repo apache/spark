@@ -88,6 +88,58 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("SPARK-6766: batch info should be submitted") {
+    val ssc = setupStreams(input, operation)
+    val collector = new StreamingListener {
+      val batchInfos = new ArrayBuffer[BatchInfo]
+
+      override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) {
+        batchInfos += batchSubmitted.batchInfo
+      }
+    }
+    ssc.addStreamingListener(collector)
+    runStreams(ssc, input.size, input.size)
+    ssc.awaitTerminationOrTimeout(5000) should be (true)
+
+    val batchInfos = collector.batchInfos
+    batchInfos should have size 4
+
+    batchInfos.foreach(info => {
+      info.schedulingDelay should be (None)
+      info.processingDelay should be (None)
+      info.totalDelay should be (None)
+    })
+
+    isInIncreasingOrder(batchInfos.map(_.submissionTime)) should be (true)
+  }
+
+  test("SPARK-6766: processingStartTime of batch info should not be None when starting") {
+    val ssc = setupStreams(input, operation)
+    val collector = new StreamingListener {
+      val batchInfos = new ArrayBuffer[BatchInfo]
+
+      override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) {
+        batchInfos += batchStarted.batchInfo
+      }
+    }
+    ssc.addStreamingListener(collector)
+    runStreams(ssc, input.size, input.size)
+    ssc.awaitTerminationOrTimeout(5000) should be (true)
+
+    val batchInfos = collector.batchInfos
+    batchInfos should have size 4
+
+    batchInfos.foreach(info => {
+      info.schedulingDelay should not be None
+      info.schedulingDelay.get should be >= 0L
+      info.processingDelay should be (None)
+      info.totalDelay should be (None)
+    })
+
+    isInIncreasingOrder(batchInfos.map(_.submissionTime)) should be (true)
+    isInIncreasingOrder(batchInfos.map(_.processingStartTime.get)) should be (true)
+  }
+
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
     for(i <- 1 until seq.size) {
