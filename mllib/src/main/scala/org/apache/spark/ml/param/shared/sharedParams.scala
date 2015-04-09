@@ -220,4 +220,23 @@ trait HasCheckpointInterval extends Params {
   /** @group getParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 }
+
+/**
+ * :: DeveloperApi ::
+ * Trait for shared param fitIntercept (default: true).
+ */
+@DeveloperApi
+trait HasFitIntercept extends Params {
+
+  /**
+   * Param for whether to fit an intercept term.
+   * @group param
+   */
+  final val fitIntercept: BooleanParam = new BooleanParam(this, "fitIntercept", "whether to fit an intercept term")
+
+  setDefault(fitIntercept, true)
+
+  /** @group getParam */
+  final def getFitIntercept: Boolean = getOrDefault(fitIntercept)
+}
 // scalastyle:on

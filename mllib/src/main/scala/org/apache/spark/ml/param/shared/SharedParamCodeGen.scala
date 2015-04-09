@@ -43,7 +43,8 @@ private[shared] object SharedParamCodeGen {
       ParamDesc[Double]("threshold", "threshold in prediction"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[String]("outputCol", "output column name"),
-      ParamDesc[Int]("checkpointInterval", "checkpoint interval"))
+      ParamDesc[Int]("checkpointInterval", "checkpoint interval"),
+      ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

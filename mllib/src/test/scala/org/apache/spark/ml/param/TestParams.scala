@@ -30,7 +30,7 @@ class TestParams extends Params {
 
   setDefault(maxIter -> 10)
 
-  override def validate(paramMap: ParamMap) = {
+  override def validate(paramMap: ParamMap): Unit = {
     val m = extractParamMap(paramMap)
     require(m(maxIter) >= 0)
     require(m.contains(inputCol))
