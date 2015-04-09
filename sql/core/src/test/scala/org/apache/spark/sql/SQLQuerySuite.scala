@@ -268,7 +268,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')"),
+      """
+        |SELECT time FROM timestamps
+        |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
+      """.stripMargin),
       Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
         Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
@@ -334,7 +337,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row("1"))
   }
 
-  def sortTest() = {
+  def sortTest(): Unit = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
@@ -413,7 +416,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("from follow multiple brackets") {
     checkAnswer(sql(
-      "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),
+      """
+        |select key from ((select * from testData limit 1)
+        |  union all (select * from testData limit 1)) x limit 1
+      """.stripMargin),
       Row(1)
     )
 
@@ -423,7 +429,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
 
     checkAnswer(sql(
-      "select key from (select * from testData limit 1 union all select * from testData limit 1) x limit 1"),
+      """
+        |select key from
+        |  (select * from testData limit 1 union all select * from testData limit 1) x
+        |  limit 1
+      """.stripMargin),
       Row(1)
     )
   }
@@ -470,7 +480,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Row(1, 0), Row(2, 1)))
 
     checkAnswer(
-      sql("SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
+      sql(
+        """
+          |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
+        """.stripMargin),
       Row(2, 1, 2, 2, 1))
   }
 
@@ -1083,7 +1096,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
+    val data = sparkContext.parallelize(
+      Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
     sql("SELECT `key?number1` FROM records")
   }
@@ -1168,8 +1182,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
-    jsonRDD(sparkContext.makeRDD(
-      """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
+      .registerTempTable("nestedOrder")
 
     checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
     checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
