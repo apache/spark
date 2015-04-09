@@ -194,17 +194,20 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateBatchListTables(): Seq[Node] = {
     val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
     val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
-    var content =
-      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
-
     val completedBatches = listener.retainedCompletedBatches.
       sortBy(_.batchTime.milliseconds).reverse
-    content ++=
+
+    val activeBatchesContent = {
+      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
+        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
+    }
+
+    val completedBatchesContent = {
       <h4 id="active">Completed Batches ({completedBatches.size})</h4> ++
         new CompletedBatchTable(completedBatches).toNodeSeq
+    }
 
-    content
+    activeBatchesContent ++ completedBatchesContent
   }
 }
 
