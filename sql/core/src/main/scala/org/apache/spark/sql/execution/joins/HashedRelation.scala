@@ -32,12 +32,16 @@ import org.apache.spark.util.collection.CompactBuffer
 private[joins] sealed trait HashedRelation {
   def get(key: Row): CompactBuffer[Row]
 
-  def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
+  // This is a helper method to implement Externalizable, and is used by
+  // GeneralHashedRelation and UniqueKeyHashedRelation
+  protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
     out.writeInt(serialized.length) // Write the length of serialized bytes first
     out.write(serialized)
   }
 
-  def readBytes(in: ObjectInput): Array[Byte] = {
+  // This is a helper method to implement Externalizable, and is used by
+  // GeneralHashedRelation and UniqueKeyHashedRelation
+  protected def readBytes(in: ObjectInput): Array[Byte] = {
     val serializedSize = in.readInt() // Read the length of serialized bytes first
     val bytes = new Array[Byte](serializedSize)
     in.readFully(bytes)
@@ -49,8 +53,8 @@ private[joins] sealed trait HashedRelation {
 /**
  * A general [[HashedRelation]] backed by a hash map that maps the key into a sequence of values.
  */
-private[joins] class GeneralHashedRelation(
-    var hashTable: JavaHashMap[Row, CompactBuffer[Row]])
+private[joins] final class GeneralHashedRelation(
+    private var hashTable: JavaHashMap[Row, CompactBuffer[Row]])
   extends HashedRelation with Externalizable {
 
   def this() = this(null) // Needed for serialization
@@ -71,7 +75,7 @@ private[joins] class GeneralHashedRelation(
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
  */
-private[joins] final class UniqueKeyHashedRelation(var hashTable: JavaHashMap[Row, Row])
+private[joins] final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Externalizable {
 
   def this() = this(null) // Needed for serialization
