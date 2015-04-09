@@ -88,13 +88,13 @@ test_that("combineByKey for doubles", {
 })
 
 test_that("combineByKey for characters", {
-  stringKeyRDD <- parallelize(sc, 
-                              list(list("max", 1L), list("min", 2L), 
+  stringKeyRDD <- parallelize(sc,
+                              list(list("max", 1L), list("min", 2L),
                                    list("other", 3L), list("max", 4L)), 2L)
-  reduced <- combineByKey(stringKeyRDD, 
+  reduced <- combineByKey(stringKeyRDD,
                           function(x) { x }, "+", "+", 2L)
   actual <- collect(reduced)
-  
+
   expected <- list(list("max", 5L), list("min", 2L), list("other", 3L))
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })

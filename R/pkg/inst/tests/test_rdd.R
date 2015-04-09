@@ -481,12 +481,12 @@ test_that("subtract() on RDDs", {
   actual <- collect(subtract(rdd1, rdd2))
   expect_equal(as.list(sort(as.vector(actual, mode="integer"))),
                l)
-  
+
   rdd2 <- parallelize(sc, list(2, 4))
   actual <- collect(subtract(rdd1, rdd2))
   expect_equal(as.list(sort(as.vector(actual, mode="integer"))),
                list(1, 1, 3))
-  
+
   l <- list("a", "a", "b", "b", "c", "d")
   rdd1 <- parallelize(sc, l)
   rdd2 <- parallelize(sc, list("b", "d"))
@@ -499,21 +499,21 @@ test_that("subtractByKey() on pairwise RDDs", {
   l <- list(list("a", 1), list("b", 4),
             list("b", 5), list("a", 2))
   rdd1 <- parallelize(sc, l)
-  
+
   # subtractByKey by itself
   actual <- collect(subtractByKey(rdd1, rdd1))
   expect_equal(actual, list())
-  
+
   # subtractByKey by an empty RDD
   rdd2 <- parallelize(sc, list())
   actual <- collect(subtractByKey(rdd1, rdd2))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(l))
-  
+
   rdd2 <- parallelize(sc, list(list("a", 3), list("c", 1)))
   actual <- collect(subtractByKey(rdd1, rdd2))
   expect_equal(actual,
-               list(list("b", 4), list("b", 5)))  
+               list(list("b", 4), list("b", 5)))
 
   l <- list(list(1, 1), list(2, 4),
             list(2, 5), list(1, 2))
@@ -528,12 +528,12 @@ test_that("intersection() on RDDs", {
   # intersection with self
   actual <- collect(intersection(rdd, rdd))
   expect_equal(sort(as.integer(actual)), nums)
-  
+
   # intersection with an empty RDD
   emptyRdd <- parallelize(sc, list())
   actual <- collect(intersection(rdd, emptyRdd))
   expect_equal(actual, list())
-  
+
   rdd1 <- parallelize(sc, list(1, 10, 2, 3, 4, 5))
   rdd2 <- parallelize(sc, list(1, 6, 2, 3, 7, 8))
   actual <- collect(intersection(rdd1, rdd2))

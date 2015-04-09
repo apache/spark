@@ -1496,15 +1496,15 @@ setMethod("zipRDD",
               stop("Can only zip RDDs which have the same number of partitions.")
             }
 
-            if (getSerializedMode(x) != getSerializedMode(other) || 
+            if (getSerializedMode(x) != getSerializedMode(other) ||
                 getSerializedMode(x) == "byte") {
               # Append the number of elements in each partition to that partition so that we can later
               # check if corresponding partitions of both RDDs have the same number of elements.
               #
-              # Note that this appending also serves the purpose of reserialization, because even if 
+              # Note that this appending also serves the purpose of reserialization, because even if
               # any RDD is serialized, we need to reserialize it to make sure its partitions are encoded
               # as a single byte array. For example, partitions of an RDD generated from partitionBy()
-              # may be encoded as multiple byte arrays.          
+              # may be encoded as multiple byte arrays.
               appendLength <- function(part) {
                 part[[length(part) + 1]] <- length(part) + 1
                 part
@@ -1512,13 +1512,13 @@ setMethod("zipRDD",
               x <- lapplyPartition(x, appendLength)
               other <- lapplyPartition(other, appendLength)
             }
-            
+
             zippedJRDD <- callJMethod(getJRDD(x), "zip", getJRDD(other))
             # The zippedRDD's elements are of scala Tuple2 type. The serialized
             # flag Here is used for the elements inside the tuples.
             serializerMode <- getSerializedMode(x)
             zippedRDD <- RDD(zippedJRDD, serializerMode)
-            
+
             partitionFunc <- function(split, part) {
               len <- length(part)
               if (len > 0) {
@@ -1526,15 +1526,15 @@ setMethod("zipRDD",
                   lengthOfValues <- part[[len]]
                   lengthOfKeys <- part[[len - lengthOfValues]]
                   stopifnot(len == lengthOfKeys + lengthOfValues)
-                  
+
                   # check if corresponding partitions of both RDDs have the same number of elements.
                   if (lengthOfKeys != lengthOfValues) {
                     stop("Can only zip RDDs with same number of elements in each pair of corresponding partitions.")
                   }
-                  
+
                   if (lengthOfKeys > 1) {
                     keys <- part[1 : (lengthOfKeys - 1)]
-                    values <- part[(lengthOfKeys + 1) : (len - 1)]                    
+                    values <- part[(lengthOfKeys + 1) : (len - 1)]
                   } else {
                     keys <- list()
                     values <- list()
@@ -1557,7 +1557,7 @@ setMethod("zipRDD",
                 part
               }
             }
-            
+
             PipelinedRDD(zippedRDD, partitionFunc)
           })
 
@@ -1585,17 +1585,16 @@ setMethod("subtract",
             mapFunction <- function(e) { list(e, NA) }
             rdd1 <- map(x, mapFunction)
             rdd2 <- map(other, mapFunction)
-            
             keys(subtractByKey(rdd1, rdd2, numPartitions))
           })
 
 #' Intersection of this RDD and another one.
 #'
 #' Return the intersection of this RDD and another one.
-#' The output will not contain any duplicate elements, 
+#' The output will not contain any duplicate elements,
 #' even if the input RDDs did. Performs a hash partition
 #' across the cluster.
-#' Note that this method performs a shuffle internally. 
+#' Note that this method performs a shuffle internally.
 #'
 #' @param x An RDD.
 #' @param other An RDD.
@@ -1616,7 +1615,7 @@ setMethod("intersection",
           function(x, other, numPartitions = SparkR::numPartitions(x)) {
             rdd1 <- map(x, function(v) { list(v, NA) })
             rdd2 <- map(other, function(v) { list(v, NA) })
-            
+
             filterFunction <- function(elem) {
               iters <- elem[[2]]
               all(as.vector(

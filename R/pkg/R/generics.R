@@ -134,10 +134,6 @@ setGeneric("minimum", function(x) { standardGeneric("minimum") })
 #' @export
 setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 
-#' @rdname foreach
-#' @export
-setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
-
 #' @rdname name
 #' @export
 setGeneric("name", function(x) { standardGeneric("name") })
@@ -269,6 +265,10 @@ setGeneric("sampleByKey",
              standardGeneric("sampleByKey")
            })
 
+#' @rdname values
+#' @export
+setGeneric("values", function(x) { standardGeneric("values") })
+
 
 ############ Shuffle Functions ############
 
@@ -349,18 +349,18 @@ setGeneric("sortByKey",
              standardGeneric("sortByKey")
            })
 
+#' @rdname subtract
+#' @export
+setGeneric("subtract",
+           function(x, other, numPartitions = 1L) {
+             standardGeneric("subtract")
+           })
+
 #' @rdname subtractByKey
 #' @export
 setGeneric("subtractByKey", 
            function(x, other, numPartitions = 1L) {
              standardGeneric("subtractByKey")
-           })
-
-#' @rdname subtract
-#' @export
-setGeneric("subtract", 
-           function(x, other, numPartitions = 1L) {
-             standardGeneric("subtract")
            })
 
 ################### Broadcast Variable Methods #################
@@ -461,10 +461,6 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @rdname sortDF
 #' @export
 setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
-
-#' @rdname subtract
-#' @export
-setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
 
 #' @rdname tojson
 #' @export

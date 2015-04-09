@@ -813,7 +813,7 @@ setMethod("subtractByKey",
               iters <- elem[[2]]
               (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)
             }
-            
+
             flatMapValues(filterRDD(cogroup(x,
                                             other,
                                             numPartitions = numPartitions),
