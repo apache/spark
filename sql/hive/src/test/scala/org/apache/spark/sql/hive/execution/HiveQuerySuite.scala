@@ -794,7 +794,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("ADD JAR command 2") {
-    val testJar = TestHive.getHiveFile("data/files/hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    // this is a test case from mapjoin_addjar.q
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
     if (HiveShim.version == "0.13.1") {
       sql(s"ADD JAR $testJar")
