@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -75,12 +76,17 @@ object PolynomialMapper {
     binomialCoefficient(numVariables + degree, numVariables) - 1
   }
 
+  @tailrec
   private def fillDenseVector(
         outputVector: Array[Double],
         prevExpandedVecFrom: Int,
         prevExpandedVecLen: Int,
         currDegree: Int,
-        nDim: Int): (Int, Int) = {
+        finalDegree: Int,
+        nDim: Int): Unit = {
+    if (currDegree > finalDegree) {
+      return None
+    }
     val currExpandedVecFrom = prevExpandedVecFrom + prevExpandedVecLen
     var currIndex = currExpandedVecFrom
     val currExpandedVecLen = numMonomials(currDegree, nDim)
@@ -97,9 +103,12 @@ object PolynomialMapper {
       }
       leftIndex += 1
     }
-    (currExpandedVecFrom, currExpandedVecLen)
+
+    fillDenseVector(outputVector, currExpandedVecFrom, currExpandedVecLen, currDegree + 1,
+      finalDegree, nDim)
   }
 
+  @tailrec
   private def fillSparseVector(
         outputIndices: ArrayBuffer[Int],
         outputValues: ArrayBuffer[Double],
@@ -107,31 +116,52 @@ object PolynomialMapper {
         prevExpandedSparseVecFrom: Int,
         prevExpandedSparseVecLen: Int,
         currDegree: Int,
-        nDim: Int): (Int, Int) = {
+        finalDegree: Int,
+        nDim: Int): Unit = {
+    if (currDegree > finalDegree) {
+      return None
+    }
+
+    println(outputIndices.toArray.mkString(", "))
+    println(outputValues.toArray.mkString(", "))
+    println(originalSparseVecLen)
+    println(prevExpandedSparseVecFrom)
+    println(prevExpandedSparseVecLen)
+    println(currDegree)
+    println(finalDegree)
+    println(nDim)
+
     val currExpandedSparseVecFrom = prevExpandedSparseVecFrom + prevExpandedSparseVecLen
-    var lengthCount = 0
-    val prevExpandedVecFrom = numExpandedDims(currDegree - 1, nDim)
+    var currExpandedSparseVecLen = 0
+    val prevExpandedVecFrom = numExpandedDims(currDegree - 2, nDim)
     val prevExpandedVecLen = numMonomials(currDegree - 1, nDim)
+    println(prevExpandedVecFrom)
+    println(prevExpandedVecLen)
+    val currExpandedVecFrom = prevExpandedVecFrom + prevExpandedVecLen
     var leftIndex = 0
+    var numToKeepCum = 0
     while (leftIndex < originalSparseVecLen) {
       val numToKeep = numMonomials(currDegree - 1, nDim - outputIndices(leftIndex))
-      val prevVecStartIndex = prevExpandedVecFrom + prevExpandedVecLen - numToKeep
       var rightIndex = 0
       while (rightIndex < prevExpandedSparseVecLen) {
         val realIndex =
           outputIndices(prevExpandedSparseVecFrom + rightIndex) - (prevExpandedVecLen - numToKeep)
-        if (realIndex >= prevVecStartIndex) {
-          outputIndices += realIndex
+        println(s"real index in $currDegree degree is $realIndex")
+        if (realIndex >= prevExpandedVecFrom) {
+          outputIndices += currExpandedVecFrom + numToKeepCum + realIndex
           outputValues += outputValues(leftIndex) * outputValues(rightIndex)
-          lengthCount += 1
+          currExpandedSparseVecLen += 1
         } else {
           // pass through if the index is invalid
         }
+        numToKeepCum += numToKeep
         rightIndex += 1
       }
       leftIndex += 1
     }
-    (currExpandedSparseVecFrom, lengthCount)
+
+    fillSparseVector(outputIndices, outputValues, originalSparseVecLen, currExpandedSparseVecFrom,
+      currExpandedSparseVecLen, currDegree + 1, finalDegree, nDim)
   }
 
   /**
@@ -172,19 +202,14 @@ object PolynomialMapper {
     }
   }
 
-  /**
-   * Transform a vector of variables into a larger vector which stores the polynomial expansion from
-   * degree 1 to degree `degree`.
-   */
-  private def transform(degree: Int)(feature: Vector): Vector = {
+  private def transform2(degree: Int)(feature: Vector): Vector = {
     val originalDims = feature.size
     val expectedDims = numExpandedDims(degree, feature.size)
     feature match {
       case f: DenseVector =>
-        val res = Vectors.zeros(expectedDims)
         (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
           vectors ++ Array(expandVector(feature, vectors.last, originalDims, currDegree))
-        }.reduce((lhs, rhs) => Vectors.dense(lhs.toArray ++ rhs.toArray))
+          }.reduce((lhs, rhs) => Vectors.dense(lhs.toArray ++ rhs.toArray))
       case f: SparseVector =>
         (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
           vectors ++ Array(expandVector(feature, vectors.last, originalDims, currDegree))
@@ -195,6 +220,35 @@ object PolynomialMapper {
           }
         }
       case _ => throw new Exception("vector type is invalid.")
+    }
+  }
+
+  /**
+   * Transform a vector of variables into a larger vector which stores the polynomial expansion from
+   * degree 1 to degree `degree`.
+   */
+  private def transform(degree: Int)(feature: Vector): Vector = {
+    val originalDims = feature.size
+    val expectedDims = numExpandedDims(degree, feature.size)
+    feature match {
+      case f: DenseVector =>
+        val res = Array.fill[Double](expectedDims)(0.0)
+        for (i <- 0 until f.size) {
+          res(i) = f(i)
+        }
+        fillDenseVector(res, 0, originalDims, 2, degree, originalDims)
+        Vectors.dense(res)
+
+      case f: SparseVector =>
+        val resIndices = new ArrayBuffer[Int]()
+        val resValues = new ArrayBuffer[Double]()
+        for (i <- 0 until f.indices.size) {
+          resIndices += f.indices(i)
+          resValues += f.values(i)
+        }
+        fillSparseVector(resIndices, resValues, f.indices.size, 0, f.indices.size, 2, degree,
+          originalDims)
+        Vectors.sparse(expectedDims, resIndices.toArray, resValues.toArray)
     }
   }
 }
