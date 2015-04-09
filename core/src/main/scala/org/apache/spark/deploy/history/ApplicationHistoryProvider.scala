@@ -21,7 +21,6 @@ import org.apache.spark.ui.SparkUI
 
 private[history] case class ApplicationAttemptInfo(
     attemptId: String,
-    name: String,
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
@@ -30,6 +29,7 @@ private[history] case class ApplicationAttemptInfo(
 
 private[history] case class ApplicationHistoryInfo(
     id: String,
+    name: String,
     attempts: List[ApplicationAttemptInfo])
 
 private[history] abstract class ApplicationHistoryProvider {

@@ -164,26 +164,25 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
       isFirst: Boolean): Seq[Node] = {
-    val attemptInfo = info.attempts.head
-    val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
-    val startTime = UIUtils.formatDate(attemptInfo.startTime)
-    val endTime = if (attemptInfo.endTime > 0) UIUtils.formatDate(attemptInfo.endTime) else "-"
+    val uiAddress = getAttemptURI(info.id, attempt)
+    val startTime = UIUtils.formatDate(attempt.startTime)
+    val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
     val duration =
-      if (attemptInfo.endTime > 0) {
-        UIUtils.formatDuration(attemptInfo.endTime - attemptInfo.startTime)
+      if (attempt.endTime > 0) {
+        UIUtils.formatDuration(attempt.endTime - attempt.startTime)
         } else {
           "-"
         }
-    val lastUpdated = UIUtils.formatDate(attemptInfo.lastUpdated)
+    val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
     <tr>
       {
         if (isFirst) {
           if (info.attempts.size > 1) {
             <td rowspan={info.attempts.size.toString}><a href={uiAddress}>{info.id}</a></td> ++
-            <td rowspan={info.attempts.size.toString}>{attempt.name}</td>
+            <td rowspan={info.attempts.size.toString}>{info.name}</td>
           } else {
             <td><a href={uiAddress}>{info.id}</a></td> ++
-            <td>{attempt.name}</td>
+            <td>{info.name}</td>
           }
         } else {
           Nil

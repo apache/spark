@@ -108,8 +108,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
       def makeAppInfo(id: String, name: String, start: Long, end: Long, lastMod: Long,
         user: String, completed: Boolean): ApplicationHistoryInfo = {
-        ApplicationHistoryInfo(id,
-          List(ApplicationAttemptInfo("", name, start, end, lastMod, user, completed)))
+        ApplicationHistoryInfo(id, name,
+          List(ApplicationAttemptInfo("", start, end, lastMod, user, completed)))
       }
 
       list(0) should be (makeAppInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,

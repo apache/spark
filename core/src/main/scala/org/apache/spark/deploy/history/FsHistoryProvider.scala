@@ -145,8 +145,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   override def getAppUI(appId: String, attemptId: String): Option[SparkUI] = {
     try {
-      applications.get(appId).flatMap { info =>
-        val attempts = info.attempts.filter(_.attemptId == attemptId)
+      applications.get(appId).flatMap { appInfo =>
+        val attempts = appInfo.attempts.filter(_.attemptId == attemptId)
         attempts.headOption.map { attempt =>
           val replayBus = new ReplayListenerBus()
           val ui = {
@@ -161,7 +161,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
 
-          ui.setAppName(s"${attempt.name} ($appId)")
+          ui.setAppName(s"${appInfo.name} ($appId)")
 
           val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
           ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -256,9 +256,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         .map { app =>
           val attempts =
             app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
-          new FsApplicationHistoryInfo(attempt.appId, attempts.sortWith(compareAttemptInfo))
+          new FsApplicationHistoryInfo(attempt.appId, attempt.name,
+            attempts.sortWith(compareAttemptInfo))
         }
-        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, List(attempt)))
+        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
       newAppMap(attempt.appId) = appInfo
     }
 
@@ -363,9 +364,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       bus.replay(logInput, logPath.toString)
       new FsApplicationAttemptInfo(
         logPath.getName(),
+        appListener.appName.getOrElse(NOT_STARTED),
         appListener.appId.getOrElse(logPath.getName()),
         appListener.appAttemptId.getOrElse(""),
-        appListener.appName.getOrElse(NOT_STARTED),
         appListener.startTime.getOrElse(-1L),
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog).get,
@@ -459,18 +460,19 @@ private object FsHistoryProvider {
 
 private class FsApplicationAttemptInfo(
     val logPath: String,
+    val name: String,
     val appId: String,
     attemptId: String,
-    name: String,
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean = true)
   extends ApplicationAttemptInfo(
-      attemptId, name, startTime, endTime, lastUpdated, sparkUser, completed)
+      attemptId, startTime, endTime, lastUpdated, sparkUser, completed)
 
 private class FsApplicationHistoryInfo(
     id: String,
+    override val name: String,
     override val attempts: List[FsApplicationAttemptInfo])
-  extends ApplicationHistoryInfo(id, attempts)
+  extends ApplicationHistoryInfo(id, name, attempts)
