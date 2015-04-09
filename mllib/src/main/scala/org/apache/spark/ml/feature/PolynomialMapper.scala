@@ -23,6 +23,8 @@ import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * :: AlphaComponent ::
  * Polynomially expand a vector into a larger one.
@@ -31,10 +33,10 @@ import org.apache.spark.sql.types.DataType
 class PolynomialMapper extends UnaryTransformer[Vector, Vector, PolynomialMapper] {
 
   /**
-   * The polynomial degree to expand, which should be larger than or equal to 1.
+   * The polynomial degree to expand, which should be larger than 1.
    * @group param
    */
-  val degree = new IntParam(this, "degree", "the polynomial degree to expand", Some(1))
+  val degree = new IntParam(this, "degree", "the polynomial degree to expand", Some(2))
 
   /** @group getParam */
   def getDegree: Int = get(degree)
@@ -71,6 +73,65 @@ object PolynomialMapper {
    */
   private def numExpandedDims(degree: Int, numVariables: Int): Int = {
     binomialCoefficient(numVariables + degree, numVariables) - 1
+  }
+
+  private def fillDenseVector(
+        outputVector: Array[Double],
+        prevExpandedVecFrom: Int,
+        prevExpandedVecLen: Int,
+        currDegree: Int,
+        nDim: Int): (Int, Int) = {
+    val currExpandedVecFrom = prevExpandedVecFrom + prevExpandedVecLen
+    var currIndex = currExpandedVecFrom
+    val currExpandedVecLen = numMonomials(currDegree, nDim)
+    var leftIndex = 0
+    while (leftIndex < nDim) {
+      val numToKeep = numMonomials(currDegree - 1, nDim - leftIndex)
+      val prevVecStartIndex = prevExpandedVecFrom + prevExpandedVecLen - numToKeep
+      var rightIndex = 0
+      while (rightIndex < numToKeep) {
+        outputVector(currIndex) =
+          outputVector(leftIndex) * outputVector(prevVecStartIndex + rightIndex)
+        currIndex += 1
+        rightIndex += 1
+      }
+      leftIndex += 1
+    }
+    (currExpandedVecFrom, currExpandedVecLen)
+  }
+
+  private def fillSparseVector(
+        outputIndices: ArrayBuffer[Int],
+        outputValues: ArrayBuffer[Double],
+        originalSparseVecLen: Int,
+        prevExpandedSparseVecFrom: Int,
+        prevExpandedSparseVecLen: Int,
+        currDegree: Int,
+        nDim: Int): (Int, Int) = {
+    val currExpandedSparseVecFrom = prevExpandedSparseVecFrom + prevExpandedSparseVecLen
+    var lengthCount = 0
+    val prevExpandedVecFrom = numExpandedDims(currDegree - 1, nDim)
+    val prevExpandedVecLen = numMonomials(currDegree - 1, nDim)
+    var leftIndex = 0
+    while (leftIndex < originalSparseVecLen) {
+      val numToKeep = numMonomials(currDegree - 1, nDim - outputIndices(leftIndex))
+      val prevVecStartIndex = prevExpandedVecFrom + prevExpandedVecLen - numToKeep
+      var rightIndex = 0
+      while (rightIndex < prevExpandedSparseVecLen) {
+        val realIndex =
+          outputIndices(prevExpandedSparseVecFrom + rightIndex) - (prevExpandedVecLen - numToKeep)
+        if (realIndex >= prevVecStartIndex) {
+          outputIndices += realIndex
+          outputValues += outputValues(leftIndex) * outputValues(rightIndex)
+          lengthCount += 1
+        } else {
+          // pass through if the index is invalid
+        }
+        rightIndex += 1
+      }
+      leftIndex += 1
+    }
+    (currExpandedSparseVecFrom, lengthCount)
   }
 
   /**
@@ -116,15 +177,17 @@ object PolynomialMapper {
    * degree 1 to degree `degree`.
    */
   private def transform(degree: Int)(feature: Vector): Vector = {
-    val nDim = feature.size
+    val originalDims = feature.size
+    val expectedDims = numExpandedDims(degree, feature.size)
     feature match {
       case f: DenseVector =>
+        val res = Vectors.zeros(expectedDims)
         (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
-          vectors ++ Array(expandVector(feature, vectors.last, nDim, currDegree))
+          vectors ++ Array(expandVector(feature, vectors.last, originalDims, currDegree))
         }.reduce((lhs, rhs) => Vectors.dense(lhs.toArray ++ rhs.toArray))
       case f: SparseVector =>
         (2 to degree).foldLeft(Array(feature.copy)) { (vectors, currDegree) =>
-          vectors ++ Array(expandVector(feature, vectors.last, nDim, currDegree))
+          vectors ++ Array(expandVector(feature, vectors.last, originalDims, currDegree))
         }.reduce { (lhs, rhs) =>
           (lhs, rhs) match {
             case (SparseVector(lLen, lIdx, lVal), SparseVector(rLen, rIdx, rVal)) =>
