@@ -176,19 +176,22 @@ trait HiveTypeCoercion {
 
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            val optWidestType = findTightestCommonType(l.dataType, r.dataType) match {
-              case type: Some => type
-              case None =>
-                (l.dataType, r.dataType) match {
-                  case (t1: DecimalType, t2: DecimalType) =>
-                    val (p1, s1) = (t1.precision, t1.scale)
-                    val (p2, s2) = (t2.precision, t2.scale)
-                    Some(DecimalType((p1-s1).max(p2-s2) + s1.max(s2) , s1.max(s2))) 
-                  case (t1: DecimalType, t2: FloatType) => Some(FloatType)
-                  case (t1: FloatType, t2: DecimalType) => Some(FloatType)
-                  case (t1: DecimalType, t2: DoubleType) => Some(DoubleType)
-                  case (t1: DoubleType, t2: DecimalType) => Some(DoubleType)
-                  case (_, _) => None
+            val optWidestType: Option[DataType] =
+              findTightestCommonType(l.dataType, r.dataType) match {
+                case None =>
+                  (l.dataType, r.dataType) match {
+                    case (t1: DecimalType, t2: DecimalType) =>
+                      val (p1, s1) = (t1.precision, t1.scale)
+                      val (p2, s2) = (t2.precision, t2.scale)
+                      Some(DecimalType((p1-s1).max(p2-s2) + s1.max(s2) , s1.max(s2)))
+                    case (t1: DecimalType, t2: FloatType) => Some(FloatType)
+                    case (t1: FloatType, t2: DecimalType) => Some(FloatType)
+                    case (t1: DecimalType, t2: DoubleType) => Some(DoubleType)
+                    case (t1: DoubleType, t2: DecimalType) => Some(DoubleType)
+                    case (_, _) => None
+                  }
+                case other => other
+              }
             optWidestType.map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
