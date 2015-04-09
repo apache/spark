@@ -1141,15 +1141,15 @@ setMethod("intersect",
             dataFrame(intersected)
           })
 
-#' Subtract
+#' except
 #'
 #' Return a new DataFrame containing rows in this DataFrame
 #' but not in another DataFrame. This is equivalent to `EXCEPT` in SQL.
 #'
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
-#' @return A DataFrame containing the result of the subtract operation.
-#' @rdname subtract
+#' @return A DataFrame containing the result of the except operation.
+#' @rdname except
 #' @export
 #' @examples
 #'\dontrun{
@@ -1157,16 +1157,17 @@ setMethod("intersect",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' df1 <- jsonFile(sqlCtx, path)
 #' df2 <- jsonFile(sqlCtx, path2)
-#' subtractDF <- subtract(df, df2)
+#' exceptDF <- except(df, df2)
 #' }
+setGeneric("except", function(x, y) { standardGeneric("except") })
 
-#' @rdname subtract
+#' @rdname except
 #' @export
-setMethod("subtract",
-          signature(x = "DataFrame", other = "DataFrame"),
-          function(x, other) {
-            subtracted <- callJMethod(x@sdf, "except", other@sdf)
-            dataFrame(subtracted)
+setMethod("except",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            excepted <- callJMethod(x@sdf, "except", y@sdf)
+            dataFrame(excepted)
           })
 
 #' Save the contents of the DataFrame to a data source

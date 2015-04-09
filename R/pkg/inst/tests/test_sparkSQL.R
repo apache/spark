@@ -644,7 +644,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
+test_that("unionAll(), except(), and intersect() on a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -659,10 +659,10 @@ test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
   expect_true(count(unioned) == 6)
   expect_true(first(unioned)$name == "Michael")
 
-  subtracted <- sortDF(subtract(df, df2), desc(df$age))
+  excepted <- sortDF(except(df, df2), desc(df$age))
   expect_true(inherits(unioned, "DataFrame"))
-  expect_true(count(subtracted) == 2)
-  expect_true(first(subtracted)$name == "Justin")
+  expect_true(count(excepted) == 2)
+  expect_true(first(excepted)$name == "Justin")
 
   intersected <- sortDF(intersect(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
