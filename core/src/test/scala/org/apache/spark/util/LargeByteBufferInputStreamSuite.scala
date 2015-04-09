@@ -17,12 +17,13 @@
 package org.apache.spark.util
 
 import java.io.{FileInputStream, FileOutputStream, OutputStream, File}
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.junit.Assert._
 import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, WrappedLargeByteBuffer}
+import org.apache.spark.network.buffer.{LargeByteBuffer, LargeByteBufferHelper, WrappedLargeByteBuffer}
 
 class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
 
@@ -54,10 +55,20 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
         assertEquals(buffer(arrIdx), read(arrIdx))
       }
     }
-    // XXX I assume its *not* intentional that the stream is only disposed when you try to read
-    // *past* the end in ByteBufferInputStream?
-    in.disposed should be (true)
+    in.disposed should be (false)
     in.read(read) should be (-1)
+    in.disposed should be (false)
+    in.close()
+    in.disposed should be (true)
+  }
+
+  test("dispose on close") {
+    //don't need to read to the end -- dispose anytime we close
+    val data = new Array[Byte](10)
+    val in = new LargeByteBufferInputStream(LargeByteBufferHelper.asLargeByteBuffer(data),
+      dispose = true)
+    in.disposed should be (false)
+    in.close()
     in.disposed should be (true)
   }
 

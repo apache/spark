@@ -24,7 +24,7 @@ import org.apache.spark.storage.BlockManager
 
 /**
  * Reads data from a LargeByteBuffer, and optionally cleans it up using buffer.dispose()
- * at the end of the stream (e.g. to close a memory-mapped file).
+ * when the stream is closed (e.g. to close a memory-mapped file).
  */
 private[spark]
 class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: Boolean = false)
@@ -32,14 +32,9 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
 
   override def read(): Int = {
     if (buffer == null || buffer.remaining() == 0) {
-      cleanUp()
       -1
     } else {
-      val r = buffer.get() & 0xFF
-      if (buffer.remaining() == 0) {
-        cleanUp()
-      }
-      r
+      buffer.get() & 0xFF
     }
   }
 
@@ -49,16 +44,10 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (buffer == null || buffer.remaining() == 0) {
-      cleanUp()
       -1
     } else {
       val amountToGet = math.min(buffer.remaining(), length).toInt
       buffer.get(dest, offset, amountToGet)
-      // XXX I assume its not intentional that the stream is only disposed when you try to read
-      // *past* the end in ByteBufferInputStream, so we do a check here
-      if (buffer.remaining() == 0) {
-        cleanUp()
-      }
       amountToGet
     }
   }
@@ -66,9 +55,6 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
   override def skip(bytes: Long): Long = {
     if (buffer != null) {
       val skipped = buffer.skip(bytes)
-      if (buffer.remaining() == 0) {
-        cleanUp()
-      }
       skipped
     } else {
       0L
@@ -81,7 +67,7 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
   /**
    * Clean up the buffer, and potentially dispose of it
    */
-  private def cleanUp() {
+  override def close() {
     if (buffer != null) {
       if (dispose) {
         buffer.dispose()
