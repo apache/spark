@@ -82,7 +82,7 @@ object PythonRunner {
         s"spark-submit is currently only supported for local files: $path")
     }
     val windows = Utils.isWindows || testWindows
-    var formattedPath = if (windows) Utils.formatWindowsPath(path) else path
+    var formattedPath = Utils.formatPath(path, windows)
 
     // Strip the URI scheme from the path
     formattedPath =

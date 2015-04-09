@@ -1659,9 +1659,14 @@ private[spark] object Utils extends Logging {
   val windowsDrive = "([a-zA-Z])".r
 
   /**
-   * Format a Windows path such that it can be safely passed to a URI.
+   * Format a path such that it can be safely passed to a URI.
    */
-  def formatWindowsPath(path: String): String = path.replace("\\", "/")
+  def formatPath(path: String, windows: Boolean): String = {
+    val formatted = path.replace(" ", "%20")
+
+    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
+    if (windows) formatted.replace("\\", "/") else formatted
+  }
 
   /**
    * Indicates whether Spark is currently running unit tests.
@@ -1762,9 +1767,8 @@ private[spark] object Utils extends Logging {
    */
   def resolveURI(path: String, testWindows: Boolean = false): URI = {
 
-    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
     val windows = isWindows || testWindows
-    val formattedPath = if (windows) formatWindowsPath(path) else path
+    val formattedPath = formatPath(path, windows)
 
     val uri = new URI(formattedPath)
     if (uri.getPath == null) {
@@ -1801,7 +1805,7 @@ private[spark] object Utils extends Logging {
       Array.empty
     } else {
       paths.split(",").filter { p =>
-        val formattedPath = if (windows) formatWindowsPath(p) else p
+        val formattedPath = formatPath(p, windows)
         val uri = new URI(formattedPath)
         Option(uri.getScheme).getOrElse("file") match {
           case windowsDrive(d) if windows => false

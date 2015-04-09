@@ -28,6 +28,7 @@ import java.util.Locale
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
+import org.apache.commons.lang3.SystemUtils
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -233,13 +234,16 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
       assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (SystemUtils.IS_OS_WINDOWS) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
+    assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
     assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("C:/path to/file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
@@ -258,14 +262,16 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (SystemUtils.IS_OS_WINDOWS) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
+    assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4",
+      testWindows = true)
   }
 
   test("nonLocalPaths") {
@@ -280,6 +286,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/path to/spark.jar,path to/a.jar,s3:/path to/smart.jar") ===
+      Array("hdfs:/path to/spark.jar", "s3:/path to/smart.jar"))
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
@@ -293,6 +301,11 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
       Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths(
+      "hdfs:/path to/spark.jar,C:\\path to\\a.jar,s3:/path to/smart.jar"
+      , testWindows = true
+    ) ===
+      Array("hdfs:/path to/spark.jar", "s3:/path to/smart.jar"))
     assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
       Array("hdfs:/a.jar", "s3:/another.jar"))
     assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
@@ -392,7 +405,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
 
-    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val path =
+      if (SystemUtils.IS_OS_WINDOWS) {
+        new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceDir.getAbsolutePath)
+      }
     val conf = new Configuration()
     val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
@@ -412,7 +430,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val destInnerFile = new File(destInnerDir, sourceFile.getName)
     assert(destInnerFile.isFile())
 
-    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val filePath =
+      if (SystemUtils.IS_OS_WINDOWS) {
+        new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceFile.getAbsolutePath)
+      }
     val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
