@@ -17,8 +17,11 @@
 
 package org.apache.spark.streaming.ui
 
-import scala.collection.mutable.{Queue, HashMap}
+import java.util.Properties
 
+import scala.collection.mutable.{ArrayBuffer, Queue, HashMap}
+
+import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{Time, StreamingContext}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
@@ -29,7 +32,9 @@ import org.apache.spark.util.Distribution
 
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
-  extends StreamingListener {
+  extends StreamingListener with SparkListener {
+
+  import StreamingJobProgressListener._
 
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
@@ -39,6 +44,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
+
+  private val batchTimeToJobIds = new HashMap[Time, ArrayBuffer[(OutputOpId, JobId)]]
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
@@ -70,9 +77,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     runningBatchInfos(batchStarted.batchInfo.batchTime) = batchStarted.batchInfo
     waitingBatchInfos.remove(batchStarted.batchInfo.batchTime)
 
-    batchStarted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
-      totalReceivedRecords += infos.map(_.numRecords).sum
-    }
+    totalReceivedRecords += batchStarted.batchInfo.numRecords
   }
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
@@ -80,12 +85,32 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
       waitingBatchInfos.remove(batchCompleted.batchInfo.batchTime)
       runningBatchInfos.remove(batchCompleted.batchInfo.batchTime)
       completedBatchInfos.enqueue(batchCompleted.batchInfo)
-      if (completedBatchInfos.size > batchInfoLimit) completedBatchInfos.dequeue()
+      if (completedBatchInfos.size > batchInfoLimit) {
+        val removedBatch = completedBatchInfos.dequeue()
+        batchTimeToJobIds.remove(removedBatch.batchTime)
+      }
       totalCompletedBatches += 1L
 
-      batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
-        totalProcessedRecords += infos.map(_.numRecords).sum
-      }
+      totalProcessedRecords += batchCompleted.batchInfo.numRecords
+    }
+  }
+
+  override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
+    getBatchTimeAndOutputOpId(jobStart.properties).foreach { case (batchTime, outputOpId) =>
+      batchTimeToJobIds.getOrElseUpdate(batchTime, ArrayBuffer[(OutputOpId, JobId)]()) +=
+        outputOpId -> jobStart.jobId
+    }
+  }
+
+  private def getBatchTimeAndOutputOpId(properties: Properties): Option[(Time, Int)] = {
+    val batchTime = properties.getProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY)
+    if (batchTime == null) {
+      // Not submitted from JobScheduler
+      None
+    } else {
+      val outputOpId = properties.getProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY)
+      assert(outputOpId != null)
+      Some(Time(batchTime.toLong) -> outputOpId.toInt)
     }
   }
 
@@ -180,4 +205,21 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {
     Distribution(completedBatchInfos.flatMap(getMetric(_)).map(_.toDouble))
   }
+
+  def getBatchInfo(batchTime: Time): Option[BatchInfo] = synchronized {
+    waitingBatchInfos.get(batchTime).orElse {
+      runningBatchInfos.get(batchTime).orElse {
+        completedBatchInfos.find(batch => batch.batchTime == batchTime)
+      }
+    }
+  }
+
+  def getJobInfos(batchTime: Time): Option[Seq[(OutputOpId, JobId)]] = synchronized {
+    batchTimeToJobIds.get(batchTime).map(_.toList)
+  }
+}
+
+private[streaming] object StreamingJobProgressListener {
+  type JobId = Int
+  type OutputOpId = Int
 }

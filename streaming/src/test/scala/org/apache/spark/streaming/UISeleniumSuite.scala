@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming
 
+import scala.collection.mutable.Queue
+
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
@@ -60,8 +62,17 @@ class UISeleniumSuite
     ssc
   }
 
+  private def setupStreams(ssc: StreamingContext): Unit = {
+    val rdds = Queue(ssc.sc.parallelize(1 to 4, 4))
+    val inputStream = ssc.queueStream(rdds)
+    inputStream.foreachRDD(rdd => rdd.foreach(_ => {}))
+  }
+
   test("attaching and detaching a Streaming tab") {
     withStreamingContext(newSparkStreamingContext()) { ssc =>
+      setupStreams(ssc)
+      ssc.start()
+
       val sparkUI = ssc.sparkContext.ui.get
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
@@ -75,6 +86,16 @@ class UISeleniumSuite
         val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
         statisticText should contain("Network receivers:")
         statisticText should contain("Batch interval:")
+
+        // TODO add tests once SPARK-6796 is merged
+
+        // Check a batch page without id
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/")
+        webDriver.getPageSource should include ("Missing id parameter")
+
+        // Check a non-exist batch
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/?id=12345")
+        webDriver.getPageSource should include ("does not exist")
       }
 
       ssc.stop(false)
