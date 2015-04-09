@@ -643,7 +643,7 @@ class Matrix(object):
     @staticmethod
     def _convert_to_array(array_like, dtype):
         """
-        Convert attributes which are array-like object or buffer to array.
+        Convert Matrix attributes which are array-like or buffer to array.
         """
         if isinstance(array_like, basestring):
             return np.frombuffer(array_like, dtype=dtype)
@@ -746,13 +746,14 @@ class SparseMatrix(Matrix):
         if self.isTransposed:
             j, i = i, j
 
-        nz = self.rowIndices[self.colPtrs[j]: self.colPtrs[j + 1]]
-        if nz.size == 0 or i > nz[-1]:
+        colStart = self.colPtrs[j]
+        colEnd = self.colPtrs[j + 1]
+        nz = self.rowIndices[colStart: colEnd]
+        ind = np.searchsorted(nz, i) + colStart
+        if ind < colEnd and self.rowIndices[ind] == i:
+            return self.values[ind]
+        else:
             return 0.0
-        ind = np.searchsorted(nz, i)
-        if i == nz[ind]:
-            return self.values[self.colPtrs[j]: self.colPtrs[j + 1]][ind]
-        return 0.0
 
     def _densify_values(self):
         sparsearr = np.zeros(self.numRows * self.numCols, dtype=np.float64)
@@ -773,8 +774,7 @@ class SparseMatrix(Matrix):
         Return an numpy.ndarray
         """
         return np.reshape(
-            self._densify_values(), (self.numRows, self.numCols), order='F'
-        )
+            self._densify_values(), (self.numRows, self.numCols), order='F')
 
     def toDense(self):
         return DenseMatrix(self.numRows, self.numCols, self._densify_values())
