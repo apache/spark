@@ -791,7 +791,7 @@ private[spark] object Utils extends Logging {
    * Note, this is typically not used from within core spark.
    */
   lazy val localIpAddress: InetAddress = findLocalInetAddress()
-  lazy val localIpAddressHostname: String = localIpAddress.getHostName
+  lazy val localIpAddressHostname: String = localIpAddress.getHostAddress
   lazy val localIpAddressURI: String = InetAddresses.toUriString(localIpAddress)
 
   private def findLocalInetAddress(): InetAddress = {
@@ -811,9 +811,9 @@ private[spark] object Utils extends Logging {
 
         for (ni <- reOrderedNetworkIFs) {
           val addresses = ni.getInetAddresses.toList
-            .filter { addr => !addr.isLinkLocalAddress && !addr.isLoopbackAddress }
-          if ( !addresses.isEmpty ) {
-            val addr = addresses.find( _.isInstanceOf[Inet4Address] ).getOrElse(addresses.head)
+            .filterNot(addr => addr.isLinkLocalAddress || addr.isLoopbackAddress)
+          if (addresses.nonEmpty) {
+            val addr = addresses.find(_.isInstanceOf[Inet4Address]).getOrElse(addresses.head)
             // because of Inet6Address.toHostName may add interface at the end if it knows about it
             val strippedAddress = InetAddress.getByAddress(addr.getAddress)
             // We've found an address that looks reasonable!
