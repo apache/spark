@@ -48,7 +48,7 @@ class FPGrowth(object):
     """
     .. note:: Experimental
 
-    A parallel FP-growth algorithm to mine frequent itemsets.
+    A Parallel FP-growth algorithm to mine frequent itemsets.
     """
 
     @classmethod
