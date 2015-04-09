@@ -125,5 +125,11 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
         }
       }
     }
+
+    // errors on bad bounds
+    intercept[IllegalArgumentException]{o.slice(31, 31)}
+    intercept[IllegalArgumentException]{o.slice(-1, 10)}
+    intercept[IllegalArgumentException]{o.slice(10, 5)}
+    intercept[IllegalArgumentException]{o.slice(10, 35)}
   }
 }
