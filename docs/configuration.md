@@ -254,6 +254,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.jdwp.enabled</code></td>
+  <td>false</td>
+  <td>
+    When enabling this option, unique JDWP ports will open for each Executor process and
+    which port is opened for each executor is displayed on Web UI.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
   <td>(none)</td>
   <td>
