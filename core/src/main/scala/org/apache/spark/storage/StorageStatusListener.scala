@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
@@ -32,7 +31,7 @@ class StorageStatusListener extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
-  def storageStatusList = executorIdToStorageStatus.values.toSeq
+  def storageStatusList: Seq[StorageStatus] = executorIdToStorageStatus.values.toSeq
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
@@ -56,7 +55,7 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     val metrics = taskEnd.taskMetrics
     if (info != null && metrics != null) {
@@ -67,7 +66,7 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
 

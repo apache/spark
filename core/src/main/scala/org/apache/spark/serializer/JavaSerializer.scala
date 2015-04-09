@@ -59,9 +59,10 @@ private[spark] class JavaSerializationStream(
 }
 
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
-extends DeserializationStream {
+  extends DeserializationStream {
+
   private val objIn = new ObjectInputStream(in) {
-    override def resolveClass(desc: ObjectStreamClass) =
+    override def resolveClass(desc: ObjectStreamClass): Class[_] =
       Class.forName(desc.getName, false, loader)
   }
 

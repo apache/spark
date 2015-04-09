@@ -59,6 +59,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  var isR: Boolean = false
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
@@ -160,7 +161,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
 
     // Try to set main class from JAR if no --class argument is given
-    if (mainClass == null && !isPython && primaryResource != null) {
+    if (mainClass == null && !isPython && !isR && primaryResource != null) {
       val uri = new URI(primaryResource)
       val uriScheme = uri.getScheme()
 
@@ -213,9 +214,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       printUsageAndExit(-1)
     }
     if (primaryResource == null) {
-      SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
+      SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python or R file)")
     }
-    if (mainClass == null && !isPython) {
+    if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
     }
     if (pyFiles != null && !isPython) {
@@ -254,7 +255,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     master.startsWith("spark://") && deployMode == "cluster"
   }
 
-  override def toString = {
+  override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
     |  deployMode              $deployMode
@@ -422,6 +423,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         opt
       }
     isPython = SparkSubmit.isPython(opt)
+    isR = SparkSubmit.isR(opt)
     false
   }
 

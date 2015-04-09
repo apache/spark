@@ -19,7 +19,7 @@ import os
 
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
-from pyspark.sql import Row, StructField, StructType, StringType, IntegerType
+from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
 
 
 if __name__ == "__main__":

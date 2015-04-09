@@ -30,7 +30,7 @@ $(function() {
 
     stripeSummaryTable();
 
-    $("input:checkbox").click(function() {
+    $('input[type="checkbox"]').click(function() {
         var column = "table ." + $(this).attr("name");
         $(column).toggle();
         stripeSummaryTable();
@@ -39,15 +39,15 @@ $(function() {
     $("#select-all-metrics").click(function() {
        if (this.checked) {
           // Toggle all un-checked options.
-          $('input:checkbox:not(:checked)').trigger('click');
+          $('input[type="checkbox"]:not(:checked)').trigger('click');
        } else {
           // Toggle all checked options.
-          $('input:checkbox:checked').trigger('click');
+          $('input[type="checkbox"]:checked').trigger('click');
        }
     });
 
     // Trigger a click on the checkbox if a user clicks the label next to it.
     $("span.additional-metric-title").click(function() {
-        $(this).parent().find('input:checkbox').trigger('click');
+        $(this).parent().find('input[type="checkbox"]').trigger('click');
     });
 });

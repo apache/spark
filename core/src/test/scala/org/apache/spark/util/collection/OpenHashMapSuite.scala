@@ -176,4 +176,14 @@ class OpenHashMapSuite extends FunSuite with Matchers {
       assert(map(i.toString) === i.toString)
     }
   }
+
+  test("contains") {
+    val map = new OpenHashMap[String, Int](2)
+    map("a") = 1
+    assert(map.contains("a"))
+    assert(!map.contains("b"))
+    assert(!map.contains(null))
+    map(null) = 0
+    assert(map.contains(null))
+  }
 }

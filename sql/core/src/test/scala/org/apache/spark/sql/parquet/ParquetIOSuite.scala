@@ -135,6 +135,21 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
   }
 
+  test("date type") {
+    def makeDateRDD(): DataFrame =
+      sparkContext
+        .parallelize(0 to 1000)
+        .map(i => Tuple1(DateUtils.toJavaDate(i)))
+        .toDF()
+        .select($"_1")
+
+    withTempPath { dir =>
+      val data = makeDateRDD()
+      data.saveAsParquetFile(dir.getCanonicalPath)
+      checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
+    }
+  }
+
   test("map") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
     checkParquetFile(data)
@@ -203,7 +218,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("compression codec") {
-    def compressionCodecFor(path: String) = {
+    def compressionCodecFor(path: String): String = {
       val codecs = ParquetTypesConverter
         .readMetaData(new Path(path), Some(configuration))
         .getBlocks

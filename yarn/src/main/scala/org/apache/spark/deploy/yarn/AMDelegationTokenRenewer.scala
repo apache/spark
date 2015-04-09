@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.NewTokens
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{SerializableBuffer, Utils}
@@ -58,7 +59,7 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   private var loggedInViaKeytab = false
-  var driverActor: ActorSelection = null
+  var driverEndPoint: RpcEndpointRef = null
 
   private lazy val hadoopUtil = YarnSparkHadoopUtil.get
 
@@ -72,7 +73,7 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
     sparkConf.getOption("spark.yarn.principal").foreach { principal =>
       val keytab = sparkConf.get("spark.yarn.keytab")
 
-      def getRenewalInterval = {
+      def getRenewalInterval: Long = {
         import scala.concurrent.duration._
         val credentials = UserGroupInformation.getCurrentUser.getCredentials
         val interval = (0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
@@ -86,7 +87,7 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
         }
       }
 
-      def scheduleRenewal(runnable: Runnable) = {
+      def scheduleRenewal(runnable: Runnable): Unit = {
         val renewalInterval = getRenewalInterval
         logInfo(s"Scheduling login from keytab in $renewalInterval millis.")
         delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
@@ -189,7 +190,7 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
         s.close()
         logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")
         remoteFs.rename(tempTokenPath, tokenPath)
-        driverActor ! NewTokens(new SerializableBuffer(ByteBuffer.wrap(baos.toByteArray)))
+        driverEndPoint.send(NewTokens(new SerializableBuffer(ByteBuffer.wrap(baos.toByteArray))))
         logInfo("Delegation token file rename complete.")
       }
     } finally {
