@@ -43,7 +43,6 @@ public class JavaKafkaRDDSuite implements Serializable {
   public void setUp() {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
-    System.clearProperty("spark.driver.port");
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     sc = new JavaSparkContext(sparkConf);
@@ -55,7 +54,6 @@ public class JavaKafkaRDDSuite implements Serializable {
       sc.stop();
       sc = null;
     }
-    System.clearProperty("spark.driver.port");
 
     if (kafkaTestUtils != null) {
       kafkaTestUtils.teardown();

@@ -196,8 +196,8 @@ private class KafkaTestUtils extends Logging {
     props
   }
 
-    // A simplified version of scalatest eventually, rewritten here is to avoid adding extra test
-    // dependency
+  // A simplified version of scalatest eventually, rewritten here to avoid adding extra test
+  // dependency
   def eventually[T](timeout: Time, interval: Time)(func: => T): T = {
     def makeAttempt(): Either[Throwable, T] = {
       try {
