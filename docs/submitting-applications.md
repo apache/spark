@@ -18,9 +18,9 @@ as `provided` dependencies; these need not be bundled since they are provided by
 the cluster manager at runtime. Once you have an assembled jar you can call the `bin/spark-submit`
 script as shown here while passing your jar.
 
-For Python, you can use the `--py-files` argument of `spark-submit` to add `.py`, `.zip` or `.egg`
-files to be distributed with your application. If you depend on multiple Python files we recommend
-packaging them into a `.zip` or `.egg`.
+For Python, you can use the `--py-files` argument of `spark-submit` to add `.py`, `.whl`, `.egg`
+or `.zip` files to be distributed with your application. If you depend on multiple Python files we
+recommend packaging them into a `.whl`, `.egg` or `.zip`.
 
 # Launching Applications with spark-submit
 
@@ -62,7 +62,7 @@ the drivers and the executors. Note that `cluster` mode is currently not support
 Mesos clusters or Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
-and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
+and add Python `.whl`, `.egg`, `.zip` or `.py` files to the search path with `--py-files`.
 
 There are a few options available that are specific to the
 [cluster manager](#cluster-overview.html#cluster-manager-types) that is being used.
@@ -179,8 +179,8 @@ with `--packages`. All transitive dependencies will be handled when using this c
 repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`. 
 These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
-For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
-to executors.
+For Python, the equivalent `--py-files` option can be used to distribute `.whl`, `.egg`, `.zip`
+and `.py` libraries to executors.
 
 # More Information
 

@@ -367,6 +367,22 @@ class AddFileTests(PySparkTestCase):
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
+    def test_add_whl_file_locally(self):
+        # To ensure that we're actually testing addPyFile's effects, check that
+        # this fails due to `testpackage1` or `testpackage2` not being on the
+        # Python path:
+        def func():
+            from testpackage2 import TestPackage1Class
+        self.assertRaises(ImportError, func)
+        paths = [
+            os.path.join(SPARK_HOME, "python/test_support/testpackage1-0.0.1-py2.py3-none-any.whl"),
+            os.path.join(SPARK_HOME, "python/test_support/testpackage2-0.0.1-py2.py3-none-any.whl"),
+        ]
+        for path in paths:
+            self.sc.addPyFile(path)
+        from testpackage2 import TestPackage1Class
+        self.assertEqual("Hello World from inside a package!", TestPackage1Class().hello())
+
     def test_overwrite_system_module(self):
         self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
 
