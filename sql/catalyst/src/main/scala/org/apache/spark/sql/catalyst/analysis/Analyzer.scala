@@ -293,7 +293,7 @@ class Analyzer(
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
-            q.resolveGetField(child, fieldName, resolver)
+            GetField(child, fieldName, resolver)
         }
     }
 
