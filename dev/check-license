@@ -73,7 +73,7 @@ mkdir -p "$FWDIR"/lib
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
 
 if [ $? -ne 0 ]; then
-   echo "Error happen when running rat, pls checking the rat jar"
+   echo "RAT exited abnormally"
    exit 1
 fi
 
