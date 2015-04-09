@@ -428,7 +428,7 @@ setMethod("combineByKey",
               pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       item$hash <- as.character(item[[1]])
+                       item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, combiners, pred, mergeValue, createCombiner)
                      })
               convertEnvsToList(keys, combiners)
@@ -441,7 +441,7 @@ setMethod("combineByKey",
               pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       item$hash <- as.character(item[[1]])
+                       item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, combiners, pred, mergeCombiners, identity)
                      })
               convertEnvsToList(keys, combiners)
