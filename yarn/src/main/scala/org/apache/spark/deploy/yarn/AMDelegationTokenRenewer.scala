@@ -58,7 +58,6 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   private var loggedInViaKeytab = false
-  private var loggedInUGI: UserGroupInformation = null
   var driverActor: ActorSelection = null
 
   private lazy val hadoopUtil = YarnSparkHadoopUtil.get
@@ -74,9 +73,17 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       val keytab = sparkConf.get("spark.yarn.keytab")
 
       def getRenewalInterval = {
+        import scala.concurrent.duration._
         val credentials = UserGroupInformation.getCurrentUser.getCredentials
-        math.max((0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
-          System.currentTimeMillis())).toLong, 0L)
+        val interval = (0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
+          System.currentTimeMillis())).toLong
+        // If only 6 hours left, then force a renewal immediately. This is to avoid tokens with
+        // very less validity being used on AM restart.
+        if ((interval millis).toHours <= 6) {
+          0L
+        } else {
+          interval
+        }
       }
 
       def scheduleRenewal(runnable: Runnable) = {
@@ -89,23 +96,32 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       val driverTokenRenewerRunnable =
         new Runnable {
           override def run(): Unit = {
+            var wroteNewFiles = false
             try {
               writeNewTokensToHDFS(principal, keytab)
+              wroteNewFiles = true
+              cleanupOldFiles()
             } catch {
               case e: Exception =>
-                logWarning("Failed to write out new credentials to HDFS, will try again in an " +
-                  "hour! If this happens too often tasks will fail.", e)
-                delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
-                return
+                // If the exception was due to some issue deleting files, don't worry about it -
+                // just try to clean up next time. Else, reschedule for an hour later so new
+                // tokens get written out.
+                if (!wroteNewFiles) {
+                  logWarning("Failed to write out new credentials to HDFS, will try again in an " +
+                    "hour! If this happens too often tasks will fail.", e)
+                  delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
+                  return
+                } else {
+                  logWarning("Error while attempting to clean up old delegation token files. " +
+                    "Cleanup will be reattempted the next time new tokens are being written.")
+                }
             }
-            cleanupOldFiles()
             scheduleRenewal(this)
           }
         }
-      // If this is an AM restart, it is possible that the original tokens have expired, which
-      // means we need to login immediately to get new tokens.
-      if (getRenewalInterval == 0) writeNewTokensToHDFS(principal, keytab)
-      // Schedule update of credentials
+      // Schedule update of credentials. This handles the case of updating the tokens right now
+      // as well, since the renenwal interval will be 0, and the thread will get scheduled
+      // immediately.
       scheduleRenewal(driverTokenRenewerRunnable)
 
     }
@@ -135,34 +151,20 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       // Keytab is copied by YARN to the working directory of the AM, so full path is
       // not needed.
       logInfo(s"Attempting to login to KDC using principal: $principal")
-      loggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(
-        principal, keytab)
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
       logInfo("Successfully logged into KDC.")
       loggedInViaKeytab = true
-      // Not exactly sure when HDFS re-logs in, be safe and do it ourselves.
-      // Periodically check and relogin this keytab. The UGI will take care of not relogging in
-      // if it is not necessary to relogin.
-      val reloginRunnable = new Runnable {
-        override def run(): Unit = {
-          try {
-            loggedInUGI.checkTGTAndReloginFromKeytab()
-          } catch {
-            case e: Exception =>
-              logError("Error while attempting tp relogin to KDC", e)
-          }
-        }
-      }
-      delegationTokenRenewer.schedule(reloginRunnable, 6, TimeUnit.HOURS)
     }
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf)
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, loggedInUGI.getCredentials)
+    hadoopUtil.obtainTokensForNamenodes(
+      nns, hadoopConf, UserGroupInformation.getCurrentUser.getCredentials)
     val remoteFs = FileSystem.get(hadoopConf)
     // If lastCredentialsFileSuffix is 0, then the AM is either started or restarted. If the AM
     // was restarted, then the lastCredentialsFileSuffix might be > 0, so find the newest file
     // and update the lastCredentialsFileSuffix.
     if (lastCredentialsFileSuffix == 0) {
       val credentialsPath = new Path(sparkConf.get("spark.yarn.credentials.file"))
-      SparkHadoopUtil.get.listFilesSorted(
+      hadoopUtil.listFilesSorted(
         remoteFs, credentialsPath.getParent, credentialsPath.getName, ".tmp")
         .lastOption.foreach { status =>
         lastCredentialsFileSuffix = getSuffixForCredentialsPath(status)
@@ -179,9 +181,10 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
       stream.foreach { s =>
         val baos = new ByteArrayOutputStream()
         val dataOutputStream = new DataOutputStream(baos)
-        loggedInUGI.getCredentials.writeTokenStorageToStream(dataOutputStream)
+        val credentials = UserGroupInformation.getCurrentUser.getCredentials
+        credentials.writeTokenStorageToStream(dataOutputStream)
         dataOutputStream.close()
-        loggedInUGI.getCredentials.writeTokenStorageToStream(s)
+        credentials.writeTokenStorageToStream(s)
         s.hflush()
         s.close()
         logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")

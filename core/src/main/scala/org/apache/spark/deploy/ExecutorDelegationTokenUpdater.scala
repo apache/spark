@@ -84,9 +84,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
     }
   }
 
-  private def getCredentialsFromHDFSFile(
-    remoteFs: FileSystem,
-    tokenPath: Path): Credentials = {
+  private def getCredentialsFromHDFSFile(remoteFs: FileSystem, tokenPath: Path): Credentials = {
     val stream = remoteFs.open(tokenPath)
     try {
       val newCredentials = new Credentials()
