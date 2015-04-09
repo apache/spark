@@ -293,7 +293,7 @@ class Analyzer(
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
-            resolveGetField(child, fieldName)
+            q.resolveGetField(child, fieldName, resolver)
         }
     }
 
@@ -313,36 +313,6 @@ class Analyzer(
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-    /**
-     * Returns the resolved `GetField`, and report error if no desired field or over one
-     * desired fields are found.
-     */
-    protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
-      def findField(fields: Array[StructField]): Int = {
-        val checkField = (f: StructField) => resolver(f.name, fieldName)
-        val ordinal = fields.indexWhere(checkField)
-        if (ordinal == -1) {
-          throw new AnalysisException(
-            s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-        } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-          throw new AnalysisException(
-            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
-        } else {
-          ordinal
-        }
-      }
-      expr.dataType match {
-        case StructType(fields) =>
-          val ordinal = findField(fields)
-          StructGetField(expr, fields(ordinal), ordinal)
-        case ArrayType(StructType(fields), containsNull) =>
-          val ordinal = findField(fields)
-          ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-        case otherType =>
-          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
-      }
-    }
   }
 
   /**

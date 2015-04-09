@@ -116,7 +116,7 @@ class DataFrame(object):
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
         >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlCtx.parquetFile(parquetFile)
+        >>> df2 = sqlContext.parquetFile(parquetFile)
         >>> sorted(df2.collect()) == sorted(df.collect())
         True
         """
@@ -129,7 +129,7 @@ class DataFrame(object):
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
-        >>> df2 = sqlCtx.sql("select * from people")
+        >>> df2 = sqlContext.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
@@ -1208,7 +1208,7 @@ def _test():
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))

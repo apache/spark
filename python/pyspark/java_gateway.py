@@ -29,11 +29,10 @@ from pyspark.serializers import read_int
 
 
 def launch_gateway():
-    SPARK_HOME = os.environ["SPARK_HOME"]
-
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
+        SPARK_HOME = os.environ["SPARK_HOME"]
         # Launch the Py4j gateway using Spark's run command so that we pick up the
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
