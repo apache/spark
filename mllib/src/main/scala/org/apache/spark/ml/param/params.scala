@@ -249,8 +249,15 @@ trait Params extends Identifiable with Serializable {
    * extra values from input into a flat param map, where the latter value is used if there exist
    * conflicts.
    */
-  protected final def extractParamMap(extraParamMap: ParamMap = ParamMap.empty): ParamMap = {
+  protected final def extractParamMap(extraParamMap: ParamMap): ParamMap = {
     defaultParamMap ++ paramMap ++ extraParamMap
+  }
+
+  /**
+   * [[extractParamMap]] with no extra values.
+   */
+  protected final def extractParamMap(): ParamMap = {
+    extractParamMap(ParamMap.empty)
   }
 
   /** Internal param map for user-supplied values. */

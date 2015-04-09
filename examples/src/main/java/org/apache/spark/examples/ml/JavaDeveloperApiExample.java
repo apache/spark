@@ -211,7 +211,7 @@ class MyJavaLogisticRegressionModel
   public MyJavaLogisticRegressionModel copy() {
     MyJavaLogisticRegressionModel m =
         new MyJavaLogisticRegressionModel(parent_, fittingParamMap_, weights_);
-    Params$.MODULE$.inheritValues(this.paramMap(), this, m);
+    Params$.MODULE$.inheritValues(this.extractParamMap(), this, m);
     return m;
   }
 }
