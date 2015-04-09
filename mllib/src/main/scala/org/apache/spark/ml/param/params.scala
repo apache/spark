@@ -136,7 +136,7 @@ trait Params extends Identifiable with Serializable {
     val valueStr = if (isDefined(param)) {
       val defaultValueStr = getDefault(param).map("default: " + _)
       val currentValueStr = get(param).map("current: " + _)
-      (defaultValueStr ++ currentValueStr).flatten.mkString("(", ", ", ")")
+      (defaultValueStr ++ currentValueStr).mkString("(", ", ", ")")
     } else {
       "(undefined)"
     }
