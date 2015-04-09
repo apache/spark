@@ -114,7 +114,10 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummaryInfo, logsExist: Boolean, debugPortDefined: Boolean): Seq[Node] = {
+  private def execRow(
+      info: ExecutorSummaryInfo,
+      logsExist: Boolean,
+      debugPortDefined: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
