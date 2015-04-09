@@ -176,26 +176,20 @@ trait HiveTypeCoercion {
 
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            var optWidestType = findTightestCommonType(l.dataType, r.dataType)
-            if (optWidestType == None) {
-              val (t1, t2) = (l.dataType, r.dataType)
-              optWidestType =
-                if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[DecimalType]) {
-                  val (d1, d2) = (t1.asInstanceOf[DecimalType], t2.asInstanceOf[DecimalType])
-                  val (p1, s1) = (d1.precision, d1.scale)
-                  val (p2, s2) = (d2.precision, d2.scale)
-                  Some(DecimalType((p1-s1).max(p2-s2) + s1.max(s2) , s1.max(s2)))
-                } else if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[FloatType] ||
-                  t1.isInstanceOf[FloatType] && t2.isInstanceOf[DecimalType]) {
-                  Some(FloatType)
-                } else if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[DoubleType] ||
-                  t1.isInstanceOf[DoubleType] && t2.isInstanceOf[DecimalType]) {
-                  Some(DoubleType)
-                }
-                else {
-                  None
-                }
-            }
+            val optWidestType = findTightestCommonType(l.dataType, r.dataType) match {
+              case type: Some => type
+              case None =>
+                (l.dataType, r.dataType) match {
+                  case (t1: DecimalType, t2: DecimalType) =>
+                    val (d1, d2) = (t1.asInstanceOf[DecimalType], t2.asInstanceOf[DecimalType])
+                    val (p1, s1) = (d1.precision, d1.scale)
+                    val (p2, s2) = (d2.precision, d2.scale)
+                    Some(DecimalType((p1-s1).max(p2-s2) + s1.max(s2) , s1.max(s2))) 
+                  case (t1: DecimalType, t2: FloatType) => Some(FloatType)
+                  case (t1: FloatType, t2: DecimalType) => Some(FloatType)
+                  case (t1: DecimalType, t2: DoubleType) => Some(DoubleType)
+                  case (t1: DoubleType, t2: DecimalType) => Some(DoubleType)
+                  case (_, _) => None
             optWidestType.map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
