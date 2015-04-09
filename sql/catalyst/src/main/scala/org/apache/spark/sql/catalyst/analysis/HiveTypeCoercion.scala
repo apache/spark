@@ -181,9 +181,8 @@ trait HiveTypeCoercion {
               case None =>
                 (l.dataType, r.dataType) match {
                   case (t1: DecimalType, t2: DecimalType) =>
-                    val (d1, d2) = (t1.asInstanceOf[DecimalType], t2.asInstanceOf[DecimalType])
-                    val (p1, s1) = (d1.precision, d1.scale)
-                    val (p2, s2) = (d2.precision, d2.scale)
+                    val (p1, s1) = (t1.precision, t1.scale)
+                    val (p2, s2) = (t2.precision, t2.scale)
                     Some(DecimalType((p1-s1).max(p2-s2) + s1.max(s2) , s1.max(s2))) 
                   case (t1: DecimalType, t2: FloatType) => Some(FloatType)
                   case (t1: FloatType, t2: DecimalType) => Some(FloatType)
