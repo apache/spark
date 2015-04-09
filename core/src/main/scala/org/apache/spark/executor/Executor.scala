@@ -27,8 +27,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.Props
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
@@ -88,9 +86,9 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
-  // Create an actor for receiving RPCs from the driver
-  private val executorActor = env.actorSystem.actorOf(
-    Props(new ExecutorActor(executorId)), "ExecutorActor")
+  // Create an RpcEndpoint for receiving RPCs from the driver
+  private val executorEndpoint = env.rpcEnv.setupEndpoint(
+    ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
 
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst: Boolean = {
@@ -139,7 +137,7 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    env.actorSystem.stop(executorActor)
+    env.rpcEnv.stop(executorEndpoint)
     isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
@@ -391,11 +389,8 @@ private[spark] class Executor(
     }
   }
 
-  private val timeout = AkkaUtils.lookupTimeout(conf)
-  private val retryAttempts = AkkaUtils.numRetries(conf)
-  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
   private val heartbeatReceiverRef =
-    AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
@@ -426,8 +421,7 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
-      val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-        retryAttempts, retryIntervalMs, timeout)
+      val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {
         logWarning("Told to re-register on heartbeat")
         env.blockManager.reregister()

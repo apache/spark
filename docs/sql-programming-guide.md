@@ -1642,7 +1642,7 @@ moved into the udf object in `SQLContext`.
 <div data-lang="scala"  markdown="1">
 {% highlight java %}
 
-sqlCtx.udf.register("strLen", (s: String) => s.length())
+sqlContext.udf.register("strLen", (s: String) => s.length())
 
 {% endhighlight %}
 </div>
@@ -1650,7 +1650,7 @@ sqlCtx.udf.register("strLen", (s: String) => s.length())
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 
-sqlCtx.udf().register("strLen", (String s) -> { s.length(); });
+sqlContext.udf().register("strLen", (String s) -> { s.length(); });
 
 {% endhighlight %}
 </div>

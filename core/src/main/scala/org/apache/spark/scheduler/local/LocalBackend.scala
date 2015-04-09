@@ -18,17 +18,14 @@
 package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
+import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.concurrent.duration._
-import scala.language.postfixOps
-
-import akka.actor.{Actor, ActorRef, Props}
-
+import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.util.ActorLogReceive
 
 private case class ReviveOffers()
 
@@ -39,17 +36,19 @@ private case class KillTask(taskId: Long, interruptThread: Boolean)
 private case class StopExecutor()
 
 /**
- * Calls to LocalBackend are all serialized through LocalActor. Using an actor makes the calls on
- * LocalBackend asynchronous, which is necessary to prevent deadlock between LocalBackend
+ * Calls to LocalBackend are all serialized through LocalEndpoint. Using an RpcEndpoint makes the
+ * calls on LocalBackend asynchronous, which is necessary to prevent deadlock between LocalBackend
  * and the TaskSchedulerImpl.
  */
-private[spark] class LocalActor(
+private[spark] class LocalEndpoint(
+    override val rpcEnv: RpcEnv,
     scheduler: TaskSchedulerImpl,
     executorBackend: LocalBackend,
     private val totalCores: Int)
-  extends Actor with ActorLogReceive with Logging {
+  extends ThreadSafeRpcEndpoint with Logging {
 
-  import context.dispatcher   // to use Akka's scheduler.scheduleOnce()
+  private val reviveThread = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("local-revive-thread"))
 
   private var freeCores = totalCores
 
@@ -59,7 +58,7 @@ private[spark] class LocalActor(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+  override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
       reviveOffers()
 
@@ -87,8 +86,16 @@ private[spark] class LocalActor(
     }
     if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
-      context.system.scheduler.scheduleOnce(1000 millis, self, ReviveOffers)
+      reviveThread.schedule(new Runnable {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          Option(self).foreach(_.send(ReviveOffers))
+        }
+      }, 1000, TimeUnit.MILLISECONDS)
     }
+  }
+
+  override def onStop(): Unit = {
+    reviveThread.shutdownNow()
   }
 }
 
@@ -101,31 +108,30 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   extends SchedulerBackend with ExecutorBackend {
 
   private val appId = "local-" + System.currentTimeMillis
-  var localActor: ActorRef = null
+  var localEndpoint: RpcEndpointRef = null
 
   override def start() {
-    localActor = SparkEnv.get.actorSystem.actorOf(
-      Props(new LocalActor(scheduler, this, totalCores)),
-      "LocalBackendActor")
+    localEndpoint = SparkEnv.get.rpcEnv.setupEndpoint(
+      "LocalBackendEndpoint", new LocalEndpoint(SparkEnv.get.rpcEnv, scheduler, this, totalCores))
   }
 
   override def stop() {
-    localActor ! StopExecutor
+    localEndpoint.send(StopExecutor)
   }
 
   override def reviveOffers() {
-    localActor ! ReviveOffers
+    localEndpoint.send(ReviveOffers)
   }
 
   override def defaultParallelism(): Int =
     scheduler.conf.getInt("spark.default.parallelism", totalCores)
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
-    localActor ! KillTask(taskId, interruptThread)
+    localEndpoint.send(KillTask(taskId, interruptThread))
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
-    localActor ! StatusUpdate(taskId, state, serializedData)
+    localEndpoint.send(StatusUpdate(taskId, state, serializedData))
   }
 
   override def applicationId(): String = appId

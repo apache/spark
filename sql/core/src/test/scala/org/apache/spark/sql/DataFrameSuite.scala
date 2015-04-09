@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
@@ -60,6 +60,14 @@ class DataFrameSuite extends QueryTest {
     assert($"test".toString === "test")
   }
 
+  test("rename nested groupby") {
+    val df = Seq((1,(1,1))).toDF()
+
+    checkAnswer(
+      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      Row(1, 1) :: Nil)
+  }
+
   test("invalid plan toString, debug mode") {
     val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
@@ -82,6 +90,11 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("empty data frame") {
+    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(TestSQLContext.emptyDataFrame.count() === 0)
   }
 
   test("head and take") {
@@ -112,6 +125,10 @@ class DataFrameSuite extends QueryTest {
     val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
       df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
@@ -312,8 +329,9 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
+    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -496,5 +514,12 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
+  }
+
+  test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
+    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val df = TestSQLContext.createDataFrame(rowRDD, schema)
+    df.rdd.collect()
   }
 }

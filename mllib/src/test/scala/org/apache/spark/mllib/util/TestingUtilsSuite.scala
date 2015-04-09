@@ -88,16 +88,20 @@ class TestingUtilsSuite extends FunSuite {
     assert(!(17.8 ~= 17.59 absTol 0.2))
 
     // Comparisons of numbers very close to zero, and both side of zeros
-    assert(Double.MinPositiveValue ~== 4 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
-    assert(Double.MinPositiveValue !~== 6 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
+    assert(
+      Double.MinPositiveValue ~== 4 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
+    assert(
+      Double.MinPositiveValue !~== 6 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
 
-    assert(-Double.MinPositiveValue ~== 3 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
-    assert(Double.MinPositiveValue !~== -4 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
+    assert(
+      -Double.MinPositiveValue ~== 3 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
+    assert(
+      Double.MinPositiveValue !~== -4 * Double.MinPositiveValue absTol 5 * Double.MinPositiveValue)
   }
 
   test("Comparing vectors using relative error.") {
 
-    //Comparisons of two dense vectors
+    // Comparisons of two dense vectors
     assert(Vectors.dense(Array(3.1, 3.5)) ~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
     assert(Vectors.dense(Array(3.1, 3.5)) !~== Vectors.dense(Array(3.135, 3.534)) relTol 0.01)
     assert(Vectors.dense(Array(3.1, 3.5)) ~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
@@ -130,7 +134,7 @@ class TestingUtilsSuite extends FunSuite {
 
   test("Comparing vectors using absolute error.") {
 
-    //Comparisons of two dense vectors
+    // Comparisons of two dense vectors
     assert(Vectors.dense(Array(3.1, 3.5, 0.0)) ~==
       Vectors.dense(Array(3.1 + 1E-8, 3.5 + 2E-7, 1E-8)) absTol 1E-6)
 

@@ -21,6 +21,7 @@ import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -103,7 +104,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT ABS(2.5)"),
       Row(2.5))
   }
-
+  
   test("aggregation with codegen") {
     val originalValue = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
@@ -151,13 +152,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "SELECT count(distinct key) FROM testData3x",
       Row(100) :: Nil)
     // SUM
-    // TODO: enable the test once https://issues.apache.org/jira/browse/SPARK-6451 has been fixed.
-    // testCodeGen(
-    //   "SELECT value, sum(key) FROM testData3x GROUP BY value",
-    //   (1 to 100).map(i => Row(i.toString, 3 * i)))
-    // testCodeGen(
-    //  "SELECT sum(key) FROM testData3x",
-    //  Row(5050 * 3) :: Nil)
+    testCodeGen(
+      "SELECT value, sum(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, 3 * i)))
+    testCodeGen(
+      "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",      
+      Row(5050 * 3, 5050 * 3.0) :: Nil)
     // AVERAGE
     testCodeGen(
       "SELECT value, avg(key) FROM testData3x GROUP BY value",
@@ -173,11 +173,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "SELECT max(key) FROM testData3x",
       Row(100) :: Nil)
     // Some combinations.
-    // TODO: add sum back once https://issues.apache.org/jira/browse/SPARK-6451 has been fixed.
     testCodeGen(
       """
         |SELECT
         |  value,
+        |  sum(key),
         |  max(key),
         |  avg(key),
         |  count(key),
@@ -185,10 +185,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |FROM testData3x
         |GROUP BY value
       """.stripMargin,
-      (1 to 100).map(i => Row(i.toString, i, i, 3, 1)))
+      (1 to 100).map(i => Row(i.toString, i*3, i, i, 3, 1)))
     testCodeGen(
       "SELECT max(key), avg(key), count(key), count(distinct key) FROM testData3x",
       Row(100, 50.5, 300, 100) :: Nil)
+    // Aggregate with Code generation handling all null values
+    testCodeGen(
+      "SELECT  sum('a'), avg('a'), count(null) FROM testData",
+      Row(0, null, 0) :: Nil)
+
     dropTempTable("testData3x")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
@@ -265,7 +270,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')"),
+      """
+        |SELECT time FROM timestamps
+        |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
+      """.stripMargin),
       Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
         Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
@@ -331,7 +339,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row("1"))
   }
 
-  def sortTest() = {
+  def sortTest(): Unit = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
@@ -410,7 +418,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("from follow multiple brackets") {
     checkAnswer(sql(
-      "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),
+      """
+        |select key from ((select * from testData limit 1)
+        |  union all (select * from testData limit 1)) x limit 1
+      """.stripMargin),
       Row(1)
     )
 
@@ -420,7 +431,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
 
     checkAnswer(sql(
-      "select key from (select * from testData limit 1 union all select * from testData limit 1) x limit 1"),
+      """
+        |select key from
+        |  (select * from testData limit 1 union all select * from testData limit 1) x
+        |  limit 1
+      """.stripMargin),
       Row(1)
     )
   }
@@ -467,7 +482,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Row(1, 0), Row(2, 1)))
 
     checkAnswer(
-      sql("SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
+      sql(
+        """
+          |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
+        """.stripMargin),
       Row(2, 1, 2, 2, 1))
   }
 
@@ -1080,7 +1098,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
+    val data = sparkContext.parallelize(
+      Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
     sql("SELECT `key?number1` FROM records")
   }
@@ -1165,12 +1184,21 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
+      .registerTempTable("nestedOrder")
+
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
+  }
+
+  test("SPARK-6145: special cases") {
     jsonRDD(sparkContext.makeRDD(
-      """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
-    // These should be successfully analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
+      """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
+    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
+    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
 }
