@@ -33,13 +33,11 @@ private[feature] trait IDFParams extends Params with HasInputCol with HasOutputC
   val minDocFreq = new IntParam(
     this, "minDocFreq", "minimum of documents in which a term should appear for filtering", Some(0))
 
-  def getMinDocFreq: Int = {
-    get(minDocFreq)
-  }
+  /** @group getParam */
+  def getMinDocFreq: Int = get(minDocFreq)
 
-  def setMinDocFreq(value: Int): this.type = {
-    set(minDocFreq, value)
-  }
+  /** @group setParam */
+  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   /**
    * Validate and transform the input schema.
@@ -104,8 +102,8 @@ class IDFModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val idf = udf((v: Vector) => { idfModel.transform(v) })
-    dataset.withColumn(map(outputCol), idf(col(map(inputCol))))
+    val idf: Vector => Vector = (vec) => idfModel.transform(vec)
+    dataset.withColumn(map(outputCol), callUDF(idf, new VectorUDT, col(map(inputCol))))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
