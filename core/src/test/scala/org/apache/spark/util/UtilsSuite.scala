@@ -40,6 +40,9 @@ import org.apache.spark.SparkConf
 class UtilsSuite extends FunSuite with ResetSystemProperties {
   
   test("timeConversion") {
+    // Test -1
+    assert(Utils.timeStringAsSec("-1") === -1)
+    
     // Test zero
     assert(Utils.timeStringAsSec("0") === 0)
     

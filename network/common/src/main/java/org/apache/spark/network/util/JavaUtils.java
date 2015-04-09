@@ -147,7 +147,7 @@ public class JavaUtils {
     try {
       String suffix = "";
       long val = -1;
-      Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
+      Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
       if (m.matches()) {
         val = Long.parseLong(m.group(1));
         suffix = m.group(2);
