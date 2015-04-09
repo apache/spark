@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.mutable.Map
-import scala.collection.mutable.Set
+import scala.collection.mutable
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
@@ -36,13 +35,13 @@ import org.apache.spark.rdd.RDD
  */
 @Experimental
 class AffinityPropagationModel(
-    val clusters: Seq[Set[Long]],
-    val exemplars: Seq[Long]) extends Serializable {
+    val clusters: RDD[(Array[Long], Long)],
+    val exemplars: RDD[(Long, Long)]) extends Serializable {
 
   /**
    * Set the number of clusters
    */
-  def getK(): Int = clusters.size
+  lazy val getK: Long = clusters.count()
 
   /**
    * Find the cluster the given vertex belongs
@@ -51,9 +50,9 @@ class AffinityPropagationModel(
    *         the given vertex doesn't belong to any cluster, return null.
    */
   def findCluster(vertexID: Long): Array[Long] = {
-    val cluster = clusters.filter(_.contains(vertexID))
+    val cluster = clusters.filter(_._1.contains(vertexID)).collect()
     if (cluster.nonEmpty) {
-      cluster(0).toArray
+      cluster(0)._1
     } else {
       null
     }
@@ -65,15 +64,20 @@ class AffinityPropagationModel(
    * @return the cluster id that the given vertex belongs to. If the given vertex doesn't belong to
    *         any cluster, return -1.
    */
-  def findClusterID(vertexID: Long): Int = {
-    var i = 0
-    clusters.foreach { cluster =>
-      if (cluster.contains(vertexID)) {
-        return i
+  def findClusterID(vertexID: Long): Long = {
+    val clusterIds = clusters.flatMap { clusterAndId =>
+      val clusterId = clusterAndId._2
+      if (clusterAndId._1.contains(vertexID)) {
+        Seq(clusterId)
+      } else {
+        Seq()
       }
-      i += i
+    }.collect()
+    if (clusterIds.nonEmpty) {
+      clusterIds(0)
+    } else {
+      -1
     }
-    -1
   } 
 }
 
@@ -191,7 +195,40 @@ class AffinityPropagation private[clustering] (
   def getSymmetric(): Boolean = {
     this.symmetric
   }
- 
+
+  /**
+   * Calculate the median value of similarities
+   */
+  private def getMedian(similarities: RDD[(Long, Long, Double)]): Double = {
+    import org.apache.spark.SparkContext._
+
+    val sorted = similarities.sortBy(_._3).zipWithIndex().map {
+      case (v, idx) => (idx, v)
+    }
+
+    val count = sorted.count()
+
+    if (count % 2 == 0) {
+      val l = count / 2 - 1
+      val r = l + 1
+      (sorted.lookup(l).head._3 + sorted.lookup(r).head._3).toDouble / 2
+    } else {
+      sorted.lookup(count / 2).head._3.toDouble
+    }
+  }
+
+  /**
+   * Determine preferences by calculating median of similarities.
+   * This might cost considering computation time for large similarities data.
+   */
+  def determinePreferences(
+      similarities: RDD[(Long, Long, Double)]): RDD[(Long, Long, Double)] = {
+    // the recommended preferences is the median of similarities
+    val median = getMedian(similarities)
+    val preferences = similarities.flatMap(t => Seq(t._1, t._2)).distinct().map(i => (i, i, median))
+    similarities.union(preferences)
+  }
+
   /**
    * Run the AP algorithm.
    *
@@ -378,35 +415,14 @@ private[clustering] object AffinityPropagation extends Logging {
       } else {
         (ar2._1, ar2._2)
       }
-    }).map(kv => (kv._2._1, kv._1)).aggregateByKey(Set[Long]())(
-      seqOp = (s, d) => s ++ Set(d),
+    }).map(kv => (kv._2._1, kv._1)).aggregateByKey(mutable.Set[Long]())(
+      seqOp = (s, d) => s ++ mutable.Set(d),
       combOp = (s1, s2) => s1 ++ s2
     ).cache()
     
-    val neighbors = clusterMembers.map(kv => kv._2 ++ Set(kv._1)).collect()
-    val exemplars = clusterMembers.map(kv => kv._1).collect()
+    val clusters = clusterMembers.map(kv => (kv._2 ++ mutable.Set(kv._1)).toArray).zipWithIndex()
+    val exemplars = clusterMembers.map(kv => kv._1).zipWithIndex()
 
-    var clusters = Seq[Set[Long]]()
-
-    var i = 0
-    var nz = neighbors.size
-    while (i < nz) {    
-      var curCluster = neighbors(i)
-      var j = i + 1
-      while (j < nz) {
-        if (!curCluster.intersect(neighbors(j)).isEmpty) {
-          curCluster ++= neighbors(j)
-        }
-        j += 1
-      }
-      val overlap = clusters.filter(!_.intersect(curCluster).isEmpty)
-      if (overlap.isEmpty) {
-        clusters = clusters.:+(curCluster)
-      } else {
-        overlap(0) ++= curCluster
-      }
-      i += 1
-    }
     new AffinityPropagationModel(clusters, exemplars)
   }
 }
