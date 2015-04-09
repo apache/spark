@@ -30,52 +30,31 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
   override def batchDuration = Milliseconds(100)
 
-  test("onBatchSubmitted") {
+  test("onBatchSubmitted, onBatchStarted, onBatchCompleted, " +
+    "onReceiverStarted, onReceiverError, onReceiverStopped") {
     val ssc = setupStreams(input, operation)
     val listener = new StreamingJobProgressListener(ssc)
-
-    val batchInfoSubmitted = BatchInfo(Time(1000), Map(), 1000, None, None)
-    listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
-
-    listener.waitingBatches should be(List(batchInfoSubmitted))
-  }
-
-  test("onBatchStarted") {
-    val ssc = setupStreams(input, operation)
-    val listener = new StreamingJobProgressListener(ssc)
-
-    val batchInfoSubmitted = BatchInfo(Time(1000), Map(), 1000, None, None)
-    listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
 
     val receivedBlockInfo = Map(
       0 -> Array(ReceivedBlockInfo(0, 100, null), ReceivedBlockInfo(0, 200, null)),
       1 -> Array(ReceivedBlockInfo(1, 300, null))
     )
+
+    // onBatchSubmitted
+    val batchInfoSubmitted = BatchInfo(Time(1000), receivedBlockInfo, 1000, None, None)
+    listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
+    listener.waitingBatches should be(List(batchInfoSubmitted))
+
+    // onBatchStarted
     val batchInfoStarted = BatchInfo(Time(1000), receivedBlockInfo, 1000, Some(2000), None)
     listener.onBatchStarted(StreamingListenerBatchStarted(batchInfoStarted))
-
     listener.runningBatches should be(List(batchInfoStarted))
     listener.waitingBatches should be(Nil)
     listener.numTotalReceivedRecords should be(600)
-  }
 
-  test("onBatchCompleted") {
-    val ssc = setupStreams(input, operation)
-    val listener = new StreamingJobProgressListener(ssc)
-
-    val batchInfoSubmitted = BatchInfo(Time(1000), Map(), 1000, None, None)
-    listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
-
-    val receivedBlockInfo = Map(
-      0 -> Array(ReceivedBlockInfo(0, 100, null), ReceivedBlockInfo(0, 200, null)),
-      1 -> Array(ReceivedBlockInfo(1, 300, null))
-    )
-    val batchInfoStarted = BatchInfo(Time(1000), receivedBlockInfo, 1000, Some(2000), None)
-    listener.onBatchStarted(StreamingListenerBatchStarted(batchInfoStarted))
-
+    // onBatchCompleted
     val batchInfoCompleted = BatchInfo(Time(1000), receivedBlockInfo, 1000, Some(2000), None)
     listener.onBatchCompleted(StreamingListenerBatchCompleted(batchInfoCompleted))
-
     listener.runningBatches should be (Nil)
     listener.waitingBatches should be (Nil)
     listener.lastCompletedBatch should be (Some(batchInfoCompleted))
@@ -83,9 +62,30 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.numTotalCompletedBatches should be (1)
     listener.numTotalProcessedRecords should be (600)
     listener.numTotalReceivedRecords should be (600)
+
+    // onReceiverStarted
+    val receiverInfoStarted = ReceiverInfo(0, "test", null, true, "localhost")
+    listener.onReceiverStarted(StreamingListenerReceiverStarted(receiverInfoStarted))
+    listener.receiverInfo(0) should be (Some(receiverInfoStarted))
+    listener.receiverInfo(1) should be (None)
+
+    // onReceiverError
+    val receiverInfoError = ReceiverInfo(1, "test", null, true, "localhost")
+    listener.onReceiverError(StreamingListenerReceiverError(receiverInfoError))
+    listener.receiverInfo(0) should be (Some(receiverInfoStarted))
+    listener.receiverInfo(1) should be (Some(receiverInfoError))
+    listener.receiverInfo(2) should be (None)
+
+    // onReceiverStopped
+    val receiverInfoStopped = ReceiverInfo(2, "test", null, true, "localhost")
+    listener.onReceiverStopped(StreamingListenerReceiverStopped(receiverInfoStopped))
+    listener.receiverInfo(0) should be (Some(receiverInfoStarted))
+    listener.receiverInfo(1) should be (Some(receiverInfoError))
+    listener.receiverInfo(2) should be (Some(receiverInfoStopped))
+    listener.receiverInfo(3) should be (None)
   }
 
-  test("retain completed batch") {
+  test("Remove the old completed batches when exceeding the limit") {
     val ssc = setupStreams(input, operation)
     val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
     val listener = new StreamingJobProgressListener(ssc)
@@ -103,38 +103,4 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.retainedCompletedBatches.size should be (limit)
     listener.numTotalCompletedBatches should be(limit + 10)
   }
-
-  test("onReceiverStarted") {
-    val ssc = setupStreams(input, operation)
-    val listener = new StreamingJobProgressListener(ssc)
-
-    val receiverInfo = ReceiverInfo(0, "test", null, true, "localhost")
-    listener.onReceiverStarted(StreamingListenerReceiverStarted(receiverInfo))
-
-    listener.receiverInfo(0) should be (Some(receiverInfo))
-    listener.receiverInfo(1) should be (None)
-  }
-
-  test("onReceiverError") {
-    val ssc = setupStreams(input, operation)
-    val listener = new StreamingJobProgressListener(ssc)
-
-    val receiverInfo = ReceiverInfo(0, "test", null, true, "localhost")
-    listener.onReceiverError(StreamingListenerReceiverError(receiverInfo))
-
-    listener.receiverInfo(0) should be (Some(receiverInfo))
-    listener.receiverInfo(1) should be (None)
-  }
-
-  test("onReceiverStopped") {
-    val ssc = setupStreams(input, operation)
-    val listener = new StreamingJobProgressListener(ssc)
-
-    val receiverInfo = ReceiverInfo(0, "test", null, true, "localhost")
-    listener.onReceiverStopped(StreamingListenerReceiverStopped(receiverInfo))
-
-    listener.receiverInfo(0) should be (Some(receiverInfo))
-    listener.receiverInfo(1) should be (None)
-  }
-
 }
