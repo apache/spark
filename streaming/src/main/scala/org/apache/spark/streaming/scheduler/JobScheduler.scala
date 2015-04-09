@@ -135,13 +135,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   private def handleJobStart(job: Job) {
     val jobSet = jobSets.get(job.time)
-    if (!jobSet.hasStarted) {
-      jobSet.handleJobStart(job)
+    val isFirstJobOfJobSet = !jobSet.hasStarted
+    jobSet.handleJobStart(job)
+    if (isFirstJobOfJobSet) {
       // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
       // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
-    } else {
-      jobSet.handleJobStart(job)
     }
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
