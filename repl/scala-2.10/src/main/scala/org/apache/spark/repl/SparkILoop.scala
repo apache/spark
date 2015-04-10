@@ -206,6 +206,7 @@ class SparkILoop(
         // e.g. file:/C:/my/path.jar -> C:/my/path.jar
         SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
       } else {
+        // We need new URI(jar).getPath here for the case that `jar` includes encoded white space (%20).
         SparkILoop.getAddedJars.map { jar => new URI(jar).getPath}
       }
     // work around for Scala bug
