@@ -63,14 +63,13 @@ private[spark] class EventLoggingListener(
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
 
   private val fileSystem = {
-    val logUri = new URI(logBaseDir)
-    val schema = logUri.getScheme
+    val schema = logBaseDir.getScheme
     if (schema == "hdfs") {
       val conf = SparkHadoopUtil.get.newConfiguration(sparkConf)
       conf.setBoolean("fs.hdfs.impl.disable.cache", true)
-      Utils.getHadoopFileSystem(logUri, conf)
+      Utils.getHadoopFileSystem(logBaseDir, conf)
     } else {
-      Utils.getHadoopFileSystem(logUri, hadoopConf)
+      Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
     }
   }
 
