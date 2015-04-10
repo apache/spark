@@ -420,7 +420,7 @@ setMethod("reduceByKeyLocally",
 #' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("combineByKey",
           signature(x = "RDD", createCombiner = "ANY", mergeValue = "ANY",
-                    mergeCombiners = "ANY", numPartitions = "integer"),
+                    mergeCombiners = "ANY", numPartitions = "numeric"),
           function(x, createCombiner, mergeValue, mergeCombiners, numPartitions) {
             combineLocally <- function(part) {
               combiners <- new.env()
@@ -434,7 +434,7 @@ setMethod("combineByKey",
               convertEnvsToList(keys, combiners)
             }
             locallyCombined <- lapplyPartition(x, combineLocally)
-            shuffled <- partitionBy(locallyCombined, numPartitions)
+            shuffled <- partitionBy(locallyCombined, numToInt(numPartitions))
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()
               keys <- new.env()
