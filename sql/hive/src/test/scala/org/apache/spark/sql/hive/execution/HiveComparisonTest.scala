@@ -138,7 +138,7 @@ abstract class HiveComparisonTest
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    val orderedAnswer = hiveQuery.logical match {
+    val orderedAnswer = hiveQuery.analyzed match {
       // Clean out non-deterministic time schema info.
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
@@ -255,8 +255,9 @@ abstract class HiveComparisonTest
           .filterNot(_ contains "hive.outerjoin.supports.filters")
           .filterNot(_ contains "hive.exec.post.hooks")
 
-      if (allQueries != queryList)
+      if (allQueries != queryList) {
         logWarning(s"Simplifications made on unsupported operations for test $testCaseName")
+      }
 
       lazy val consoleTestCase = {
         val quotes = "\"\"\""
@@ -299,19 +300,22 @@ abstract class HiveComparisonTest
 
             val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
-            hiveQueries.foreach(_.logical)
+            hiveQueries.foreach(_.analyzed)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
               case ((queryString, i), hiveQuery, cachedAnswerFile)=>
                 try {
                   // Hooks often break the harness and don't really affect our test anyway, don't
                   // even try running them.
-                  if (installHooksCommand.findAllMatchIn(queryString).nonEmpty)
+                  if (installHooksCommand.findAllMatchIn(queryString).nonEmpty) {
                     sys.error("hive exec hooks not supported for tests.")
+                  }
 
-                  logWarning(s"Running query ${i+1}/${queryList.size} with hive.")
+                  logWarning(s"Running query ${i + 1}/${queryList.size} with hive.")
                   // Analyze the query with catalyst to ensure test tables are loaded.
                   val answer = hiveQuery.analyzed match {
-                    case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
+                    case _: ExplainCommand =>
+                      // No need to execute EXPLAIN queries as we don't check the output.
+                      Nil
                     case _ => TestHive.runSqlHive(queryString)
                   }
 
@@ -394,21 +398,24 @@ abstract class HiveComparisonTest
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
           if (System.getProperty("spark.hive.canarytest") != null) {
-            // When we encounter an error we check to see if the environment is still okay by running a simple query.
-            // If this fails then we halt testing since something must have gone seriously wrong.
+            // When we encounter an error we check to see if the environment is still
+            // okay by running a simple query. If this fails then we halt testing since
+            // something must have gone seriously wrong.
             try {
               new TestHive.HiveQLQueryExecution("SELECT key FROM src").stringResult()
               TestHive.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
-                logError(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
-                // The testing setup traps exits so wait here for a long time so the developer can see when things started
-                // to go wrong.
+                logError(s"FATAL ERROR: Canary query threw $e This implies that the " +
+                  "testing environment has likely been corrupted.")
+                // The testing setup traps exits so wait here for a long time so the developer
+                // can see when things started to go wrong.
                 Thread.sleep(1000000)
             }
           }
 
-          // If the canary query didn't fail then the environment is still okay, so just throw the original exception.
+          // If the canary query didn't fail then the environment is still okay,
+          // so just throw the original exception.
           throw originalException
       }
     }

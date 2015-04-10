@@ -434,7 +434,7 @@ def _parse_datatype_json_string(json_string):
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
     ...     assert datatype == pickled
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
+    ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_primitive_types.values():
@@ -1237,7 +1237,7 @@ def _test():
     globs = pyspark.sql.types.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['ExamplePoint'] = ExamplePoint
     globs['ExamplePointUDT'] = ExamplePointUDT
     (failure_count, test_count) = doctest.testmod(

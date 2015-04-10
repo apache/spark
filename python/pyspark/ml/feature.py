@@ -117,9 +117,9 @@ if __name__ == "__main__":
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.feature tests")
-    sqlCtx = SQLContext(sc)
+    sqlContext = SQLContext(sc)
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx
+    globs['sqlContext'] = sqlContext
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
