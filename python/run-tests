@@ -21,13 +21,13 @@
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 
+. "$FWDIR"/bin/load-spark-env.sh
+
 # CD into the python directory to find things on the right path
 cd "$FWDIR/python"
 
 FAILED=0
 LOG_FILE=unit-tests.log
-
-. "$FWDIR"/bin/load-spark-env.sh
 
 rm -f $LOG_FILE
 
