@@ -172,11 +172,13 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     <tr>
       {
         if (isFirst) {
-          if (info.attempts.size > 1) {
-            <td rowspan={info.attempts.size.toString}><a href={uiAddress}>{info.id}</a></td> ++
-            <td rowspan={info.attempts.size.toString}>{info.name}</td>
+          if (info.attempts.size > 1 || renderAttemptIdColumn) {
+            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
+              <a href={uiAddress}>{info.id}</a></td>
+            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
+              {info.name}</td>
           } else {
-            <td><a href={uiAddress}>{info.id}</a></td> ++
+            <td><a href={uiAddress}>{info.id}</a></td>
             <td>{info.name}</td>
           }
         } else {
