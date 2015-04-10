@@ -184,10 +184,11 @@ object CatalystTypeConverters {
     }
   }
 
-  /** Converts Catalyst types used internally in rows to standard Scala types
-    * This method is slow, and for batch conversion you should be using converter
-    * produced by createToScalaConverter.
-    */
+  /** 
+   * Converts Catalyst types used internally in rows to standard Scala types
+   * This method is slow, and for batch conversion you should be using converter
+   * produced by createToScalaConverter.
+   */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
     // Check UDT first since UDTs can override other types
     case (d, udt: UserDefinedType[_]) =>
