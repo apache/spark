@@ -46,23 +46,6 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     val collector = new BatchInfoCollector
     ssc.addStreamingListener(collector)
     runStreams(ssc, input.size, input.size)
-    ssc.awaitTerminationOrTimeout(5000) should be (true)
-
-    val batchInfos = collector.batchInfos
-    batchInfos should have size 4
-
-    batchInfos.foreach(info => {
-      info.schedulingDelay should not be None
-      info.processingDelay should not be None
-      info.totalDelay should not be None
-      info.schedulingDelay.get should be >= 0L
-      info.processingDelay.get should be >= 0L
-      info.totalDelay.get should be >= 0L
-    })
-
-    isInIncreasingOrder(batchInfos.map(_.submissionTime)) should be (true)
-    isInIncreasingOrder(batchInfos.map(_.processingStartTime.get)) should be (true)
-    isInIncreasingOrder(batchInfos.map(_.processingEndTime.get)) should be (true)
 
     // SPARK-6766: batch info should be submitted
     val batchInfosSubmitted = collector.batchInfosSubmitted
@@ -89,6 +72,23 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     isInIncreasingOrder(batchInfosStarted.map(_.submissionTime)) should be (true)
     isInIncreasingOrder(batchInfosStarted.map(_.processingStartTime.get)) should be (true)
+
+    // test onBatchCompleted
+    val batchInfosCompleted = collector.batchInfosCompleted
+    batchInfosCompleted should have size 4
+
+    batchInfosCompleted.foreach(info => {
+      info.schedulingDelay should not be None
+      info.processingDelay should not be None
+      info.totalDelay should not be None
+      info.schedulingDelay.get should be >= 0L
+      info.processingDelay.get should be >= 0L
+      info.totalDelay.get should be >= 0L
+    })
+
+    isInIncreasingOrder(batchInfosCompleted.map(_.submissionTime)) should be (true)
+    isInIncreasingOrder(batchInfosCompleted.map(_.processingStartTime.get)) should be (true)
+    isInIncreasingOrder(batchInfosCompleted.map(_.processingEndTime.get)) should be (true)
   }
 
   test("receiver info reporting") {
@@ -127,7 +127,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
 /** Listener that collects information on processed batches */
 class BatchInfoCollector extends StreamingListener {
-  val batchInfos = new ArrayBuffer[BatchInfo]
+  val batchInfosCompleted = new ArrayBuffer[BatchInfo]
   val batchInfosStarted = new ArrayBuffer[BatchInfo]
   val batchInfosSubmitted = new ArrayBuffer[BatchInfo]
 
@@ -140,7 +140,7 @@ class BatchInfoCollector extends StreamingListener {
   }
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
-    batchInfos += batchCompleted.batchInfo
+    batchInfosCompleted += batchCompleted.batchInfo
   }
 }
 
