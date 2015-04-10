@@ -715,10 +715,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.cores</code></td>
-  <td>(infinite)</td>
+  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
-    Default: 1 in YARN mode, all the available cores on the worker in standalone mode.
-    
     The number of cores to use on each executor. For YARN and standalone mode only.
     
     In standalone mode, setting this parameter allows an application to run multiple executors on 

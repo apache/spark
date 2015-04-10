@@ -533,11 +533,14 @@ private[master] class Master(
   }
 
   /**
-   * The resource allocator spread out each app among all the workers until it has all its cores in
-   * spreadOut mode otherwise packs each app into as few workers as possible until it has assigned
-   * all its cores. User can define spark.deploy.maxCoresPerExecutor per application to
-   * limit the maximum number of cores to allocate to each executor on each worker; if the parameter
-   * is not defined, then only one executor will be launched on a worker.
+   * Schedule executors to be launched on the workers.There are two modes of launching executors.
+   * The first attempts to spread out an application's executors on as many workers as possible,
+   * while the second does the opposite (i.e. launch them on as few workers as possible). The former
+   * is usually better for data locality purposes and is the default. The number of cores assigned
+   * to each executor is configurable. When this is explicitly set, multiple executors from the same
+   * application may be launched on the same worker if the worker has enough cores and memory.
+   * Otherwise, each executor grabs all the cores available on the worker by default, in which case
+   * only one executor may be launched on each worker.
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
@@ -546,7 +549,9 @@ private[master] class Master(
       // Try to spread out each app among all the workers, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
+          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+            worker.coresFree > 0)
+          .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
@@ -566,15 +571,16 @@ private[master] class Master(
     } else {
       // Pack each app into as few workers as possible until we've assigned all its cores
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0) {
-          allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
+        for (app <- waitingApps if app.coresLeft > 0 &&
+          worker.memoryFree >= app.desc.memoryPerExecutorMB) {
+            allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
         }
       }
     }
   }
 
   /**
-   * allocate resources in a certain worker to one or more executors
+   * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
    * @param coresToAllocate cores on this worker to be allocated to this application
    * @param worker the worker info
@@ -583,28 +589,14 @@ private[master] class Master(
       app: ApplicationInfo,
       coresToAllocate: Int,
       worker: WorkerInfo): Unit = {
-    if (canUse(app, worker)) {
-      val memoryPerExecutor = app.desc.memoryPerExecutorMB
-      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
-      var coresLeft = coresToAllocate
-      while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
-        val exec = app.addExecutor(worker, coresPerExecutor)
-        coresLeft -= coresPerExecutor
-        launchExecutor(worker, exec)
-        app.state = ApplicationState.RUNNING
-      }
-    }
-  }
-
-  private def startDriversOnWorkers(): Unit = {
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
-        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
-          launchDriver(worker, driver)
-          waitingDrivers -= driver
-        }
-      }
+    val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
+    var coresLeft = coresToAllocate
+    while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
+      val exec = app.addExecutor(worker, coresPerExecutor)
+      coresLeft -= coresPerExecutor
+      launchExecutor(worker, exec)
+      app.state = ApplicationState.RUNNING
     }
   }
 
@@ -615,12 +607,20 @@ private[master] class Master(
   private def schedule(): Unit = {
     if (state != RecoveryState.ALIVE) { return }
     // start in-cluster drivers, they take strict precedence over applications
-    startDriversOnWorkers()
+    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
+    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
+      for (driver <- waitingDrivers) {
+        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          launchDriver(worker, driver)
+          waitingDrivers -= driver
+        }
+      }
+    }
     // start executors
     startExecutorsOnWorkers()
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit =  {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
