@@ -17,21 +17,20 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.json4s._
 import org.json4s.JsonDSL._
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkContext, Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{Loader, Saveable}
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
  * :: Experimental ::
@@ -74,7 +73,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataRDD = model.assignments.map(Tuple1.apply).toDF("assignment")
+      val dataRDD = model.assignments.map(x => (x.id, x.cluster)).toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
@@ -88,10 +87,10 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
       val k = (metadata \ "k").extract[Int]
       val assignments = sqlContext.parquetFile(Loader.dataPath(path))
-      Loader.checkSchema[Tuple1[PowerIterationClustering.Assignment]](assignments.schema)
+      Loader.checkSchema[(Long, Int)](assignments.schema)
 
       val assignmentsRDD = assignments.map {
-        case Row(Tuple1(x: PowerIterationClustering.Assignment)) => x
+        case Row(id: Long, cluster: Int) => new PowerIterationClustering.Assignment(id, cluster)
       }
 
       val realK = assignmentsRDD.map(_.cluster).distinct().collect().size
