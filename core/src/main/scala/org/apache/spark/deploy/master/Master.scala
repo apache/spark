@@ -611,7 +611,7 @@ private[master] class Master(
     startExecutorsOnWorkers()
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
+  private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
