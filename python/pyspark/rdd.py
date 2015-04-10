@@ -2233,7 +2233,7 @@ class RDD(object):
 def _prepare_for_python_RDD(sc, command, obj=None):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
-    pickled_command = ser.dumps(command)
+    pickled_command = ser.dumps((command, sys.version_info[:2]))
     if len(pickled_command) > (1 << 20):  # 1M
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)

@@ -35,6 +35,8 @@ import itertools
 import threading
 import hashlib
 
+from py4j.protocol import Py4JJavaError
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -1493,6 +1495,20 @@ class WorkerTests(PySparkTestCase):
         t.join(5)
         self.assertTrue(not t.isAlive())
         self.assertEqual(100000, rdd.count())
+
+    def test_with_different_versions_of_python(self):
+        rdd = self.sc.parallelize(range(10))
+        rdd.count()
+        version = sys.version_info
+        sys.version_info = (2, 0, 0)
+        log4j = self.sc._jvm.org.apache.log4j
+        old_level = log4j.LogManager.getRootLogger().getLevel()
+        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
+        try:
+            self.assertRaises(Py4JJavaError, lambda: rdd.count())
+        finally:
+            sys.version_info = version
+            log4j.LogManager.getRootLogger().setLevel(old_level)
 
 
 class SparkSubmitTests(unittest.TestCase):
