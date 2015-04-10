@@ -268,7 +268,6 @@ object CheckpointReader extends Logging {
           cp = ois.readObject.asInstanceOf[Checkpoint]
         } {
           ois.close()
-          fs.close()
         }
         cp.validate()
         logInfo("Checkpoint successfully loaded from file " + file)
