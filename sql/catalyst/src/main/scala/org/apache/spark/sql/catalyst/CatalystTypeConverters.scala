@@ -140,7 +140,7 @@ object CatalystTypeConverters {
               val convertedMap: HashMap[Any, Any] = HashMap()
               while (iter.hasNext) {
                 val entry = iter.next()
-                convertedMap += Tuple2(keyConverter(entry.getKey), valueConverter(entry.getValue))
+                convertedMap(keyConverter(entry.getKey)) = valueConverter(entry.getValue)
               }
               convertedMap
 
