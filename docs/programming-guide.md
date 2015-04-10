@@ -363,7 +363,7 @@ data <- c(1, 2, 3, 4, 5)
 distData <- parallelize(sc, data)
 {% endhighlight %}
 
-Once created, the distributed dataset (`distData`) can be operated on in parallel. For example, we can call `reduce(distData, function(a, b) {a + b})` to add up the elements of the list.
+Once created, the distributed dataset (`distData`) can be operated on in parallel. For example, we can call `reduce(distData, "+")` to add up the elements of the list.
 We describe operations on distributed datasets later on.
 
 </div>
@@ -551,7 +551,7 @@ Text file RDDs can be created using `textFile` method. This method takes an URI 
 distFile <- textFile(sc, "data.txt")
 {% endhighlight %}
 
-Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `reduce(map(distFile, length), function(a, b) {a + b})`.
+Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `reduce(map(distFile, length), "+")`.
 
 Some notes on reading files with Spark:
 
@@ -667,7 +667,7 @@ To illustrate RDD basics, consider the simple program below:
 {% highlight r %}
 lines <- textFile(sc, "data.txt")
 lineLengths <- map(lines, length)
-totalLength <- reduce(lineLengths, function(a, b) {a + b})
+totalLength <- reduce(lineLengths, "+")
 {% endhighlight %}
 
 The first line defines a base RDD from an external file. This dataset is not loaded in memory or
@@ -1070,7 +1070,7 @@ many times each line of text occurs in a file:
 {% highlight r %}
 lines <- textFile(sc, "data.txt")
 pairs <- map(lines, function(s) list(s, 1))
-counts <- reduceByKey(pairs, function(a, b){a + b})
+counts <- reduceByKey(pairs, "+")
 {% endhighlight %}
 
 We could also use `sortByKey(counts)`, for example, to sort the pairs alphabetically, and finally

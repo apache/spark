@@ -225,7 +225,7 @@ For example, we'll define a `mymax` function to make this code easier to underst
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight r %}
-> wordCounts <- reduceByKey(map(flatMap(textFile, function(line) strsplit(line, " ")[[1]]), function(word) list(word, 1)), function(a, b) {a + b}, 2)
+> wordCounts <- reduceByKey(map(flatMap(textFile, function(line) strsplit(line, " ")[[1]]), function(word) list(word, 1)), "+", 2)
 {% endhighlight %}
 
 Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, numeric) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
