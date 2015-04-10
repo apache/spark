@@ -1198,7 +1198,7 @@ class Row(tuple):
             raise TypeError("Cannot convert a Row class into dict")
         return dict(zip(self.__fields__, self))
 
-    # let object acks like class
+    # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
         return _create_row(self, args)
