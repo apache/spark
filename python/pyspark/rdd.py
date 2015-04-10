@@ -587,7 +587,7 @@ class RDD(object):
         maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
         fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
         samples = self.sample(False, fraction, 1).map(lambda (k, v): k).collect()
-        samples = sorted(samples, reverse=(not ascending), key=keyfunc)
+        samples = sorted(samples, key=keyfunc)
 
         # we have numPartitions many parts but one of the them has
         # an implicit boundary

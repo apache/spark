@@ -744,6 +744,17 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
+    def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
+        # Regression test for SPARK-5969
+        seq = [(i * 59 % 101, i) for i in range(101)]  # unsorted sequence
+        rdd = self.sc.parallelize(seq)
+        for ascending in [True, False]:
+            sort = rdd.sortByKey(ascending=ascending, numPartitions=5)
+            self.assertEqual(sort.collect(), sorted(seq, reverse=not ascending))
+            sizes = sort.glom().map(len).collect()
+            for size in sizes:
+                self.assertGreater(size, 0)
+
 
 class ProfilerTests(PySparkTestCase):
 
