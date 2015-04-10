@@ -17,6 +17,13 @@
 # limitations under the License.
 #
 
+# A shell script to stop all workers on a single slave
+#
+# Environment variables
+#
+#   SPARK_WORKER_INSTANCES The number of worker instances that should be 
+#                          running on this slave.  Default is 1.
+
 # Usage: stop-slave.sh
 #   Stops all slaves on this worker machine
 
@@ -26,7 +33,6 @@ sbin="`cd "$sbin"; pwd`"
 . "$sbin/spark-config.sh"
 
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
-
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
