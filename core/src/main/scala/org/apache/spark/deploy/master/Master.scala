@@ -524,15 +524,6 @@ private[master] class Master(
   }
 
   /**
-   * Can an app use the given worker?
-   */
-  private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    val enoughResources = worker.memoryFree >= app.desc.memoryPerExecutorMB && worker.coresFree > 0
-    val allowToExecute = app.desc.coresPerExecutor.isDefined || !worker.hasExecutor(app)
-    allowToExecute && enoughResources
-  }
-
-  /**
    * Schedule executors to be launched on the workers.There are two modes of launching executors.
    * The first attempts to spread out an application's executors on as many workers as possible,
    * while the second does the opposite (i.e. launch them on as few workers as possible). The former
