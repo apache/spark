@@ -677,10 +677,9 @@ class DenseMatrix(Matrix):
     def toSparse(self):
         """Convert to SparseMatrix"""
         indices = np.nonzero(self.values)[0]
-        colCount = np.bincount(indices / self.numRows + 1)
-        colPtrs = np.zeros((self.numCols + 1))
-        colPtrs[: colCount.size] = colCount
-        colPtrs = np.cumsum(colPtrs)
+        colCounts = np.bincount(indices / self.numRows)
+        colPtrs = np.cumsum(np.hstack(
+            (0, colCounts, np.zeros(self.numCols - colCounts.size))))
         values = self.values[indices]
         rowIndices = indices % self.numRows
 
@@ -736,7 +735,7 @@ class SparseMatrix(Matrix):
         if i < 0 or i >= self.numRows:
             raise ValueError("Row index %d is out of range [0, %d)"
                              % (i, self.numRows))
-        if j >= self.numCols or j < 0:
+        if j < 0 or j >= self.numCols:
             raise ValueError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
 
@@ -755,29 +754,24 @@ class SparseMatrix(Matrix):
         else:
             return 0.0
 
-    def _densify_values(self):
-        sparsearr = np.zeros(self.numRows * self.numCols, dtype=np.float64)
-
-        for ptr in xrange(self.colPtrs.size - 1):
-            startptr = self.colPtrs[ptr]
-            endptr = self.colPtrs[ptr + 1]
-            if self.isTransposed:
-                flatind = self.rowIndices[startptr: endptr] * self.numRows + ptr
-            else:
-                flatind = ptr * self.numRows + self.rowIndices[startptr: endptr]
-            sparsearr[flatind] = self.values[startptr: endptr]
-
-        return sparsearr
-
     def toArray(self):
         """
         Return an numpy.ndarray
         """
-        return np.reshape(
-            self._densify_values(), (self.numRows, self.numCols), order='F')
+        A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
+        for k in xrange(self.colPtrs.size - 1):
+            startptr = self.colPtrs[k]
+            endptr = self.colPtrs[k + 1]
+            if self.isTransposed:
+                A[k, self.rowIndices[startptr:endptr]] = self.values[startptr:endptr]
+            else:
+                A[self.rowIndices[startptr:endptr], k] = self.values[startptr:endptr]
+        return A
 
     def toDense(self):
-        return DenseMatrix(self.numRows, self.numCols, self._densify_values())
+        densevals = np.reshape(
+            self.toArray(), (self.numRows * self.numCols), order='F')
+        return DenseMatrix(self.numRows, self.numCols, densevals)
 
     # TODO: More efficient implementation:
     def __eq__(self, other):
