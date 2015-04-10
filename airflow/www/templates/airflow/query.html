@@ -16,6 +16,7 @@
     <div class="form-inline">
       {{ form.conn_id }}
       <input type="submit" class="btn btn-default" value="Run!">
+      <input type="button" class="btn btn-default" value=".csv" id="csv">
       <span id="results"></span><br>
   <div id='ace_container'>
   {{ form.sql(rows=10) }}
@@ -54,6 +55,9 @@
         $("#query_form").submit(function(event){
             $("#results").html("<img width='25'src='{{ url_for('static', filename='loading.gif') }}'>");
         });
+        $("#csv").on("click", function(){
+            window.location += '&csv=true';
+        })
     });
   </script>
 {% endblock %}
