@@ -360,7 +360,9 @@ object PySparkAssembly {
     // list since that will copy unneeded / unwanted files.
     resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
       val dst = new File(outDir, "pyspark")
-      require(dst.mkdirs())
+      if (!dst.isDirectory()) {
+        require(dst.mkdirs())
+      }
 
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       copy(src, dst)
