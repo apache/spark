@@ -35,8 +35,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
-  case class RegisteredExecutor(tokens: Option[SerializableBuffer])
-    extends CoarseGrainedClusterMessage
+  case object RegisteredExecutor extends CoarseGrainedClusterMessage
 
   case class NewTokens(tokens: SerializableBuffer) extends CoarseGrainedClusterMessage
 
