@@ -610,7 +610,7 @@ class RDD(object):
         maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
         fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
         samples = self.sample(False, fraction, 1).map(lambda kv: kv[0]).collect()
-        samples = sorted(samples, reverse=(not ascending), key=keyfunc)
+        samples = sorted(samples, key=keyfunc)
 
         # we have numPartitions many parts but one of the them has
         # an implicit boundary
@@ -2253,7 +2253,7 @@ class RDD(object):
 def _prepare_for_python_RDD(sc, command, obj=None):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
-    pickled_command = ser.dumps(command)
+    pickled_command = ser.dumps((command, sys.version_info[:2]))
     if len(pickled_command) > (1 << 20):  # 1M
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)
