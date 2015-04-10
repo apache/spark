@@ -21,6 +21,8 @@
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 
+. "$FWDIR"/bin/load-spark-env.sh
+
 # CD into the python directory to find things on the right path
 cd "$FWDIR/python"
 
@@ -57,7 +59,7 @@ function run_core_tests() {
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
     run_test "pyspark/serializers.py"
-    run_test "pyspark/profiler.py" 
+    run_test "pyspark/profiler.py"
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
@@ -97,6 +99,21 @@ function run_ml_tests() {
 
 function run_streaming_tests() {
     echo "Run streaming tests ..."
+
+    KAFKA_ASSEMBLY_DIR="$FWDIR"/external/kafka-assembly
+    JAR_PATH="${KAFKA_ASSEMBLY_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+    for f in "${JAR_PATH}"/spark-streaming-kafka-assembly-*.jar; do
+      if [[ ! -e "$f" ]]; then
+        echo "Failed to find Spark Streaming Kafka assembly jar in $KAFKA_ASSEMBLY_DIR" 1>&2
+        echo "You need to build Spark with " \
+             "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or" \
+             "'build/mvn package' before running this program" 1>&2
+        exit 1
+      fi
+      KAFKA_ASSEMBLY_JAR="$f"
+    done
+
+    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
     run_test "pyspark/streaming/util.py"
     run_test "pyspark/streaming/tests.py"
 }
