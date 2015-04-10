@@ -25,7 +25,7 @@ import numpy
 if numpy.version.version < '1.4':
     raise Exception("MLlib requires NumPy 1.4+")
 
-__all__ = ['classification', 'clustering', 'feature', 'linalg', 'random',
+__all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
            'recommendation', 'regression', 'stat', 'tree', 'util']
 
 import sys
