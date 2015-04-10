@@ -418,7 +418,9 @@ private[yarn] class YarnAllocator(
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
-          executorFailureTimeStamps.push(System.currentTimeMillis / 1000)
+          if(relativeMaxExecutorFailureCheck) {
+             executorFailureTimeStamps.push(System.currentTimeMillis / 1000)
+          }
         }
       }
 
