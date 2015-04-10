@@ -21,7 +21,6 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.feature.FeatureTests.DataSet
 import org.apache.spark.ml.util.TestingUtils
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -30,6 +29,8 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 
 class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
+
+  import VectorIndexerSuite.FeatureData
 
   @transient var sqlContext: SQLContext = _
 
@@ -85,18 +86,18 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
     sqlContext = new SQLContext(sc)
-    densePoints1 = sqlContext.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(DataSet))
-    sparsePoints1 = sqlContext.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(DataSet))
-    densePoints2 = sqlContext.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(DataSet))
-    sparsePoints2 = sqlContext.createDataFrame(sc.parallelize(sparsePoints2Seq, 2).map(DataSet))
-    badPoints = sqlContext.createDataFrame(sc.parallelize(badPointsSeq, 2).map(DataSet))
+    densePoints1 = sqlContext.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(FeatureData))
+    sparsePoints1 = sqlContext.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(FeatureData))
+    densePoints2 = sqlContext.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(FeatureData))
+    sparsePoints2 = sqlContext.createDataFrame(sc.parallelize(sparsePoints2Seq, 2).map(FeatureData))
+    badPoints = sqlContext.createDataFrame(sc.parallelize(badPointsSeq, 2).map(FeatureData))
   }
 
   private def getIndexer: VectorIndexer =
     new VectorIndexer().setInputCol("features").setOutputCol("indexed")
 
   test("Cannot fit an empty DataFrame") {
-    val rdd = sqlContext.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(DataSet))
+    val rdd = sqlContext.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(FeatureData))
     val vectorIndexer = getIndexer
     intercept[IllegalArgumentException] {
       vectorIndexer.fit(rdd)
@@ -244,4 +245,8 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     // Check that non-ML metadata are preserved.
     TestingUtils.testPreserveMetadata(densePoints1WithMeta, model, "features", "indexed")
   }
+}
+
+private object VectorIndexerSuite {
+  case class FeatureData(features: Vector)
 }
