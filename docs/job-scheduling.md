@@ -9,7 +9,7 @@ title: Job Scheduling
 # Overview
 
 Spark has several facilities for scheduling resources between computations. First, recall that, as described
-in the [cluster mode overview](cluster-overview.html), each Spark application (instance of SparkContext)
+in the [cluster mode overview](cluster-overview.md), each Spark application (instance of SparkContext)
 runs an independent set of executor processes. The cluster managers that Spark runs on provide
 facilities for [scheduling across applications](#scheduling-across-applications). Second,
 _within_ each Spark application, multiple "jobs" (Spark actions) may be running concurrently
@@ -24,9 +24,9 @@ different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use, and holds onto them
-for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
-and [YARN](running-on-yarn.html) modes, as well as the
-[coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
+for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.md)
+and [YARN](running-on-yarn.md) modes, as well as the
+[coarse-grained Mesos mode](running-on-mesos.md#mesos-run-modes).
 Resource allocation can be configured as follows, based on the cluster type:
 
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
@@ -65,9 +65,9 @@ returned to the cluster's pool of resources and acquired by other applications. 
 resource allocation is performed on the granularity of the executor and can be enabled through
 `spark.dynamicAllocation.enabled`.
 
-This feature is currently disabled by default and available only on [YARN](running-on-yarn.html).
-A future release will extend this to [standalone mode](spark-standalone.html) and
-[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes). Note that although Spark on
+This feature is currently disabled by default and available only on [YARN](running-on-yarn.md).
+A future release will extend this to [standalone mode](spark-standalone.md) and
+[Mesos coarse-grained mode](running-on-mesos.md#mesos-run-modes). Note that although Spark on
 Mesos already has a similar notion of dynamic resource sharing in fine-grained mode, enabling
 dynamic allocation allows your Mesos application to take advantage of coarse-grained low-latency
 scheduling while sharing cluster resources efficiently.
@@ -77,17 +77,17 @@ scheduling while sharing cluster resources efficiently.
 All configurations used by this feature live under the `spark.dynamicAllocation.*` namespace.
 To enable this feature, your application must set `spark.dynamicAllocation.enabled` to `true`.
 Other relevant configurations are described on the
-[configurations page](configuration.html#dynamic-allocation) and in the subsequent sections in
+[configurations page](configuration.md#dynamic-allocation) and in the subsequent sections in
 detail.
 
 Additionally, your application must use an external shuffle service. The purpose of the service is
 to preserve the shuffle files written by executors so the executors can be safely removed (more
-detail described [below](job-scheduling.html#graceful-decommission-of-executors)). To enable
+detail described [below](job-scheduling.md#graceful-decommission-of-executors)). To enable
 this service, set `spark.shuffle.service.enabled` to `true`. In YARN, this external shuffle service
 is implemented in `org.apache.spark.yarn.network.YarnShuffleService` that runs in each `NodeManager`
 in your cluster. To start this service, follow these steps:
 
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+1. Build Spark with the [YARN profile](building-spark.md). Skip this step if you are using a
 pre-packaged distribution.
 2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
 `$SPARK_HOME/network/yarn/target/scala-<version>` if you are building Spark yourself, and under
@@ -96,7 +96,7 @@ pre-packaged distribution.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 `org.apache.spark.network.yarn.YarnShuffleService`. Additionally, set all relevant
-`spark.shuffle.service.*` [configurations](configuration.html).
+`spark.shuffle.service.*` [configurations](configuration.md).
 4. Restart all `NodeManager`s in your cluster.
 
 ### Resource Allocation Policy
@@ -245,7 +245,7 @@ properties:
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and setting a `spark.scheduler.allocation.file` property in your
-[SparkConf](configuration.html#spark-properties).
+[SparkConf](configuration.md#spark-properties).
 
 {% highlight scala %}
 conf.set("spark.scheduler.allocation.file", "/path/to/file")

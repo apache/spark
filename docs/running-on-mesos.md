@@ -97,7 +97,7 @@ To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPA
 Or if you are using a custom-compiled version of Spark, you will need to create a package using
 the `make-distribution.sh` script included in a Spark source tarball/checkout.
 
-1. Download and build Spark using the instructions [here](index.html)
+1. Download and build Spark using the instructions [here](index.md)
 2. Create a binary package using `make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
@@ -128,8 +128,8 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-(You can also use [`spark-submit`](submitting-applications.html) and configure `spark.executor.uri`
-in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file. Note
+(You can also use [`spark-submit`](submitting-applications.md) and configure `spark.executor.uri`
+in the [conf/spark-defaults.conf](configuration.md#loading-default-configurations) file. Note
 that `spark-submit` currently only supports deploying the Spark driver in `client` mode for Mesos.)
 
 When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
@@ -156,7 +156,7 @@ overhead, but at the cost of reserving the Mesos resources for the complete dura
 application.
 
 To run in coarse-grained mode, set the `spark.mesos.coarse` property in your
-[SparkConf](configuration.html#spark-properties):
+[SparkConf](configuration.md#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
@@ -184,7 +184,7 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Configuration
 
-See the [configuration page](configuration.html) for information on Spark configurations.  The following configs are specific for Spark on Mesos.
+See the [configuration page](configuration.md) for information on Spark configurations.  The following configs are specific for Spark on Mesos.
 
 #### Spark Properties
 
@@ -195,7 +195,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>false</td>
   <td>
     If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    <a href="running-on-mesos.md#mesos-run-modes">"coarse-grained" sharing mode</a>,
     where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
     Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
     for the whole duration of the Spark job.

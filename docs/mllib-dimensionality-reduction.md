@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Dimensionality Reduction - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Dimensionality Reduction
 ---
 
 * Table of contents
@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
+MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.md#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -58,7 +58,7 @@ passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 ### SVD Example
  
 MLlib provides SVD functionality to row-oriented matrices, provided in the
-<a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
+<a href="mllib-data-types.md#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -123,7 +123,7 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 
 In order to run the above application, follow the instructions
 provided in the [Self-Contained
-Applications](quick-start.html#self-contained-applications) section of the Spark
+Applications](quick-start.md#self-contained-applications) section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
@@ -204,7 +204,7 @@ public class PCA {
 </div>
 
 In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+provided in the [Self-Contained Applications](quick-start.md#self-contained-applications)
 section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.

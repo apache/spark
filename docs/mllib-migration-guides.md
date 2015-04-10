@@ -1,11 +1,11 @@
 ---
 layout: global
 title: Old Migration Guides - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Old Migration Guides
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Old Migration Guides
 description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 ---
 
-The migration guide for the current Spark version is kept on the [MLlib Programming Guide main page](mllib-guide.html#migration-guide).
+The migration guide for the current Spark version is kept on the [MLlib Programming Guide main page](mllib-guide.md#migration-guide).
 
 ## From 1.1 to 1.2
 
@@ -31,7 +31,7 @@ The tree `Node` now includes more information, including the probability of the 
 3. Printing methods' output has changed.  The `toString` (Scala/Java) and `__repr__` (Python) methods used to print the full model; they now print a summary.  For the full model, use `toDebugString`.
 
 Examples in the Spark distribution and examples in the
-[Decision Trees Guide](mllib-decision-tree.html#examples) have been updated accordingly.
+[Decision Trees Guide](mllib-decision-tree.md#examples) have been updated accordingly.
 
 ## From 1.0 to 1.1
 
@@ -57,7 +57,7 @@ separate classification and regression, and they replace specialized parameter t
 simple `String` types.
 
 Examples of the new, recommended `trainClassifier` and `trainRegressor` are given in the
-[Decision Trees Guide](mllib-decision-tree.html#examples).
+[Decision Trees Guide](mllib-decision-tree.md#examples).
 
 ## From 0.9 to 1.0
 

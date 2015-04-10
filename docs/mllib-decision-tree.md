@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Decision Trees - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Trees
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Decision Trees
 ---
 
 * Table of contents
@@ -19,7 +19,7 @@ MLlib supports decision trees for binary and multiclass classification and for r
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions of instances.
 
-Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in the [Ensembles guide](mllib-ensembles.html).
+Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in the [Ensembles guide](mllib-ensembles.md).
 
 ## Basic algorithm
 

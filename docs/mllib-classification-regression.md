@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Classification and Regression - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Classification and Regression
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Classification and Regression
 ---
 
 MLlib supports various methods for 
@@ -30,12 +30,12 @@ the supported algorithms for each type of problem.
 
 More details for these methods can be found here:
 
-* [Linear models](mllib-linear-methods.html)
-  * [binary classification (SVMs, logistic regression)](mllib-linear-methods.html#binary-classification)
-  * [linear regression (least squares, Lasso, ridge)](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
-* [Decision trees](mllib-decision-tree.html)
-* [Ensembles of decision trees](mllib-ensembles.html)
-  * [random forests](mllib-ensembles.html#random-forests)
-  * [gradient-boosted trees](mllib-ensembles.html#gradient-boosted-trees-gbts)
-* [Naive Bayes](mllib-naive-bayes.html)
-* [Isotonic regression](mllib-isotonic-regression.html)
+* [Linear models](mllib-linear-methods.md)
+  * [binary classification (SVMs, logistic regression)](mllib-linear-methods.md#binary-classification)
+  * [linear regression (least squares, Lasso, ridge)](mllib-linear-methods.md#linear-least-squares-lasso-and-ridge-regression)
+* [Decision trees](mllib-decision-tree.md)
+* [Ensembles of decision trees](mllib-ensembles.md)
+  * [random forests](mllib-ensembles.md#random-forests)
+  * [gradient-boosted trees](mllib-ensembles.md#gradient-boosted-trees-gbts)
+* [Naive Bayes](mllib-naive-bayes.md)
+* [Isotonic regression](mllib-isotonic-regression.md)

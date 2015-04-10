@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Clustering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Clustering
 ---
 
 Clustering is an unsupervised learning problem whereby we aim to group subsets
@@ -539,7 +539,7 @@ import org.apache.spark.mllib.clustering.StreamingKMeans
 
 Then we make an input stream of vectors for training, as well as a stream of labeled data
 points for testing. We assume a StreamingContext `ssc` has been created, see
-[Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.
+[Spark Streaming Programming Guide](streaming-programming-guide.md#initializing) for more info.
 
 {% highlight scala %}
 

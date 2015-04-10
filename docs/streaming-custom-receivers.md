@@ -198,7 +198,7 @@ The full source code is in the example [JavaCustomReceiver.java](https://github.
 
 ## Receiver Reliability
 As discussed in brief in the
-[Spark Streaming Programming Guide](streaming-programming-guide.html#receiver-reliability),
+[Spark Streaming Programming Guide](streaming-programming-guide.md#receiver-reliability),
 there are two kinds of receivers based on their reliability and fault-tolerance semantics.
 
 1. *Reliable Receiver* - For *reliable sources* that allow sent data to be acknowledged, a
@@ -224,7 +224,7 @@ records from the source and insert them one-at-a-time using `store(single-record
 not get the reliability guarantees of `store(multiple-records)`, it has the following advantages.
 
 - The system takes care of chunking that data into appropriate sized blocks (look for block
-interval in the [Spark Streaming Programming Guide](streaming-programming-guide.html)).
+interval in the [Spark Streaming Programming Guide](streaming-programming-guide.md)).
 - The system takes care of controlling the receiving rates if the rate limits have been specified.
 - Because of these two, unreliable receivers are simpler to implement than reliable receivers.
 

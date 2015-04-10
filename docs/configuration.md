@@ -53,7 +53,7 @@ Then, you can supply configuration values at runtime:
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar
 {% endhighlight %}
 
-The Spark shell and [`spark-submit`](submitting-applications.html)
+The Spark shell and [`spark-submit`](submitting-applications.md)
 tool support two ways to load configurations dynamically. The first are command line options,
 such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
 flag, but uses special flags for properties that play a part in launching the Spark application.
@@ -170,7 +170,7 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     The cluster manager to connect to. See the list of
-    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
+    <a href="submitting-applications.md#master-urls"> allowed master URL's</a>.
   </td>
 </tr>
 </table>
@@ -593,7 +593,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If you use Kryo serialization, give a comma-separated list of custom class names to register
     with Kryo.
-    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+    See the <a href="tuning.md#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
 <tr>
@@ -627,7 +627,7 @@ Apart from these, the following properties are also available, and may be useful
     set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
-    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+    See the <a href="tuning.md#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
 <tr>
@@ -663,7 +663,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object
-    but is quite slow, so we recommend <a href="tuning.html">using
+    but is quite slow, so we recommend <a href="tuning.md">using
     <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
     when speed is necessary. Can be any subclass of
     <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
@@ -970,8 +970,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cores.max</code></td>
   <td>(not set)</td>
   <td>
-    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
+    When running on a <a href="spark-standalone.md">standalone deploy cluster</a> or a
+    <a href="running-on-mesos.md#mesos-run-modes">Mesos cluster in "coarse-grained"
     sharing mode</a>, the maximum amount of CPU cores to request for the application from
     across the cluster (not from each machine). If not set, the default will be
     <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
@@ -1046,7 +1046,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.mode</code></td>
   <td>FIFO</td>
   <td>
-    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    The <a href="job-scheduling.md#scheduling-within-an-application">scheduling mode</a> between
     jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
     to use fair sharing instead of queueing jobs one after another. Useful for
     multi-user services.
@@ -1116,7 +1116,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to use dynamic resource allocation, which scales the number of executors registered
     with this application up and down based on the workload. Note that this is currently only
     available on YARN mode. For more detail, see the description
-    <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
+    <a href="job-scheduling.md#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
     The following configurations are also relevant:
@@ -1131,7 +1131,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If dynamic allocation is enabled and an executor has been idle for more than this duration
     (in seconds), the executor will be removed. For more detail, see this
-    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+    <a href="job-scheduling.md#resource-allocation-policy">description</a>.
   </td>
 </tr>
 <tr>
@@ -1161,7 +1161,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration (in seconds), new executors will be requested. For more detail, see this
-    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+    <a href="job-scheduling.md#resource-allocation-policy">description</a>.
   </td>
 </tr>
 <tr>
@@ -1170,7 +1170,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
     subsequent executor requests. For more detail, see this
-    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+    <a href="job-scheduling.md#resource-allocation-policy">description</a>.
   </td>
 </tr>
 </table>
@@ -1351,7 +1351,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Interval (milliseconds) at which data received by Spark Streaming receivers is chunked
     into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
-    <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
+    <a href="streaming-programming-guide.md#level-of-parallelism-in-data-receiving">performance
      tuning</a> section in the Spark Streaming programing guide for more details.
   </td>
 </tr>
@@ -1362,7 +1362,7 @@ Apart from these, the following properties are also available, and may be useful
     Maximum rate (number of records per second) at which each receiver will receive data.
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
-    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    See the <a href="streaming-programming-guide.md#deploying-applications">deployment guide</a>
     in the Spark Streaming programing guide for mode details.
   </td>
 </tr>
@@ -1372,7 +1372,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enable write ahead logs for receivers. All the input data received through receivers
     will be saved to write ahead logs that will allow it to be recovered after driver failures.
-    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    See the <a href="streaming-programming-guide.md#deploying-applications">deployment guide</a>
     in the Spark Streaming programing guide for more details.
   </td>
 </tr>
@@ -1393,7 +1393,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum rate (number of records per second) at which data will be read from each Kafka
     partition when using the new Kafka direct stream API. See the
-    <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
+    <a href="streaming-kafka-integration.md">Kafka Integration guide</a>
     for more details.
   </td>
 </tr>
@@ -1403,11 +1403,11 @@ Apart from these, the following properties are also available, and may be useful
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
-##### [YARN](running-on-yarn.html#configuration)
+##### [YARN](running-on-yarn.md#configuration)
 
-##### [Mesos](running-on-mesos.html#configuration)
+##### [Mesos](running-on-mesos.md#configuration)
 
-##### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
+##### [Standalone Mode](spark-standalone.md#cluster-launch-scripts)
 
 # Environment Variables
 
@@ -1443,7 +1443,7 @@ The following variables can be set in `spark-env.sh`:
 </table>
 
 In addition to the above, there are also options for setting up the Spark
-[standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
+[standalone cluster scripts](spark-standalone.md#cluster-launch-scripts), such as number of cores
 to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
