@@ -238,7 +238,16 @@ class AffinityPropagation private[clustering] (
     val preferences = similarities.flatMap(t => Seq(t._1, t._2)).distinct().map(i => (i, i, median))
     similarities.union(preferences)
   }
-
+ 
+  /**
+   * A Java-friendly version of [[AffinityPropagation.determinePreferences]].
+   */
+  def determinePreferences(
+      similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)]): 
+      RDD[(Long, Long, Double)] = {
+    determinePreferences(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
+  }
+ 
   /**
    * Run the AP algorithm.
    *

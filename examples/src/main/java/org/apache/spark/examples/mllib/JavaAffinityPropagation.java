@@ -56,6 +56,19 @@ public class JavaAffinityPropagation {
       .setMaxIterations(20);
     AffinityPropagationModel model = ap.run(similarities);
 
+    JavaRDD<Tuple3<Long, Long, Double>> similarities2 = sc.parallelize(Lists.newArrayList(
+      new Tuple3<Long, Long, Double>(0L, 1L, -0.12),
+      new Tuple3<Long, Long, Double>(1L, 2L, -0.08),
+      new Tuple3<Long, Long, Double>(1L, 3L, -0.22),
+      new Tuple3<Long, Long, Double>(3L, 4L, -0.93),
+      new Tuple3<Long, Long, Double>(3L, 5L, -0.82),
+      new Tuple3<Long, Long, Double>(4L, 1L, -0.85),
+      new Tuple3<Long, Long, Double>(4L, 2L, -0.73),
+      new Tuple3<Long, Long, Double>(4L, 5L, -0.19),
+      new Tuple3<Long, Long, Double>(4L, 6L, -0.12)));
+
+    AffinityPropagationModel model2 = ap.run(ap.determinePreferences(similarities2));
+
     for (AffinityPropagationCluster c: model.clusters().toJavaRDD().collect()) {
       StringBuilder builder = new StringBuilder();
       builder.append("cluster id: " + c.id() + " -> ");
@@ -65,7 +78,17 @@ public class JavaAffinityPropagation {
       }
       System.out.println(builder.toString());
     }
-
+ 
+    for (AffinityPropagationCluster c: model2.clusters().toJavaRDD().collect()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("cluster id: " + c.id() + " -> ");
+      builder.append(" exemplar: " + c.exemplar() + " members:");
+      for (Long node: c.members()) {
+        builder.append(" " + node);
+      }
+      System.out.println(builder.toString());
+    }
+ 
     sc.stop();
   }
 }
