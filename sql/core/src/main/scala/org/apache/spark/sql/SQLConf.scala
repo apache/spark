@@ -199,8 +199,15 @@ private[sql] class SQLConf extends Serializable {
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
-  def setConf(props: Properties): Unit = settings.synchronized {
-    props.foreach { case (k, v) => settings.put(k, v) }
+  def setConf(props: Properties, overwrite: Boolean = true): Unit = settings.synchronized {
+    if (overwrite) {
+      props.foreach { case (k, v) => settings.put(k, v) }  
+    } else {
+      props
+        .filter(p => !settings.containsKey(p._1))
+        .foreach { case (k, v) => settings.put(k, v) }
+    }
+    
   }
 
   /** Set the given Spark SQL configuration property. */
