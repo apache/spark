@@ -140,30 +140,3 @@ print.structField <- function(x, ...) {
       ")",
       sep = "")
 }
-
-# cfreeman: Don't think we need this function since we can create
-# structType in R and pass to createDataFrame
-#
-# #' dump the schema into JSON string
-# tojson <- function(x) {
-#   if (inherits(x, "struct")) {
-#     # schema object
-#     l <- paste(lapply(x, tojson), collapse = ", ")
-#     paste('{\"type\":\"struct\", \"fields\":','[', l, ']}', sep = '')
-#   } else if (inherits(x, "field")) {
-#     # field object
-#     names <- names(x)
-#     items <- lapply(names, function(n) {
-#       safe_n <- gsub('"', '\\"', n)
-#       paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
-#     })
-#     d <- paste(items, collapse = ", ")
-#     paste('{', d, '}', sep = '')
-#   } else if (is.character(x)) {
-#     paste('"', x, '"', sep = '')
-#   } else if (is.logical(x)) {
-#     if (x) "true" else "false"
-#   } else {
-#     stop(paste("unexpected type:", class(x)))
-#   }
-# }
