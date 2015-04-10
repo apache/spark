@@ -25,7 +25,7 @@ structType <- function(x, ...) {
 structType.jobj <- function(x) {
   obj <- structure(list(), class = "structType")
   obj$jobj <- x
-  obj$fields <- function() { lapply(callJMethod(x, "fields"), structField) }
+  obj$fields <- function() { lapply(callJMethod(obj$jobj, "fields"), structField) }
   obj
 }
 
