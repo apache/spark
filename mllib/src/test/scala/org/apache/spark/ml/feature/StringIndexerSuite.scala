@@ -35,6 +35,7 @@ class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
+      .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
     val transformed = indexer.transform(df)
