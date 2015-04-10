@@ -137,14 +137,10 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
 
 private[spark] object RDDCheckpointData {
   def rddCheckpointDataPath(sc: SparkContext, rddId: Int): Option[Path] = {
-    if (sc.checkpointDir.isDefined) {
-      Some(new Path(sc.checkpointDir.get, "rdd-" + rddId))
-    } else {
-      None
-    }
+    sc.checkpointDir.map { dir => new Path(dir, "rdd-" + rddId) }
   }
 
-  def clearRDDCheckpointData(sc: SparkContext, rddId: Int, blocking: Boolean = true) = {
+  def clearRDDCheckpointData(sc: SparkContext, rddId: Int): Unit = {
     rddCheckpointDataPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
