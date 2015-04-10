@@ -41,5 +41,4 @@ class SimpleResourceCleaner extends ResourceCleaner {
   def doCleanup(): Unit = {
     cleanerFuncs.foreach{ f => f() }
   }
-
 }

@@ -242,8 +242,8 @@ private[spark] class Executor(
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
-            env.blockManager.putBytes(
-              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER, taskResultBlockPutCleaner)
+            env.blockManager.putBytes(blockId, serializedDirectResult,
+              StorageLevel.MEMORY_AND_DISK_SER, taskResultBlockPutCleaner)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
@@ -297,7 +297,7 @@ private[spark] class Executor(
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         // Release memory used by this thread for accumulators
         Accumulators.clear()
-        //clean up any resources needed when putting block results
+        // clean up any resources needed when putting block results
         taskResultBlockPutCleaner.doCleanup()
         runningTasks.remove(taskId)
       }

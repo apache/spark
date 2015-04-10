@@ -98,7 +98,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * If the lock is free, just acquire it and return None. Otherwise, another thread is already
    * loading the partition, so we wait for it to finish and return the values loaded by the thread.
    */
-  private def acquireLockForPartition[T](id: RDDBlockId, taskContext: TaskContext): Option[Iterator[T]] = {
+  private def acquireLockForPartition[T](
+      id: RDDBlockId,
+      taskContext: TaskContext): Option[Iterator[T]] = {
     loading.synchronized {
       if (!loading.contains(id)) {
         // If the partition is free, acquire its lock to compute its value

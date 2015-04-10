@@ -100,7 +100,9 @@ private[spark] class TachyonStore(
     }
   }
 
-  override def getValues(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
+  override def getValues(
+      blockId: BlockId,
+      resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer, resourceCleaner))
   }
 

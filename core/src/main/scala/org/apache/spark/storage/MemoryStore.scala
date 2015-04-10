@@ -197,7 +197,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def getValues(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
+  override def getValues(
+      blockId: BlockId,
+      resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }

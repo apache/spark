@@ -432,7 +432,8 @@ private[spark] class BlockManager(
    */
   def getLocal(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    doGetLocal(blockId, asBlockResult = true, Some(resourceCleaner)).asInstanceOf[Option[BlockResult]]
+    doGetLocal(blockId, asBlockResult = true, Some(resourceCleaner))
+      .asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -508,7 +509,8 @@ private[spark] class BlockManager(
                   return Some(bytes)
                 } else {
                   return Some(new BlockResult(
-                    dataDeserialize(blockId, bytes, resourceCleaner.get), DataReadMethod.Memory, info.size))
+                    dataDeserialize(blockId, bytes, resourceCleaner.get),
+                    DataReadMethod.Memory, info.size))
                 }
               case None =>
                 logDebug(s"Block $blockId not found in tachyon")
@@ -586,7 +588,8 @@ private[spark] class BlockManager(
    */
   def getRemote(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
-    doGetRemote(blockId, asBlockResult = true, Some(resourceCleaner)).asInstanceOf[Option[BlockResult]]
+    doGetRemote(blockId, asBlockResult = true, Some(resourceCleaner))
+      .asInstanceOf[Option[BlockResult]]
   }
 
   /**
