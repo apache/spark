@@ -34,6 +34,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature._
+import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -358,9 +359,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data)
   }
-
-
-
+  
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
@@ -418,6 +417,24 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     val model =  als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
+  }
+
+  /**
+   * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
+   * to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see
+   * the Py4J documentation.
+   */
+  def trainFPGrowthModel(
+      data: JavaRDD[java.lang.Iterable[Any]],
+      minSupport: Double,
+      numPartitions: Int): FPGrowthModel[Any] = {
+    val fpg = new FPGrowth()
+      .setMinSupport(minSupport)
+      .setNumPartitions(numPartitions)
+
+    val model = fpg.run(data.rdd.map(_.asScala.toArray))
+    new FPGrowthModelWrapper(model)
   }
 
   /**

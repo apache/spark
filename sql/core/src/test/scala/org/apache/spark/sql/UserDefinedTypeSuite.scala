@@ -63,7 +63,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
     }
   }
 
-  override def userClass = classOf[MyDenseVector]
+  override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }

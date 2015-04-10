@@ -56,6 +56,6 @@ res2: Array[org.apache.spark.sql.Row] = Array([238,val_238], [86,val_86], [311,v
 
 You can also build further queries on top of these `DataFrames` using the query DSL.
 ```
-scala> query.where('key > 30).select(avg('key)).collect()
+scala> query.where(query("key") > 30).select(avg(query("key"))).collect()
 res3: Array[org.apache.spark.sql.Row] = Array([274.79025423728814])
 ```

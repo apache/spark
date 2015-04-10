@@ -25,7 +25,8 @@ case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 
 /**
- * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
+ * A set of test cases expressed in Hive QL that are not covered by the tests
+ * included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
 
