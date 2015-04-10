@@ -120,10 +120,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case _ => Nil
       }
       dataType match {
+        // Row() need this interface to compile
         case StringType =>
           q"""
           override def getString(i: Int): String = {
-            ..$ifStatements;
             $accessorFailure
           }"""
         case other =>
@@ -147,9 +147,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
       dataType match {
         case StringType =>
+          // MutableRow() need this interface to compile
           q"""
           override def setString(i: Int, value: String) {
-            ..$ifStatements;
             $accessorFailure
           }"""
         case other =>
