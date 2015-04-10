@@ -28,15 +28,14 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
- * Base trait for [[LabelIndexer]] and [[LabelIndexerModel]].
+ * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait LabelIndexerBase extends Params with HasLabelCol with HasOutputCol {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
-    val labelType = schema(map(labelCol)).dataType
-    require(labelType == StringType, s"The label column must be string-typed but got $labelType.")
+    checkInputColumn(schema, map(inputCol), StringType)
     val inputFields = schema.fields
     val outputColName = map(outputCol)
     require(inputFields.forall(_.name != outputColName),
@@ -54,21 +53,21 @@ private[feature] trait LabelIndexerBase extends Params with HasLabelCol with Has
  * So the most frequent label gets index 0.
  */
 @AlphaComponent
-class LabelIndexer extends Estimator[LabelIndexerModel] with LabelIndexerBase {
+class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase {
 
   /** @group setParam */
-  def setLabelCol(value: String): this.type = set(labelCol, value)
+  def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   // TODO: handle unseen labels
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): LabelIndexerModel = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): StringIndexerModel = {
     val map = this.paramMap ++ paramMap
-    val counts = dataset.select(map(labelCol)).map(_.getString(0)).countByValue()
+    val counts = dataset.select(map(inputCol)).map(_.getString(0)).countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    val model = new LabelIndexerModel(this, map, labels)
+    val model = new StringIndexerModel(this, map, labels)
     Params.inheritValues(map, this, model)
     model
   }
@@ -80,13 +79,13 @@ class LabelIndexer extends Estimator[LabelIndexerModel] with LabelIndexerBase {
 
 /**
  * :: AlphaComponent ::
- * Model fitted by [[LabelIndexer]].
+ * Model fitted by [[StringIndexer]].
  */
 @AlphaComponent
-class LabelIndexerModel private[ml] (
-    override val parent: LabelIndexer,
+class StringIndexerModel private[ml] (
+    override val parent: StringIndexer,
     override val fittingParamMap: ParamMap,
-    labels: Array[String]) extends Model[LabelIndexerModel] with LabelIndexerBase {
+    labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
   private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
@@ -100,7 +99,7 @@ class LabelIndexerModel private[ml] (
   }
 
   /** @group setParam */
-  def setLabelCol(value: String): this.type = set(labelCol, value)
+  def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
@@ -111,13 +110,14 @@ class LabelIndexerModel private[ml] (
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
       } else {
+        // TODO: handle unseen labels
         throw new SparkException(s"Unseen label: $label.")
       }
     }
     val outputColName = map(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toStructField().metadata
-    dataset.select(col("*"), indexer(dataset(map(labelCol))).as(outputColName, metadata))
+    dataset.select(col("*"), indexer(dataset(map(inputCol))).as(outputColName, metadata))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {

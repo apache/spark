@@ -23,7 +23,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.SQLContext
 
-class LabelIndexerSuite extends FunSuite with MLlibTestSparkContext {
+class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
   private var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
@@ -31,10 +31,10 @@ class LabelIndexerSuite extends FunSuite with MLlibTestSparkContext {
     sqlContext = new SQLContext(sc)
   }
 
-  test("LabelIndexer") {
+  test("StringIndexer") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
-    val indexer = new LabelIndexer()
+    val indexer = new StringIndexer()
       .setOutputCol("labelIndex")
       .fit(df)
     val transformed = indexer.transform(df)
