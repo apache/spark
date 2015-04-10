@@ -36,7 +36,7 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
      15-14 -13  12
      . \      /    
      4 . 3 . 2  
-     |   .   |   
+     |   .   |
      5   0 . 1  10
      | \     .   .
      6   7 . 8 - 9 - 11
@@ -79,7 +79,7 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
 
     val preferences = similaritiesWithPreferneces.collect().filter(x => x._1 == x._2).map(_._3)
     preferences.foreach(p => assert(p == medianValue))
- 
+
     val model = ap.setMaxIterations(30)
       .run(similaritiesWithPreferneces)
 
