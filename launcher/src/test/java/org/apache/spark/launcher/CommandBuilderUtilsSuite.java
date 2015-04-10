@@ -79,9 +79,9 @@ public class CommandBuilderUtilsSuite {
 
   @Test
   public void testPythonArgQuoting() {
-    assertEquals("\"abc\"", quoteForPython("abc"));
-    assertEquals("\"a b c\"", quoteForPython("a b c"));
-    assertEquals("\"a \\\"b\\\" c\"", quoteForPython("a \"b\" c"));
+    assertEquals("\"abc\"", quoteForCommandString("abc"));
+    assertEquals("\"a b c\"", quoteForCommandString("a b c"));
+    assertEquals("\"a \\\"b\\\" c\"", quoteForCommandString("a \"b\" c"));
   }
 
   private void testOpt(String opts, List<String> expected) {

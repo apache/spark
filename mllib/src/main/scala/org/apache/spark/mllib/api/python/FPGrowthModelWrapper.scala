@@ -15,15 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.mllib.api.python
+
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
+import org.apache.spark.rdd.RDD
 
 /**
- * This class exists to restrict the visibility of TaskContext setters.
+ * A Wrapper of FPGrowthModel to provide helper method for Python
  */
-private [spark] object TaskContextHelper {
+private[python] class FPGrowthModelWrapper(model: FPGrowthModel[Any])
+  extends FPGrowthModel(model.freqItemsets) {
 
-  def setTaskContext(tc: TaskContext): Unit = TaskContext.setTaskContext(tc)
-
-  def unset(): Unit = TaskContext.unset()
-  
+  def getFreqItemsets: RDD[Array[Any]] = {
+    SerDe.fromTuple2RDD(model.freqItemsets.map(x => (x.javaItems, x.freq)))
+  }
 }
