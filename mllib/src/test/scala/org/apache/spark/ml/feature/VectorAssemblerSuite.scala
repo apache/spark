@@ -50,14 +50,14 @@ class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
 
   test("VectorAssembler") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)))
-    )).toDF("id", "x", "y", "name", "z")
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
+    )).toDF("id", "x", "y", "name", "z", "n")
     val assembler = new VectorAssembler()
-      .setInputCols(Array("x", "y", "z"))
+      .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
     assembler.transform(df).select("features").collect().foreach {
       case Row(v: Vector) =>
-        assert(v === Vectors.sparse(5, Array(1, 2, 4), Array(1.0, 2.0, 3.0)))
+        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
     }
   }
 }

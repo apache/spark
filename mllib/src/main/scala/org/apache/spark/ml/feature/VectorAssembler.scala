@@ -26,7 +26,7 @@ import org.apache.spark.ml.param.{HasInputCols, HasOutputCol, ParamMap}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.CreateStruct
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CreateStruct}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -48,7 +48,15 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
-    val args = map(inputCols).map(c => UnresolvedAttribute(c))
+    val schema = dataset.schema
+    val inputColNames = map(inputCols)
+    val args = inputColNames.map { c =>
+      schema(c).dataType match {
+        case DoubleType => UnresolvedAttribute(c)
+        case t if t.isInstanceOf[VectorUDT] => UnresolvedAttribute(c)
+        case _: NativeType => Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
+      }
+    }
     dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
   }
 
@@ -57,10 +65,11 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
     val inputColNames = map(inputCols)
     val outputColName = map(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
-    for (dataType <- inputDataTypes) {
-      if (!(dataType == DoubleType || dataType.isInstanceOf[VectorUDT])) {
-        throw new IllegalArgumentException(s"Data type $dataType is not supported.")
-      }
+    inputDataTypes.foreach {
+      case _: NativeType =>
+      case t if t.isInstanceOf[VectorUDT] =>
+      case other =>
+        throw new IllegalArgumentException(s"Data type $other is not supported.")
     }
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
