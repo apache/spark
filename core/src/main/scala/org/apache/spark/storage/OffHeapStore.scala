@@ -72,34 +72,33 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
       blockId: BlockId,
       bytes: ByteBuffer,
       returnValues: Boolean): PutResult = {
-
-      // So that we do not modify the input offsets !
-      // duplicate does not copy buffer, so inexpensive
-      val byteBuffer = bytes.duplicate()
-      byteBuffer.rewind()
-      logDebug(s"Attempting to put block $blockId into OffHeap store")
+    // So that we do not modify the input offsets !
+    // duplicate does not copy buffer, so inexpensive
+    val byteBuffer = bytes.duplicate()
+    byteBuffer.rewind()
+    logDebug(s"Attempting to put block $blockId into OffHeap store")
+    // we should never hit here if offHeapManager is None. Handle it anyway for safety.
+    try {
       val startTime = System.currentTimeMillis
-      // we should never hit here if offHeapManager is None. Handle it anyway for safety.
-      try {
-        if (offHeapManager.isDefined) {
-          offHeapManager.get.putBytes(blockId, bytes)
-          val finishTime = System.currentTimeMillis
-          logDebug("Block %s stored as %s file in OffHeap store in %d ms".format(
-            blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
+      if (offHeapManager.isDefined) {
+        offHeapManager.get.putBytes(blockId, bytes)
+        val finishTime = System.currentTimeMillis
+        logDebug("Block %s stored as %s file in OffHeap store in %d ms".format(
+          blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
 
-          if (returnValues) {
-            PutResult(bytes.limit(), Right(bytes.duplicate()))
-          } else {
-            PutResult(bytes.limit(), null)
-          }
+        if (returnValues) {
+          PutResult(bytes.limit(), Right(bytes.duplicate()))
         } else {
-          logError(s"error in putBytes $blockId")
-          PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+          PutResult(bytes.limit(), null)
         }
-      } catch {
-        case NonFatal(t) => logError(s"error in putBytes $blockId")
-          PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+      } else {
+        logError(s"error in putBytes $blockId")
+        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
       }
+    } catch {
+      case NonFatal(t) => logError(s"error in putBytes $blockId")
+        PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
+    }
   }
 
   // We assume the block is removed even if exception thrown
@@ -115,7 +114,6 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
-
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     try {

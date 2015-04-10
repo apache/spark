@@ -247,9 +247,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  // Generate the random name for a temp folder in Tachyon
+  // Generate the random name for a temp folder in OffHeap
   // Add a timestamp as the suffix here to make it more safe
-  val tachyonFolderName = "spark-" + randomUUID.toString()
+  val offHeapFolderName = "spark-" + randomUUID.toString()
+  conf.set("spark.offHeapStore.folderName", offHeapFolderName)
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 

@@ -60,7 +60,7 @@ private[spark] object BlockManagerMessages {
       var storageLevel: StorageLevel,
       var memSize: Long,
       var diskSize: Long,
-      var tachyonSize: Long)
+      var offHeapSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
@@ -72,7 +72,7 @@ private[spark] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
-      out.writeLong(tachyonSize)
+      out.writeLong(offHeapSize)
     }
 
     override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -81,7 +81,7 @@ private[spark] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
-      tachyonSize = in.readLong()
+      offHeapSize = in.readLong()
     }
   }
 

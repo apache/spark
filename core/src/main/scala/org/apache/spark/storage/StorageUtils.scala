@@ -199,33 +199,33 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
-    val changeInTachyon = newBlockStatus.tachyonSize - oldBlockStatus.tachyonSize
+    val changeInOffHeap = newBlockStatus.offHeapSize - oldBlockStatus.offHeapSize
     val level = newBlockStatus.storageLevel
 
     // Compute new info from old info
-    val (oldMem, oldDisk, oldTachyon) = blockId match {
+    val (oldMem, oldDisk, oldOffHeap) = blockId match {
       case RDDBlockId(rddId, _) =>
         _rddStorageInfo.get(rddId)
-          .map { case (mem, disk, tachyon, _) => (mem, disk, tachyon) }
+          .map { case (mem, disk, offheap, _) => (mem, disk, offheap) }
           .getOrElse((0L, 0L, 0L))
       case _ =>
         _nonRddStorageInfo
     }
     val newMem = math.max(oldMem + changeInMem, 0L)
     val newDisk = math.max(oldDisk + changeInDisk, 0L)
-    val newTachyon = math.max(oldTachyon + changeInTachyon, 0L)
+    val newOffHeap = math.max(oldOffHeap + changeInOffHeap, 0L)
 
     // Set the correct info
     blockId match {
       case RDDBlockId(rddId, _) =>
         // If this RDD is no longer persisted, remove it
-        if (newMem + newDisk + newTachyon == 0) {
+        if (newMem + newDisk + newOffHeap == 0) {
           _rddStorageInfo.remove(rddId)
         } else {
-          _rddStorageInfo(rddId) = (newMem, newDisk, newTachyon, level)
+          _rddStorageInfo(rddId) = (newMem, newDisk, newOffHeap, level)
         }
       case _ =>
-        _nonRddStorageInfo = (newMem, newDisk, newTachyon)
+        _nonRddStorageInfo = (newMem, newDisk, newOffHeap)
     }
   }
 
@@ -247,13 +247,13 @@ private[spark] object StorageUtils {
       val numCachedPartitions = statuses.map(_.numRddBlocksById(rddId)).sum
       val memSize = statuses.map(_.memUsedByRdd(rddId)).sum
       val diskSize = statuses.map(_.diskUsedByRdd(rddId)).sum
-      val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).sum
+      val offHeapSize = statuses.map(_.offHeapUsedByRdd(rddId)).sum
 
       rddInfo.storageLevel = storageLevel
       rddInfo.numCachedPartitions = numCachedPartitions
       rddInfo.memSize = memSize
       rddInfo.diskSize = diskSize
-      rddInfo.tachyonSize = tachyonSize
+      rddInfo.offHeapSize = offHeapSize
     }
   }
 

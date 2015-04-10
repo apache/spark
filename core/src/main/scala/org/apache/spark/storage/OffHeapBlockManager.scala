@@ -36,7 +36,7 @@ trait OffHeapBlockManager {
    *
    * @throws java.io.IOException when FS init failure.
    */
-  def init(blockManager: BlockManager, executorId: String)
+  def init(blockManager: BlockManager, executorId: String): Unit
 
   /**
    * remove the cache from offheap
@@ -87,24 +87,23 @@ trait OffHeapBlockManager {
 
 object OffHeapBlockManager extends Logging{
   val MAX_DIR_CREATION_ATTEMPTS = 10
-  val subDirsPerDir = 64
-  def create(blockManager: BlockManager,
-             executorId: String): Option[OffHeapBlockManager] = {
-     val sNames = blockManager.conf.getOption("spark.offHeapStore.blockManager")
-     sNames match {
-       case Some(name) =>
-         try {
-           val instance = Class.forName(name)
-             .newInstance()
-             .asInstanceOf[OffHeapBlockManager]
-           instance.setup(blockManager, executorId)
-           Some(instance)
-         } catch {
-           case NonFatal(t) =>
-             logError("Cannot initialize offHeap store")
-             None
-         }
-       case None => None
-     }
+  val SUB_DIRS_PER_DIR = "64"
+  def create(blockManager: BlockManager, executorId: String): Option[OffHeapBlockManager] = {
+    val sNames = blockManager.conf.getOption("spark.offHeapStore.blockManager")
+    sNames match {
+      case Some(name) =>
+        try {
+          val instance = Class.forName(name)
+            .newInstance()
+            .asInstanceOf[OffHeapBlockManager]
+          instance.setup(blockManager, executorId)
+          Some(instance)
+        } catch {
+          case NonFatal(t) =>
+            logError("Cannot initialize offHeap store")
+            None
+        }
+      case None => None
+    }
   }
 }
