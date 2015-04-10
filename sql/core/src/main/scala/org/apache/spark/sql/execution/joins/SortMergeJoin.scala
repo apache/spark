@@ -39,15 +39,24 @@ case class SortMergeJoin(
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputPartitioning: Partitioning = HashSortedPartitioning(leftKeys, 0)
+  override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredOrderedDistribution(leftKeys) :: ClusteredOrderedDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   private val orders: Seq[SortOrder] = leftKeys.zipWithIndex.map {
     case(expr, index) => SortOrder(BoundReference(index, expr.dataType, expr.nullable), Ascending)
   }
   private val ordering: RowOrdering = new RowOrdering(orders, left.output)
+
+  private def requiredOrders(keys: Seq[Expression], side: SparkPlan): Seq[SortOrder] = keys.map {
+    k => SortOrder(BindReferences.bindReference(k, side.output, allowFailures = false), Ascending)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys, left)
+
+  override def requiredInPartitionOrdering: Seq[Seq[SortOrder]] =
+    requiredOrders(leftKeys, left) :: requiredOrders(rightKeys, right) :: Nil
 
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)

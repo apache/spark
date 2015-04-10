@@ -72,29 +72,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
         shuffled.map(_._2)
 
-      case HashSortedPartitioning(expressions, numPartitions) =>
-        val rdd = if (sortBasedShuffleOn && numPartitions > bypassMergeThreshold) {
-          child.execute().mapPartitions { iter =>
-            val hashExpressions = newMutableProjection(expressions, child.output)()
-            iter.map(r => (hashExpressions(r).copy(), r.copy()))
-          }
-        } else {
-          child.execute().mapPartitions { iter =>
-            val hashExpressions = newMutableProjection(expressions, child.output)()
-            val mutablePair = new MutablePair[Row, Row]()
-            iter.map(r => mutablePair.update(hashExpressions(r), r))
-          }
-        }
-        val sortingExpressions = expressions.zipWithIndex.map {
-          case (exp, index) =>
-            new SortOrder(BoundReference(index, exp.dataType, exp.nullable), Ascending)
-        }
-        val ordering = new RowOrdering(sortingExpressions, child.output)
-        val part = new HashPartitioner(numPartitions)
-        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
-        shuffled.map(_._2)
-
       case RangePartitioning(sortingExpressions, numPartitions) =>
         val rdd = if (sortBasedShuffleOn) {
           child.execute().mapPartitions { iter => iter.map(row => (row.copy(), null))}
@@ -184,6 +161,11 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
       def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan): SparkPlan =
         if (child.outputPartitioning != partitioning) Exchange(partitioning, child) else child
 
+      // Check if the partitioning we want to ensure is the same as the child's output
+      // partitioning. If so, we do not need to add the Exchange operator.
+      def addSortIfNecessary(ordering: Seq[SortOrder], child: SparkPlan): SparkPlan =
+        if (child.outputOrdering != ordering) Sort(ordering, global = false, child) else child
+
       if (meetsRequirements && compatible) {
         operator
       } else {
@@ -195,14 +177,18 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
             addExchangeIfNecessary(SinglePartition, child)
           case (ClusteredDistribution(clustering), child) =>
             addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child)
-          case (ClusteredOrderedDistribution(clustering), child) =>
-            addExchangeIfNecessary(HashSortedPartitioning(clustering, numPartitions), child)
           case (OrderedDistribution(ordering), child) =>
             addExchangeIfNecessary(RangePartitioning(ordering, numPartitions), child)
           case (UnspecifiedDistribution, child) => child
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
         }
-        operator.withNewChildren(repartitionedChildren)
+        val reorderedChildren = operator.requiredInPartitionOrdering.zip(repartitionedChildren).map {
+          case (Nil, child) =>
+            child
+          case (ordering, child) =>
+            addSortIfNecessary(ordering, child)
+        }
+        operator.withNewChildren(reorderedChildren)
       }
   }
 }

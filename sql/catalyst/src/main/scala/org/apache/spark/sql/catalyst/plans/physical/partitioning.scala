@@ -75,21 +75,6 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   def clustering: Set[Expression] = ordering.map(_.child).toSet
 }
 
-/**
- * Represents data where tuples have been ordered according to the `clustering`
- * [[Expression Expressions]].  This is a strictly stronger guarantee than
- * [[ClusteredDistribution]] as this will ensure that tuples in a single partition are sorted
- * by the expressions.
- */
-case class ClusteredOrderedDistribution(clustering: Seq[Expression])
-  extends Distribution {
-  require(
-    clustering != Nil,
-    "The clustering expressions of a ClusteredOrderedDistribution should not be Nil. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-}
-
 sealed trait Partitioning {
   /** Returns the number of partitions that the data is split across */
   val numPartitions: Int
@@ -170,40 +155,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def compatibleWith(other: Partitioning): Boolean = other match {
     case BroadcastPartitioning => true
     case h: HashPartitioning if h == this => true
-    case _ => false
-  }
-
-  override def eval(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-}
-
-/**
- * Represents a partitioning where rows are split up across partitions based on the hash
- * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
- * in the same partition. And rows within the same partition are sorted by the expressions.
- */
-case class HashSortedPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression
-  with Partitioning {
-
-  override def children: Seq[Expression] = expressions
-  override def nullable: Boolean = false
-  override def dataType: DataType = IntegerType
-
-  private[this] lazy val clusteringSet = expressions.toSet
-
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case ClusteredOrderedDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
-    case ClusteredDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning) = other match {
-    case BroadcastPartitioning => true
-    case h: HashSortedPartitioning if h == this => true
     case _ => false
   }
 
