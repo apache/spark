@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.rdd.RDD
@@ -30,19 +31,29 @@ import org.apache.spark.rdd.RDD
  *
  * Model produced by [[AffinityPropagation]].
  *
- * @param clusters the vertexIDs of each cluster.
- * @param exemplars the vertexIDs of all exemplars.
+ * @param id cluster id.
+ * @param exemplar cluster exemplar.
+ * @param members cluster members.
+ */
+@Experimental
+case class AffinityPropagationCluster(val id: Long, val exemplar: Long, val members: Array[Long])
+
+/**
+ * :: Experimental ::
+ *
+ * Model produced by [[AffinityPropagation]].
+ *
+ * @param clusters the clusters of AffinityPropagation clustering results.
  */
 @Experimental
 class AffinityPropagationModel(
-    val clusters: RDD[(Array[Long], Long)],
-    val exemplars: RDD[(Long, Long)]) extends Serializable {
+    val clusters: RDD[AffinityPropagationCluster]) extends Serializable {
 
   /**
    * Set the number of clusters
    */
   lazy val getK: Long = clusters.count()
-
+ 
   /**
    * Find the cluster the given vertex belongs
    * @param vertexID vertex id.
@@ -50,9 +61,9 @@ class AffinityPropagationModel(
    *         the given vertex doesn't belong to any cluster, return null.
    */
   def findCluster(vertexID: Long): Array[Long] = {
-    val cluster = clusters.filter(_._1.contains(vertexID)).collect()
+    val cluster = clusters.filter(_.members.contains(vertexID)).collect()
     if (cluster.nonEmpty) {
-      cluster(0)._1
+      cluster(0).members
     } else {
       null
     }
@@ -65,10 +76,9 @@ class AffinityPropagationModel(
    *         any cluster, return -1.
    */
   def findClusterID(vertexID: Long): Long = {
-    val clusterIds = clusters.flatMap { clusterAndId =>
-      val clusterId = clusterAndId._2
-      if (clusterAndId._1.contains(vertexID)) {
-        Seq(clusterId)
+    val clusterIds = clusters.flatMap { cluster =>
+      if (cluster.members.contains(vertexID)) {
+        Seq(cluster.id)
       } else {
         Seq()
       }
@@ -249,6 +259,14 @@ class AffinityPropagation private[clustering] (
   }
 
   /**
+   * A Java-friendly version of [[AffinityPropagation.run]].
+   */
+  def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])
+    : AffinityPropagationModel = {
+    run(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
+  }
+
+  /**
    * Runs the AP algorithm.
    *
    * @param s The (normalized) similarity matrix, which is the matrix S in the AP paper with vertex
@@ -419,9 +437,10 @@ private[clustering] object AffinityPropagation extends Logging {
       combOp = (s1, s2) => s1 ++ s2
     ).cache()
     
-    val clusters = clusterMembers.map(kv => (kv._2 ++ mutable.Set(kv._1)).toArray).zipWithIndex()
-    val exemplars = clusterMembers.map(kv => kv._1).zipWithIndex()
+    val clusters = clusterMembers.zipWithIndex().map {kv =>
+      new AffinityPropagationCluster(kv._2, kv._1._1, kv._1._2.toArray)
+    }
 
-    new AffinityPropagationModel(clusters, exemplars)
+    new AffinityPropagationModel(clusters)
   }
 }
