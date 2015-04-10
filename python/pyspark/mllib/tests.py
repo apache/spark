@@ -24,7 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 
-from numpy import array, array_equal
+from numpy import array, array_equal, zeros
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -38,7 +38,7 @@ else:
 
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
-    DenseMatrix, Vectors, Matrices
+    DenseMatrix, SparseMatrix, Vectors, Matrices
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
@@ -143,6 +143,54 @@ class VectorTests(PySparkTestCase):
         for i in range(3):
             for j in range(2):
                 self.assertEquals(mat[i, j], expected[i][j])
+
+    def test_sparse_matrix(self):
+        # Test sparse matrix creation.
+        sm1 = SparseMatrix(
+            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        self.assertEquals(sm1.numRows, 3)
+        self.assertEquals(sm1.numCols, 4)
+        self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
+        self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
+        self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
+
+        # Test indexing
+        expected = [
+            [0, 0, 0, 0],
+            [1, 0, 4, 0],
+            [2, 0, 5, 0]]
+
+        for i in range(3):
+            for j in range(4):
+                self.assertEquals(expected[i][j], sm1[i, j])
+        self.assertTrue(array_equal(sm1.toArray(), expected))
+
+        # Test conversion to dense and sparse.
+        smnew = sm1.toDense().toSparse()
+        self.assertEquals(sm1.numRows, smnew.numRows)
+        self.assertEquals(sm1.numCols, smnew.numCols)
+        self.assertTrue(array_equal(sm1.colPtrs, smnew.colPtrs))
+        self.assertTrue(array_equal(sm1.rowIndices, smnew.rowIndices))
+        self.assertTrue(array_equal(sm1.values, smnew.values))
+
+        sm1t = SparseMatrix(
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
+            isTransposed=True)
+        self.assertEquals(sm1t.numRows, 3)
+        self.assertEquals(sm1t.numCols, 4)
+        self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
+        self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
+        self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
+
+        expected = [
+            [3, 2, 0, 0],
+            [0, 0, 4, 0],
+            [9, 0, 8, 0]]
+
+        for i in range(3):
+            for j in range(4):
+                self.assertEquals(expected[i][j], sm1t[i, j])
+        self.assertTrue(array_equal(sm1t.toArray(), expected))
 
 
 class ListTests(PySparkTestCase):
