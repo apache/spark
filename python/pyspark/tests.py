@@ -54,7 +54,8 @@ from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
-    PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer
+    PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
+    FlattenedValuesSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
@@ -91,45 +92,45 @@ class MergerTests(unittest.TestCase):
     def test_in_memory(self):
         m = InMemoryMerger(self.agg)
         m.mergeValues(self.data)
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)))
 
         m = InMemoryMerger(self.agg)
         m.mergeCombiners(map(lambda x_y: (x_y[0], [x_y[1]]), self.data))
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)))
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)
         m.mergeValues(self.data)
         self.assertEqual(m.spills, 0)
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
         m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), self.data))
         self.assertEqual(m.spills, 0)
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)))
 
     def test_medium_dataset(self):
         m = ExternalMerger(self.agg, 30)
         m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 10)
         m.mergeCombiners(map(lambda x_y2: (x_y2[0], [x_y2[1]]), self.data * 3))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(sum(v) for k, v in m.items()),
                          sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 10, partitions=3)
         m.mergeCombiners(map(lambda k_v: (k_v[0], [str(k_v[1])]), self.data * 10))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(len(v) for k, v in m.iteritems()),
+        self.assertEqual(sum(len(v) for k, v in m.items()),
                          self.N * 10)
         m._cleanup()
 
@@ -293,6 +294,7 @@ class SerializationTestCase(unittest.TestCase):
         hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CompressedSerializer(PickleSerializer()))
+        hash(FlattenedValuesSerializer(PickleSerializer()))
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -748,7 +750,7 @@ class RDDTests(ReusedPySparkTestCase):
         kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
-        filtered = gkv.filter(lambda (k, vs): k == 1)
+        filtered = gkv.filter(lambda kv: k[0] == 1)
         self.assertEqual(1, filtered.count())
         self.assertEqual([(1, N/3)], filtered.mapValues(len).collect())
         self.assertEqual([(N/3, N/3)],

@@ -327,11 +327,13 @@ class DenseVector(Vector):
     __sub__ = _delegate("__sub__")
     __mul__ = _delegate("__mul__")
     __div__ = _delegate("__div__")
+    __truediv__ = _delegate("__truediv__")
     __mod__ = _delegate("__mod__")
     __radd__ = _delegate("__radd__")
     __rsub__ = _delegate("__rsub__")
     __rmul__ = _delegate("__rmul__")
     __rdiv__ = _delegate("__rdiv__")
+    __rtruediv__ = _delegate("__rtruediv__")
     __rmod__ = _delegate("__rmod__")
 
 
@@ -651,7 +653,7 @@ class Matrix(object):
         """
         Convert Matrix attributes which are array-like or buffer to array.
         """
-        if isinstance(array_like, basestring):
+        if isinstance(array_like, bytes):
             return np.frombuffer(array_like, dtype=dtype)
         return np.asarray(array_like, dtype=dtype)
 
@@ -683,7 +685,7 @@ class DenseMatrix(Matrix):
     def toSparse(self):
         """Convert to SparseMatrix"""
         indices = np.nonzero(self.values)[0]
-        colCounts = np.bincount(indices / self.numRows)
+        colCounts = np.bincount(indices // self.numRows)
         colPtrs = np.cumsum(np.hstack(
             (0, colCounts, np.zeros(self.numCols - colCounts.size))))
         values = self.values[indices]

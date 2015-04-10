@@ -1789,10 +1789,10 @@ class RDD(object):
         sum or average) over each key, using reduceByKey or aggregateByKey will
         provide much better performance.
 
-        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> [(x, len(y)) for x, y in sorted(x.groupByKey().collect())]
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+        >>> sorted(rdd.groupByKey().mapValues(len).collect())
         [('a', 2), ('b', 1)]
-        >>> [(x, list(y)) for x, y in sorted(x.groupByKey().collect())]
+        >>> sorted(rdd.groupByKey().mapValues(list).collect())
         [('a', [1, 1]), ('b', [1])]
         """
         def createCombiner(x):
