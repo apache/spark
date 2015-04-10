@@ -54,8 +54,8 @@ Example applications are also provided in Python. For example,
 
     ./bin/spark-submit examples/src/main/python/pi.py 10
 
-Spark also provides a R API. To run Spark interactively in a R interpreter, use
-`bin/sparkR`:
+Spark also provides an experimental R API since 1.4 (only RDD and DtaFrame APIs included).
+To run Spark interactively in a R interpreter, use `bin/sparkR`:
 
     ./bin/sparkR --master local[2]
 

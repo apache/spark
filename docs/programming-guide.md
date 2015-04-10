@@ -286,7 +286,7 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
-can be passed to the `--repositories` argument. For example, to run `bin/pyspark` on exactly four cores, use:
+can be passed to the `--repositories` argument. For example, to run `bin/sparkR` on exactly four cores, use:
 
 {% highlight bash %}
 $ ./bin/sparkR --master local[4]
@@ -864,12 +864,11 @@ There are three recommended ways to do this:
   for simple functions that can be written as an anonymous function.
 * Top-level functions in a module.
 
-For example, to pass a longer function than can be supported using a `lambda`, consider
-the code below:
+For example, to pass a longer function, consider the code below:
 
 {% highlight r %}
 """MyScript.py"""
-myFunc <- funciton(s) {
+myFunc <- function(s) {
     words = strsplit(s, " ")[[1]]
     length(words)
 }
@@ -1074,8 +1073,8 @@ pairs <- map(lines, function(s) list(s, 1))
 counts <- reduceByKey(pairs, function(a, b){a + b})
 {% endhighlight %}
 
-We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
-`counts.collect()` to bring them back to the driver program as a list of objects.
+We could also use `sortByKey(counts)`, for example, to sort the pairs alphabetically, and finally
+`collect(counts)` to bring them back to the driver program as a list of objects.
 
 </div>
 
@@ -1771,4 +1770,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) [R](api/R/).
+[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).
