@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.ByteArrayOutputStream
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
@@ -1239,4 +1240,30 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(result.data === Right(bytes))
     assert(result.droppedBlocks === Nil)
   }
+
+  def makeTestBytes: ByteBuffer = {
+    val out = new ByteArrayOutputStream()
+    val serStream = new JavaSerializer(new SparkConf()).newInstance().serializeStream(out)
+    serStream.writeAll((1 to 10).iterator)
+
+    val bytes = out.toByteArray
+
+    ByteBuffer.wrap(bytes)
+  }
+
+  class TestResourceCleaner extends ResourceCleaner {
+    var gotCleanerFunc = false
+    override def addCleanerFunction(f: () => Unit): Unit = {
+      gotCleanerFunc = true
+    }
+  }
+
+  test("dataDeserialize registers the input stream for cleaning") {
+    val bytes = makeTestBytes
+    store = makeBlockManager(0)
+    val cleaner = new TestResourceCleaner
+    store.dataDeserialize(BlockId("rdd_0_0"), bytes, cleaner)
+    cleaner.gotCleanerFunc should be (true)
+  }
+
 }
