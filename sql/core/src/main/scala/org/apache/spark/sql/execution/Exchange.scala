@@ -182,12 +182,12 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
           case (UnspecifiedDistribution, child) => child
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
         }
-        val reorderedChildren = operator.requiredInPartitionOrdering.zip(repartitionedChildren).map {
-          case (Nil, child) =>
-            child
-          case (ordering, child) =>
-            addSortIfNecessary(ordering, child)
-        }
+        val reorderedChildren =
+          operator.requiredInPartitionOrdering.zip(repartitionedChildren).map {
+            case (Nil, child) => child
+            case (ordering, child) =>
+              addSortIfNecessary(ordering, child)
+          }
         operator.withNewChildren(reorderedChildren)
       }
   }
