@@ -26,41 +26,6 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
 
-  @transient var data: Array[Vector] = _
-  @transient var dataFrame: DataFrame = _
-  @transient var polynomialMapper: PolynomialMapper = _
-  @transient var oneDegreeExpansion: Array[Vector] = _
-  @transient var threeDegreeExpansion: Array[Vector] = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    data = Array(
-      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3)))
-      //Vectors.dense(0.0, 0.0, 0.0),
-      //Vectors.dense(0.6, -1.1, -3.0),
-      //Vectors.sparse(3, Seq())
-    )
-
-    oneDegreeExpansion = data
-
-    threeDegreeExpansion = Array(
-      Vectors.sparse(
-        19,Array(0,1,3,4,6,9,10,12,15),Array(-2.0,2.3,4.0,-4.6,5.29,-8.0,9.2,-10.58,12.17))
-      //Vectors.dense(Array.fill[Double](19)(0.0)),
-      //Vectors.dense(0.6,-1.1,-3.0,0.36,-0.66,-1.8,1.21,3.3,9.0,0.216,-0.396,-1.08,0.73,1.98,5.4,
-      //  -1.33,-3.63,-9.9,-27.0),
-      //Vectors.sparse(19, Seq())
-    )
-
-    val sqlContext = new SQLContext(sc)
-    dataFrame = sqlContext
-      .createDataFrame(sc.parallelize(data, 2).map(Tuple1.apply)).toDF("features")
-    polynomialMapper = new PolynomialMapper()
-      .setInputCol("features")
-      .setOutputCol("poly_features")
-  }
-
   def collectResult(result: DataFrame): Array[Vector] = {
     result.select("poly_features").collect().map {
       case Row(features: Vector) => features
@@ -75,40 +40,78 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
     }, "The vector type should be preserved after normalization.")
   }
 
-  def assertValues(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
-    assert((lhs, rhs).zipped.forall { (vector1, vector2) =>
-      vector1 ~== vector2 absTol 1E-1
+  def assertValues(lhs: Array[Vector], rhs: Array[Array[Double]]): Unit = {
+    assert((lhs, rhs).zipped.forall {
+      case (vector1: DenseVector, vector2) =>
+        Vectors.dense(vector1.values) ~== Vectors.dense(vector2) absTol 1E-1
+      case (vector1: SparseVector, vector2) =>
+        Vectors.dense(vector1.values) ~== Vectors.dense(vector2) absTol 1E-1
     }, "The vector value is not correct after normalization.")
   }
 
   test("Polynomial expansion with default parameter") {
-    val result = collectResult(polynomialMapper.transform(dataFrame))
+    val data = Array(
+      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+      Vectors.dense(-2.0, 2.3),
+      Vectors.dense(0.0, 0.0, 0.0),
+      Vectors.dense(0.6, -1.1, -3.0),
+      Vectors.sparse(3, Seq())
+    )
 
-    println(polynomialMapper.getDegree)
+    val sqlContext = new SQLContext(sc)
+    val dataFrame = sqlContext
+      .createDataFrame(sc.parallelize(data, 2).map(Tuple1.apply)).toDF("features")
+
+    val polynomialMapper = new PolynomialMapper()
+      .setInputCol("features")
+      .setOutputCol("poly_features")
+
+    val twoDegreeExpansion: Array[Array[Double]] = Array(
+      Array(-2.0, 2.3, 4.0, -4.6, 5.29),
+      Array(-2.0, 2.3, 4.0, -4.6, 5.29),
+      Array.fill[Double](9)(0.0),
+      Array(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0),
+      Array())
+
+    val result = collectResult(polynomialMapper.transform(dataFrame))
 
     assertTypeOfVector(data, result)
 
-    // assertValues(result, oneDegreeExpansion)
+    assertValues(result, twoDegreeExpansion)
 
-    println(result.mkString("\n"))
-    println()
-    println(oneDegreeExpansion.mkString("\n"))
   }
 
   test("Polynomial expansion with setter") {
-    polynomialMapper.setDegree(3)
+    val data = Array(
+      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+      Vectors.dense(-2.0, 2.3),
+      Vectors.dense(0.0, 0.0, 0.0),
+      Vectors.dense(0.6, -1.1, -3.0),
+      Vectors.sparse(3, Seq())
+    )
 
-    println(polynomialMapper.getDegree)
+    val sqlContext = new SQLContext(sc)
+    val dataFrame = sqlContext
+      .createDataFrame(sc.parallelize(data, 2).map(Tuple1.apply)).toDF("features")
+
+    val polynomialMapper = new PolynomialMapper()
+      .setInputCol("features")
+      .setOutputCol("poly_features")
+      .setDegree(3)
+
+    val threeDegreeExpansion: Array[Array[Double]] = Array(
+      Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
+      Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
+      Array.fill[Double](19)(0.0),
+      Array(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0, 0.216, -0.396, -1.08, 0.73, 1.98,
+        5.4, -1.33, -3.63, -9.9, -27.0),
+      Array())
 
     val result = collectResult(polynomialMapper.transform(dataFrame))
 
     assertTypeOfVector(data, result)
 
-    // assertValues(result, threeDegreeExpansion)
-
-    println(result.mkString("\n"))
-    println()
-    println(threeDegreeExpansion.mkString("\n"))
+    assertValues(result, threeDegreeExpansion)
   }
 }
 
