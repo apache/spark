@@ -32,8 +32,6 @@ import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 
-import akka.actor.Props
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -48,12 +46,13 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.TriggerThreadDump
+import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, SimrSchedulerBackend}
@@ -360,14 +359,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
   // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
-  private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(this)), "HeartbeatReceiver")
+  private val heartbeatReceiver = env.rpcEnv.setupEndpoint(
+    HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
   // Create and start the scheduler
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
 
-  heartbeatReceiver ! TaskSchedulerIsSet
+  heartbeatReceiver.send(TaskSchedulerIsSet)
 
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
@@ -455,10 +454,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
-        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
-        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
-          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+        val (host, port) = env.blockManager.master.getRpcHostPortForExecutor(executorId).get
+        val endpointRef = env.rpcEnv.setupEndpointRef(
+          SparkEnv.executorActorSystemName,
+          RpcAddress(host, port),
+          ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
+        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -1418,7 +1419,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     dagScheduler = null
     listenerBus.stop()
     eventLogger.foreach(_.stop())
-    env.actorSystem.stop(heartbeatReceiver)
+    env.rpcEnv.stop(heartbeatReceiver)
     progressBar.foreach(_.stop())
     taskScheduler = null
     // TODO: Cache.stop()?
@@ -1900,7 +1901,17 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
 
-  private[spark] val DRIVER_IDENTIFIER = "<driver>"
+  /**
+   * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
+   * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see
+   * SPARK-6716 for more details).
+   */
+  private[spark] val DRIVER_IDENTIFIER = "driver"
+
+  /**
+   * Legacy version of DRIVER_IDENTIFIER, retained for backwards-compatibility.
+   */
+  private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
   // The following deprecated objects have already been copied to `object AccumulatorParam` to
   // make the compiler find them automatically. They are duplicate codes only for backward
