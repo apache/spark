@@ -939,13 +939,13 @@ object Client extends Logging {
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
 
         val hiveConfGet = (param:String) => Option(hiveConfClass
-          .getMethod("get",classOf[java.lang.String])
+          .getMethod("get", classOf[java.lang.String])
           .invoke(hiveConf, param))
 
         val metastore_uri = hiveConfGet("hive.metastore.uris")
 
         // Check for local metastore
-        if(metastore_uri != None && metastore_uri.get.toString.size > 0) {
+        if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
           val metastore_kerberos_principal_conf_var = mirror.classLoader
             .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
             .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
@@ -953,7 +953,7 @@ object Client extends Logging {
           val principal = hiveConfGet(metastore_kerberos_principal_conf_var)
 
           val username = Option(UserGroupInformation.getCurrentUser().getUserName)
-          if(principal != None && username != None){
+          if (principal != None && username != None) {
             val tokenStr = hiveClass.getMethod("getDelegationToken",
               classOf[java.lang.String], classOf[java.lang.String])
               .invoke(hive, username.get, principal.get).asInstanceOf[java.lang.String]
@@ -976,7 +976,7 @@ object Client extends Logging {
         case e:java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
         case e:java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
         case e:Exception => { logError("Unexpected Exception " + e)
-          throw new RuntimeException("Unexpected exception",e)
+          throw new RuntimeException("Unexpected exception", e)
         }
       }
     }
