@@ -4,7 +4,7 @@ title: Submitting Applications
 ---
 
 The `spark-submit` script in Spark's `bin` directory is used to launch applications on a cluster.
-It can use all of Spark's supported [cluster managers](cluster-overview.html#cluster-manager-types)
+It can use all of Spark's supported [cluster managers](cluster-overview.md#cluster-manager-types)
 through a uniform interface so you don't have to configure your application specially for each one.
 
 # Bundling Your Application's Dependencies
@@ -65,7 +65,7 @@ For Python applications, simply pass a `.py` file in the place of `<application-
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
 
 There are a few options available that are specific to the
-[cluster manager](#cluster-overview.html#cluster-manager-types) that is being used.
+[cluster manager](#cluster-overview.md#cluster-manager-types) that is being used.
 For example, with a [Spark Standalone](#spark-standalone) cluster with `cluster` deploy mode,
 you can also specify `--supervise` to make sure that the driver is automatically restarted if it
 fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
@@ -125,17 +125,17 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
 <tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
 <tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.md">Spark standalone
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.md">Mesos</a> cluster.
         The port must be whichever one your is configured to use, which is 5050 by default.
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
 </td></tr>
-<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.md"> YARN </a> cluster in
 client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
-<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.md"> YARN </a> cluster in
 cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 </table>
@@ -143,10 +143,10 @@ cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or
 
 # Loading Configuration from a File
 
-The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
+The `spark-submit` script can load default [Spark configuration values](configuration.md) from a
 properties file and pass them on to your application. By default it will read options
 from `conf/spark-defaults.conf` in the Spark directory. For more detail, see the section on
-[loading default configurations](configuration.html#loading-default-configurations).
+[loading default configurations](configuration.md#loading-default-configurations).
 
 Loading default Spark configurations this way can obviate the need for certain flags to
 `spark-submit`. For instance, if the `spark.master` property is set, you can safely omit the
@@ -184,5 +184,5 @@ to executors.
 
 # More Information
 
-Once you have deployed your application, the [cluster mode overview](cluster-overview.html) describes
+Once you have deployed your application, the [cluster mode overview](cluster-overview.md) describes
 the components involved in distributed execution, and how to monitor and debug applications.

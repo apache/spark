@@ -4,7 +4,7 @@ title: Cluster Mode Overview
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
-the components involved. Read through the [application submission guide](submitting-applications.html)
+the components involved. Read through the [application submission guide](submitting-applications.md)
 to submit applications to a cluster.
 
 # Components
@@ -35,7 +35,7 @@ There are several useful things to note about this architecture:
    cluster manager that also supports other applications (e.g. Mesos/YARN).
 3. The driver program must listen for and accept incoming connections from its executors throughout 
    its lifetime (e.g., see [spark.driver.port and spark.fileserver.port in the network config 
-   section](configuration.html#networking)). As such, the driver program must be network 
+   section](configuration.md#networking)). As such, the driver program must be network 
    addressable from the worker nodes.
 4. Because the driver schedules tasks on the cluster, it should be run close to the worker
    nodes, preferably on the same local area network. If you'd like to send requests to the
@@ -46,31 +46,31 @@ There are several useful things to note about this architecture:
 
 The system currently supports three cluster managers:
 
-* [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
+* [Standalone](spark-standalone.md) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
-* [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
+* [Apache Mesos](running-on-mesos.md) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications.
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
+* [Hadoop YARN](running-on-yarn.md) -- the resource manager in Hadoop 2.
 
-In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
+In addition, Spark's [EC2 launch scripts](ec2-scripts.md) make it easy to launch a standalone
 cluster on Amazon EC2.
 
 # Submitting Applications
 
 Applications can be submitted to a cluster of any type using the `spark-submit` script.
-The [application submission guide](submitting-applications.html) describes how to do this.
+The [application submission guide](submitting-applications.md) describes how to do this.
 
 # Monitoring
 
 Each driver program has a web UI, typically on port 4040, that displays information about running
 tasks, executors, and storage usage. Simply go to `http://<driver-node>:4040` in a web browser to
-access this UI. The [monitoring guide](monitoring.html) also describes other monitoring options.
+access this UI. The [monitoring guide](monitoring.md) also describes other monitoring options.
 
 # Job Scheduling
 
 Spark gives control over resource allocation both _across_ applications (at the level of the cluster
 manager) and _within_ applications (if multiple computations are happening on the same SparkContext).
-The [job scheduling overview](job-scheduling.html) describes this in more detail.
+The [job scheduling overview](job-scheduling.md) describes this in more detail.
 
 # Glossary
 

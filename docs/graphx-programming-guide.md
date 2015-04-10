@@ -96,7 +96,7 @@ import org.apache.spark.rdd.RDD
 {% endhighlight %}
 
 If you are not using the Spark shell you will also need a `SparkContext`.  To learn more about
-getting started with Spark refer to the [Spark Quick Start Guide](quick-start.html).
+getting started with Spark refer to the [Spark Quick Start Guide](quick-start.md).
 
 <a name="property_graph"></a>
 

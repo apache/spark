@@ -11,7 +11,7 @@ with these distributions:
 
 When compiling Spark, you'll need to specify the Hadoop version by defining the `hadoop.version`
 property. For certain versions, you will need to specify additional profiles. For more detail,
-see the guide on [building with maven](building-spark.html#specifying-the-hadoop-version):
+see the guide on [building with maven](building-spark.md#specifying-the-hadoop-version):
 
     mvn -Dhadoop.version=1.0.4 -DskipTests clean package
     mvn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
@@ -93,7 +93,7 @@ Or in Maven:
 
 # Where to Run Spark
 
-As described in the [Hardware Provisioning](hardware-provisioning.html#storage-systems) guide,
+As described in the [Hardware Provisioning](hardware-provisioning.md#storage-systems) guide,
 Spark can run in a variety of deployment modes:
 
 * Using dedicated set of Spark nodes in your cluster. These nodes should be co-located with your

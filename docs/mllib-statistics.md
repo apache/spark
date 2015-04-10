@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Basic Statistics - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Basic Statistics 
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Basic Statistics 
 ---
 
 * Table of contents

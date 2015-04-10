@@ -11,11 +11,11 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 
 Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the Spark project website. 
-To build Spark yourself, refer to [Building Spark](building-spark.html).
+To build Spark yourself, refer to [Building Spark](building-spark.md).
 
 # Configuration
 
-Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.html) for more information on those.  These are configs that are specific to Spark on YARN.
+Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.md) for more information on those.  These are configs that are specific to Spark on YARN.
 
 #### Spark Properties
 

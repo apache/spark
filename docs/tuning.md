@@ -12,7 +12,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](programming-guide.md#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -40,7 +40,7 @@ in your operations) and performance. It provides two serialization libraries:
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.
 
-You can switch to using Kryo by initializing your job with a [SparkConf](configuration.html#spark-properties)
+You can switch to using Kryo by initializing your job with a [SparkConf](configuration.md#spark-properties)
 and calling `conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")`.
 This setting configures the serializer used for not only shuffling data between worker
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
@@ -113,13 +113,13 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
 4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. You can add these options in
-   [`spark-env.sh`](configuration.html#environment-variables).
+   [`spark-env.sh`](configuration.md#environment-variables).
 
 ## Serialized RDD Storage
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](programming-guide.md#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -145,7 +145,7 @@ the space allocated to the RDD cache to mitigate this.
 **Measuring the Impact of GC**
 
 The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of
-time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.html#Dynamically-Loading-Spark-Properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.md#Dynamically-Loading-Spark-Properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
 their work directories), *not* on your driver program.
 
@@ -227,7 +227,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](programming-guide.md#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
@@ -264,7 +264,7 @@ server, or b) immediately start a new task in a farther away place that requires
 What Spark typically does is wait a bit in the hopes that a busy CPU frees up.  Once that timeout
 expires, it starts moving the data from far away to the free CPU.  The wait timeout for fallback
 between each level can be configured individually or all together in one parameter; see the
-`spark.locality` parameters on the [configuration page](configuration.html#scheduling) for details.
+`spark.locality` parameters on the [configuration page](configuration.md#scheduling) for details.
 You should increase these settings if your tasks are long and see poor locality, but the default
 usually works well.
 
