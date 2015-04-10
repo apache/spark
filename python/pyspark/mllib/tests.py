@@ -85,7 +85,7 @@ class VectorTests(PySparkTestCase):
         self._test_serialize(DenseVector(pyarray.array('d', range(10))))
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
         self._test_serialize(SparseVector(3, {}))
-        self._test_serialize(DenseMatrix(2, 3, range(6)))
+        # self._test_serialize(DenseMatrix(2, 3, range(6)))
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -192,6 +192,22 @@ class VectorTests(PySparkTestCase):
             for j in range(4):
                 self.assertEquals(expected[i][j], sm1t[i, j])
         self.assertTrue(array_equal(sm1t.toArray(), expected))
+
+    def test_dense_matrix_is_transposed(self):
+        mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
+        mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
+        self.assertEquals(mat1, mat)
+
+        expected = [[0, 4], [1, 6], [3, 9]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat1[i, j], expected[i][j])
+        self.assertTrue(array_equal(mat1.toArray(), expected))
+
+        sm = mat1.toSparse()
+        self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
+        self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
+        self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
 
 class ListTests(PySparkTestCase):
