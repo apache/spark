@@ -555,7 +555,7 @@ private[master] class Master(
           pos = (pos + 1) % numUsable
         }
         // Now that we've decided how many cores to give on each node, let's actually give them
-        for (pos <- 0 until numUsable) {
+        for (pos <- 0 until numUsable if assigned(pos) > 0) {
           allocateWorkerResourceToExecutors(app, assigned(pos), usableWorkers(pos))
         }
       }
