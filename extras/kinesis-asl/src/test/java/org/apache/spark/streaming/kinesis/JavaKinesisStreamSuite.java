@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kinesis;
 
+import com.amazonaws.auth.BasicAWSCredentials;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
@@ -34,8 +35,15 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
     // Tests the API, does not actually test data receiving
     JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
         "https://kinesis.us-west-2.amazonaws.com", new Duration(2000), 
-        InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());
-    
-    ssc.stop();
+        InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2(), null);
+  }
+
+  @Test
+  public void testKinesisStreamWithCredentials() {
+    // Tests the API, does not actually test data receiving
+    JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
+        "https://kinesis.us-west-2.amazonaws.com", new Duration(2000),
+        InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2(),
+        new BasicAWSCredentials("accessKey", "secretKey"));
   }
 }

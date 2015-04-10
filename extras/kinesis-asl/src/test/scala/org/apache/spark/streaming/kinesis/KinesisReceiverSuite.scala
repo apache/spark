@@ -18,6 +18,9 @@ package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
 
+import com.amazonaws.auth.BasicAWSCredentials
+import org.jets3t.service.security.AWSCredentials
+
 import scala.collection.JavaConversions.seqAsJavaList
 
 import org.apache.spark.storage.StorageLevel
@@ -86,7 +89,17 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     // Tests the API, does not actually test data receiving
     val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
       "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
+    ssc.stop()
+  }
+
+  test("kinesis utils api with credentials") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    // Tests the API, does not actually test data receiving
+    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2,
+      credentials = Some(new BasicAWSCredentials("accessKey", "secretKey")))
     ssc.stop()
   }
 

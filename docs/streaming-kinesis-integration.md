@@ -30,9 +30,10 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 		import org.apache.spark.streaming.Duration
 		import org.apache.spark.streaming.kinesis._
 		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+		import com.amazonaws.auth.AWSCredentials
 
 		val kinesisStream = KinesisUtils.createStream(
-        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position])
+        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position], [credentials])
 
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the Running the Example section for instructions on how to run the example.
@@ -42,9 +43,10 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 		import org.apache.spark.streaming.Duration;
 		import org.apache.spark.streaming.kinesis.*;
 		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+		import com.amazonaws.auth.AWSCredentials
 
 		JavaReceiverInputDStream<byte[]> kinesisStream = KinesisUtils.createStream(
-        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position]);
+        	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position], [credentials]);
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the next subsection for instructions to run the example.
@@ -52,7 +54,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	</div>
 	</div>
 
-    - `streamingContext`: StreamingContext containg an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
+    - `streamingContext`: StreamingContext containing an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
 
 	- `[Kinesis stream name]`: The Kinesis stream that this streaming application receives from
 		- The application name used in the streaming context becomes the Kinesis application name
@@ -66,6 +68,8 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	- `[checkpoint interval]`: The interval (e.g., Duration(2000) = 2 seconds) at which the Kinesis Client Library saves its position in the stream.  For starters, set it to the same as the batch interval of the streaming application.
 
 	- `[initial position]`: Can be either `InitialPositionInStream.TRIM_HORIZON` or `InitialPositionInStream.LATEST` (see Kinesis Checkpointing section and Amazon Kinesis API documentation for more details).
+
+	- `[credentials]`: Can be any class implementing `AWSCredentials` interface. Provided implementations are `AnonymousAWSCredentials`, `BasicAWSCredentials`, `BasicSessionCredentials`, `PropertiesCredentials` and `STSSessionCredentials`. All of them can be found under the package `com.amazonaws.auth`.
 
 
 3. **Deploying:** Package `spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).

@@ -48,7 +48,7 @@ private[kinesis] class KinesisCheckpointState(
   /**
    * Advance the checkpoint clock by the checkpoint interval.
    */
-  def advanceCheckpoint() = {
+  def advanceCheckpoint(): Unit = {
     checkpointClock.advance(checkpointInterval.milliseconds)
   }
 }

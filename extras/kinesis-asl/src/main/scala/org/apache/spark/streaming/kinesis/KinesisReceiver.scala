@@ -26,11 +26,8 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorFactory
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -67,22 +64,9 @@ private[kinesis] class KinesisReceiver(
     endpointUrl: String,
     checkpointInterval: Duration,
     initialPositionInStream: InitialPositionInStream,
-    storageLevel: StorageLevel)
+    storageLevel: StorageLevel,
+    credentials: Option[AWSCredentials])
   extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
-
-  def this(appName: String,
-           streamName: String,
-           endpointUrl: String,
-           checkpointInterval: Duration,
-           initialPositionInStream: InitialPositionInStream,
-           storageLevel: StorageLevel,
-           credentials: AWSCredentials) = {
-    this(appName, streamName, endpointUrl, checkpointInterval, initialPositionInStream, storageLevel)
-    credentialsProvider = new AWSCredentialsProvider {
-      override def getCredentials: AWSCredentials = credentials
-      override def refresh(): Unit = {}
-    }
-  }
 
   /*
    * The following vars are built in the onStart() method which executes in the Spark Worker after
@@ -96,8 +80,9 @@ private[kinesis] class KinesisReceiver(
   var workerId: String = null
 
   /*
-   * This impl uses the DefaultAWSCredentialsProviderChain unless it's provided by constructor
-   *  and searches for credentials in the following order of precedence:
+   * This impl uses the credentials provided in the constructor if it is Some[AWSCredentials]
+   * otherwise DefaultAWSCredentialsProviderChain is used which searches for credentials
+   * in the following order of precedence:
    * Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
    * Java System Properties - aws.accessKeyId and aws.secretKey
    * Credential profiles file at the default location (~/.aws/credentials) shared by all 
@@ -132,8 +117,15 @@ private[kinesis] class KinesisReceiver(
    *    method.
    */
   override def onStart() {
-    workerId = Utils.localHostName() + ":" + UUID.randomUUID()
-    credentialsProvider = new DefaultAWSCredentialsProviderChain()
+    workerId = InetAddress.getLocalHost.getHostAddress() + ":" + UUID.randomUUID()
+    if(credentialsProvider == null) {
+      credentialsProvider = (credentials map { cr =>
+        new AWSCredentialsProvider {
+          override def getCredentials: AWSCredentials = cr
+          override def refresh(): Unit = {}
+        }
+      }).getOrElse(new DefaultAWSCredentialsProviderChain())
+    }
     kinesisClientLibConfiguration = new KinesisClientLibConfiguration(appName, streamName,
       credentialsProvider, workerId).withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream).withTaskBackoffTimeMillis(500)
