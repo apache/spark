@@ -19,11 +19,17 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SQLContext, Row}
 
 /**
  * :: Experimental ::
@@ -41,10 +47,16 @@ import org.apache.spark.rdd.RDD
 @Experimental
 class GaussianMixtureModel(
   val weights: Array[Double], 
-  val gaussians: Array[MultivariateGaussian]) extends Serializable {
+  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable{
   
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
-  
+
+  override protected def formatVersion = "1.0"
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)
+  }
+
   /** Number of gaussians in mixture */
   def k: Int = weights.length
 
@@ -83,5 +95,79 @@ class GaussianMixtureModel(
       p(i) /= pSum
     }
     p
-  }  
+  }
+}
+
+@Experimental
+object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
+
+  private object SaveLoadV1_0 {
+
+    case class Data(weight: Double, mu: Vector, sigma: Matrix)
+
+    val formatVersionV1_0 = "1.0"
+
+    val classNameV1_0 = "org.apache.spark.mllib.clustering.GaussianMixtureModel"
+
+    def save(
+        sc: SparkContext,
+        path: String,
+        weights: Array[Double],
+        gaussians: Array[MultivariateGaussian]): Unit = {
+
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+
+      // Create JSON metadata.
+      val metadata = compact(render
+        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~ ("k" -> weights.length)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      // Create Parquet data.
+      val dataArray = Array.tabulate(weights.length) { i =>
+        Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
+      }
+      sc.parallelize(dataArray, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): GaussianMixtureModel = {
+      val dataPath = Loader.dataPath(path)
+      val sqlContext = new SQLContext(sc)
+      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
+
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      Loader.checkSchema[Data](dataFrame.schema)
+
+      val (weights, gaussians) = dataArray.map {
+        case Row(weight: Double, mu: Vector, sigma: Matrix) =>
+          (weight, new MultivariateGaussian(mu, sigma))
+      }.unzip
+
+      return new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+    }
+  }
+
+  override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    implicit val formats = DefaultFormats
+    val k = (metadata \ "k").extract[Int]
+    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    (loadedClassName, version) match {
+      case (classNameV1_0, "1.0") => {
+        val model = SaveLoadV1_0.load(sc, path)
+        require(model.weights.length == k,
+          s"GaussianMixtureModel requires weights of length $k " +
+          s"got weights of length ${model.weights.length}")
+        require(model.gaussians.length == k,
+          s"GaussianMixtureModel requires gaussians of length $k" +
+          s"got gaussians of length ${model.gaussians.length}")
+        model
+      }
+      case _ => throw new Exception(
+        s"GaussianMixtureModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
+    }
+  }
 }

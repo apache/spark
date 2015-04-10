@@ -58,13 +58,15 @@ private[spark] class SortShuffleWriter[K, V, C](
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
-      sorter = new ExternalSorter[K, V, V](
-        None, Some(dep.partitioner), None, dep.serializer)
+      sorter = new ExternalSorter[K, V, V](None, Some(dep.partitioner), None, dep.serializer)
       sorter.insertAll(records)
     }
 
+    // Don't bother including the time to open the merged output file in the shuffle write time,
+    // because it just opens a single file, so is typically too fast to measure accurately
+    // (see SPARK-3570).
     val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
-    val blockId = shuffleBlockManager.consolidateId(dep.shuffleId, mapId)
+    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockManager.NOOP_REDUCE_ID)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
     shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
 
@@ -97,3 +99,4 @@ private[spark] class SortShuffleWriter[K, V, C](
     }
   }
 }
+

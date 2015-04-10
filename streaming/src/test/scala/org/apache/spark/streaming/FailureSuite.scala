@@ -29,9 +29,9 @@ class FailureSuite extends TestSuiteBase with Logging {
   val directory = Utils.createTempDir()
   val numBatches = 30
 
-  override def batchDuration = Milliseconds(1000)
+  override def batchDuration: Duration = Milliseconds(1000)
 
-  override def useManualClock = false
+  override def useManualClock: Boolean = false
 
   override def afterFunction() {
     Utils.deleteRecursively(directory)

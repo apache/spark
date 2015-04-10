@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -170,7 +170,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         </div>
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      def accumulableRow(acc: AccumulableInfo): Elem =
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
       val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
         accumulables.values.toSeq)
 
@@ -268,11 +269,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +: getFormattedTimeQuantiles(serializationTimes)
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
-            if (info.gettingResultTime > 0) {
-              (info.finishTime - info.gettingResultTime).toDouble
-            } else {
-              0.0
-            }
+            getGettingResultTime(info).toDouble
           }
           val gettingResultQuantiles =
             <td>
@@ -293,10 +290,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val schedulerDelayQuantiles = schedulerDelayTitle +:
             getFormattedTimeQuantiles(schedulerDelays)
 
-          def getFormattedSizeQuantiles(data: Seq[Double]) =
+          def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] =
             getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
 
-          def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double]) = {
+          def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double])
+            : Seq[Elem] = {
             val recordDist = getDistributionQuantiles(records).iterator
             getDistributionQuantiles(data).map(d =>
               <td>{s"${Utils.bytesToString(d.toLong)} / ${recordDist.next().toLong}"}</td>
@@ -462,7 +460,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-      val gettingResultTime = info.gettingResultTime
+      val gettingResultTime = getGettingResultTime(info)
 
       val maybeAccumulators = info.accumulables
       val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
@@ -625,6 +623,19 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     <td>{errorSummary}{details}</td>
   }
 
+  private def getGettingResultTime(info: TaskInfo): Long = {
+    if (info.gettingResultTime > 0) {
+      if (info.finishTime > 0) {
+        info.finishTime - info.gettingResultTime
+      } else {
+        // The task is still fetching the result.
+        System.currentTimeMillis - info.gettingResultTime
+      }
+    } else {
+      0L
+    }
+  }
+
   private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {
     val totalExecutionTime =
       if (info.gettingResult) {
@@ -636,6 +647,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       }
     val executorOverhead = (metrics.executorDeserializeTime +
       metrics.resultSerializationTime)
-    math.max(0, totalExecutionTime - metrics.executorRunTime - executorOverhead)
+    math.max(
+      0,
+      totalExecutionTime - metrics.executorRunTime - executorOverhead - getGettingResultTime(info))
   }
 }

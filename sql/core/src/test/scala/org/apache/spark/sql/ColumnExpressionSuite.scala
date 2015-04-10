@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Project, NoRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 
 class ColumnExpressionSuite extends QueryTest {
@@ -321,5 +319,16 @@ class ColumnExpressionSuite extends QueryTest {
   test("columns can be compared") {
     assert('key.desc == 'key.desc)
     assert('key.desc != 'key.asc)
+  }
+
+  test("alias with metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("originName", "value")
+      .build()
+    val schema = testData
+      .select($"*", col("value").as("abc", metadata))
+      .schema
+    assert(schema("value").metadata === Metadata.empty)
+    assert(schema("abc").metadata === metadata)
   }
 }

@@ -41,8 +41,32 @@ case class NestedArray1(a: NestedArray2)
  */
 class SQLQuerySuite extends QueryTest {
 
+  test("SPARK-5371: union with null and sum") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+
+    val query = sql(
+      """
+        |SELECT
+        |  MIN(c1),
+        |  MIN(c2)
+        |FROM (
+        |  SELECT
+        |    SUM(c1) c1,
+        |    NULL c2
+        |  FROM table1
+        |  UNION ALL
+        |  SELECT
+        |    NULL c1,
+        |    SUM(c2) c2
+        |  FROM table1
+        |) a
+      """.stripMargin)
+    checkAnswer(query, Row(1, 1) :: Nil)
+  }
+
   test("explode nested Field") {
-    Seq(NestedArray1(NestedArray2(Seq(1,2,3)))).toDF.registerTempTable("nestedArray")
+    Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -398,7 +422,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("resolve udtf with single alias") {
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
@@ -411,7 +435,7 @@ class SQLQuerySuite extends QueryTest {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
     setConf("spark.sql.hive.convertCTAS", "false")
@@ -433,4 +457,26 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
     setConf("spark.sql.hive.convertCTAS", originalConf)
   }
+
+  test("sanity test for SPARK-6618") {
+    (1 to 100).par.map { i =>
+      val tableName = s"SPARK_6618_table_$i"
+      sql(s"CREATE TABLE $tableName (col1 string)")
+      catalog.lookupRelation(Seq(tableName))
+      table(tableName)
+      tables()
+      sql(s"DROP TABLE $tableName")
+    }
+  }
+  
+  test("SPARK-5203 union with different decimal precision") {
+    Seq.empty[(Decimal, Decimal)]
+      .toDF("d1", "d2")
+      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .registerTempTable("dn")
+
+    sql("select d from dn union all select d * 2 from dn")
+      .queryExecution.analyzed
+  }
+
 }

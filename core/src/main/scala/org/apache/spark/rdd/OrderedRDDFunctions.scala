@@ -56,7 +56,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * order of the keys).
    */
   // TODO: this currently doesn't work on P other than Tuple2!
-  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size)
+  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.length)
       : RDD[(K, V)] =
   {
     val part = new RangePartitioner(numPartitions, self, ascending)

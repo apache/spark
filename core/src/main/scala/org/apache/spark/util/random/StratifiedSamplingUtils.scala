@@ -311,7 +311,7 @@ private[random] class AcceptanceResult(var numItems: Long = 0L, var numAccepted:
   var acceptBound: Double = Double.NaN // upper bound for accepting item instantly
   var waitListBound: Double = Double.NaN // upper bound for adding item to waitlist
 
-  def areBoundsEmpty = acceptBound.isNaN || waitListBound.isNaN
+  def areBoundsEmpty: Boolean = acceptBound.isNaN || waitListBound.isNaN
 
   def merge(other: Option[AcceptanceResult]): Unit = {
     if (other.isDefined) {

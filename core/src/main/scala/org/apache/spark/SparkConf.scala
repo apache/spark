@@ -133,7 +133,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set multiple parameters together */
-  def setAll(settings: Traversable[(String, String)]) = {
+  def setAll(settings: Traversable[(String, String)]): SparkConf = {
     this.settings.putAll(settings.toMap.asJava)
     this
   }

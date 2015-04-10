@@ -178,7 +178,9 @@ object MovieLensALS {
   def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean)
     : Double = {
 
-    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
+    def mapPredictedRating(r: Double): Double = {
+      if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
+    }
 
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
     val predictionsAndRatings = predictions.map{ x =>

@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# A shell script to run all workers on a single slave
+# Starts a slave on the machine this script is executed on.
 #
 # Environment Variables
 #
@@ -31,8 +31,13 @@
 #                           worker.  Subsequent workers will increment this 
 #                           number.  Default is 8081.
 
-# Usage: start-slave.sh <master-spark-URL> <worker#>
-#   where <master-spark-URL> is like "spark://localhost:7077"
+usage="Usage: start-slave.sh <spark-master-URL> where <spark-master-URL> is like spark://localhost:7077"
+
+if [ $# -lt 1 ]; then
+  echo $usage
+  echo Called as start-slave.sh $*
+  exit 1
+fi
 
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
