@@ -1,10 +1,13 @@
+# A set of S3 classes and methods that support the SparkSQL `StructType` and `StructField
+# datatypes. These are used to create and interact with DataFrame schemas.
+
 #' structType
 #'
 #' Create a structType object that contains the metadata for a DataFrame. Intended for 
 #' use with createDataFrame and toDF.
 #'
-#' @param x a Field object (created with the field() function)
-#' @param ... additional Field objects
+#' @param x a structField object (created with the field() function)
+#' @param ... additional structField objects
 #' @return a structType object
 #' @export
 #' @examples
@@ -12,7 +15,7 @@
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
 #' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
-#' schema <- buildSchema(field("a", "integer"), field("b", "string"))
+#' schema <- structType(structField("a", "integer"), structField("b", "string"))
 #' df <- createDataFrame(sqlCtx, rdd, schema)
 #' }
 structType <- function(x, ...) {
@@ -63,16 +66,16 @@ print.structType <- function(x, ...) {
 #' @param x The name of the field
 #' @param type The data type of the field
 #' @param nullable A logical vector indicating whether or not the field is nullable
-#' @return a Field object
+#' @return a structField object
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
 #' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
-#' field1 <- field("a", "integer", TRUE)
-#' field2 <- field("b", "string", TRUE)
-#' schema <- buildSchema(field1, field2)
+#' field1 <- structField("a", "integer", TRUE)
+#' field2 <- structField("b", "string", TRUE)
+#' schema <- structType(field1, field2)
 #' df <- createDataFrame(sqlCtx, rdd, schema)
 #' }
 
