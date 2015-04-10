@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Collaborative Filtering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Collaborative Filtering 
 ---
 
 * Table of contents
@@ -236,7 +236,7 @@ model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
 </div>
 
 In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+provided in the [Self-Contained Applications](quick-start.md#self-contained-applications)
 section of the Spark
 Quick Start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.

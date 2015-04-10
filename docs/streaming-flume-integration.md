@@ -32,7 +32,7 @@ See the [Flume's documentation](https://flume.apache.org/documentation.html) for
 configuring Flume agents.
 
 #### Configuring Spark Streaming Application
-1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
+1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.md#linking) in the main programming guide for further information).
 
 		groupId = org.apache.spark
 		artifactId = spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}
@@ -64,18 +64,18 @@ configuring Flume agents.
     cluster (Mesos, YARN or Spark Standalone), so that resource allocation can match the names and launch
     the receiver in the right machine.
 
-3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.md#deploying-applications) in the main programming guide).
 
 ## Approach 2: Pull-based Approach using a Custom Sink
 Instead of Flume pushing data directly to Spark Streaming, this approach runs a custom Flume sink that allows the following.
 
 - Flume pushes data into the sink, and the data stays buffered.
-- Spark Streaming uses a [reliable Flume receiver](streaming-programming-guide.html#receiver-reliability)
+- Spark Streaming uses a [reliable Flume receiver](streaming-programming-guide.md#receiver-reliability)
   and transactions to pull data from the sink. Transactions succeed only after data is received and
   replicated by Spark Streaming.
 
 This ensures stronger reliability and
-[fault-tolerance guarantees](streaming-programming-guide.html#fault-tolerance-semantics)
+[fault-tolerance guarantees](streaming-programming-guide.md#fault-tolerance-semantics)
 than the previous approach. However, this requires configuring Flume to run a custom sink.
 Here are the configuration steps.
 
@@ -113,7 +113,7 @@ See the [Flume's documentation](https://flume.apache.org/documentation.html) for
 configuring Flume agents.
 
 #### Configuring Spark Streaming Application
-1. **Linking:** In your SBT/Maven project definition, link your streaming application against the `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide).
+1. **Linking:** In your SBT/Maven project definition, link your streaming application against the `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` (see [Linking section](streaming-programming-guide.md#linking) in the main programming guide).
 
 2. **Programming:** In the streaming application code, import `FlumeUtils` and create input DStream as follows.
 
@@ -135,7 +135,7 @@ configuring Flume agents.
 
 	Note that each input DStream can be configured to receive data from multiple sinks.
 
-3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.md#deploying-applications) in the main programming guide).
 
 
 

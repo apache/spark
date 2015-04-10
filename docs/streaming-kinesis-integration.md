@@ -15,7 +15,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 #### Configuring Spark Streaming Application
 
-1. **Linking:** In your SBT/Maven project definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
+1. **Linking:** In your SBT/Maven project definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.md#linking) in the main programming guide for further information).
 
 		groupId = org.apache.spark
 		artifactId = spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}
@@ -68,7 +68,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	- `[initial position]`: Can be either `InitialPositionInStream.TRIM_HORIZON` or `InitialPositionInStream.LATEST` (see Kinesis Checkpointing section and Amazon Kinesis API documentation for more details).
 
 
-3. **Deploying:** Package `spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+3. **Deploying:** Package `spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.md#deploying-applications) in the main programming guide).
 
 	*Points to remember at runtime:*
 
@@ -108,7 +108,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 #### Running the Example
 To run the example,
 
-- Download Spark source and follow the [instructions](building-spark.html) to build Spark with profile *-Pkinesis-asl*.
+- Download Spark source and follow the [instructions](building-spark.md) to build Spark with profile *-Pkinesis-asl*.
 
         mvn -Pkinesis-asl -DskipTests clean package
 

@@ -23,28 +23,28 @@ to `spark.ml`.
 
 Spark ML standardizes APIs for machine learning algorithms to make it easier to combine multiple algorithms into a single pipeline, or workflow.  This section covers the key concepts introduced by the Spark ML API.
 
-* **[ML Dataset](ml-guide.html#ml-dataset)**: Spark ML uses the [`DataFrame`](api/scala/index.html#org.apache.spark.sql.DataFrame) from Spark SQL as a dataset which can hold a variety of data types.
+* **[ML Dataset](ml-guide.md#ml-dataset)**: Spark ML uses the [`DataFrame`](api/scala/index.html#org.apache.spark.sql.DataFrame) from Spark SQL as a dataset which can hold a variety of data types.
 E.g., a dataset could have different columns storing text, feature vectors, true labels, and predictions.
 
-* **[`Transformer`](ml-guide.html#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
+* **[`Transformer`](ml-guide.md#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
 E.g., an ML model is a `Transformer` which transforms an RDD with features into an RDD with predictions.
 
-* **[`Estimator`](ml-guide.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
+* **[`Estimator`](ml-guide.md#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
 E.g., a learning algorithm is an `Estimator` which trains on a dataset and produces a model.
 
-* **[`Pipeline`](ml-guide.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
+* **[`Pipeline`](ml-guide.md#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
 
-* **[`Param`](ml-guide.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
+* **[`Param`](ml-guide.md#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
 
 ## ML Dataset
 
 Machine learning can be applied to a wide variety of data types, such as vectors, text, images, and structured data.
 Spark ML adopts the [`DataFrame`](api/scala/index.html#org.apache.spark.sql.DataFrame) from Spark SQL in order to support a variety of data types under a unified Dataset concept.
 
-`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.html#spark-sql-datatype-reference) for a list of supported types.
+`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.md#spark-sql-datatype-reference) for a list of supported types.
 In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) types.
 
-A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
+A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.md) for examples.
 
 Columns in a `DataFrame` are named.  The code examples below use names such as "text," "features," and "label."
 
@@ -151,7 +151,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 # Code Examples
 
 This section gives code examples illustrating the functionality discussed above.
-There is not yet documentation for specific algorithms in Spark ML.  For more info, please refer to the [API Documentation](api/scala/index.html#org.apache.spark.ml.package).  Spark ML algorithms are currently wrappers for MLlib algorithms, and the [MLlib programming guide](mllib-guide.html) has details on specific algorithms.
+There is not yet documentation for specific algorithms in Spark ML.  For more info, please refer to the [API Documentation](api/scala/index.html#org.apache.spark.ml.package).  Spark ML algorithms are currently wrappers for MLlib algorithms, and the [MLlib programming guide](mllib-guide.md) has details on specific algorithms.
 
 ## Example: Estimator, Transformer, and Param
 
@@ -767,7 +767,7 @@ jsc.stop();
 # Dependencies
 
 Spark ML currently depends on MLlib and has the same dependencies.
-Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for more info.
+Please see the [MLlib Dependencies guide](mllib-guide.md#dependencies) for more info.
 
 Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
 
@@ -779,7 +779,7 @@ The main API changes are from Spark SQL.  We list the most important changes her
 
 * The old [SchemaRDD](http://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in Spark ML which used to use SchemaRDD now use DataFrame.
 * In Spark 1.2, we used implicit conversions from `RDD`s of `LabeledPoint` into `SchemaRDD`s by calling `import sqlContext._` where `sqlContext` was an instance of `SQLContext`.  These implicits have been moved, so we now call `import sqlContext.implicits._`.
-* Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.html) for details.
+* Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.md) for details.
 
 Other changes were in `LogisticRegression`:
 

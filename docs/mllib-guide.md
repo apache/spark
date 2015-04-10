@@ -9,34 +9,34 @@ MLlib is Spark's scalable machine learning library consisting of common learning
 including classification, regression, clustering, collaborative
 filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
 
-* [Data types](mllib-data-types.html)
-* [Basic statistics](mllib-statistics.html)
+* [Data types](mllib-data-types.md)
+* [Basic statistics](mllib-statistics.md)
   * summary statistics
   * correlations
   * stratified sampling
   * hypothesis testing
   * random data generation  
-* [Classification and regression](mllib-classification-regression.html)
-  * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
-  * [naive Bayes](mllib-naive-bayes.html)
-  * [decision trees](mllib-decision-tree.html)
-  * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
-  * [isotonic regression](mllib-isotonic-regression.html)
-* [Collaborative filtering](mllib-collaborative-filtering.html)
+* [Classification and regression](mllib-classification-regression.md)
+  * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.md)
+  * [naive Bayes](mllib-naive-bayes.md)
+  * [decision trees](mllib-decision-tree.md)
+  * [ensembles of trees](mllib-ensembles.md) (Random Forests and Gradient-Boosted Trees)
+  * [isotonic regression](mllib-isotonic-regression.md)
+* [Collaborative filtering](mllib-collaborative-filtering.md)
   * alternating least squares (ALS)
-* [Clustering](mllib-clustering.html)
-  * [k-means](mllib-clustering.html#k-means)
-  * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
-  * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
-  * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
-  * [streaming k-means](mllib-clustering.html#streaming-k-means)
-* [Dimensionality reduction](mllib-dimensionality-reduction.html)
+* [Clustering](mllib-clustering.md)
+  * [k-means](mllib-clustering.md#k-means)
+  * [Gaussian mixture](mllib-clustering.md#gaussian-mixture)
+  * [power iteration clustering (PIC)](mllib-clustering.md#power-iteration-clustering-pic)
+  * [latent Dirichlet allocation (LDA)](mllib-clustering.md#latent-dirichlet-allocation-lda)
+  * [streaming k-means](mllib-clustering.md#streaming-k-means)
+* [Dimensionality reduction](mllib-dimensionality-reduction.md)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
-* [Feature extraction and transformation](mllib-feature-extraction.html)
-* [Frequent pattern mining](mllib-frequent-pattern-mining.html)
+* [Feature extraction and transformation](mllib-feature-extraction.md)
+* [Frequent pattern mining](mllib-frequent-pattern-mining.md)
   * FP-growth
-* [Optimization (developer)](mllib-optimization.html)
+* [Optimization (developer)](mllib-optimization.md)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
@@ -57,7 +57,7 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
+See the **[spark.ml programming guide](ml-guide.md)** for more information on this package.
 
 # Dependencies
 
@@ -87,7 +87,7 @@ version 1.4 or newer.
 
 # Migration Guide
 
-For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.html#migration-guide).
+For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.md#migration-guide).
 
 ## From 1.2 to 1.3
 
@@ -107,4 +107,4 @@ In the `spark.mllib` package, there were several breaking changes.  The first ch
 
 ## Previous Spark Versions
 
-Earlier migration guides are archived [on this page](mllib-migration-guides.html).
+Earlier migration guides are archived [on this page](mllib-migration-guides.md).

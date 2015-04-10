@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Linear Methods - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Linear Methods
 ---
 
 * Table of contents
@@ -112,7 +112,7 @@ especially when the number of training examples is small.
 
 ### Optimization
 
-Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.md).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.md#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
 
 ## Classification
 
@@ -128,7 +128,7 @@ and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
 multiclass classification problems.
 For both methods, MLlib supports L1 and L2 regularized variants.
-The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
+The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.md) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
 Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
 $+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
@@ -309,7 +309,7 @@ final SVMModel modelL1 = svmAlg.run(training.rdd());
 
 In order to run the above application, follow the instructions
 provided in the [Self-Contained
-Applications](quick-start.html#self-contained-applications) section of the Spark
+Applications](quick-start.md#self-contained-applications) section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 </div>
@@ -695,7 +695,7 @@ print("Mean Squared Error = " + str(MSE))
 </div>
 
 In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+provided in the [Self-Contained Applications](quick-start.md#self-contained-applications)
 section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
@@ -729,7 +729,7 @@ import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
 {% endhighlight %}
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
-has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.md#initializing)
 for more info. For this example, we use labeled points in training and testing streams, 
 but in practice you will likely want to use unlabeled vectors for test data.
 
@@ -779,7 +779,7 @@ will get better!
 
 Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent
 (SGD), building on the underlying gradient descent primitive (as described in the <a
-href="mllib-optimization.html">optimization</a> section).  All provided algorithms take as input a
+href="mllib-optimization.md">optimization</a> section).  All provided algorithms take as input a
 regularization parameter (`regParam`) along with various parameters associated with stochastic
 gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each of them, we support
 all three possible regularizations (none, L1 or L2).

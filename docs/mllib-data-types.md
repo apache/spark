@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Data Types - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Data Types
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Data Types
 ---
 
 * Table of contents

@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Frequent Pattern Mining - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Frequent Pattern Mining
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Frequent Pattern Mining
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the

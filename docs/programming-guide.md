@@ -35,7 +35,7 @@ To write a Spark application, you need to add a Maven dependency on Spark. Spark
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
 `hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+[third party distributions](hadoop-third-party-distributions.md) page.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -66,7 +66,7 @@ To write a Spark application in Java, you need to add a dependency on Spark. Spa
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
 `hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+[third party distributions](hadoop-third-party-distributions.md) page.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -93,7 +93,7 @@ You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
 to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+[third party distributions](hadoop-third-party-distributions.md) page.
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
@@ -156,10 +156,10 @@ sc = SparkContext(conf=conf)
 </div>
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.md#master-urls),
 or a special "local" string to run in local mode.
 In practice, when running on a cluster, you will not want to hardcode `master` in the program,
-but rather [launch the application with `spark-submit`](submitting-applications.html) and
+but rather [launch the application with `spark-submit`](submitting-applications.md) and
 receive it there. However, for local testing and unit tests, you can pass "local" to run Spark
 in-process.
 
@@ -196,7 +196,7 @@ $ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
-`spark-shell` invokes the more general [`spark-submit` script](submitting-applications.html).
+`spark-shell` invokes the more general [`spark-submit` script](submitting-applications.md).
 
 </div>
 
@@ -223,7 +223,7 @@ $ ./bin/pyspark --master local[4] --py-files code.py
 {% endhighlight %}
 
 For a complete list of options, run `pyspark --help`. Behind the scenes,
-`pyspark` invokes the more general [`spark-submit` script](submitting-applications.html).
+`pyspark` invokes the more general [`spark-submit` script](submitting-applications.md).
 
 It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
@@ -1149,7 +1149,7 @@ to be re-computed if the lineage is re-computed. The temporary storage directory
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
 Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
-'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.html). 
+'Shuffle Behavior' section within the [Spark Configuration Guide](configuration.md). 
 
 ## RDD Persistence
 
@@ -1191,7 +1191,7 @@ storage levels is:
   <td> MEMORY_ONLY_SER </td>
   <td> Store RDD as <i>serialized</i> Java objects (one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
-    <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
+    <a href="tuning.md">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
@@ -1232,7 +1232,7 @@ efficiency. We recommend going through the following process to select one:
 * If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way.
   This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 
-* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
+* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.md) to
 make the objects much more space-efficient, but still reasonably fast to access. 
 
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter
@@ -1500,7 +1500,7 @@ data.map(g)
 
 # Deploying to a Cluster
 
-The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
+The [application submission guide](submitting-applications.md) describes how to submit applications to a cluster.
 In short, once you package your application into a JAR (for Java/Scala) or a set of `.py` or `.zip` files (for Python),
 the `bin/spark-submit` script lets you submit it to any supported cluster manager.
 
@@ -1556,8 +1556,8 @@ have changed from returning (key, list of values) pairs to (key, iterable of val
 
 </div>
 
-Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](mllib-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
+Migration guides are also available for [Spark Streaming](streaming-programming-guide.md#migration-guide-from-091-or-below-to-1x),
+[MLlib](mllib-guide.md#migration-guide) and [GraphX](graphx-programming-guide.md#migrating-from-spark-091).
 
 
 # Where to Go from Here
@@ -1575,10 +1575,10 @@ For Python examples, use `spark-submit` instead:
 
     ./bin/spark-submit examples/src/main/python/pi.py
 
-For help on optimizing your programs, the [configuration](configuration.html) and
-[tuning](tuning.html) guides provide information on best practices. They are especially important for
+For help on optimizing your programs, the [configuration](configuration.md) and
+[tuning](tuning.md) guides provide information on best practices. They are especially important for
 making sure that your data is stored in memory in an efficient format.
-For help on deploying, the [cluster mode overview](cluster-overview.html) describes the components involved
+For help on deploying, the [cluster mode overview](cluster-overview.md) describes the components involved
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in

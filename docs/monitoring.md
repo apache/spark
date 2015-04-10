@@ -28,7 +28,7 @@ in the UI to persisted storage.
 ## Viewing After the Fact
 
 Spark's Standalone Mode cluster manager also has its own
-[web UI](spark-standalone.html#monitoring-and-logging). If an application has logged events over
+[web UI](spark-standalone.md#monitoring-and-logging). If an application has logged events over
 the course of its lifetime, then the Standalone master's web UI will automatically re-render the
 application's UI after the application has finished.
 
@@ -182,7 +182,7 @@ Spark has a configurable metrics system based on the
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV 
 files. The metrics system is configured via a configuration file that Spark expects to be present 
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the 
-`spark.metrics.conf` [configuration property](configuration.html#spark-properties).
+`spark.metrics.conf` [configuration property](configuration.md#spark-properties).
 Spark's metrics are decoupled into different 
 _instances_ corresponding to Spark components. Within each instance, you can configure a 
 set of sinks to which metrics are reported. The following instances are currently supported:

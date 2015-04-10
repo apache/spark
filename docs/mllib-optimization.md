@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Optimization - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Optimization
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Optimization
 ---
 
 * Table of contents
@@ -48,7 +48,7 @@ pass through the complete dataset, in order to compute the contributions from al
 Optimization problems whose objective function `$f$` is written as a sum are particularly
 suitable to be solved using *stochastic gradient descent (SGD)*. 
 In our case, for the optimization formulations commonly used in <a
-href="mllib-classification-regression.html">supervised machine learning</a>,
+href="mllib-classification-regression.md">supervised machine learning</a>,
 `\begin{equation}
     f(\wv) := 
     \lambda\, R(\wv) +
@@ -88,7 +88,7 @@ step-size for SGD methods can often be delicate in practice and is a topic of ac
 
 **Gradients.**
 A table of (sub)gradients of the machine learning methods implemented in MLlib, is available in
-the <a href="mllib-classification-regression.html">classification and regression</a> section.
+the <a href="mllib-classification-regression.md">classification and regression</a> section.
 
 
 **Proximal Updates.**
@@ -116,7 +116,7 @@ is a stochastic gradient. Here `$S$` is the sampled subset of size `$|S|=$ miniB
 $\cdot n$`.
 
 In each iteration, the sampling over the distributed dataset
-([RDD](programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
+([RDD](programming-guide.md#resilient-distributed-datasets-rdds)), as well as the
 computation of the sum of the partial results from each worker machine is performed by the
 standard spark routines.
 
@@ -140,7 +140,7 @@ other first-order optimization.
 
 ### Choosing an Optimization Method
 
-[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+[Linear methods](mllib-linear-methods.md) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
 Different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
 In general, when L-BFGS is available, we recommend using it instead of SGD since L-BFGS tends to converge faster (in fewer iterations).
 
@@ -150,7 +150,7 @@ In general, when L-BFGS is available, we recommend using it instead of SGD since
 Gradient descent methods including stochastic subgradient descent (SGD) as
 included as a low-level primitive in `MLlib`, upon which various ML algorithms 
 are developed, see the 
-<a href="mllib-linear-methods.html">linear methods</a> 
+<a href="mllib-linear-methods.md">linear methods</a> 
 section for example.
 
 The SGD class

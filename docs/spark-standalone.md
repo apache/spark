@@ -10,7 +10,7 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Installing Spark Standalone to a Cluster
 
-To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.html).
+To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.md).
 
 # Starting a Cluster Manually
 
@@ -249,7 +249,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor](programming-guide.html#initializing-spark).
+constructor](programming-guide.md#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
@@ -259,7 +259,7 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 # Launching Spark Applications
 
-The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
+The [`spark-submit` script](submitting-applications.md) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
 supports two deploy modes. In `client` mode, the driver is launched in the same process as the
 client that submits the application. In `cluster` mode, however, the driver is launched from one
@@ -270,7 +270,7 @@ If your application is launched through Spark submit, then the application jar i
 distributed to all worker nodes. For any additional jars that your application depends on, you
 should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
 To control the application's configuration or execution environment, see
-[Spark Configuration](configuration.html).
+[Spark Configuration](configuration.md).
 
 Additionally, standalone `cluster` mode supports restarting your application automatically if it
 exited with non-zero exit code. To use this feature, you may pass in the `--supervise` flag to
@@ -288,7 +288,7 @@ However, to allow multiple concurrent users, you can control the maximum number 
 application will use.
 By default, it will acquire *all* cores in the cluster, which only makes sense if you just run one
 application at a time. You can cap the number of cores by setting `spark.cores.max` in your
-[SparkConf](configuration.html#spark-properties). For example:
+[SparkConf](configuration.md#spark-properties). For example:
 
 {% highlight scala %}
 val conf = new SparkConf()
@@ -325,7 +325,7 @@ You can run Spark alongside your existing Hadoop cluster by just launching it as
 
 Spark makes heavy use of the network, and some environments have strict requirements for using
 tight firewall settings. For a complete list of ports to configure, see the
-[security page](security.html#configuring-ports-for-network-security).
+[security page](security.md#configuring-ports-for-network-security).
 
 # High Availability
 

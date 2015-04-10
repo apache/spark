@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Feature Extraction and Transformation - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction and Transformation
+displayTitle: <a href="mllib-guide.md">MLlib</a> - Feature Extraction and Transformation
 ---
 
 * Table of contents
