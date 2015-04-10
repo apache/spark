@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -33,7 +34,6 @@ import org.apache.spark.util.collection.CompactBuffer
 case class SortMergeJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType,
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
@@ -52,7 +52,7 @@ case class SortMergeJoin(
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val leftResults = left.execute().map(_.copy())
     val rightResults = right.execute().map(_.copy())
 
