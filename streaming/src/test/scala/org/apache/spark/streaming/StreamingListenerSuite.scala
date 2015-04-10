@@ -38,8 +38,8 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   // To make sure that the processing start and end times in collected
   // information are different for successive batches
-  override def batchDuration = Milliseconds(100)
-  override def actuallyWait = true
+  override def batchDuration: Duration = Milliseconds(100)
+  override def actuallyWait: Boolean = true
 
   test("batch info reporting") {
     val ssc = setupStreams(input, operation)

@@ -37,13 +37,12 @@ import org.apache.spark.api.java.function.Function;
 
 public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-    suiteBase = new KafkaStreamSuiteBase() { };
-    suiteBase.setupKafka();
-    System.clearProperty("spark.driver.port");
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     sc = new JavaSparkContext(sparkConf);
@@ -51,10 +50,15 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
-    System.clearProperty("spark.driver.port");
-    suiteBase.tearDownKafka();
+    if (sc != null) {
+      sc.stop();
+      sc = null;
+    }
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
@@ -66,7 +70,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     String[] topic2data = createTopicAndSendData(topic2);
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),
@@ -75,7 +79,7 @@ public class JavaKafkaRDDSuite implements Serializable {
 
     HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap<TopicAndPartition, Broker>();
     HashMap<TopicAndPartition, Broker> leaders = new HashMap<TopicAndPartition, Broker>();
-    String[] hostAndPort = suiteBase.brokerAddress().split(":");
+    String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
     Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
     leaders.put(new TopicAndPartition(topic1, 0), broker);
     leaders.put(new TopicAndPartition(topic2, 0), broker);
@@ -144,8 +148,8 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

@@ -67,12 +67,12 @@ object Checkpoint extends Logging {
   val REGEX = (PREFIX + """([\d]+)([\w\.]*)""").r
 
   /** Get the checkpoint file for the given checkpoint time */
-  def checkpointFile(checkpointDir: String, checkpointTime: Time) = {
+  def checkpointFile(checkpointDir: String, checkpointTime: Time): Path = {
     new Path(checkpointDir, PREFIX + checkpointTime.milliseconds)
   }
 
   /** Get the checkpoint backup file for the given checkpoint time */
-  def checkpointBackupFile(checkpointDir: String, checkpointTime: Time) = {
+  def checkpointBackupFile(checkpointDir: String, checkpointTime: Time): Path = {
     new Path(checkpointDir, PREFIX + checkpointTime.milliseconds + ".bk")
   }
 
@@ -232,7 +232,9 @@ object CheckpointReader extends Logging {
   def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] =
   {
     val checkpointPath = new Path(checkpointDir)
-    def fs = checkpointPath.getFileSystem(hadoopConf)
+
+    // TODO(rxin): Why is this a def?!
+    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs).reverse

@@ -56,7 +56,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     logDebug("Starting JobScheduler")
     eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
-      def receive = {
+      override def receive: PartialFunction[Any, Unit] = {
         case event: JobSchedulerEvent => processEvent(event)
       }
     }), "JobScheduler")

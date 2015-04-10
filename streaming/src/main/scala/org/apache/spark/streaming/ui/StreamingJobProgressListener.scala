@@ -17,9 +17,10 @@
 
 package org.apache.spark.streaming.ui
 
+import scala.collection.mutable.{Queue, HashMap}
+
 import org.apache.spark.streaming.{Time, StreamingContext}
 import org.apache.spark.streaming.scheduler._
-import scala.collection.mutable.{Queue, HashMap}
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.BatchInfo
@@ -59,11 +60,13 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) = synchronized {
-    runningBatchInfos(batchSubmitted.batchInfo.batchTime) = batchSubmitted.batchInfo
+  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = {
+    synchronized {
+      runningBatchInfos(batchSubmitted.batchInfo.batchTime) = batchSubmitted.batchInfo
+    }
   }
 
-  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) = synchronized {
+  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = synchronized {
     runningBatchInfos(batchStarted.batchInfo.batchTime) = batchStarted.batchInfo
     waitingBatchInfos.remove(batchStarted.batchInfo.batchTime)
 
@@ -72,19 +75,21 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) = synchronized {
-    waitingBatchInfos.remove(batchCompleted.batchInfo.batchTime)
-    runningBatchInfos.remove(batchCompleted.batchInfo.batchTime)
-    completedaBatchInfos.enqueue(batchCompleted.batchInfo)
-    if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
-    totalCompletedBatches += 1L
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+    synchronized {
+      waitingBatchInfos.remove(batchCompleted.batchInfo.batchTime)
+      runningBatchInfos.remove(batchCompleted.batchInfo.batchTime)
+      completedaBatchInfos.enqueue(batchCompleted.batchInfo)
+      if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
+      totalCompletedBatches += 1L
 
-    batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
-      totalProcessedRecords += infos.map(_.numRecords).sum
+      batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
+        totalProcessedRecords += infos.map(_.numRecords).sum
+      }
     }
   }
 
-  def numReceivers = synchronized {
+  def numReceivers: Int = synchronized {
     ssc.graph.getReceiverInputStreams().size
   }
 

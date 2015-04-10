@@ -218,12 +218,12 @@ object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
-      case e @ IsNull(c) if !c.nullable => Literal(false, BooleanType)
-      case e @ IsNotNull(c) if !c.nullable => Literal(true, BooleanType)
-      case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
-      case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
-      case e @ StructGetField(Literal(null, _), _, _) => Literal(null, e.dataType)
-      case e @ ArrayGetField(Literal(null, _), _, _, _) => Literal(null, e.dataType)
+      case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
+      case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
+      case e @ GetItem(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ GetItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
+      case e @ StructGetField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
+      case e @ ArrayGetField(Literal(null, _), _, _, _) => Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))
@@ -235,36 +235,36 @@ object NullPropagation extends Rule[LogicalPlan] {
           case _ => true
         }
         if (newChildren.length == 0) {
-          Literal(null, e.dataType)
+          Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren(0)
         } else {
           Coalesce(newChildren)
         }
 
-      case e @ Substring(Literal(null, _), _, _) => Literal(null, e.dataType)
-      case e @ Substring(_, Literal(null, _), _) => Literal(null, e.dataType)
-      case e @ Substring(_, _, Literal(null, _)) => Literal(null, e.dataType)
+      case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)
+      case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
 
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
       case e: BinaryComparison => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
       case e: StringRegexExpression => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
       case e: StringComparison => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
     }
@@ -284,13 +284,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
       case l: Literal => l
 
       // Fold expressions that are foldable.
-      case e if e.foldable => Literal(e.eval(null), e.dataType)
+      case e if e.foldable => Literal.create(e.eval(null), e.dataType)
 
       // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
       case In(Literal(v, _), list) if list.exists {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
-        } => Literal(true, BooleanType)
+        } => Literal.create(true, BooleanType)
     }
   }
 }
@@ -647,7 +647,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 
     case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
       Cast(
-        Divide(Average(UnscaledValue(e)), Literal(math.pow(10.0, scale), DoubleType)),
+        Divide(Average(UnscaledValue(e)), Literal.create(math.pow(10.0, scale), DoubleType)),
         DecimalType(prec + 4, scale + 4))
   }
 }

@@ -120,7 +120,7 @@ private[streaming] class BlockGenerator(
    * `BlockGeneratorListener.onAddData` callback will be called. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def addDataWithCallback(data: Any, metadata: Any) = synchronized {
+  def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
     waitToPush()
     currentBuffer += data
     listener.onAddData(data, metadata)
