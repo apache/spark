@@ -27,6 +27,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.util.SimpleResourceCleaner
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
@@ -361,7 +362,8 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
         testStore => blockLocations.contains(testStore.blockManagerId.executorId)
       }.foreach { testStore =>
         val testStoreName = testStore.blockManagerId.executorId
-        assert(testStore.getLocal(blockId).isDefined, s"$blockId was not found in $testStoreName")
+        assert(testStore.getLocal(blockId, new SimpleResourceCleaner).isDefined,
+          s"$blockId was not found in $testStoreName")
         assert(master.getLocations(blockId).map(_.executorId).toSet.contains(testStoreName),
           s"master does not have status for ${blockId.name} in $testStoreName")
 

@@ -41,7 +41,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
-    blockManager.get(key) match {
+    blockManager.get(key, context) match {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
         val inputMetrics = blockResult.inputMetrics
@@ -59,7 +59,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
-        val storedValues = acquireLockForPartition[T](key)
+        val storedValues = acquireLockForPartition[T](key, context)
         if (storedValues.isDefined) {
           return new InterruptibleIterator[T](context, storedValues.get)
         }
@@ -76,7 +76,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-          val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
+          val cachedValues =
+            putInBlockManager(key, computedValues, storageLevel, updatedBlocks, context)
           val metrics = context.taskMetrics
           val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
           metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
@@ -97,7 +98,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * If the lock is free, just acquire it and return None. Otherwise, another thread is already
    * loading the partition, so we wait for it to finish and return the values loaded by the thread.
    */
-  private def acquireLockForPartition[T](id: RDDBlockId): Option[Iterator[T]] = {
+  private def acquireLockForPartition[T](id: RDDBlockId, taskContext: TaskContext): Option[Iterator[T]] = {
     loading.synchronized {
       if (!loading.contains(id)) {
         // If the partition is free, acquire its lock to compute its value
@@ -115,7 +116,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           }
         }
         logInfo(s"Finished waiting for $id")
-        val values = blockManager.get(id)
+        val values = blockManager.get(id, taskContext)
         if (!values.isDefined) {
           /* The block is not guaranteed to exist even after the other thread has finished.
            * For instance, the block could be evicted after it was put, but before our get.
@@ -142,6 +143,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       values: Iterator[T],
       level: StorageLevel,
       updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)],
+      taskContext: TaskContext,
       effectiveStorageLevel: Option[StorageLevel] = None): Iterator[T] = {
 
     val putLevel = effectiveStorageLevel.getOrElse(level)
@@ -152,7 +154,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        */
       updatedBlocks ++=
         blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
-      blockManager.get(key) match {
+      blockManager.get(key, taskContext) match {
         case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
@@ -182,7 +184,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
             logWarning(s"Persisting partition $key to disk instead.")
             val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
               useOffHeap = false, deserialized = false, putLevel.replication)
-            putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+            putInBlockManager[T](key, returnValues, level, updatedBlocks, taskContext,
+              Some(diskOnlyLevel))
           } else {
             returnValues
           }

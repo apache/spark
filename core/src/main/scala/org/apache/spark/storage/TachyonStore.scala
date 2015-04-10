@@ -24,7 +24,7 @@ import com.google.common.io.ByteStreams
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResourceCleaner, Utils}
 
 /**
  * Stores BlockManager blocks on Tachyon.
@@ -40,7 +40,11 @@ private[spark] class TachyonStore(
     tachyonManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      bytes: ByteBuffer,
+      level: StorageLevel,
+      resourceCleaner: ResourceCleaner): PutResult = {
     putIntoTachyonStore(blockId, bytes, returnValues = true)
   }
 
@@ -96,8 +100,8 @@ private[spark] class TachyonStore(
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+  override def getValues(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
+    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer, resourceCleaner))
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {

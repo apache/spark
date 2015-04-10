@@ -303,7 +303,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
-      val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
+      val blockBytesOpt = doGetLocal(blockId, asBlockResult = false, None)
         .asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
@@ -317,8 +317,12 @@ private[spark] class BlockManager(
   /**
    * Put the block locally, using the given storage level.
    */
-  override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(blockId, data.nioByteBuffer(), level)
+  override def putBlockData(
+      blockId: BlockId,
+      data: ManagedBuffer,
+      level: StorageLevel,
+      resourceCleaner: ResourceCleaner): Unit = {
+    putBytes(blockId, data.nioByteBuffer(), level, resourceCleaner)
   }
 
   /**
@@ -426,9 +430,9 @@ private[spark] class BlockManager(
   /**
    * Get block from local block manager.
    */
-  def getLocal(blockId: BlockId): Option[BlockResult] = {
+  def getLocal(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    doGetLocal(blockId, asBlockResult = true, Some(resourceCleaner)).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -444,11 +448,16 @@ private[spark] class BlockManager(
       // downstream code will throw an exception.
       Option(shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
     } else {
-      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      doGetLocal(blockId, asBlockResult = false, None).asInstanceOf[Option[ByteBuffer]]
     }
   }
 
-  private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
+  private def doGetLocal(
+      blockId: BlockId,
+      asBlockResult: Boolean,
+      resourceCleaner: Option[ResourceCleaner]): Option[Any] = {
+    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a TaskContext if " +
+      "requesting block results")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -476,7 +485,8 @@ private[spark] class BlockManager(
         if (level.useMemory) {
           logDebug(s"Getting block $blockId from memory")
           val result = if (asBlockResult) {
-            memoryStore.getValues(blockId).map(new BlockResult(_, DataReadMethod.Memory, info.size))
+            memoryStore.getValues(blockId, resourceCleaner.get)
+              .map(new BlockResult(_, DataReadMethod.Memory, info.size))
           } else {
             memoryStore.getBytes(blockId)
           }
@@ -498,7 +508,7 @@ private[spark] class BlockManager(
                   return Some(bytes)
                 } else {
                   return Some(new BlockResult(
-                    dataDeserialize(blockId, bytes), DataReadMethod.Memory, info.size))
+                    dataDeserialize(blockId, bytes, resourceCleaner.get), DataReadMethod.Memory, info.size))
                 }
               case None =>
                 logDebug(s"Block $blockId not found in tachyon")
@@ -520,8 +530,8 @@ private[spark] class BlockManager(
           if (!level.useMemory) {
             // If the block shouldn't be stored in memory, we can just return it
             if (asBlockResult) {
-              return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
-                info.size))
+              return Some(new BlockResult(dataDeserialize(blockId, bytes, resourceCleaner.get),
+                DataReadMethod.Disk, info.size))
             } else {
               return Some(bytes)
             }
@@ -544,7 +554,7 @@ private[spark] class BlockManager(
             if (!asBlockResult) {
               return Some(bytes)
             } else {
-              val values = dataDeserialize(blockId, bytes)
+              val values = dataDeserialize(blockId, bytes, resourceCleaner.get)
               if (level.deserialized) {
                 // Cache the values before returning them
                 val putResult = memoryStore.putIterator(
@@ -574,9 +584,9 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers.
    */
-  def getRemote(blockId: BlockId): Option[BlockResult] = {
+  def getRemote(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
-    doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    doGetRemote(blockId, asBlockResult = true, Some(resourceCleaner)).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -584,11 +594,16 @@ private[spark] class BlockManager(
    */
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    doGetRemote(blockId, asBlockResult = false, None).asInstanceOf[Option[ByteBuffer]]
   }
 
-  private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
+  private def doGetRemote(
+      blockId: BlockId,
+      asBlockResult: Boolean,
+      resourceCleaner: Option[ResourceCleaner]): Option[Any] = {
     require(blockId != null, "BlockId is null")
+    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a TaskContext if " +
+      "requesting block results")
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
@@ -598,7 +613,7 @@ private[spark] class BlockManager(
       if (data != null) {
         if (asBlockResult) {
           return Some(new BlockResult(
-            dataDeserialize(blockId, data),
+            dataDeserialize(blockId, data, resourceCleaner.get),
             DataReadMethod.Network,
             data.limit()))
         } else {
@@ -614,13 +629,13 @@ private[spark] class BlockManager(
   /**
    * Get a block from the block manager (either local or remote).
    */
-  def get(blockId: BlockId): Option[BlockResult] = {
-    val local = getLocal(blockId)
+  def get(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[BlockResult] = {
+    val local = getLocal(blockId, resourceCleaner)
     if (local.isDefined) {
       logInfo(s"Found block $blockId locally")
       return local
     }
-    val remote = getRemote(blockId)
+    val remote = getRemote(blockId, resourceCleaner)
     if (remote.isDefined) {
       logInfo(s"Found block $blockId remotely")
       return remote
@@ -635,7 +650,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(values != null, "Values is null")
-    doPut(blockId, IteratorValues(values), level, tellMaster, effectiveStorageLevel)
+    doPut(blockId, IteratorValues(values), level, tellMaster, None, effectiveStorageLevel)
   }
 
   /**
@@ -666,7 +681,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(values != null, "Values is null")
-    doPut(blockId, ArrayValues(values), level, tellMaster, effectiveStorageLevel)
+    doPut(blockId, ArrayValues(values), level, tellMaster, None, effectiveStorageLevel)
   }
 
   /**
@@ -677,10 +692,12 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ByteBuffer,
       level: StorageLevel,
+      resourceCleaner: ResourceCleaner,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
+    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, Some(resourceCleaner),
+      effectiveStorageLevel)
   }
 
   /**
@@ -696,11 +713,13 @@ private[spark] class BlockManager(
       data: BlockValues,
       level: StorageLevel,
       tellMaster: Boolean = true,
+      resourceCleaner: Option[ResourceCleaner],
       effectiveStorageLevel: Option[StorageLevel] = None)
     : Seq[(BlockId, BlockStatus)] = {
-
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
+    require(!data.isInstanceOf[ByteBufferValues] || resourceCleaner.isDefined, "Must specify a " +
+      "resourceCleaner for ByteBufferValues")
     effectiveStorageLevel.foreach { level =>
       require(level != null && level.isValid, "Effective StorageLevel is null or invalid")
     }
@@ -789,7 +808,7 @@ private[spark] class BlockManager(
             blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
             bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel)
+            blockStore.putBytes(blockId, bytes, putLevel, resourceCleaner.get)
         }
         size = result.size
         result.data match {
@@ -977,8 +996,8 @@ private[spark] class BlockManager(
   /**
    * Read a block consisting of a single object.
    */
-  def getSingle(blockId: BlockId): Option[Any] = {
-    get(blockId).map(_.data.next())
+  def getSingle(blockId: BlockId, resourceCleaner: ResourceCleaner): Option[Any] = {
+    get(blockId, resourceCleaner).map(_.data.next())
   }
 
   /**
@@ -1202,9 +1221,11 @@ private[spark] class BlockManager(
   def dataDeserialize(
       blockId: BlockId,
       bytes: ByteBuffer,
+      cleaner: ResourceCleaner,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
     val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    cleaner.addCleanerFunction{ () => stream.close() }
     serializer.newInstance().deserializeStream(stream).asIterator
   }
 

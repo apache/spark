@@ -23,7 +23,7 @@ import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResourceCleaner, Utils}
 
 /**
  * Stores BlockManager blocks on disk.
@@ -38,7 +38,18 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      _bytes: ByteBuffer,
+      level: StorageLevel,
+      resourceCleaner: ResourceCleaner): PutResult = {
+    putBytes(blockId, _bytes, level)
+  }
+
+  def putBytes(
+    blockId: BlockId,
+    _bytes: ByteBuffer,
+    level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -139,18 +150,24 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(segment.file, segment.offset, segment.length)
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+  override def getValues(
+      blockId: BlockId,
+      resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
+    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer, resourceCleaner))
   }
 
   /**
    * A version of getValues that allows a custom serializer. This is used as part of the
    * shuffle short-circuit code.
    */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+  def getValues(
+      blockId: BlockId,
+      serializer: Serializer,
+      resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
     // TODO: Should bypass getBytes and use a stream based implementation, so that
     // we won't use a lot of memory during e.g. external sort merge.
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+    getBytes(blockId).map(bytes =>
+      blockManager.dataDeserialize(blockId, bytes, resourceCleaner, serializer))
   }
 
   override def remove(blockId: BlockId): Boolean = {

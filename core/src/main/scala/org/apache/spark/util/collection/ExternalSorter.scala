@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockObjectWriter, BlockId}
+import org.apache.spark.util.ResourceCleaner
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -675,7 +676,8 @@ private[spark] class ExternalSorter[K, V, C](
    * For now, we just merge all the spilled files in once pass, but this can be modified to
    * support hierarchical merging.
    */
-   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
+   def partitionedIterator(
+      resourceCleaner: ResourceCleaner): Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
     val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
     if (spills.isEmpty && partitionWriters == null) {
@@ -693,7 +695,7 @@ private[spark] class ExternalSorter[K, V, C](
       // note that there's no ordering or aggregator in this case -- we just partition objects
       val collIter = groupByPartition(collection.destructiveSortedIterator(partitionComparator))
       collIter.map { case (partitionId, values) =>
-        (partitionId, values ++ readPartitionFile(partitionWriters(partitionId)))
+        (partitionId, values ++ readPartitionFile(partitionWriters(partitionId), resourceCleaner))
       }
     } else {
       // Merge spilled and in-memory data
@@ -704,7 +706,9 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Return an iterator over all the data written to this object, aggregated by our aggregator.
    */
-  def iterator: Iterator[Product2[K, C]] = partitionedIterator.flatMap(pair => pair._2)
+  def iterator(resourceCleaner: ResourceCleaner): Iterator[Product2[K, C]] = {
+    partitionedIterator(resourceCleaner).flatMap(pair => pair._2)
+  }
 
   /**
    * Write all the data added into this ExternalSorter into a file in the disk store. This is
@@ -747,7 +751,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       // Either we're not bypassing merge-sort or we have only in-memory data; get an iterator by
       // partition and just write everything directly.
-      for ((id, elements) <- this.partitionedIterator) {
+      for ((id, elements) <- this.partitionedIterator(context)) {
         if (elements.hasNext) {
           val writer = blockManager.getDiskWriter(
             blockId, outputFile, ser, fileBufferSize, context.taskMetrics.shuffleWriteMetrics.get)
@@ -777,11 +781,14 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Read a partition file back as an iterator (used in our iterator method)
    */
-  private def readPartitionFile(writer: BlockObjectWriter): Iterator[Product2[K, C]] = {
+  private def readPartitionFile(
+      writer: BlockObjectWriter,
+      resourceCleaner: ResourceCleaner): Iterator[Product2[K, C]] = {
     if (writer.isOpen) {
       writer.commitAndClose()
     }
-    blockManager.diskStore.getValues(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
+    blockManager.diskStore.getValues(writer.blockId, ser, resourceCleaner)
+      .get.asInstanceOf[Iterator[Product2[K, C]]]
   }
 
   def stop(): Unit = {

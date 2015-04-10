@@ -112,7 +112,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
       case ShuffleCoGroupSplitDep(handle) =>
         val iter = SparkEnv.get.shuffleManager
           .getReader(handle, partition.index, partition.index + 1, context)
-          .read()
+          .read(context)
         iter.foreach(op)
     }
     // the first dep is rdd1; add all values to the map

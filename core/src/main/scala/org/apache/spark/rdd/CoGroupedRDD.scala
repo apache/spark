@@ -134,7 +134,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         // Read map outputs of shuffle
         val it = SparkEnv.get.shuffleManager
           .getReader(handle, split.index, split.index + 1, context)
-          .read()
+          .read(context)
         rddIterators += ((it, depNum))
     }
 

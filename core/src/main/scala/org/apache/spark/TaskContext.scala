@@ -21,7 +21,7 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{ResourceCleaner, TaskCompletionListener}
 
 
 object TaskContext {
@@ -54,7 +54,7 @@ object TaskContext {
  *   org.apache.spark.TaskContext.get()
  * }}}
  */
-abstract class TaskContext extends Serializable {
+abstract class TaskContext extends Serializable with ResourceCleaner {
   // Note: TaskContext must NOT define a get method. Otherwise it will prevent the Scala compiler
   // from generating a static get method (based on the companion object's get method).
 
@@ -94,6 +94,11 @@ abstract class TaskContext extends Serializable {
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
+
+  def addCleanerFunction(f: () => Unit): Unit = {
+    addTaskCompletionListener { _ => f() }
+  }
+
 
   /**
    * Adds a callback function to be executed on task completion. An example use
