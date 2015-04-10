@@ -713,15 +713,17 @@ class TaskInstance(Base):
         rt = self.task.render_template  # shortcut to method
         for attr in task.__class__.template_fields:
             content = getattr(task, attr)
-            if isinstance(content, basestring):
-                result = rt(content, jinja_context)
-            elif isinstance(content, list):
-                result = [rt(s, jinja_context) for s in content]
-            elif isinstance(content, dict):
-                result = {k: rt(content[k], jinja_context) for k in content}
-            else:
-                raise Exception("Type not supported for templating")
-            setattr(task, attr, result)
+            if content:
+                if isinstance(content, basestring):
+                    result = rt(content, jinja_context)
+                elif isinstance(content, (list, tuple)):
+                    result = [rt(s, jinja_context) for s in content]
+                elif isinstance(content, dict):
+                    result = {
+                        k: rt(content[k], jinja_context) for k in content}
+                else:
+                    raise Exception("Type not supported for templating")
+                setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
         task = self.task
