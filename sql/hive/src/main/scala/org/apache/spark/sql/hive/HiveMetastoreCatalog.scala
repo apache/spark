@@ -279,7 +279,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       }
     }
 
-    if (metastoreRelation.hiveQlTable.isPartitioned) {
+    val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
       val partitions = metastoreRelation.hiveQlPartitions.map { p =>
@@ -314,6 +314,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       parquetRelation
     }
+
+    result.newInstance()
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = synchronized {
