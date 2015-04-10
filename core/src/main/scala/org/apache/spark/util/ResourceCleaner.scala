@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
  * block for exception handling).  Note that this does not do clean anything up itself.
  */
 trait ResourceCleaner {
-  def addCleanerFunction(f: () => Unit): Unit
+  def addCleaner(f: () => Unit): Unit
 }
 
 /**
@@ -34,7 +34,7 @@ trait ResourceCleaner {
 class SimpleResourceCleaner extends ResourceCleaner {
   private val cleanerFuncs = new ArrayBuffer[() => Unit]
 
-  override def addCleanerFunction(f: () => Unit): Unit = {
+  override def addCleaner(f: () => Unit): Unit = {
     cleanerFuncs += f
   }
 

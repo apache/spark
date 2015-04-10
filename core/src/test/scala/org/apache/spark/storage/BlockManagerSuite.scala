@@ -1253,7 +1253,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
   class TestResourceCleaner extends ResourceCleaner {
     var gotCleanerFunc = false
-    override def addCleanerFunction(f: () => Unit): Unit = {
+    override def addCleaner(f: () => Unit): Unit = {
       gotCleanerFunc = true
     }
   }

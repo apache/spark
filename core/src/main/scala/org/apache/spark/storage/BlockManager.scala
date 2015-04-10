@@ -1225,7 +1225,7 @@ private[spark] class BlockManager(
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
     val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
-    cleaner.addCleanerFunction{ () => stream.close() }
+    cleaner.addCleaner{ () => stream.close() }
     serializer.newInstance().deserializeStream(stream).asIterator
   }
 

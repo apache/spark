@@ -95,7 +95,7 @@ abstract class TaskContext extends Serializable with ResourceCleaner {
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
-  def addCleanerFunction(f: () => Unit): Unit = {
+  def addCleaner(f: () => Unit): Unit = {
     addTaskCompletionListener { _ => f() }
   }
 
