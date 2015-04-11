@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
+import org.apache.spark.{HashPartitioner, SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -194,7 +194,7 @@ case class ExternalSort(
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[Row, Null, Row](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r, null)))
-      val baseIterator = sorter.iterator.map(_._1)
+      val baseIterator = sorter.iterator(TaskContext.get).map(_._1)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[Row, Iterator[Row]](baseIterator, sorter.stop())
     }, preservesPartitioning = true)
