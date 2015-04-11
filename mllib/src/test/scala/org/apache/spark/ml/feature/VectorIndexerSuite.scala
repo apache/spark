@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.beans.{BeanInfo, BeanProperty}
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
@@ -247,6 +249,7 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private object VectorIndexerSuite {
-  case class FeatureData(features: Vector)
+private[feature] object VectorIndexerSuite {
+  @BeanInfo
+  case class FeatureData(@BeanProperty features: Vector)
 }

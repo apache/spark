@@ -58,11 +58,16 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *       features and some categorical features. The choice between continuous and categorical
  *       is based upon a maxCategories parameter.
  *     - Set maxCategories to the maximum number of categorical any categorical feature should have.
+ *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
+ *       If maxCategories = 2, then feature 0 will be declared categorical and use indices {0, 1},
+ *       and feature 1 will be declared continuous.
  *  - Index all features, if all features are categorical
  *     - If maxCategories is set to be very large, then this will build an index of unique
  *       values for all features.
  *     - Warning: This can cause problems if features are continuous since this will collect ALL
  *       unique values to the driver.
+ *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
+ *       If maxCategories >= 3, then both features will be declared categorical.
  *
  * This returns a model which can transform categorical features to use 0-based indices.
  *
@@ -72,24 +77,14 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *    This maintains vector sparsity.
  *  - More stability may be added in the future.
  *
- * TODO: Add warning if a categorical feature has only 1 category?
- *
- * TODO: Add option for allowing unknown categories:
- *       Parameter allowUnknownCategories:
- *        If true, then handle unknown categories during `transform`
- *        by assigning them to an extra category index.
- *        That unknown category index should be index 1; this will allow maintaining sparsity
- *        (reserving index 0 for value 0.0), and it will allow category indices to remain fixed
- *        even if more categories are added later.
- *
- * TODO: Currently, this does not preserve input metadata in the output column.  Before this class
- *       becomes non-experimental, we should preserve metadata for categorical features (but also
- *       check that the input data is valid for that metadata).
+ * TODO: Future extensions: The following functionality is planned for the future:
+ *  - Preserve metadata in transform; if a feature's metadata is already present, do not recompute.
+ *  - Specify certain features to not index, either via a parameter or via existing metadata.
+ *  - Add warning if a categorical feature has only 1 category.
+ *  - Add option for allowing unknown categories.
  */
 @AlphaComponent
 class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerParams {
-
-  // TODO: If a feature is already marked as categorical in metadata, do not index it.
 
   /** @group setParam */
   def setMaxCategories(value: Int): this.type = {
