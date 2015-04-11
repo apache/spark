@@ -19,13 +19,15 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.Accumulator
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 import org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -41,6 +43,29 @@ private[sql] object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String]): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+
+  private val accumulators = HashMap[String, ArrayBuffer[Accumulable[_, _]]]()
+
+  private[sql] def addAccumulator(relation: InMemoryRelation, acc: Accumulable[_, _]): Unit = {
+    val index = relation.tableName.map { n =>
+      s"In-memory table $n"
+    }.getOrElse(relation.child.toString)
+
+    if (!accumulators.contains(index)) {
+      accumulators.put(index, ArrayBuffer[Accumulable[_, _]]())
+    }
+    accumulators.get(index).get += acc  
+  }
+
+  private[sql] def removeAccumulators(relation: InMemoryRelation): Unit = {
+    val index = relation.tableName.map { n =>
+      s"In-memory table $n"
+    }.getOrElse(relation.child.toString)
+
+    if (accumulators.contains(index)) {
+      accumulators.get(index).get.foreach(acc => Accumulators.remove(acc.id))
+    }
+  }
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
@@ -58,6 +83,19 @@ private[sql] case class InMemoryRelation(
 
   private val batchStats =
     child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+
+  InMemoryRelation.addAccumulator(this, batchStats)
+
+  private[sql] def applyScanAccumulators(sc: SparkContext): (Accumulator[Int], Accumulator[Int]) = {
+    val accs = (sc.accumulator(0), sc.accumulator(0))
+    InMemoryRelation.addAccumulator(this, accs._1)
+    InMemoryRelation.addAccumulator(this, accs._2)
+    accs 
+  }
+
+  private[sql] def removeAccumulators(): Unit = {
+    InMemoryRelation.removeAccumulators(this)
+  }
 
   val partitionStatistics = new PartitionStatistics(output)
 
@@ -245,8 +283,7 @@ private[sql] case class InMemoryColumnarTableScan(
   }
 
   // Accumulators used for testing purposes
-  val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
-  val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
+  val (readPartitions, readBatches) = relation.applyScanAccumulators(sparkContext)
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
