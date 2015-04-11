@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.Command
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan, Command}
 import org.scalatest.FunSuite
 
 private[sql] case class TestCommand(cmd: String) extends Command
@@ -58,4 +58,12 @@ class SqlParserSuite extends FunSuite {
     assert(TestCommand("NotRealCommand") === parser("execute NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser("exEcute NotRealCommand"))
   }
+
+  test("select all") {
+    val parser = new SqlParser
+    assertResult(
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("t1")))
+    )(parser("SELECT ALL * FROM t1"))
+  }
+
 }
