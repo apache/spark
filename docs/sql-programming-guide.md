@@ -1784,6 +1784,7 @@ in Hive deployments.
 
 
 **Esoteric Hive Features**
+
 * `UNION` type
 * Unique join
 * Column statistics collecting: Spark SQL does not piggyback scans to collect column statistics at
