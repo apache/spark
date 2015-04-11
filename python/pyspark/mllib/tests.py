@@ -685,6 +685,7 @@ class Word2VecTests(PySparkTestCase):
         model = Word2Vec().fit(self.sc.parallelize(data))
         self.assertEquals(len(model.getVectors()), 3)
 
+
 class StandardScalerTests(PySparkTestCase):
     def test_model_setters(self):
         data = [
