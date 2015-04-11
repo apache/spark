@@ -51,6 +51,12 @@ case class Order(
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-6835: udtf in lateral view") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+    val query = sql("SELECT c1, v FROM table1 LATERAL VIEW stack(3, 1, c1 + 1, c1 + 2) d AS v")
+    checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+  }
 
   test("SPARK-6851: Self-joined converted parquet tables") {
     val orders = Seq(
