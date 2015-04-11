@@ -60,6 +60,8 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
+  override def outputOrdering: Seq[SortOrder] = Nil
+
   /**
    * An aggregate that needs to be computed for each row in a group.
    *

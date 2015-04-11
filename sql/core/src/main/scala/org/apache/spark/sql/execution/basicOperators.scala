@@ -70,6 +70,8 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
   override def execute(): RDD[Row] = {
     child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
   }
+
+  override def outputOrdering: Seq[SortOrder] = Nil
 }
 
 /**
@@ -146,6 +148,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
   override def execute(): RDD[Row] = sparkContext.makeRDD(collectData(), 1)
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -171,6 +175,8 @@ case class Sort(
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -201,6 +207,8 @@ case class ExternalSort(
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**

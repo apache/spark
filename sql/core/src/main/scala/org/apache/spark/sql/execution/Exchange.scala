@@ -161,8 +161,8 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
       def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan): SparkPlan =
         if (child.outputPartitioning != partitioning) Exchange(partitioning, child) else child
 
-      // Check if the partitioning we want to ensure is the same as the child's output
-      // partitioning. If so, we do not need to add the Exchange operator.
+      // Check if the ordering we want to ensure is the same as the child's output
+      // ordering. If so, we do not need to add the Sort operator.
       def addSortIfNecessary(ordering: Seq[SortOrder], child: SparkPlan): SparkPlan =
         if (child.outputOrdering != ordering) Sort(ordering, global = false, child) else child
 

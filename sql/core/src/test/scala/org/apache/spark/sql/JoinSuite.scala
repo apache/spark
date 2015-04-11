@@ -95,13 +95,16 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    conf.setConf("spark.sql.autoSortMergeJoin", "true")
-    Seq(
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    conf.setConf("spark.sql.autoSortMergeJoin", AUTO_SORTMERGEJOIN.toString)
+    try {
+      conf.setConf("spark.sql.autoSortMergeJoin", "true")
+      Seq(
+        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    } finally {
+      conf.setConf("spark.sql.autoSortMergeJoin", AUTO_SORTMERGEJOIN.toString)
+    }
   }
 
   test("broadcasted hash join operator selection") {
