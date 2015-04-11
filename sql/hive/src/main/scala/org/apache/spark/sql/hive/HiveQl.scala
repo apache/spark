@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.sql.Date
 
 
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -1284,8 +1286,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         Explode(attributes, nodeToExpr(child))
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+        val functionInfo: FunctionInfo =
+          Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
+            sys.error(s"Couldn't find function $functionName"))
+        val functionClassName = functionInfo.getFunctionClass.getName
+
         HiveGenericUdtf(
-          new HiveFunctionWrapper(functionName),
+          new HiveFunctionWrapper(functionClassName),
           attributes,
           children.map(nodeToExpr))
 
