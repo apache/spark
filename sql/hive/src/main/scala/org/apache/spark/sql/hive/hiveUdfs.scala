@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.aggregate2.{AggregateExpression2, COMPLETE, FINAL, PARTIAL1}
+import org.apache.spark.sql.catalyst.planning.AggregateExpressionSubsitution
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -468,6 +470,112 @@ private[hive] case class HiveUdaf(
   def newInstance(): HiveUdafFunction = new HiveUdafFunction(funcWrapper, children, this, true)
 }
 
+private[hive] case class HiveGenericUdaf2(
+    funcWrapper: HiveFunctionWrapper,
+    children: Seq[Expression],
+    distinct: Boolean,
+    isUDAF: Boolean) extends AggregateExpression2 with HiveInspectors {
+  type UDFType = AbstractGenericUDAFResolver
+
+  protected def createEvaluator = resolver.getEvaluator(
+    new SimpleGenericUDAFParameterInfo(inspectors, false, false))
+
+  // Hive UDAF evaluator
+  @transient
+  lazy val evaluator = createEvaluator
+
+  @transient
+  protected lazy val resolver: AbstractGenericUDAFResolver = if (isUDAF) {
+    // if it's UDAF, we need the UDAF bridge
+    new GenericUDAFBridge(funcWrapper.createFunction())
+  } else {
+    funcWrapper.createFunction()
+  }
+
+  // Output data object inspector
+  @transient
+  lazy val objectInspector = createEvaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+
+  // Aggregation Buffer Inspector
+  @transient
+  lazy val bufferObjectInspector = {
+    createEvaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+  }
+
+  // Input arguments object inspectors
+  @transient
+  lazy val inspectors = children.map(toInspector).toArray
+
+  @transient
+  override val distinctLike: Boolean = {
+    val annotation = evaluator.getClass().getAnnotation(classOf[HiveUDFType])
+    if (annotation == null || !annotation.distinctLike()) false else true
+  }
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+
+  // Aggregation Buffer Data Type, We assume only 1 element for the Hive Aggregation Buffer
+  // It will be StructType if more than 1 element (Actually will be StructSettableObjectInspector)
+  override def bufferDataType: Seq[DataType] = inspectorToDataType(bufferObjectInspector) :: Nil
+
+  // Output data type
+  override def dataType: DataType = inspectorToDataType(objectInspector)
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////
+  //            The following code will be called within the executors                         //
+  ///////////////////////////////////////////////////////////////////////////////////////////////
+  @transient var bound: BoundReference = _
+
+  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+    bound = buffers(0)
+    mode match {
+      case FINAL => evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(bufferObjectInspector))
+      case COMPLETE => evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+      case PARTIAL1 => evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+    }
+  }
+
+  // Initialize (reinitialize) the aggregation buffer
+  override def reset(buf: MutableRow): Unit = {
+    val buffer = evaluator.getNewAggregationBuffer
+    evaluator.reset(buffer)
+    // This is a hack, we never use the mutable row as buffer, but define our own buffer,
+    // which is set as the first element of the buffer
+    buf(bound.ordinal) = buffer
+  }
+
+  // Expect the aggregate function fills the aggregation buffer when fed with each value
+  // in the group
+  override def iterate(arguments: Any, buf: MutableRow): Unit = {
+    val args = arguments.asInstanceOf[Seq[AnyRef]].zip(inspectors).map {
+      case (value, oi) => wrap(value, oi)
+    }.toArray
+
+    evaluator.iterate(
+      buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal),
+      args)
+  }
+
+  // Merge 2 aggregation buffer, and write back to the later one
+  override def merge(value: Row, buf: MutableRow): Unit = {
+    val buffer = buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)
+    evaluator.merge(buffer, wrap(value.get(bound.ordinal), bufferObjectInspector))
+  }
+
+  @deprecated
+  override def terminatePartial(buf: MutableRow): Unit = {
+    val buffer = buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)
+    // this is for serialization
+    buf(bound.ordinal) = unwrap(evaluator.terminatePartial(buffer), bufferObjectInspector)
+  }
+
+  // Output the final result by feeding the aggregation buffer
+  override def terminate(input: Row): Any = {
+    unwrap(evaluator.terminate(
+      input.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal)),
+      objectInspector)
+  }
+}
+
 /**
  * Converts a Hive Generic User Defined Table Generating Function (UDTF) to a
  * [[catalyst.expressions.Generator Generator]].  Note that the semantics of Generators do not allow
@@ -587,3 +695,13 @@ private[hive] case class HiveUdafFunction(
   }
 }
 
+private[hive] object HiveAggregateExpressionSubsitution extends AggregateExpressionSubsitution {
+  override def subsitute(aggr: AggregateExpression): AggregateExpression2 = aggr match {
+    // TODO: we don't support distinct for Hive UDAF(Generic) yet from the user interface
+    case HiveGenericUdaf(funcWrapper, children) =>
+      HiveGenericUdaf2(funcWrapper, children, distinct = false, isUDAF = false)
+    case HiveUdaf(funcWrapper, children) =>
+      HiveGenericUdaf2(funcWrapper, children, distinct = false, isUDAF = true)
+    case _ => super.subsitute(aggr)
+  }
+}

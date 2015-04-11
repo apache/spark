@@ -90,6 +90,9 @@ private[spark] object SQLConf {
 
   val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
 
+  // Whether enable the aggregate2, which is the refactor one
+  val AGGREGATE_2 = "spark.sql.aggregate2"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -263,6 +266,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def dataFrameRetainGroupColumns: Boolean =
     getConf(DATAFRAME_RETAIN_GROUP_COLUMNS, "true").toBoolean
+
+  private[spark] def aggregate2: Boolean =
+    getConf(AGGREGATE_2, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
