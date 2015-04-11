@@ -206,9 +206,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
         }
       }
     }
-
-    broadcastedTreeWeight.unpersist()
-    broadcastedTree.unpersist()
     newPredError
   }
 
