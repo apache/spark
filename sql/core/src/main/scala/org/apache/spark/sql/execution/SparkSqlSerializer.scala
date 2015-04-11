@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
+import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.sql.types.Decimal
 
@@ -54,6 +55,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]],
                   new OpenHashSetSerializer)
     kryo.register(classOf[Decimal])
+    kryo.register(classOf[JavaHashMap[_, _]])
 
     kryo.setReferences(false)
     kryo
