@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
+import java.util.HashSet
+
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 
 /**
  * :: DeveloperApi ::
@@ -26,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 package object joins {
 
   @DeveloperApi
-  sealed abstract class BuildSide
+  sealed trait BuildSide
 
   @DeveloperApi
   case object BuildRight extends BuildSide
@@ -34,4 +36,11 @@ package object joins {
   @DeveloperApi
   case object BuildLeft extends BuildSide
 
+  @AlphaComponent
+  class MultiBuild extends HashSet[Int] with BuildSide {
+    def this(indices: Seq[Int]) = {
+      this()
+      indices.foreach(index => this.add(index))
+    }
+  }
 }

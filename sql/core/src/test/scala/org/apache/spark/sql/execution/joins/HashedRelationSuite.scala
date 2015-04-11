@@ -58,6 +58,6 @@ class HashedRelationSuite extends FunSuite {
     assert(uniqHashed.getValue(data(0)) == data(0))
     assert(uniqHashed.getValue(data(1)) == data(1))
     assert(uniqHashed.getValue(data(2)) == data(2))
-    assert(uniqHashed.getValue(Row(10)) == null)
+    assert(uniqHashed.getValue(Row(10)) === null)
   }
 }

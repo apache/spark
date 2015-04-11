@@ -184,7 +184,6 @@ object PartialAggregation {
   }
 }
 
-
 /**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  */
