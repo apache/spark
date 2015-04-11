@@ -215,8 +215,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val partitionColNames = relation.partitioningAttributes.map(_.name).toSet
-        val filtersToPush = filters
-          .filter { pred =>
+        val filtersToPush = filters.filter { pred =>
             val referencedColNames = pred.references.map(_.name).toSet
             referencedColNames.intersect(partitionColNames).isEmpty
           }
@@ -229,7 +228,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // can result in "A OR C" being pushed down. Here we are conservative in the sense
               // that even if "A" was pushed and we check for "A AND B" we still want to keep
               // "A AND B" in the higher-level filter, not just "B".
-              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect { 
+              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
                 case (predicate, None) => predicate
                 // Filter needs to be applied above when it contains partitioning
                 // columns
