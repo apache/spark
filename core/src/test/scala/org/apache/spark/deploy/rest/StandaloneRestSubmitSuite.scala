@@ -39,9 +39,9 @@ import org.apache.spark.deploy.master.DriverState._
  * Tests for the REST application submission protocol used in standalone cluster mode.
  */
 class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
-  private val client = new RestClient
+  private val client = new RestSubmissionClient
   private var actorSystem: Option[ActorSystem] = None
-  private var server: Option[RestServer] = None
+  private var server: Option[RestSubmissionServer] = None
 
   override def afterEach() {
     actorSystem.foreach(_.shutdown())
@@ -89,7 +89,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
-    val response = RestClient.run("app-resource", "main-class", appArgs, conf)
+    val response = RestSubmissionClient.run("app-resource", "main-class", appArgs, conf)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
     assert(submitResponse.serverSparkVersion === SPARK_VERSION)
@@ -208,7 +208,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("good request paths") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = RestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val json = constructSubmitRequest(masterUrl).toJson
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill"
@@ -238,7 +238,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("good request paths, bad requests") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = RestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill"
     val statusRequestPath = s"$httpUrl/$v/submissions/status"
@@ -276,7 +276,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("bad request paths") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = RestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val (response1, code1) = sendHttpRequestWithResponse(httpUrl, "GET")
     val (response2, code2) = sendHttpRequestWithResponse(s"$httpUrl/", "GET")
     val (response3, code3) = sendHttpRequestWithResponse(s"$httpUrl/$v", "GET")
@@ -292,7 +292,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(code5 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code6 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code7 === HttpServletResponse.SC_BAD_REQUEST)
-    assert(code8 === RestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+    assert(code8 === RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION)
     // all responses should be error responses
     val errorResponse1 = getErrorResponse(response1)
     val errorResponse2 = getErrorResponse(response2)
@@ -310,13 +310,13 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(errorResponse5.highestProtocolVersion === null)
     assert(errorResponse6.highestProtocolVersion === null)
     assert(errorResponse7.highestProtocolVersion === null)
-    assert(errorResponse8.highestProtocolVersion === RestServer.PROTOCOL_VERSION)
+    assert(errorResponse8.highestProtocolVersion === RestSubmissionServer.PROTOCOL_VERSION)
   }
 
   test("server returns unknown fields") {
     val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = RestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val oldJson = constructSubmitRequest(masterUrl).toJson
     val oldFields = parse(oldJson).asInstanceOf[JObject].obj
@@ -340,7 +340,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("client handles faulty server") {
     val masterUrl = startFaultyServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
-    val v = RestServer.PROTOCOL_VERSION
+    val v = RestSubmissionServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
     val killRequestPath = s"$httpUrl/$v/submissions/kill/anything"
     val statusRequestPath = s"$httpUrl/$v/submissions/status/anything"
@@ -561,15 +561,15 @@ private class SmarterMaster extends Actor {
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
-    val host: String,
-    val requestedPort: Int,
-    val masterConf: SparkConf,
+    host: String,
+    requestedPort: Int,
+    masterConf: SparkConf,
     masterActor: ActorRef,
     masterUrl: String)
-  extends RestServer {
-  def submitRequestServlet: SubmitRequestServlet = new MalformedSubmitServlet
-  def killRequestServlet: KillRequestServlet = new InvalidKillServlet
-  def statusRequestServlet: StatusRequestServlet = new ExplodingStatusServlet
+  extends RestSubmissionServer(host, requestedPort, masterConf) {
+  val submitRequestServlet = new MalformedSubmitServlet
+  val killRequestServlet = new InvalidKillServlet
+  val statusRequestServlet = new ExplodingStatusServlet
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet extends StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf) {

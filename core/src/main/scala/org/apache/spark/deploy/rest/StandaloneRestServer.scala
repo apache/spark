@@ -28,7 +28,7 @@ import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 
 /**
- * A server that responds to requests submitted by the [[RestClient]].
+ * A server that responds to requests submitted by the [[RestSubmissionClient]].
  * This is intended to be embedded in the standalone Master and used in cluster mode only.
  *
  * This server responds with different HTTP codes depending on the situation:
@@ -50,18 +50,15 @@ import org.apache.spark.deploy.ClientArguments._
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
  */
 private[deploy] class StandaloneRestServer(
-    val host: String,
-    val requestedPort: Int,
-    val masterConf: SparkConf,
+    host: String,
+    requestedPort: Int,
+    masterConf: SparkConf,
     masterActor: ActorRef,
     masterUrl: String)
-  extends RestServer {
-  def submitRequestServlet: SubmitRequestServlet =
-    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
-  def killRequestServlet: KillRequestServlet =
-    new StandaloneKillRequestServlet(masterActor, masterConf)
-  def statusRequestServlet: StatusRequestServlet =
-    new StandaloneStatusRequestServlet(masterActor, masterConf)
+  extends RestSubmissionServer(host, requestedPort, masterConf) {
+  val submitRequestServlet = new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
+  val killRequestServlet = new StandaloneKillRequestServlet(masterActor, masterConf)
+  val statusRequestServlet = new StandaloneStatusRequestServlet(masterActor, masterConf)
 }
 
 /**

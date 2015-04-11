@@ -30,11 +30,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 
 /**
- * A client that submits applications to the standalone Master and Mesos dispatcher
- * using a REST protocol.
- * This client is intended to communicate with the [[StandaloneRestServer]] or
- * [[org.apache.spark.deploy.mesos.MesosClusterDispatcher]] and is
- * currently used for cluster mode only.
+ * A client that submits applications to a [[RestSubmissionServer]].
  *
  * In protocol version v1, the REST URL takes the form http://[host:port]/v1/submissions/[action],
  * where [action] can be one of create, kill, or status. Each type of request is represented in
@@ -55,8 +51,10 @@ import org.apache.spark.util.Utils
  * implementation of this client can use that information to retry using the version specified
  * by the server.
  */
-private[spark] class RestClient extends Logging {
-  import RestClient._
+private[spark] class RestSubmissionClient extends Logging {
+  import RestSubmissionClient._
+
+  private val supportedMasterPrefixes = Seq("spark://", "mesos://")
 
   /**
    * Submit an application specified by the parameters in the provided request.
@@ -221,20 +219,23 @@ private[spark] class RestClient extends Logging {
 
   /** Return the base URL for communicating with the server, including the protocol version. */
   private def getBaseUrl(master: String): String = {
-    val masterUrl = if (master.startsWith("spark://")) {
-      master.stripPrefix("spark://").stripSuffix("/")
-    } else {
-      master.stripPrefix("mesos://").stripSuffix("/")
+    var masterUrl = master
+    supportedMasterPrefixes.foreach { prefix =>
+      if (master.startsWith(prefix)) {
+        masterUrl = master.stripPrefix(prefix)
+      }
     }
-
+    masterUrl = masterUrl.stripSuffix("/")
     s"http://$masterUrl/$PROTOCOL_VERSION/submissions"
   }
 
   /** Throw an exception if this is not standalone mode. */
   private def validateMaster(master: String): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+    val valid = supportedMasterPrefixes.exists { prefix => master.startsWith(prefix) }
+    if (!valid) {
       throw new IllegalArgumentException(
-        "This REST client is only supported in standalone or Mesos mode.")
+        "This REST client only supports master URLs that start with " +
+          "one of the following: " + supportedMasterPrefixes.mkString(","))
     }
   }
 
@@ -303,7 +304,7 @@ private[spark] class RestClient extends Logging {
   }
 }
 
-private[spark] object RestClient {
+private[spark] object RestSubmissionClient {
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
@@ -323,7 +324,7 @@ private[spark] object RestClient {
     }
     val sparkProperties = conf.getAll.toMap
     val environmentVariables = env.filter { case (k, _) => k.startsWith("SPARK_") }
-    val client = new RestClient
+    val client = new RestSubmissionClient
     val submitRequest = client.constructSubmitRequest(
       appResource, mainClass, appArgs, sparkProperties, environmentVariables)
     client.createSubmission(master, submitRequest)

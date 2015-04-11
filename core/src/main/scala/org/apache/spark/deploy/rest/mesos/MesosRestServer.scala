@@ -18,6 +18,9 @@
 package org.apache.spark.deploy.rest.mesos
 
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.concurrent.atomic.AtomicLong
 import javax.servlet.http.HttpServletResponse
 
 import org.apache.spark.deploy.Command
@@ -29,28 +32,25 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 
 
 /**
- * A server that responds to requests submitted by the [[RestClient]].
- * This is intended to be used in Mesos cluster mode only, which forwards all requests to
- * [[MesosClusterScheduler]].
- *
+ * A server that responds to requests submitted by the [[RestSubmissionClient]].
+ * All requests are forwarded to
+ * [[org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler]].
+ * This is intended to be used in Mesos cluster mode only.
  * For more details about the RestServer Spark protocol and status codes please refer to
- * [[RestServer]] javadocs.
+ * [[RestSubmissionServer]] javadocs.
  */
 private[spark] class MesosRestServer(
-    val host: String,
-    val requestedPort: Int,
-    val masterConf: SparkConf,
+    host: String,
+    requestedPort: Int,
+    masterConf: SparkConf,
     scheduler: MesosClusterScheduler)
-  extends RestServer {
-  def submitRequestServlet: SubmitRequestServlet =
-    new MesosSubmitRequestServlet(scheduler, masterConf)
-  def killRequestServlet: KillRequestServlet =
-    new MesosKillRequestServlet(scheduler, masterConf)
-  def statusRequestServlet: StatusRequestServlet =
-    new MesosStatusRequestServlet(scheduler, masterConf)
+  extends RestSubmissionServer(host, requestedPort, masterConf) {
+  protected val submitRequestServlet = new MesosSubmitRequestServlet(scheduler, masterConf)
+  protected val killRequestServlet = new MesosKillRequestServlet(scheduler, masterConf)
+  protected val statusRequestServlet = new MesosStatusRequestServlet(scheduler, masterConf)
 }
 
-private[mesos] class MesosSubmitRequestServlet(
+private[deploy] class MesosSubmitRequestServlet(
     scheduler: MesosClusterScheduler,
     conf: SparkConf)
   extends SubmitRequestServlet {
@@ -58,6 +58,13 @@ private[mesos] class MesosSubmitRequestServlet(
   private val DEFAULT_SUPERVISE = false
   private val DEFAULT_MEMORY = 512 // mb
   private val DEFAULT_CORES = 1.0
+
+  private val nextDriverNumber: AtomicLong = new AtomicLong(0)
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
+  private def newDriverId(submitDate: Date): String = {
+    "driver-%s-%04d".format(
+      createDateFormat.format(submitDate), nextDriverNumber.incrementAndGet())
+  }
 
   /**
    * Build a driver description from the fields specified in the submit request.
@@ -85,7 +92,7 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
-
+    val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
     // Construct driver description
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
@@ -100,10 +107,12 @@ private[mesos] class MesosSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
 
+    val submitDate = new Date()
+    val submissionId = newDriverId(submitDate)
+
     new MesosDriverDescription(
-      request.sparkProperties.get("spark.app.name").getOrElse(mainClass),
-      appResource, actualDriverMemory, actualDriverCores,
-      actualSuperviseDriver, command, request.sparkProperties)
+      name, appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver,
+      command, request.sparkProperties, submissionId, submitDate)
   }
 
   protected override def handleSubmit(
@@ -128,7 +137,7 @@ private[mesos] class MesosSubmitRequestServlet(
   }
 }
 
-private[mesos] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
+private[deploy] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends KillRequestServlet {
   protected override def handleKill(submissionId: String): KillSubmissionResponse = {
     val k = scheduler.killDriver(submissionId)
@@ -137,7 +146,7 @@ private[mesos] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, c
   }
 }
 
-private[mesos] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
+private[deploy] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler, conf: SparkConf)
   extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val d = scheduler.getStatus(submissionId)

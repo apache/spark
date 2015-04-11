@@ -20,6 +20,7 @@ package org.apache.spark.deploy.mesos
 import java.util.Date
 
 import org.apache.spark.deploy.Command
+import org.apache.spark.scheduler.cluster.mesos.RetryState
 
 /**
  * Describes a Spark driver that is submitted from the
@@ -32,18 +33,31 @@ import org.apache.spark.deploy.Command
  * @param command The command to launch the driver.
  * @param schedulerProperties Extra properties to pass the Mesos scheduler
  */
-private[spark] case class MesosDriverDescription(
+private[spark] class MesosDriverDescription(
     val name: String,
     val jarUrl: String,
     val mem: Int,
     val cores: Double,
     val supervise: Boolean,
     val command: Command,
-    val schedulerProperties: Map[String, String])
+    val schedulerProperties: Map[String, String],
+    val submissionId: String,
+    val submissionDate: Date,
+    val retryState: Option[RetryState] = None)
   extends Serializable {
-
-  var submissionId: Option[String] = None
-  var submissionDate: Option[Date] = None
-
+  def copy(
+      name: String = name,
+      jarUrl: String = jarUrl,
+      mem: Int = mem,
+      cores: Double = cores,
+      supervise: Boolean = supervise,
+      command: Command = command,
+      schedulerProperties: Map[String, String] = schedulerProperties,
+      retryState: Option[RetryState] = retryState,
+      submissionId: String = submissionId,
+      submissionDate: Date = submissionDate): MesosDriverDescription = {
+    new MesosDriverDescription(name, jarUrl, mem, cores, supervise, command, schedulerProperties,
+      submissionId, submissionDate, retryState)
+  }
   override def toString: String = s"MesosDriverDescription (${command.mainClass})"
 }

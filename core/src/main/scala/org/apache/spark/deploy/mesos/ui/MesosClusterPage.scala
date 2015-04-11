@@ -19,21 +19,20 @@ package org.apache.spark.deploy.mesos.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
-
 import org.apache.mesos.Protos.TaskStatus
-
 import org.apache.spark.deploy.mesos.MesosDriverDescription
-import org.apache.spark.scheduler.cluster.mesos.{RetryState, MesosClusterTaskState}
+import org.apache.spark.scheduler.cluster.mesos.MesosClusterTaskState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+
+import scala.xml.Node
 
 private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = parent.scheduler.getState()
-    val queuedHeaders = Seq("DriverID", "Submit Date", "Main Class", "Driver resources")
+    val queuedHeaders = Seq("Driver ID", "Submit Date", "Main Class", "Driver Resources")
     val driverHeaders = queuedHeaders ++
       Seq("Start Date", "Mesos Slave ID", "State")
-    val retryHeaders = Seq("DriverID", "Submit Date", "Description") ++
+    val retryHeaders = Seq("Driver ID", "Submit Date", "Description") ++
       Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
     val launchedTable = UIUtils.listingTable(driverHeaders, driverRow, state.launchedDrivers)
@@ -58,8 +57,8 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
   private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {
     <tr>
-      <td>{submission.submissionId.get}</td>
-      <td>{submission.submissionDate.get}</td>
+      <td>{submission.submissionId}</td>
+      <td>{submission.submissionDate}</td>
       <td>{submission.command.mainClass}</td>
       <td>cpus: {submission.cores}, mem: {submission.mem}</td>
     </tr>
@@ -67,8 +66,8 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
   private def driverRow(state: MesosClusterTaskState): Seq[Node] = {
     <tr>
-      <td>{state.submission.submissionId.get}</td>
-      <td>{state.submission.submissionDate.get}</td>
+      <td>{state.submission.submissionId}</td>
+      <td>{state.submission.submissionDate}</td>
       <td>{state.submission.command.mainClass}</td>
       <td>cpus: {state.submission.cores}, mem: {state.submission.mem}</td>
       <td>{state.startDate}</td>
@@ -77,14 +76,14 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     </tr>
   }
 
-  private def retryRow(state: RetryState): Seq[Node] = {
+  private def retryRow(submission: MesosDriverDescription): Seq[Node] = {
     <tr>
-      <td>{state.submission.submissionId.get}</td>
-      <td>{state.submission.submissionDate.get}</td>
-      <td>{state.submission.command.mainClass}</td>
-      <td>{state.lastFailureStatus}</td>
-      <td>{state.nextRetry}</td>
-      <td>{state.retries}</td>
+      <td>{submission.submissionId}</td>
+      <td>{submission.submissionDate}</td>
+      <td>{submission.command.mainClass}</td>
+      <td>{submission.retryState.get.lastFailureStatus}</td>
+      <td>{submission.retryState.get.nextRetry}</td>
+      <td>{submission.retryState.get.retries}</td>
     </tr>
   }
 

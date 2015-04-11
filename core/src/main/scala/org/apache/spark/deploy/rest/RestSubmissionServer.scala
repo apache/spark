@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 
 /**
- * A server that responds to requests submitted by the [[RestClient]].
+ * A server that responds to requests submitted by the [[RestSubmissionClient]].
  *
  * This server responds with different HTTP codes depending on the situation:
  *   200 OK - Request was processed successfully
@@ -45,21 +45,20 @@ import org.apache.spark.util.Utils
  * instead of the one expected by the client. If the construction of this error response itself
  * fails, the response will consist of an empty body with a response code that indicates internal
  * server error.
- *
  */
-private[spark] abstract class RestServer extends Logging {
-  val host: String
-  val requestedPort: Int
-  val masterConf: SparkConf
-  def submitRequestServlet: SubmitRequestServlet
-  def killRequestServlet: KillRequestServlet
-  def statusRequestServlet: StatusRequestServlet
+private[spark] abstract class RestSubmissionServer(
+  val host: String,
+  val requestedPort: Int,
+  val masterConf: SparkConf) extends Logging {
+  protected val submitRequestServlet: SubmitRequestServlet
+  protected val killRequestServlet: KillRequestServlet
+  protected val statusRequestServlet: StatusRequestServlet
 
   private var _server: Option[Server] = None
 
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
-  protected val baseContext = s"/${RestServer.PROTOCOL_VERSION}/submissions"
-  protected val contextToServlet = Map[String, RestServlet](
+  protected val baseContext = s"/${RestSubmissionServer.PROTOCOL_VERSION}/submissions"
+  protected lazy val contextToServlet = Map[String, RestServlet](
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
@@ -99,13 +98,13 @@ private[spark] abstract class RestServer extends Logging {
   }
 }
 
-private[rest] object RestServer {
-  val PROTOCOL_VERSION = RestClient.PROTOCOL_VERSION
+private[rest] object RestSubmissionServer {
+  val PROTOCOL_VERSION = RestSubmissionClient.PROTOCOL_VERSION
   val SC_UNKNOWN_PROTOCOL_VERSION = 468
 }
 
 /**
- * An abstract servlet for handling requests passed to the [[RestServer]].
+ * An abstract servlet for handling requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class RestServlet extends HttpServlet with Logging {
 
@@ -189,7 +188,7 @@ private[rest] abstract class RestServlet extends HttpServlet with Logging {
 }
 
 /**
- * A servlet for handling kill requests passed to the [[RestServer]].
+ * A servlet for handling kill requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class KillRequestServlet
   extends RestServlet {
@@ -213,7 +212,7 @@ private[rest] abstract class KillRequestServlet
 }
 
 /**
- * A servlet for handling status requests passed to the [[RestServer]].
+ * A servlet for handling status requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class StatusRequestServlet extends RestServlet {
 
@@ -236,7 +235,7 @@ private[rest] abstract class StatusRequestServlet extends RestServlet {
 }
 
 /**
- * A servlet for handling submit requests passed to the [[RestServer]].
+ * A servlet for handling submit requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class SubmitRequestServlet extends RestServlet {
 
@@ -277,7 +276,7 @@ private[rest] abstract class SubmitRequestServlet extends RestServlet {
  * A default servlet that handles error cases that are not captured by other servlets.
  */
 private class ErrorServlet extends RestServlet {
-  private val serverVersion = RestServer.PROTOCOL_VERSION
+  private val serverVersion = RestSubmissionServer.PROTOCOL_VERSION
 
   /** Service a faulty request by returning an appropriate error message to the client. */
   protected override def service(
@@ -311,7 +310,7 @@ private class ErrorServlet extends RestServlet {
     // this server supports in case the client wants to retry with our version
     if (versionMismatch) {
       error.highestProtocolVersion = serverVersion
-      response.setStatus(RestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+      response.setStatus(RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION)
     } else {
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
     }

@@ -20,11 +20,12 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.List
 import java.util.concurrent.CountDownLatch
 
-import org.apache.mesos.Protos.{Status, FrameworkInfo, Resource}
-import org.apache.mesos.{MesosSchedulerDriver, Scheduler, SchedulerDriver}
-import org.apache.spark.Logging
-
 import scala.collection.JavaConversions._
+
+import org.apache.mesos.Protos.{FrameworkInfo, Resource, Status}
+import org.apache.mesos.{MesosSchedulerDriver, Scheduler}
+import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
@@ -32,10 +33,10 @@ import scala.collection.JavaConversions._
  */
 private[mesos] trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
-  final val registerLatch = new CountDownLatch(1)
+  private final val registerLatch = new CountDownLatch(1)
 
   // Driver for talking to Mesos
-  var driver: SchedulerDriver = null
+  protected var driver: MesosSchedulerDriver = null
 
   /**
    * Starts the MesosSchedulerDriver with the provided information. This method returns
@@ -52,11 +53,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       fwInfo: FrameworkInfo): Unit = {
     synchronized {
       if (driver != null) {
-        waitForRegister()
+        registerLatch.await()
         return
       }
 
-      new Thread(name + " driver") {
+      new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
 
         override def run() {
@@ -64,41 +65,33 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
           try {
             val ret = driver.run()
             logInfo("driver.run() returned with code " + ret)
-            onDriverExit(ret)
+            if (ret.equals(Status.DRIVER_ABORTED)) {
+              System.exit(1)
+            }
           } catch {
-            case e: Exception => logError("driver.run() failed", e)
+            case e: Exception => {
+              logError("driver.run() failed", e)
+              System.exit(1)
+            }
           }
         }
       }.start()
 
-      waitForRegister()
+      registerLatch.await()
     }
-  }
-
-  def onDriverExit(status: Status): Unit = {
-    // Exit the process when the Mesos framework driver was aborted.
-    // This behavior can be overriden by the scheduler.
-    if (status.equals(Status.DRIVER_ABORTED)) {
-      System.exit(1)
-    }
-  }
-
-  /**
-   * Waits for the scheduler to be registered, which the scheduler will signal by calling
-   * markRegistered().
-   */
-  def waitForRegister(): Unit = {
-    registerLatch.await()
   }
 
   /**
    * Signal that the scheduler has registered with Mesos.
    */
-  def markRegistered(): Unit = {
+  protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
 
-  def getResource(res: List[Resource], name: String): Double = {
+  /**
+   * Get the amount of resources for the specified type from the resource list
+   */
+  protected def getResource(res: List[Resource], name: String): Double = {
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
