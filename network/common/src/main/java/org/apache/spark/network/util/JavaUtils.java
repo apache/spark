@@ -156,12 +156,12 @@ public class JavaUtils {
       }
       
       // Check for invalid suffixes
-      if(!timeSuffixes.containsKey(suffix) && suffix != null) {
-        throw new NumberFormatException("Invalid suffix: " + suffix);
+      if (suffix != null && !timeSuffixes.containsKey(suffix)) {
+        throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
       }
       
       // If suffix is valid use that, otherwise none was provided and use the default passed
-      return unit.convert(val, timeSuffixes.containsKey(suffix) ? timeSuffixes.get(suffix) : unit);
+      return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +
