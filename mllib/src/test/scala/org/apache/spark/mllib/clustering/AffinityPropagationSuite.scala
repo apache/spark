@@ -89,6 +89,31 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.findClusterID(14) === model.findClusterID(15))
     assert(model.findClusterID(100) == -1)
   }
+ 
+  test("manually set up preferences") {
+    val similarities = Seq[(Long, Long, Double)]((0, 1, -8.2), (0, 3, -5.8), (1, 2, -0.4),
+      (1, 8, -8.1), (2, 3, -9.2), (2, 12, -1.1), (3, 15, -1.5), (3, 4, -10.1), (4, 5, -0.7),
+      (4, 15, -11.8), (5, 6, -0.7), (5, 7, -0.41), (7, 8, -8.1), (8, 9, -0.55), (9, 10, -5.8),
+      (9, 11, -0.76), (13, 14, -0.15), (14, 15, -0.67))
+
+    val preference = -1.3
+
+    val ap = new AffinityPropagation()
+    val similaritiesWithPreferneces =
+      ap.embedPreferences(sc.parallelize(similarities, 2), preference)
+
+    val preferences = similaritiesWithPreferneces.collect().filter(x => x._1 == x._2).map(_._3)
+    preferences.foreach(p => assert(p == preference))
+
+    val model = ap.setMaxIterations(30)
+      .run(similaritiesWithPreferneces)
+
+    assert(model.getK == 7)
+    assert(model.findCluster(5).sorted === Array[Long](4, 5, 6, 7))
+    assert(model.findClusterID(14) != -1)
+    assert(model.findClusterID(14) === model.findClusterID(15))
+    assert(model.findClusterID(100) == -1)
+  }
 
   test("normalize") {
     /*

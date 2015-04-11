@@ -247,6 +247,26 @@ class AffinityPropagation private[clustering] (
       RDD[(Long, Long, Double)] = {
     determinePreferences(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
   }
+
+  /**
+   * Manually set up preferences for tuning cluster size.
+   */
+  def embedPreferences(
+      similarities: RDD[(Long, Long, Double)],
+      preference: Double): RDD[(Long, Long, Double)] = {
+    val preferences = similarities.flatMap(t => Seq(t._1, t._2)).distinct()
+      .map(i => (i, i, preference))
+    similarities.union(preferences)
+  }
+
+  /**
+   * A Java-friendly version of [[AffinityPropagation.embedPreferences]].
+   */
+  def embedPreferences(
+      similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)],
+      preference: Double): RDD[(Long, Long, Double)] = {
+    embedPreferences(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]], preference)
+  }
  
   /**
    * Run the AP algorithm.

@@ -44,7 +44,7 @@ public class JavaAffinityPropagation {
       new Tuple3<Long, Long, Double>(3L, 4L, 0.1),
       new Tuple3<Long, Long, Double>(4L, 5L, 0.9),
       new Tuple3<Long, Long, Double>(4L, 6L, 0.9),
-      new Tuple3<Long, Long, Double>(0L, 0L, 0.1), // preferences
+      new Tuple3<Long, Long, Double>(0L, 0L, 0.2), // preferences
       new Tuple3<Long, Long, Double>(1L, 1L, 0.2),
       new Tuple3<Long, Long, Double>(2L, 2L, 0.2),
       new Tuple3<Long, Long, Double>(3L, 3L, 0.2),
@@ -55,6 +55,16 @@ public class JavaAffinityPropagation {
     AffinityPropagation ap = new AffinityPropagation()
       .setMaxIterations(20);
     AffinityPropagationModel model = ap.run(similarities);
+
+    for (AffinityPropagationCluster c: model.clusters().toJavaRDD().collect()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("cluster id: " + c.id() + " -> ");
+      builder.append(" exemplar: " + c.exemplar() + " members:");
+      for (Long node: c.members()) {
+        builder.append(" " + node);
+      }
+      System.out.println(builder.toString());
+    }
 
     JavaRDD<Tuple3<Long, Long, Double>> similarities2 = sc.parallelize(Lists.newArrayList(
       new Tuple3<Long, Long, Double>(0L, 1L, -0.12),
@@ -69,16 +79,6 @@ public class JavaAffinityPropagation {
 
     AffinityPropagationModel model2 = ap.run(ap.determinePreferences(similarities2));
 
-    for (AffinityPropagationCluster c: model.clusters().toJavaRDD().collect()) {
-      StringBuilder builder = new StringBuilder();
-      builder.append("cluster id: " + c.id() + " -> ");
-      builder.append(" exemplar: " + c.exemplar() + " members:");
-      for (Long node: c.members()) {
-        builder.append(" " + node);
-      }
-      System.out.println(builder.toString());
-    }
- 
     for (AffinityPropagationCluster c: model2.clusters().toJavaRDD().collect()) {
       StringBuilder builder = new StringBuilder();
       builder.append("cluster id: " + c.id() + " -> ");
@@ -88,7 +88,19 @@ public class JavaAffinityPropagation {
       }
       System.out.println(builder.toString());
     }
- 
+
+    AffinityPropagationModel model3 = ap.run(ap.embedPreferences(similarities2, -0.5));
+
+    for (AffinityPropagationCluster c: model3.clusters().toJavaRDD().collect()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("cluster id: " + c.id() + " -> ");
+      builder.append(" exemplar: " + c.exemplar() + " members:");
+      for (Long node: c.members()) {
+        builder.append(" " + node);
+      }
+      System.out.println(builder.toString());
+    }
+
     sc.stop();
   }
 }
