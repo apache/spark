@@ -55,6 +55,10 @@ class DataTypeParserSuite extends FunSuite {
     "array<struct<tinYint:tinyint>>",
     ArrayType(StructType(StructField("tinYint", ByteType, true) :: Nil), true)
   )
+  checkDataType("bigint array", ArrayType(LongType))
+  checkDataType("bigint array[123]", ArrayType(LongType))
+  checkDataType("bigint Array", ArrayType(LongType))
+  checkDataType("bigint array[5000] array", ArrayType(ArrayType(LongType)))
   checkDataType("MAP<int, STRING>", MapType(IntegerType, StringType, true))
   checkDataType("MAp<int, ARRAY<double>>", MapType(IntegerType, ArrayType(DoubleType), true))
   checkDataType(
@@ -113,4 +117,7 @@ class DataTypeParserSuite extends FunSuite {
   unsupported("struct<x: int")
   unsupported("struct<x int, y string>")
   unsupported("struct<`x``y` int>")
+  unsupported("array<array>")
+  unsupported("bigint array[]")
+  unsupported("array<bigint> array")
 }
