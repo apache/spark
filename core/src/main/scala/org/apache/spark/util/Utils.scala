@@ -790,9 +790,7 @@ private[spark] object Utils extends Logging {
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    * Note, this is typically not used from within core spark.
    */
-  lazy val localIpAddress: InetAddress = findLocalInetAddress()
-  lazy val localIpAddressHostname: String = localIpAddress.getHostAddress
-  lazy val localIpAddressURI: String = InetAddresses.toUriString(localIpAddress)
+  private lazy val localIpAddress: InetAddress = findLocalInetAddress()
 
   private def findLocalInetAddress(): InetAddress = {
     val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
@@ -849,18 +847,14 @@ private[spark] object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddressHostname)
+    customHostname.getOrElse(localIpAddress.getHostAddress)
   }
 
   /**
    * Get the local machine's URI.
    */
-  def localHostURI(): String = {
-    customHostname.getOrElse(localIpAddressURI)
-  }
-
-  def getAddressHostName(address: String): String = {
-    InetAddress.getByName(address).getHostName
+  def localHostNameForURI(): String = {
+    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
   def checkHost(host: String, message: String = "") {
