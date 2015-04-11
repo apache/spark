@@ -479,9 +479,23 @@ class Word2VecModel private[mllib] (
    */
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
-    // TODO: optimize top-k
-    val fVector = vector.toArray.map(_.toFloat)
-    model.mapValues(vec => cosineSimilarity(fVector, vec))
+
+    val fVector = vector.toArray
+    val flatVec = model.toSeq.flatMap { case(w, v) =>
+      v.map(_.toDouble)}.toArray
+
+    val numDim = model.head._2.size
+    val numWords = model.size
+    val cosineArray = Array.fill[Double](numWords)(0)
+
+    blas.dgemv(
+      "T", numDim, numWords, 1.0, flatVec, numDim, fVector, 1, 0.0, cosineArray, 1)
+
+    // Need not divide with the norm of the given vector since it is constant.
+    val updatedCosines = model.zipWithIndex.map { case (vec, ind) =>
+      cosineArray(ind) / blas.snrm2(numDim, vec._2, 1) }
+
+    model.keys.zip(updatedCosines)
       .toSeq
       .sortBy(- _._2)
       .take(num + 1)
