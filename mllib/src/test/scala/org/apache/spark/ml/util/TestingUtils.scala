@@ -38,6 +38,7 @@ private[ml] object TestingUtils extends FunSuite {
       transformer: Transformer,
       inputCol: String,
       outputCol: String): Unit = {
+    // Create some fake metadata
     val origMetadata = data.schema(inputCol).metadata
     val metaKey = "__testPreserveMetadata__fake_key"
     val metaValue = 12345
@@ -45,7 +46,9 @@ private[ml] object TestingUtils extends FunSuite {
       s"Unit test with testPreserveMetadata will fail since metadata key was present: $metaKey")
     val newMetadata =
       new MetadataBuilder().withMetadata(origMetadata).putLong(metaKey, metaValue).build()
+    // Add metadata to the inputCol
     val withMetadata = data.select(data(inputCol).as(inputCol, newMetadata))
+    // Transform, and ensure extra metadata was not affected
     val transformed = transformer.transform(withMetadata)
     val transMetadata = transformed.schema(outputCol).metadata
     assert(transMetadata.contains(metaKey),

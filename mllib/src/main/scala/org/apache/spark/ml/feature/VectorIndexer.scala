@@ -146,11 +146,7 @@ private object VectorIndexer {
     private val featureValueSets =
       Array.fill[OpenHashSet[Double]](numFeatures)(new OpenHashSet[Double]())
 
-    /**
-     * Merge with another instance, modifying this instance.
-     * @param other  Other instance, not modified
-     * @return This instance, modified
-     */
+    /** Merge with another instance, modifying this instance. */
     def merge(other: CategoryStats): CategoryStats = {
       featureValueSets.zip(other.featureValueSets).foreach { case (thisValSet, otherValSet) =>
         otherValSet.iterator.foreach { x =>
@@ -186,8 +182,6 @@ private object VectorIndexer {
       // Filter out features which are declared continuous.
       featureValueSets.zipWithIndex.filter(_._1.size <= maxCategories).map {
         case (featureValues: OpenHashSet[Double], featureIndex: Int) =>
-          // Get feature values, but remove 0 to treat separately.
-          // If value 0 exists, give it index 0 to maintain sparsity if possible.
           var sortedFeatureValues = featureValues.iterator.filter(_ != 0.0).toArray.sorted
           val zeroExists = sortedFeatureValues.length + 1 == featureValues.size
           if (zeroExists) {
@@ -232,17 +226,17 @@ private object VectorIndexer {
  * :: AlphaComponent ::
  *
  * Transform categorical features to use 0-based indices instead of their original values.
- *  - Categorical features are mapped to their feature value indices.
+ *  - Categorical features are mapped to indices.
  *  - Continuous features (columns) are left unchanged.
+ * This also appends metadata to the output column, marking features as Numeric (continuous),
+ * Nominal (categorical), or Binary (either continuous or categorical).
  *
  * This maintains vector sparsity.
- *
- * Note: If this model was created for vectors of length numFeatures,
- *       this model's transform method must be given vectors of length numFeatures.
  *
  * @param numFeatures  Number of features, i.e., length of Vectors which this transforms
  * @param categoryMaps  Feature value index.  Keys are categorical feature indices (column indices).
  *                      Values are maps from original features values to 0-based category indices.
+ *                      If a feature is not in this map, it is treated as continuous.
  */
 @AlphaComponent
 class VectorIndexerModel private[ml] (
@@ -263,13 +257,14 @@ class VectorIndexerModel private[ml] (
     while (featureIndex < numFeatures) {
       if (categoryMaps.contains(featureIndex)) {
         // categorical feature
-        val featureValues = categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1)
+        val featureValues: Array[String] =
+          categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
         if (featureValues.length == 2) {
           attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
-            values = Some(featureValues.map(_.toString)))
+            values = Some(featureValues))
         } else {
           attrs(featureIndex) = new NominalAttribute(index = Some(featureIndex),
-            isOrdinal = Some(false), values = Some(featureValues.map(_.toString)))
+            isOrdinal = Some(false), values = Some(featureValues))
         }
         categoricalFeatureCount += 1
       } else {
@@ -362,8 +357,12 @@ class VectorIndexerModel private[ml] (
     StructType(outputFields)
   }
 
-  // TODO: Figure out a way to avoid transforming the schema twice.
-  //       It could be expensive if there are many features and few instances.
+  /**
+   * Prepare the output column field, including per-feature metadata.
+   * @param schema  Input schema
+   * @param map  Parameter map (with this class' embedded parameter map folded in)
+   * @return  Output column field
+   */
   private def prepOutputField(schema: StructType, map: ParamMap): StructField = {
     val origAttrGroup = AttributeGroup.fromStructField(schema(map(inputCol)))
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
