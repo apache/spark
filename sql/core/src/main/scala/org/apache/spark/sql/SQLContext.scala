@@ -166,13 +166,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val cacheManager = new CacheManager(this)
 
-  private val DEFAULT_FILTER: PathFilter = new PathFilter() {
-    @Override
-    def accept(file: Path): Boolean = {
-      return true
-    }
-  }
-
   /**
    * Return PathFilter to be used for filtering input files using custom filter class
    */
@@ -182,7 +175,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       val filterClazz = Class.forName(filterClassName).asInstanceOf[Class[_ <: PathFilter]]
       Option(ReflectionUtils.newInstance(filterClazz, null))
     } else {
-      Option(DEFAULT_FILTER)
+      None
     }
   }
 

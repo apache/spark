@@ -207,16 +207,22 @@ class SparkHadoopUtil extends Logging {
    * given path points to a file, return a single-element collection containing [[FileStatus]] of
    * that file. Uses pathFilter to filter out certain filestatuses
    */
-  def listLeafStatusesFiltered(fs: FileSystem, basePath: Path,
+  def listLeafStatusesFiltered(
+    fs: FileSystem,
+    basePath: Path,
     filter: Option[PathFilter]): Seq[FileStatus] = {
-    def recurse(path: Path): Array[FileStatus] = {
-      val (directories, leaves) = fs.listStatus(path, filter.get).partition(_.isDir)
-      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
-    }
+      if (filter.isDefined) {
+        def recurse(path: Path): Array[FileStatus] = {
+          val (directories, leaves) = fs.listStatus(path, filter.get).partition(_.isDir)
+          leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
+        }
 
-    val baseStatus = fs.getFileStatus(basePath)
-    if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
-  }
+        val baseStatus = fs.getFileStatus(basePath)
+        if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
+      } else {
+        listLeafStatuses(fs, basePath)
+      }
+    }
 }
 
 object SparkHadoopUtil {

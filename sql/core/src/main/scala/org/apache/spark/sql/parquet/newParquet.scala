@@ -283,7 +283,7 @@ private[sql] case class ParquetRelation2(
       val leaves = baseStatuses.flatMap { f =>
         val fs = FileSystem.get(f.getPath.toUri, sparkContext.hadoopConfiguration)
         SparkHadoopUtil.get.listLeafStatusesFiltered(fs, f.getPath,
-          sqlContext.getPathFilter()).filter { f =>
+          sqlContext.getPathFilter).filter { f =>
             isSummaryFile(f.getPath) ||
               !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
         }
