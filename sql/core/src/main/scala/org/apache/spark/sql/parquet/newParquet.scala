@@ -294,11 +294,15 @@ private[sql] case class ParquetRelation2(
         val taskSideMetaData =
           sparkContext.hadoopConfiguration.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
 
-        val rawFooters =
+        val rawFooters = if (shouldMergeSchemas) {
           ParquetFileReader.readAllFootersInParallel(
             sparkContext.hadoopConfiguration, seqAsJavaList(leaves), taskSideMetaData)
+        } else {
+          ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
+            sparkContext.hadoopConfiguration, seqAsJavaList(leaves), taskSideMetaData)
+        }
 
-        rawFooters.map { footer => footer.getFile -> footer }.toMap
+        rawFooters.map(footer => footer.getFile -> footer).toMap
       }
 
       partitionSpec = maybePartitionSpec.getOrElse {
