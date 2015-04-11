@@ -60,6 +60,7 @@ private[spark] class Client(
 
   def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
 
+  private var stopMonitor = false
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private val credentials = UserGroupInformation.getCurrentUser.getCredentials
@@ -569,13 +570,8 @@ private[spark] class Client(
       logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var lastState: YarnApplicationState = null
-    while (true) {
-      try {
-        Thread.sleep(interval)
-      } catch {
-        case e: InterruptedException =>
-          logInfo(e.getMessage)
-      }
+    while (!stopMonitor) {
+      Thread.sleep(interval)
       val report: ApplicationReport =
         try {
           getApplicationReport(appId)
@@ -615,6 +611,10 @@ private[spark] class Client(
     throw new SparkException("While loop is depleted! This should never happen...")
   }
 
+  def stopMonitorApplication(): Unit = {
+    stopMonitor = true
+  }
+ 
   private def formatReportDetails(report: ApplicationReport): String = {
     val details = Seq[(String, String)](
       ("client token", getClientToken(report)),

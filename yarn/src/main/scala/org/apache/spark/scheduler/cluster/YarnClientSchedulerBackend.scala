@@ -34,7 +34,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  private var monitorThread: Thread = null
+  private var monitorThread: MonitorApplicationThread = null
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -124,19 +124,24 @@ private[spark] class YarnClientSchedulerBackend(
    * If the application has exited for any reason, stop the SparkContext.
    * This assumes both `client` and `appId` have already been set.
    */
-  private def asyncMonitorApplication(): Thread = {
+  private def asyncMonitorApplication(): MonitorApplicationThread = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val t = new Thread {
-      override def run() {
-        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
-        logError(s"Yarn application has already exited with state $state!")
-        sc.stop()
-        Thread.currentThread().interrupt()
-      }
-    }
+    val t = new MonitorApplicationThread()
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
     t
+  }
+
+  private class  MonitorApplicationThread extends Thread{
+    override def run() {
+      val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+      logError(s"Yarn application has already exited with state $state!")
+      sc.stop()
+      Thread.currentThread().interrupt()
+    }
+    def stopMonitor() {
+      client.stopMonitorApplication()
+    }
   }
 
   /**
@@ -144,7 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    monitorThread.interrupt()
+    monitorThread.stopMonitor()
     super.stop()
     client.stop()
     logInfo("Stopped")
