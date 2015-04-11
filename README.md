@@ -9,6 +9,7 @@ and Spark Streaming for stream processing.
 
 <http://spark.apache.org/>
 
+*NOTE: As of April 2015, SparkR has been [merged](https://github.com/apache/spark/pull/5096) into Apache Spark and is shipping in an upcoming release (1.4) due early summer 2015. This repo currently targets users using released versions of Spark. __This repo no longer accepts new pull requests, and they should now be submitted to [apache/spark](https://github.com/apache/spark); see [here](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark) for some instructions.__*
 
 ## Online Documentation
 
