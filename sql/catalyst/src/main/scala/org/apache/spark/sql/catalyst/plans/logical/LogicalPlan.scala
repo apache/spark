@@ -86,6 +86,39 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
+  /**
+   * Returns true when the given logical plan will return part of the results of this logical plan.
+   *
+   * The given logical plan is considered the part of this logical plan if all args of the given
+   * plan (i.e. cleanArgs) are contained in the ares of this logical plan.
+   *
+   * Since its likely undecideable to generally determine if the given plan will produce part of
+   * the results of another plan, it is okay for this function to return false, even if the results
+   * are actually one part of another. Such behavior will not affect correctness, only the
+   * application of performance enhancements like caching.  However, it is not acceptable to return
+   * true if the results could possibly be not of part of another.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.  Logical operators that
+   * can do better should override this function.
+   */
+  def partResult(plan: LogicalPlan): Boolean = {
+    plan.getClass == this.getClass &&
+    plan.children.size == children.size && {
+      logDebug(s"[${plan.cleanArgs.mkString(", ")}] is part of [${cleanArgs.mkString(", ")}]")
+      !plan.cleanArgs.zip(cleanArgs).exists {
+        // If this arg is a sequence, we check if there is a sequence in cleanArgs of this logical
+        // plan at the same index that contains all elements of this arg.
+        case (s: Seq[_], ss: Seq[_]) =>
+          s.exists(!ss.contains(_))
+        // Otherwise, we check if the arg in cleanArgs at the same index is as same as this arg.
+        case (o, oo) =>
+          o != oo
+      }
+    } &&
+    (children, plan.children).zipped.forall(_ partResult _)
+  }
+
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
