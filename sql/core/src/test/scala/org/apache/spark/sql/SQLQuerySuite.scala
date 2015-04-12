@@ -414,6 +414,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("with q1 as (select * from testData limit 10) select * from q1"),
       testData.take(10).toSeq)
 
+    intercept[RuntimeException] {
+      sql("with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
+    }
+
     checkAnswer(
       sql("""
         |with q1 as (select * from testData where key= '5'),
