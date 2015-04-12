@@ -137,7 +137,7 @@ case class InsertIntoTable(
   }
 }
 
-trait CreateTableAsSelect extends UnaryNode {
+abstract class CreateTableAsSelect extends UnaryCommand {
   self: Product =>
   def databaseName: Option[String]
   def tableName: String
