@@ -329,7 +329,7 @@ private[sql] case class ParquetRelation2(
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
-            partitionColumns.forall(f => parquetSchema.fieldNames.contains(f.name))
+          partitionColumns.forall(f => parquetSchema.fieldNames.contains(f.name))
 
       // Reconcile the schema later
       schema = {
