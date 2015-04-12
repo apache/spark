@@ -123,9 +123,17 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val errs = new Err
     withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
-      // error codes here indicate missing / just created topic,
-      // repeating on a different broker wont be useful
-      return Right(resp.topicsMetadata.toSet)
+      val respErrs = resp.topicsMetadata.filter(m => m.errorCode != ErrorMapping.NoError)
+
+      if (respErrs.isEmpty) {
+        return Right(resp.topicsMetadata.toSet)
+      } else {
+        respErrs.foreach { m =>
+          val cause = ErrorMapping.exceptionFor(m.errorCode)
+          val msg = s"Error getting partition metadata for '${m.topic}'. Does the topic exist?"
+          errs.append(new SparkException(msg, cause))
+        }
+      }
     }
     Left(errs)
   }
