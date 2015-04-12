@@ -119,7 +119,9 @@ object SparkBuild extends PomBuild {
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
-    javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
+    javaHome := sys.env.get("JAVA_HOME")
+      .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
+      .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -360,15 +362,15 @@ object Unidoc {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("akka")))
-      .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
-      .map(_.filterNot(_.getCanonicalPath.contains("network")))
-      .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
-      .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/shuffle")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
-      .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
@@ -426,8 +428,10 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
-      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
+    envVars in Test ++= Map(
+      "SPARK_DIST_CLASSPATH" -> 
+        (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
+      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",

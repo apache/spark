@@ -35,7 +35,7 @@ object TestCompressibleColumnBuilder {
   def apply[T <: NativeType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
-      scheme: CompressionScheme) = {
+      scheme: CompressionScheme): TestCompressibleColumnBuilder[T] = {
 
     val builder = new TestCompressibleColumnBuilder(columnStats, columnType, Seq(scheme))
     builder.initialize(0, "", useCompression = true)

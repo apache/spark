@@ -839,7 +839,7 @@ object DStream {
 
     /** Filtering function that excludes non-user classes for a streaming application */
     def streamingExclustionFunction(className: String): Boolean = {
-      def doesMatch(r: Regex) = r.findFirstIn(className).isDefined
+      def doesMatch(r: Regex): Boolean = r.findFirstIn(className).isDefined
       val isSparkClass = doesMatch(SPARK_CLASS_REGEX)
       val isSparkExampleClass = doesMatch(SPARK_EXAMPLES_CLASS_REGEX)
       val isSparkStreamingTestClass = doesMatch(SPARK_STREAMING_TESTCLASS_REGEX)

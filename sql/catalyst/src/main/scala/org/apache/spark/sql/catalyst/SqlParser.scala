@@ -111,6 +111,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val WITH = Keyword("WITH")
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -127,6 +128,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       | UNION ~ DISTINCT.? ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert
+    | cte
     )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -139,7 +141,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
-          val base = r.getOrElse(NoRelation)
+          val base = r.getOrElse(OneRowRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
             .map(Aggregate(_, assignAliases(p), withFilter))
@@ -154,6 +156,11 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val insert: Parser[LogicalPlan] =
     INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
       case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o)
+    }
+
+  protected lazy val cte: Parser[LogicalPlan] =
+    WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start <~ ")"), ",") ~ start ^^ {
+      case r ~ s => With(s, r.map({case n ~ s => (n, Subquery(n, s))}).toMap)
     }
 
   protected lazy val projection: Parser[Expression] =
@@ -316,13 +323,13 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val literal: Parser[Literal] =
     ( numericLiteral
     | booleanLiteral
-    | stringLit ^^ {case s => Literal(s, StringType) }
-    | NULL ^^^ Literal(null, NullType)
+    | stringLit ^^ {case s => Literal.create(s, StringType) }
+    | NULL ^^^ Literal.create(null, NullType)
     )
 
   protected lazy val booleanLiteral: Parser[Literal] =
-    ( TRUE ^^^ Literal(true, BooleanType)
-    | FALSE ^^^ Literal(false, BooleanType)
+    ( TRUE ^^^ Literal.create(true, BooleanType)
+    | FALSE ^^^ Literal.create(false, BooleanType)
     )
 
   protected lazy val numericLiteral: Parser[Literal] =
