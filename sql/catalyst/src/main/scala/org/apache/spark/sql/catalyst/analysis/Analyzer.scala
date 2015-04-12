@@ -208,16 +208,18 @@ class Analyzer(
    */
   object RewriteWhereClause extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      // EXISTS is always correlated
-      case e @ Exists(left, Project(_, Filter(condition, right)), true) =>
-        Join(left, right, LeftSemiExist, Some(condition))
+      // TODO we don't support [EXIST subquery] combined with other conjunctions now
+      // e.g. from a where exists (select _ from b where a.v = b.v) AND value > '112'
+      case e @ Exists(SubqueryConjunction(left, None, None), Project(_, Filter(condition, right)), positive) =>
+        if (positive) {
+          Join(left, right, LeftSemiExist, Some(condition))
+        } else {
+          Join(left, right, LeftSemiNotExist, Some(condition))
+        }
 
-      case e @ Exists(left, Project(_, Filter(condition, right)), false) =>
-        Join(left, right, LeftSemiNotExist, Some(condition))
-
-      // TODO we don't support [IN subquery] combined with other condition now
-      // e.g. where key in (SELECT key FROM src_b) AND value > '112'
-      case e @ InSubquery(Filter(key, left), Project(projectList, child), positive)
+      // TODO we don't support [IN subquery] combined with other conjunctions now
+      // e.g. where key in (select key from src_b) AND value > '112'
+      case e @ InSubquery(SubqueryConjunction(left, Some(key), None), Project(projectList, child), positive)
           if e.left.resolved =>
         child match {
           case Filter(condition, right) =>

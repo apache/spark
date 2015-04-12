@@ -66,6 +66,9 @@ trait CheckAnalysis {
         }
 
         operator match {
+          case f @ SubqueryConjunction(_, _, Some(condition)) =>
+            failAnalysis(s"WHERE EXISTS/IS can not be combined with conjunctions, ${condition}")
+
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.prettyString}' " +

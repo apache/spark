@@ -75,6 +75,44 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |WHERE !(a>1)
     """.stripMargin)
 
+  createQueryTest("(unrelated)WHERE clause with IN",
+    """select *
+      |from src
+      |where src.key in (select key from src s1 where s1.key > '9')
+      |order by key, value LIMIT 5""".stripMargin)
+
+  createQueryTest("(unrelated)WHERE clause with NOT IN",
+    """select *
+      |from src
+      |where src.key not in (select key from src s1 where s1.key > '9')
+      |order by key, value LIMIT 5""".stripMargin)
+
+  createQueryTest("(correlated)WHERE clause with IN",
+    """select *
+      |from src b
+      |where b.key in
+      |        (select a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        ) LIMIT 5""".stripMargin)
+
+  createQueryTest("(correlated)WHERE clause with NOT IN",
+    """select *
+      |from src b
+      |where b.key not in
+      |        (select a.key
+      |         from src a
+      |         where b.value = a.value and a.key > '9'
+      |        ) LIMIT 5""".stripMargin)
+
+  createQueryTest("constant object inspector for generic udf",
+    """SELECT named_struct(
+      lower("AA"), "10",
+      repeat(lower("AA"), 3), "11",
+      lower(repeat("AA", 3)), "12",
+      printf("Bb%d", 12), "13",
+      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
+
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",
