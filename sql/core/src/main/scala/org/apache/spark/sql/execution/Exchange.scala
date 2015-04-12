@@ -174,12 +174,14 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
       def addExchangeIfNecessary(
           partitioning: Partitioning,
           child: SparkPlan,
-          rowOrdering: Option[Ordering[Row]] = None): SparkPlan =
-        if (child.outputPartitioning != partitioning) {
-          Exchange(partitioning, child, sort = child.outputOrdering != rowOrdering)
+          rowOrdering: Option[Ordering[Row]] = None): SparkPlan = {
+        val needSort = child.outputOrdering != rowOrdering
+        if (child.outputPartitioning != partitioning || needSort) {
+          Exchange(partitioning, child, sort = needSort)
         } else {
           child
         }
+      }
 
       if (meetsRequirements && compatible) {
         operator
