@@ -32,7 +32,11 @@ import org.apache.spark.util.MutablePair
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
+case class Exchange(
+    newPartitioning: Partitioning,
+    child: SparkPlan,
+    sort: Boolean = false)
+  extends UnaryNode {
 
   override def outputPartitioning: Partitioning = newPartitioning
 
@@ -68,7 +72,16 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
           }
         }
         val part = new HashPartitioner(numPartitions)
-        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
+        val shuffled = sort match {
+          case false => new ShuffledRDD[Row, Row, Row](rdd, part)
+          case true =>
+            val sortingExpressions = expressions.zipWithIndex.map {
+              case (exp, index) =>
+                new SortOrder(BoundReference(index, exp.dataType, exp.nullable), Ascending)
+            }
+            val ordering = new RowOrdering(sortingExpressions, child.output)
+            new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
+        }
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
         shuffled.map(_._2)
 
@@ -158,13 +171,15 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
 
       // Check if the partitioning we want to ensure is the same as the child's output
       // partitioning. If so, we do not need to add the Exchange operator.
-      def addExchangeIfNecessary(partitioning: Partitioning, child: SparkPlan): SparkPlan =
-        if (child.outputPartitioning != partitioning) Exchange(partitioning, child) else child
-
-      // Check if the ordering we want to ensure is the same as the child's output
-      // ordering. If so, we do not need to add the Sort operator.
-      def addSortIfNecessary(ordering: Seq[SortOrder], child: SparkPlan): SparkPlan =
-        if (child.outputOrdering != ordering) Sort(ordering, global = false, child) else child
+      def addExchangeIfNecessary(
+          partitioning: Partitioning,
+          child: SparkPlan,
+          rowOrdering: Option[Ordering[Row]] = None): SparkPlan =
+        if (child.outputPartitioning != partitioning) {
+          Exchange(partitioning, child, sort = child.outputOrdering != rowOrdering)
+        } else {
+          child
+        }
 
       if (meetsRequirements && compatible) {
         operator
@@ -172,23 +187,19 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
         // At least one child does not satisfies its required data distribution or
         // at least one child's outputPartitioning is not compatible with another child's
         // outputPartitioning. In this case, we need to add Exchange operators.
-        val repartitionedChildren = operator.requiredChildDistribution.zip(operator.children).map {
-          case (AllTuples, child) =>
+        val repartitionedChildren = operator.requiredChildDistribution.zip(
+          operator.children.zip(operator.requiredChildOrdering)
+        ).map {
+          case (AllTuples, (child, _)) =>
             addExchangeIfNecessary(SinglePartition, child)
-          case (ClusteredDistribution(clustering), child) =>
-            addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child)
-          case (OrderedDistribution(ordering), child) =>
+          case (ClusteredDistribution(clustering), (child, rowOrdering)) =>
+            addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child, rowOrdering)
+          case (OrderedDistribution(ordering), (child, _)) =>
             addExchangeIfNecessary(RangePartitioning(ordering, numPartitions), child)
-          case (UnspecifiedDistribution, child) => child
+          case (UnspecifiedDistribution, (child, _)) => child
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
         }
-        val reorderedChildren =
-          operator.requiredInPartitionOrdering.zip(repartitionedChildren).map {
-            case (Nil, child) => child
-            case (ordering, child) =>
-              addSortIfNecessary(ordering, child)
-          }
-        operator.withNewChildren(reorderedChildren)
+        operator.withNewChildren(repartitionedChildren)
       }
   }
 }

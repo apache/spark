@@ -41,6 +41,15 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
     val resuableProjection = buildProjection()
     iter.map(resuableProjection)
   }
+
+  /**
+   * outputOrdering of Project is not always same with child's outputOrdering if the certain
+   * key is pruned, however, if the key is pruned then we must not require child using this
+   * ordering from upper layer, only if the ordering would not be changed by a negative, there
+   * would be a way to keep the ordering.
+   * TODO: we may utilize this feature later to avoid some unnecessary sorting.
+   */
+  override def outputOrdering: Option[Ordering[Row]] = None
 }
 
 /**
@@ -55,6 +64,8 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def execute(): RDD[Row] = child.execute().mapPartitions { iter =>
     iter.filter(conditionEvaluator)
   }
+
+  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
 }
 
 /**
@@ -70,8 +81,6 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
   override def execute(): RDD[Row] = {
     child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
   }
-
-  override def outputOrdering: Seq[SortOrder] = Nil
 }
 
 /**
@@ -103,6 +112,8 @@ case class Limit(limit: Int, child: SparkPlan)
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
+
+  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
 
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
@@ -149,7 +160,7 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   // TODO: Pick num splits based on |limit|.
   override def execute(): RDD[Row] = sparkContext.makeRDD(collectData(), 1)
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
 }
 
 /**
@@ -176,7 +187,7 @@ case class Sort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
 }
 
 /**
@@ -208,7 +219,7 @@ case class ExternalSort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
 }
 
 /**

@@ -92,7 +92,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // for now let's support inner join first, then add outer join
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.autoSortMergeJoin =>
+        if sqlContext.conf.sortMergeJoinEnabled =>
         val mergeJoin =
           joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil

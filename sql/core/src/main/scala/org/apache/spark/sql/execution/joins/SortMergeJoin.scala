@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.util.NoSuchElementException
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -47,16 +49,16 @@ case class SortMergeJoin(
   private val orders: Seq[SortOrder] = leftKeys.zipWithIndex.map {
     case(expr, index) => SortOrder(BoundReference(index, expr.dataType, expr.nullable), Ascending)
   }
-  private val ordering: RowOrdering = new RowOrdering(orders, left.output)
+  // this is to manually construct an ordering that can be used to compare keys from both sides
+  private val keyOrdering: RowOrdering = new RowOrdering(orders)
 
-  private def requiredOrders(keys: Seq[Expression], side: SparkPlan): Seq[SortOrder] = keys.map {
-    k => SortOrder(BindReferences.bindReference(k, side.output, allowFailures = false), Ascending)
-  }
+  private def requiredOrders(keys: Seq[Expression], side: SparkPlan): Ordering[Row] =
+    newOrdering(keys.map(SortOrder(_, Ascending)), side.output)
 
-  override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys, left)
+  override def outputOrdering: Option[Ordering[Row]] = Some(requiredOrders(leftKeys, left))
 
-  override def requiredInPartitionOrdering: Seq[Seq[SortOrder]] =
-    requiredOrders(leftKeys, left) :: requiredOrders(rightKeys, right) :: Nil
+  override def requiredChildOrdering: Seq[Option[Ordering[Row]]] =
+    Some(requiredOrders(leftKeys, left)) :: Some(requiredOrders(rightKeys, right)) :: Nil
 
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
@@ -78,24 +80,28 @@ case class SortMergeJoin(
         private[this] var stop: Boolean = false
         private[this] var matchKey: Row = _
 
+        // initialize iterator
+        initialize()
+
         override final def hasNext: Boolean = nextMatchingPair()
 
         override final def next(): Row = {
           if (hasNext) {
+            // we are using the buffered right rows and run down left iterator
             val joinedRow = joinRow(leftElement, rightMatches(rightPosition))
             rightPosition += 1
             if (rightPosition >= rightMatches.size) {
               rightPosition = 0
               fetchLeft()
-              if (leftElement == null || ordering.compare(leftKey, matchKey) != 0) {
+              if (leftElement == null || keyOrdering.compare(leftKey, matchKey) != 0) {
                 stop = false
                 rightMatches = null
               }
             }
             joinedRow
           } else {
-            // according to Scala doc, this is undefined
-            null
+            // no more result
+            throw new NoSuchElementException
           }
         }
 
@@ -121,33 +127,36 @@ case class SortMergeJoin(
           fetchLeft()
           fetchRight()
         }
-        // initialize iterator
-        initialize()
 
         /**
-         * Searches the left/right iterator for the next rows that matches.
+         * Searches the right iterator for the next rows that have matches in left side, and store
+         * them in a buffer.
          *
-         * @return true if the search is successful, and false if the left/right iterator runs out
-         *         of tuples.
+         * @return true if the search is successful, and false if the right iterator runs out of
+         *         tuples.
          */
         private def nextMatchingPair(): Boolean = {
           if (!stop && rightElement != null) {
+            // run both side to get the first match pair
             while (!stop && leftElement != null && rightElement != null) {
-              stop = ordering.compare(leftKey, rightKey) == 0 && !leftKey.anyNull
-              if (ordering.compare(leftKey, rightKey) > 0 || rightKey.anyNull) {
+              val comparing = keyOrdering.compare(leftKey, rightKey)
+              // for inner join, we need to filter those null keys
+              stop = comparing == 0 && !leftKey.anyNull
+              if (comparing > 0 || rightKey.anyNull) {
                 fetchRight()
-              } else if (ordering.compare(leftKey, rightKey) < 0 || leftKey.anyNull) {
+              } else if (comparing < 0 || leftKey.anyNull) {
                 fetchLeft()
               }
             }
             rightMatches = new CompactBuffer[Row]()
             if (stop) {
               stop = false
+              // iterate the right side to buffer all rows that matches
+              // as the records should be ordered, exit when we meet the first that not match
               while (!stop && rightElement != null) {
                 rightMatches += rightElement
                 fetchRight()
-                // exit loop when run out of right matches
-                stop = ordering.compare(leftKey, rightKey) != 0
+                stop = keyOrdering.compare(leftKey, rightKey) != 0
               }
               if (rightMatches.size > 0) {
                 rightPosition = 0

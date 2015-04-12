@@ -64,7 +64,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("join operator selection") {
     cacheManager.clearCache()
 
-    val AUTO_SORTMERGEJOIN: Boolean = conf.autoSortMergeJoin
+    val SORTMERGEJOIN_ENABLED: Boolean = conf.sortMergeJoinEnabled
     conf.setConf("spark.sql.autoSortMergeJoin", "false")
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
@@ -103,7 +103,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
-      conf.setConf("spark.sql.autoSortMergeJoin", AUTO_SORTMERGEJOIN.toString)
+      conf.setConf("spark.sql.autoSortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
     }
   }
 

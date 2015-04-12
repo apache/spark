@@ -27,7 +27,6 @@ private[spark] object SQLConf {
   val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
   val IN_MEMORY_PARTITION_PRUNING = "spark.sql.inMemoryColumnarStorage.partitionPruning"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
-  val AUTO_SORTMERGEJOIN = "spark.sql.autoSortMergeJoin"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
@@ -46,6 +45,7 @@ private[spark] object SQLConf {
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+  val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -124,6 +124,13 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
 
   /**
+   * Sort merge join would sort the two side of join first, and then iterate both sides together
+   * only once to get all matches. Using sort merge join can save a lot of memory usage compared
+   * to HashJoin.
+   */
+  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
+
+  /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
    * than interpreted evaluation, but there are significant start-up costs due to compilation.
@@ -143,12 +150,6 @@ private[sql] class SQLConf extends Serializable {
    */
   private[spark] def autoBroadcastJoinThreshold: Int =
     getConf(AUTO_BROADCASTJOIN_THRESHOLD, (10 * 1024 * 1024).toString).toInt
-
-  /**
-   * By default not choose sort merge join.
-   */
-  private[spark] def autoSortMergeJoin: Boolean =
-    getConf(AUTO_SORTMERGEJOIN, false.toString).toBoolean
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,

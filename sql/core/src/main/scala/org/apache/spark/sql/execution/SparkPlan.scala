@@ -73,10 +73,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     Seq.fill(children.size)(UnspecifiedDistribution)
 
   /** Specifies how data is ordered in each partition. */
-  def outputOrdering: Seq[SortOrder] = Nil
+  def outputOrdering: Option[Ordering[Row]] = None
 
   /** Specifies sort order for each partition requirements on the input data for this operator. */
-  def requiredInPartitionOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+  def requiredChildOrdering: Seq[Option[Ordering[Row]]] = Seq.fill(children.size)(None)
 
   /**
    * Runs this query returning the result as an RDD.
@@ -183,7 +183,6 @@ private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
 private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
   self: Product =>
   override def outputPartitioning: Partitioning = child.outputPartitioning
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {

@@ -26,11 +26,11 @@ import org.apache.spark.sql.hive.test.TestHive
 class SortMergeCompatibilitySuite extends HiveCompatibilitySuite {
   override def beforeAll() {
     super.beforeAll()
-    TestHive.setConf(SQLConf.AUTO_SORTMERGEJOIN, "true")
+    TestHive.setConf(SQLConf.SORTMERGE_JOIN, "true")
   }
 
   override def afterAll() {
-    TestHive.setConf(SQLConf.AUTO_SORTMERGEJOIN, "false")
+    TestHive.setConf(SQLConf.SORTMERGE_JOIN, "false")
     super.afterAll()
   }
 
