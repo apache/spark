@@ -24,6 +24,7 @@ sbin="`cd "$sbin"; pwd`"
 
 
 START_TACHYON=false
+SPARK_MASTER_STRING=""
 
 while (( "$#" )); do
 case $1 in
@@ -47,8 +48,21 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
 
+# List masters from file
+if [ -f "${SPARK_CONF_DIR}/masters" ]; then
+  HOSTLIST=`cat "${SPARK_CONF_DIR}/masters"`
+  SPARK_MASTER_STRING=`for master in \`echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"\`; do echo "$master:$SPARK_MASTER_PORT"; done | paste -sd "," -`
+fi
+
 if [ "$SPARK_MASTER_IP" = "" ]; then
   SPARK_MASTER_IP="`hostname`"
+  if [ "$SPARK_MASTER_STRING" = "" ]; then
+    # If masters file does not exist, use default hostname+port
+    SPARK_MASTER_STRING="$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
+  fi
+else
+  # if user specified ip address, use env variables first
+  SPARK_MASTER_STRING="$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
 fi
 
 if [ "$START_TACHYON" == "true" ]; then
@@ -60,12 +74,12 @@ fi
 
 # Launch the slaves
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" 1 "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
+  exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" 1 "spark://$SPARK_MASTER_STRING"
 else
   if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
     SPARK_WORKER_WEBUI_PORT=8081
   fi
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 )) --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i )) "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
+    "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 )) --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i )) "spark://$SPARK_MASTER_STRING"
   done
 fi
