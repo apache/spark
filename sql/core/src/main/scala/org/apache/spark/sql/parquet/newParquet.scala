@@ -329,19 +329,15 @@ private[sql] case class ParquetRelation2(
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
-          partitionColumns.forall(f => parquetSchema.fieldNames.contains(f.name))
+            partitionColumns.forall(f => parquetSchema.fieldNames.contains(f.name))
 
+      // Reconcile the schema later
       schema = {
-        val fullRelationSchema = if (partitionKeysIncludedInParquetSchema) {
+        if (partitionKeysIncludedInParquetSchema) {
           parquetSchema
         } else {
           StructType(parquetSchema.fields ++ partitionColumns.fields)
         }
-
-        // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
-        // insensitivity issue and possible schema mismatch.
-        maybeMetastoreSchema
-          .getOrElse(fullRelationSchema)
       }
     }
 
