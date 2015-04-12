@@ -20,9 +20,11 @@ package org.apache.spark.streaming.ui
 import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.collection.mutable.ArrayBuffer
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.Logging
+import org.apache.spark.streaming.Time
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.util.Distribution
@@ -31,6 +33,8 @@ import org.apache.spark.util.Distribution
 private[ui] class StreamingPage(parent: StreamingTab)
   extends WebUIPage("") with Logging {
 
+  import StreamingPage._
+
   private val listener = parent.listener
   private val startTime = System.currentTimeMillis()
   private val emptyCell = "-"
@@ -38,47 +42,206 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content = listener.synchronized {
-      generateBasicStats() ++ <br></br> ++
-      <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
-      generateReceiverStats() ++
-      generateBatchStatsTable() ++
+      generateLoadResources() ++
+      generateBasicStats() ++
+      generateStatTable() ++
       generateBatchListTables()
     }
-    UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
+    UIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
+  }
+
+  private def generateLoadResources(): Seq[Node] = {
+    // scalastyle:off
+    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
+      <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/streaming-page.css")} type="text/css"/>
+      <script src={UIUtils.prependBaseUri("/static/streaming-page.js")}></script>
+    // scalastyle:on
   }
 
   /** Generate basic stats of the streaming program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime
+    <div>Running batches of
+      <strong>
+        {formatDurationVerbose(listener.batchDuration)}
+      </strong>
+      for
+      <strong>
+        {formatDurationVerbose(timeSinceStart)}
+      </strong>
+      since
+      <strong>
+        {UIUtils.formatDate(startTime)}
+      </strong>.
+    </div>
+  }
+
+  private def generateStatTable(): Seq[Node] = {
+    val avgSchedulingDelay = listener.schedulingDelayDistribution.map(_.statCounter.mean.toLong)
+    val avgProcessingTime = listener.processingDelayDistribution.map(_.statCounter.mean.toLong)
+    val avgTotalDelay = listener.totalDelayDistribution.map(_.statCounter.mean.toLong)
+    val avgReceiverEvents =
+      listener.receivedRecordsDistributions.mapValues(_.map(_.statCounter.mean.toLong))
+    val avgAllReceiverEvents = avgReceiverEvents.values.flatMap(x => x).sum
+    val receivedRecords = listener.allReceivedRecordsWithBatchTime
+
+    val completedBatches = listener.retainedCompletedBatches
+    val processingTime = completedBatches.
+      flatMap(batchInfo => batchInfo.processingDelay.map(batchInfo.batchTime.milliseconds -> _)).
+      sortBy(_._1)
+    val schedulingDelay = completedBatches.
+      flatMap(batchInfo => batchInfo.schedulingDelay.map(batchInfo.batchTime.milliseconds -> _)).
+      sortBy(_._1)
+    val totalDelay = completedBatches.
+      flatMap(batchInfo => batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)).
+      sortBy(_._1)
+    val jsCollector = ArrayBuffer[String]()
+
+    val triangleJs =
+      s"""$$('#inputs-table').toggle('collapsed');
+         |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML')
+         |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');
+         |else $$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');""".stripMargin.replaceAll("\\n", "")
+
+    val table =
+      // scalastyle:off
+      <table class="table table-bordered">
+      <thead>
+        <tr><th></th><th>Timelines</th><th>Distributions</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div>
+              <span onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
+              <strong>Input Rate</strong>
+            </div>
+            <div>Avg: {avgAllReceiverEvents} events/sec</div>
+          </td>
+          <td>{generateTimeline(jsCollector, "all-receiver-events-timeline", receivedRecords, "#")}</td>
+          <td>{generateDistribution(jsCollector, "all-receiver-events-distribution", receivedRecords.map(_._2), "#")}</td>
+        </tr>
+        <tr id="inputs-table" style="display: none;" >
+          <td colspan="3">
+          {generateInputReceiversTable(jsCollector)}
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div><strong>Processing Time</strong></div>
+            <div>Avg: {formatDurationOption(avgProcessingTime)}</div>
+          </td>
+          <td>{generateTimeline(jsCollector, "processing-time-timeline", processingTime, "ms")}</td>
+          <td>{generateDistribution(jsCollector, "processing-time-distribution", processingTime.map(_._2), "ms")}</td>
+        </tr>
+        <tr>
+          <td>
+            <div><strong>Scheduling Delay</strong></div>
+            <div>Avg: {formatDurationOption(avgSchedulingDelay)}</div>
+          </td>
+          <td>{generateTimeline(jsCollector, "scheduling-delay-timeline", schedulingDelay, "ms")}</td>
+          <td>{generateDistribution(jsCollector, "scheduling-delay-distribution", schedulingDelay.map(_._2), "ms")}</td>
+        </tr>
+        <tr>
+          <td>
+            <div><strong>Total Delay</strong></div>
+            <div>Avg: {formatDurationOption(avgTotalDelay)}</div>
+          </td>
+          <td>{generateTimeline(jsCollector, "total-delay-timeline", totalDelay, "ms")}</td>
+          <td>{generateDistribution(jsCollector, "total-delay-distribution", totalDelay.map(_._2), "ms")}</td>
+        </tr>
+      </tbody>
+    </table>
+    // scalastyle:on
+
+    val js =
+      s"""
+         |$$(document).ready(function(){
+         |    ${jsCollector.mkString("\n")}
+         |});""".stripMargin
+    table ++ <script>{Unparsed(js)}</script>
+  }
+
+  private def generateInputReceiversTable(jsCollector: ArrayBuffer[String]): Seq[Node] = {
+    val content = listener.receivedRecordsDistributions.map { case (receiverId, distribution) =>
+      generateInputReceiverRow(jsCollector, receiverId, distribution)
+    }.reduce(_ ++ _)
+
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Status</th>
+          <th>Location</th>
+          <th>Last Error Time</th>
+          <th>Last Error Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {content}
+      </tbody>
+    </table>
+  }
+
+  private def generateInputReceiverRow(
+      jsCollector: ArrayBuffer[String], receiverId: Int, distribution: Option[Distribution]):
+    Seq[Node] = {
+    val avgReceiverEvents = distribution.map(_.statCounter.mean.toLong)
+    val receiverInfo = listener.receiverInfo(receiverId)
+    val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
+    val receiverActive = receiverInfo.map { info =>
+      if (info.active) "ACTIVE" else "INACTIVE"
+    }.getOrElse(emptyCell)
+    val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
+    val receiverLastError = listener.receiverInfo(receiverId).map { info =>
+      val msg = s"${info.lastErrorMessage} - ${info.lastError}"
+      if (msg.size > 100) msg.take(97) + "..." else msg
+    }.getOrElse(emptyCell)
+    val receiverLastErrorTime =
+      listener.receiverLastErrorTimeo(receiverId).map(UIUtils.formatDate).getOrElse(emptyCell)
+    val receivedRecords = listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq())
+
     // scalastyle:off
-    <ul class ="unstyled">
-      <li>
-        <strong>Started at: </strong> {UIUtils.formatDate(startTime)}
-      </li>
-      <li>
-        <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
-      </li>
-      <li>
-        <strong>Network receivers: </strong>{listener.numReceivers}
-      </li>
-      <li>
-        <strong>Batch interval: </strong>{formatDurationVerbose(listener.batchDuration)}
-      </li>
-      <li>
-        <a href="#completed"><strong>Completed batches: </strong></a>{listener.numTotalCompletedBatches}
-      </li>
-      <li>
-        <a href="#active"><strong>Active batches: </strong></a>{listener.numUnprocessedBatches}
-      </li>
-      <li>
-        <strong>Received events: </strong>{listener.numTotalReceivedRecords}
-      </li>
-      <li>
-        <strong>Processed events: </strong>{listener.numTotalProcessedRecords}
-      </li>
-    </ul>
+    <tr>
+      <td rowspan="2">
+        <div>
+          <strong>{receiverName}</strong>
+        </div>
+        <div>Avg: {avgReceiverEvents.map(_.toString).getOrElse(emptyCell)} events/sec</div>
+      </td>
+      <td>{receiverActive}</td>
+      <td>{receiverLocation}</td>
+      <td>{receiverLastErrorTime}</td>
+      <td>{receiverLastError}</td>
+    </tr>
+      <tr>
+        <td colspan="3">
+          {generateTimeline(jsCollector, s"receiver-$receiverId-events-timeline", receivedRecords, "#")}
+        </td>
+        <td>{generateDistribution(jsCollector, s"receiver-$receiverId-events-distribution", receivedRecords.map(_._2), "#")}</td>
+      </tr>
     // scalastyle:on
   }
+
+  private def generateTimeline(
+      jsCollector: ArrayBuffer[String], divId: String, data: Seq[(Long, _)], unit: String):
+    Seq[Node] = {
+    val jsForData = data.map { case (x, y) =>
+      s"""{"x": $x, "y": $y}"""
+    }.mkString("[", ",", "]")
+    jsCollector += s"drawTimeline('#$divId', $jsForData, '$unit');"
+
+    <div id={divId}></div>
+  }
+
+  private def generateDistribution(
+      jsCollector: ArrayBuffer[String], divId: String, data: Seq[_], unit: String): Seq[Node] = {
+    val jsForData = data.mkString("[", ",", "]")
+    jsCollector += s"drawDistribution('#$divId', $jsForData, '$unit');"
+
+    <div id={divId}></div>
+  }
+
 
   /** Generate stats of data received by the receivers in the streaming program */
   private def generateReceiverStats(): Seq[Node] = {
@@ -173,6 +336,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
     content
   }
 
+  def generateTimeRow(title: String, times: Seq[(Time, Long)]): Unit = {
+
+  }
+
 
   /**
    * Returns a human-readable string representing a duration such as "5 second 35 ms"
@@ -214,5 +381,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     activeBatchesContent ++ completedBatchesContent
   }
+}
+
+private object StreamingPage {
+  val BLACK_RIGHT_TRIANGLE_HTML = "&#9654;"
+  val BLACK_DOWN_TRIANGLE_HTML = "&#9660;"
 }
 

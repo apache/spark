@@ -30,6 +30,7 @@ log4j-defaults.properties
 bootstrap-tooltip.js
 jquery-1.11.1.min.js
 sorttable.js
+d3.min.js
 .*avsc
 .*txt
 .*json

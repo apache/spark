@@ -58,4 +58,11 @@ case class BatchInfo(
    */
   def totalDelay: Option[Long] = schedulingDelay.zip(processingDelay)
     .map(x => x._1 + x._2).headOption
+
+  /**
+   * The number of recorders received by the receivers in this batch.
+   */
+  def numRecords: Long = receivedBlockInfo.map { case (_, infos) =>
+    infos.map(_.numRecords).sum
+  }.sum
 }

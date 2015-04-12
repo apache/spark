@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.PrintStream
 
 import scala.collection.immutable.IndexedSeq
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Util for getting some stats from a small sample of numeric values, with some handy
@@ -66,6 +67,34 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   def summary(out: PrintStream = System.out) {
     out.println(statCounter)
     showQuantiles(out)
+  }
+
+  def histogram(bins: Int): Seq[(Double, Int)] = {
+    require(bins > 0)
+    val stat = statCounter
+    val binSize = (stat.max - stat.min) / (bins - 1)
+    val points = new Array[Double](bins)
+    for (i <- 0 until (bins - 1)) {
+      points(i) = stat.min + binSize * i
+    }
+    points(bins - 1) = stat.max
+    val counts = new Array[Int](bins)
+    for (i <- startIdx until endIdx) {
+      val v = data(i)
+      var j = 0
+      var find = false
+      while (!find && j < bins - 1) {
+        if (v < points(j) + binSize / 2) {
+          counts(j) += 1
+          find = true
+        }
+        j += 1
+      }
+      if (!find) {
+        counts(bins - 1) += 1
+      }
+    }
+    points.zip(counts)
   }
 }
 

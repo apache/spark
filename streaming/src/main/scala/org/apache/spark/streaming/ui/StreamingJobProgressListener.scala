@@ -39,6 +39,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
+  private val receiverLastErrorTime = new HashMap[Int, Long]
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
@@ -51,6 +52,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
     synchronized {
       receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
+      receiverLastErrorTime(receiverError.receiverInfo.streamId) = System.currentTimeMillis()
     }
   }
 
@@ -149,6 +151,31 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }.toMap
   }
 
+  def receivedRecordsWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
+    val latestBlockInfos = retainedBatches.take(batchInfoLimit).map { batchInfo =>
+      (batchInfo.batchTime.milliseconds, batchInfo.receivedBlockInfo)
+    }
+    (0 until numReceivers).map { receiverId =>
+      val blockInfoOfParticularReceiver = latestBlockInfos.map {
+        case (batchTime, receivedBlockInfo) =>
+          (batchTime, receivedBlockInfo.get(receiverId).getOrElse(Array.empty))
+      }
+      val recordsOfParticularReceiver = blockInfoOfParticularReceiver.map {
+        case (batchTime, blockInfo) =>
+          // calculate records per second for each batch
+          (batchTime, blockInfo.map(_.numRecords).sum.toDouble * 1000 / batchDuration)
+      }
+      (receiverId, recordsOfParticularReceiver)
+    }.toMap
+  }
+
+
+  def allReceivedRecordsWithBatchTime: Seq[(Long, Double)] = synchronized {
+    retainedBatches.take(batchInfoLimit).map { batchInfo =>
+      (batchInfo.batchTime.milliseconds, batchInfo.numRecords.toDouble * 1000 / batchDuration)
+    }
+  }
+
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
@@ -162,6 +189,10 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def receiverInfo(receiverId: Int): Option[ReceiverInfo] = synchronized {
     receiverInfos.get(receiverId)
+  }
+
+  def receiverLastErrorTimeo(receiverId: Int): Option[Long] = synchronized {
+    receiverLastErrorTime.get(receiverId)
   }
 
   def lastCompletedBatch: Option[BatchInfo] = synchronized {
