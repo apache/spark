@@ -289,19 +289,15 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
-case class Exists(left: LogicalPlan, right: LogicalPlan, exist: Boolean) extends BinaryNode {
+case class Exists(left: LogicalPlan, right: LogicalPlan, positive: Boolean) extends BinaryNode {
   override def output: Seq[Attribute] = Nil
   override lazy val resolved = false
-  // we don't want to attribute resolution come before being mapped as LEFT SEMI JOIN
-  override def childrenResolved = false
 }
 
-case class InSubquery(left: LogicalPlan, right: LogicalPlan, inKey: Expression, exist: Boolean)
+case class InSubquery(left: Filter, right: LogicalPlan, positive: Boolean)
     extends BinaryNode {
   override def output: Seq[Attribute] = Nil
   override lazy val resolved = false
-  // we don't want to attribute resolution come before being mapped as LEFT SEMI JOIN
-  override def childrenResolved = false
 }
 
 case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)

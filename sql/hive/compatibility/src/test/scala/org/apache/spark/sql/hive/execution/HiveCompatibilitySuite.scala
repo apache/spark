@@ -240,7 +240,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // It has a bug and it has been fixed by
     // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
-    "input46"
+    "input46",
+
+    // It contains the window function
+    "subquery_in",
+    "subquery_notin"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -781,10 +785,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
-    "subquery_exists",
-    "subquery_in",
-    "subquery_notexists",
-    "subquery_notin",
     "tablename_with_select",
     "timestamp_1",
     "timestamp_2",

@@ -205,33 +205,52 @@ class Analyzer(
 
   /**
    * Rewrite the [[Exists]] with left semi join
-   * TODO add support for IN / NOT IN subquery
    */
   object RewriteWhereClause extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      // EXISTS is always correlated
       case e @ Exists(left, Project(_, Filter(condition, right)), true) =>
-          Join(left, right, LeftSemiExist, Some(condition))
+        Join(left, right, LeftSemiExist, Some(condition))
 
       case e @ Exists(left, Project(_, Filter(condition, right)), false) =>
+        Join(left, right, LeftSemiNotExist, Some(condition))
+
+      // TODO we don't support [IN subquery] combined with other condition now
+      // e.g. where key in (SELECT key FROM src_b) AND value > '112'
+      case e @ InSubquery(Filter(key, left), Project(projectList, child), positive)
+          if e.left.resolved =>
+        child match {
+          case Filter(condition, right) =>
+            // possible correlated (subquery references its parent attribute)
+            // convert the filter as part of the join condition
+            // and even if it's not correlated, that will not harmful if we
+            // pop up the filter into the left semi join, cause the optimizer
+            // will push it back (even down) again.
+            createSemiJoinForInSubquery(
+              left, right, projectList, And(condition, EqualTo(projectList(0), key)), positive)
+          case _ =>
+            // it's unrelated
+            createSemiJoinForInSubquery(left, e.right, projectList, key, positive)
+        }
+    }
+
+    def createSemiJoinForInSubquery(
+        left: LogicalPlan,
+        right: LogicalPlan,
+        projectList: Seq[NamedExpression],
+        condition: Expression,
+        positive: Boolean): Join = {
+      if (projectList.length == 1) {
+        if (positive) {
+          Join(left, right, LeftSemiExist, Some(condition))
+        } else {
           Join(left, right, LeftSemiNotExist, Some(condition))
-
-      case e @ InSubquery(left, right @ Project(projectList, _), key, false) =>
-        if (projectList.length == 1) {
-          Join(left, right, LeftSemiNotExist, Some(EqualTo(projectList(0), key)))
-        } else {
-          throw new AnalysisException(
-            s"""Only a single expression need for In subquery but got
-               |${projectList.map(_.prettyString).mkString(",")}""".stripMargin)
         }
-
-      case e @ InSubquery(left, right @ Project(projectList, _), key, true) =>
-        if (projectList.length == 1) {
-          Join(left, right, LeftSemiExist, Some(EqualTo(projectList(0), key)))
-        } else {
-          throw new AnalysisException(
-            s"""Only a single expression need for In subquery but got
+      } else {
+        throw new AnalysisException(
+          s"""Only a single expression needed for IN subquery but got
                |${projectList.map(_.prettyString).mkString(",")}""".stripMargin)
-        }
+      }
     }
   }
 
