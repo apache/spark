@@ -299,6 +299,12 @@ class ExecutorRunnable(
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
+
+    sys.env.get("PYTHONPATH") match {
+      case Some(pythonPath) => env("PYTHONPATH") = pythonPath
+      case None => // do nothing
+    }
+
     env
   }
 }

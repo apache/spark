@@ -371,6 +371,11 @@ private[spark] class Client(
       env(ENV_DIST_CLASSPATH) = dcp
     }
 
+    sys.env.get("PYTHONPATH") match {
+      case Some(pythonPath) => env("PYTHONPATH") = pythonPath
+      case None => // do nothing
+    }
+
     env
   }
 
