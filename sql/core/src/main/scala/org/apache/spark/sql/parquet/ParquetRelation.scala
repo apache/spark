@@ -21,9 +21,11 @@ import java.io.IOException
 import java.util.logging.Level
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.spark.sql.types.{StructType, DataType}
+
 import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
@@ -53,6 +55,17 @@ private[sql] case class ParquetRelation(
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
+
+  // will be used in the listStatus call in FilteringParquetRowInputFormat.readFooters
+  // also used in readMetaData in ParquetTypes.scala
+  @transient val filterClassName = sqlContext.getConf(NewFileInputFormat.PATHFILTER_CLASS, "")
+  if (filterClassName.nonEmpty) {
+    val filterClazz = Class.forName(filterClassName).asInstanceOf[Class[_ <: PathFilter]]
+    if (conf.isDefined) {
+      conf.get.setClass(NewFileInputFormat.PATHFILTER_CLASS,
+      filterClazz, classOf[PathFilter])
+    }
+  }
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =

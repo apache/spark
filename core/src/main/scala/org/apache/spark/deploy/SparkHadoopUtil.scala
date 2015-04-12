@@ -21,7 +21,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -201,6 +201,28 @@ class SparkHadoopUtil extends Logging {
     val baseStatus = fs.getFileStatus(basePath)
     if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
+
+  /**
+   * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
+   * given path points to a file, return a single-element collection containing [[FileStatus]] of
+   * that file. Uses pathFilter to filter out certain filestatuses
+   */
+  def listLeafStatusesFiltered(
+    fs: FileSystem,
+    basePath: Path,
+    filter: Option[PathFilter]): Seq[FileStatus] = {
+      if (filter.isDefined) {
+        def recurse(path: Path): Array[FileStatus] = {
+          val (directories, leaves) = fs.listStatus(path, filter.get).partition(_.isDir)
+          leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
+        }
+
+        val baseStatus = fs.getFileStatus(basePath)
+        if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
+      } else {
+        listLeafStatuses(fs, basePath)
+      }
+    }
 }
 
 object SparkHadoopUtil {

@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters,
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
@@ -77,8 +78,7 @@ class HadoopTableReader(
     makeRDDForTable(
       hiveTable,
       relation.tableDesc.getDeserializerClass.asInstanceOf[Class[Deserializer]],
-      filterOpt = None)
-
+      sc.getPathFilter)
   /**
    * Creates a Hadoop RDD to read data from the target table's data directory. Returns a transformed
    * RDD that contains deserialized rows.
@@ -125,7 +125,7 @@ class HadoopTableReader(
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[Row] = {
     val partitionToDeserializer = partitions.map(part =>
       (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
-    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
+    makeRDDForPartitionedTable(partitionToDeserializer, sc.getPathFilter)
   }
 
   /**
