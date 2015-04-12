@@ -132,6 +132,7 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = child.output
 
+  assert(overwrite || !ifNotExists)
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) =>
       DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
