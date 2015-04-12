@@ -271,8 +271,7 @@ case class GeneratedAggregate(
       // This projection should be targeted at the current values for the group and then applied
       // to a joined row of the current values with the new input row.
       val updateExpressions = computeFunctions.flatMap(_.update)
-      val updateSchema = computeFunctions.flatMap(_.schema) ++ child.output
-      val updateProjection = newMutableProjection(updateExpressions, updateSchema)()
+      val updateProjection = newMutableProjection(updateExpressions, child.output)()
       log.info(s"Update Expressions: ${updateExpressions.mkString(",")}")
 
       // A projection that produces the final result, given a computation.
@@ -292,7 +291,7 @@ case class GeneratedAggregate(
 
         while (iter.hasNext) {
           currentRow = iter.next()
-          updateProjection(joinedRow(buffer, currentRow))
+          updateProjection(currentRow)
         }
 
         val resultProjection = resultProjectionBuilder()
@@ -311,7 +310,7 @@ case class GeneratedAggregate(
           }
           // Target the projection at the current aggregation buffer and then project the updated
           // values.
-          updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
+          updateProjection.target(currentBuffer)(currentRow)
         }
 
         new Iterator[Row] {
