@@ -434,7 +434,7 @@ case object BooleanType extends BooleanType
  * @group dataType
  */
 @DeveloperApi
-class TimestampType private() extends NativeType {
+class TimestampType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "TimestampType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.

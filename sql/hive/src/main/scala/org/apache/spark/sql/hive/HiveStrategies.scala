@@ -60,7 +60,7 @@ private[hive] trait HiveStrategies {
     implicit class LogicalPlanHacks(s: DataFrame) {
       def lowerCase: DataFrame = DataFrame(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]): DataFrame = {
+      def addPartitioningAttributes(attrs: Seq[Attribute], partVals: String): DataFrame = {
         // Don't add the partitioning key if its already present in the data.
         if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
           s
@@ -68,7 +68,8 @@ private[hive] trait HiveStrategies {
           DataFrame(
             s.sqlContext,
             s.logicalPlan transform {
-              case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
+              case p: ParquetRelation => p.copy(partitioningAttributes = attrs, 
+                partitionValues = partVals)
             })
         }
       }
@@ -137,14 +138,15 @@ private[hive] trait HiveStrategies {
               pruningCondition(inputData)
             }
 
-            val partitionLocations = partitions.map(_.getLocation)
+            val partitionLocations = partitions.map(part => part.getLocation)
+            val partitionNames = partitions.map(part => part.getName)
 
             if (partitionLocations.isEmpty) {
               PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
             } else {
               hiveContext
                 .parquetFile(partitionLocations: _*)
-                .addPartitioningAttributes(relation.partitionKeys)
+                .addPartitioningAttributes(relation.partitionKeys, partitionNames.mkString(","))
                 .lowerCase
                 .where(unresolvedOtherPredicates)
                 .select(unresolvedProjection: _*)

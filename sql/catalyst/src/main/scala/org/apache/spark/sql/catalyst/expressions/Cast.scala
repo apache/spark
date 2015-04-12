@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.net.URLDecoder
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
@@ -158,6 +159,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         if (periodIdx != -1 && n.length() - periodIdx > 9) {
           n = n.substring(0, periodIdx + 10)
         }
+        // Timestamp value in the partition could be in the form: (2015-02-09 00%3A55%3A00)
+        n = URLDecoder.decode(n, "UTF-8");
         try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>

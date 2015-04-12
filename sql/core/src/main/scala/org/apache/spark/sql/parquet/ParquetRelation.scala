@@ -49,7 +49,8 @@ private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
-    partitioningAttributes: Seq[Attribute] = Nil)
+    partitioningAttributes: Seq[Attribute] = Nil,
+    partitionValues: String = "")
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
