@@ -282,14 +282,24 @@ private[sql] case class InMemoryColumnarTableScan(
     }
   }
 
+  lazy val enableAccumulators: Boolean =
+    sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
+
   // Accumulators used for testing purposes
-  val (readPartitions, readBatches) = relation.applyScanAccumulators(sparkContext)
+  lazy val (readPartitions, readBatches) =
+    if (enableAccumulators) {
+      relation.applyScanAccumulators(sparkContext)
+    } else {
+      (null, null)
+    }
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   override def execute(): RDD[Row] = {
-    readPartitions.setValue(0)
-    readBatches.setValue(0)
+    if (enableAccumulators) {
+      readPartitions.setValue(0)
+      readBatches.setValue(0)
+    }
 
     relation.cachedColumnBuffers.mapPartitions { cachedBatchIterator =>
       val partitionFilter = newPredicate(
@@ -339,7 +349,7 @@ private[sql] case class InMemoryColumnarTableScan(
           }
         }
 
-        if (rows.hasNext) {
+        if (rows.hasNext && enableAccumulators) {
           readPartitions += 1
         }
 
@@ -358,7 +368,9 @@ private[sql] case class InMemoryColumnarTableScan(
               logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {
-              readBatches += 1
+              if (enableAccumulators) {
+                readBatches += 1
+              }
               true
             }
           }
