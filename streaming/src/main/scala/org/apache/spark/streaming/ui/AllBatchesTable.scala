@@ -22,7 +22,7 @@ import scala.xml.Node
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.ui.UIUtils
 
-private[ui] class BatchTableBase(tableId: String) {
+private[ui] abstract class BatchTableBase(tableId: String) {
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
@@ -70,7 +70,7 @@ private[ui] class BatchTableBase(tableId: String) {
   /**
    * Return HTML for all rows of this table.
    */
-  protected def renderRows: Seq[Node] = Nil
+  protected def renderRows: Seq[Node]
 }
 
 private[ui] class ActiveBatchTable(runningBatches: Seq[BatchInfo], waitingBatches: Seq[BatchInfo])
