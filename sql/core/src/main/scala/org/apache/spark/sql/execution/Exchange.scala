@@ -177,6 +177,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
           rowOrdering: Option[Ordering[Row]] = None): SparkPlan = {
         val needSort = child.outputOrdering != rowOrdering
         if (child.outputPartitioning != partitioning || needSort) {
+          // TODO: if only needSort, we need only sort each partition instead of an Exchange
           Exchange(partitioning, child, sort = needSort)
         } else {
           child

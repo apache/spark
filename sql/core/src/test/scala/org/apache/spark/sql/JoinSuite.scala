@@ -65,7 +65,6 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     cacheManager.clearCache()
 
     val SORTMERGEJOIN_ENABLED: Boolean = conf.sortMergeJoinEnabled
-    conf.setConf("spark.sql.autoSortMergeJoin", "false")
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
       ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
@@ -96,14 +95,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     try {
-      conf.setConf("spark.sql.autoSortMergeJoin", "true")
+      conf.setConf("spark.sql.planner.sortMergeJoin", "true")
       Seq(
         ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
-      conf.setConf("spark.sql.autoSortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+      conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
     }
   }
 
