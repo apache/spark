@@ -44,6 +44,8 @@ import scala.collection.JavaConversions._
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {
+  
+  FunctionRegistry.registerGenericUDF(true, "current_database", classOf[sqlUDFCurrentDB])
 
   def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
 
