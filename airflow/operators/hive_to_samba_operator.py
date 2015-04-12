@@ -36,11 +36,13 @@ class Hive2SambaOperator(BaseOperator):
         self.hiveserver2_conn_id = hiveserver2_conn_id
         self.samba_conn_id = samba_conn_id
         self.destination_filepath = destination_filepath
-        self.samba = SambaHook(samba_conn_id=samba_conn_id)
-        self.hook = HiveServer2Hook(hiveserver2_conn_id=hiveserver2_conn_id)
         self.hql = hql.strip().rstrip(';')
 
     def execute(self, context):
+        samba = SambaHook(samba_conn_id=self.samba_conn_id)
+        hive = HiveServer2Hook(hiveserver2_conn_id=self.hiveserver2_conn_id)
         tmpfile = tempfile.NamedTemporaryFile()
-        self.hook.to_csv(hql=self.hql, csv_filepath=tmpfile.name)
-        self.samba.push_from_local(self.destination_filepath, tmpfile.name)
+        logging.info("Fetching file from Hive")
+        hive.to_csv(hql=self.hql, csv_filepath=tmpfile.name)
+        logging.info("Pushing to samba")
+        samba.push_from_local(self.destination_filepath, tmpfile.name)

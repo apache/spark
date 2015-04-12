@@ -177,8 +177,6 @@ class HivePartitionSensor(BaseSensorOperator):
         if not partition:
             partition = "ds='{{ ds }}'"
         self.metastore_conn_id = metastore_conn_id
-        self.hook = hooks.HiveMetastoreHook(
-            metastore_conn_id=metastore_conn_id)
         self.table = table
         self.partition = partition
         self.schema = schema
@@ -187,6 +185,8 @@ class HivePartitionSensor(BaseSensorOperator):
         logging.info(
             'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
+        self.hook = hooks.HiveMetastoreHook(
+            metastore_conn_id=self.metastore_conn_id)
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)
 
@@ -269,14 +269,14 @@ class S3KeySensor(BaseSensorOperator):
         self.bucket_name = bucket_name
         self.bucket_key = bucket_key
         self.s3_conn_id = s3_conn_id
-        self.hook = hooks.S3Hook(s3_conn_id=s3_conn_id)
         session.commit()
         session.close()
 
     def poke(self):
+        hook = hooks.S3Hook(s3_conn_id=self.s3_conn_id)
         full_url = "s3://" + self.bucket_name + self.bucket_key
         logging.info('Poking for key : {full_url}'.format(**locals()))
-        return self.hook.check_for_key(self.bucket_key, self.bucket_name)
+        return hook.check_for_key(self.bucket_key, self.bucket_name)
 
 
 class S3PrefixSensor(BaseSensorOperator):
@@ -320,14 +320,14 @@ class S3PrefixSensor(BaseSensorOperator):
         self.delimiter = delimiter
         self.full_url = "s3://" + bucket_name + '/' + prefix
         self.s3_conn_id = s3_conn_id
-        self.hook = hooks.S3Hook(s3_conn_id=s3_conn_id)
         session.commit()
         session.close()
 
     def poke(self):
         logging.info('Poking for prefix : {self.prefix}\n'
                      'in bucket s3://{self.bucket_name}'.format(**locals()))
-        return self.hook.check_for_prefix(prefix=self.prefix,
+        hook = hooks.S3Hook(s3_conn_id=self.s3_conn_id)
+        return hook.check_for_prefix(prefix=self.prefix,
                                           delimiter=self.delimiter,
                                           bucket_name=self.bucket_name)
 

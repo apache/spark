@@ -71,8 +71,8 @@ class MySqlToHiveTransfer(BaseOperator):
         self.create = create
         self.recreate = recreate
         self.delimiter = delimiter
-        self.hive = HiveCliHook(hive_cli_conn_id=hive_cli_conn_id)
-        self.mysql = MySqlHook(mysql_conn_id=mysql_conn_id)
+        self.mysql_conn_id = mysql_conn_id
+        self.hive_cli_conn_id = hive_cli_conn_id
         self.partition = partition or {}
 
     @classmethod
@@ -92,8 +92,11 @@ class MySqlToHiveTransfer(BaseOperator):
         return d[mysql_type] if mysql_type in d else 'STRING'
 
     def execute(self, context):
+        hive = HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
+        mysql = MySqlHook(mysql_conn_id=self.mysql_conn_id)
+
         logging.info("Dumping MySQL query results to local file")
-        conn = self.mysql.get_conn()
+        conn = mysql.get_conn()
         cursor = conn.cursor()
         cursor.execute(self.sql)
         with NamedTemporaryFile("w") as f:
@@ -106,7 +109,7 @@ class MySqlToHiveTransfer(BaseOperator):
             cursor.close()
             conn.close()
             logging.info("Loading file into Hive")
-            self.hive.load_file(
+            hive.load_file(
                 f.name,
                 self.hive_table,
                 field_dict=field_dict,

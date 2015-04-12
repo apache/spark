@@ -30,12 +30,12 @@ class PrestoCheckOperator(BaseOperator):
         super(PrestoCheckOperator, self).__init__(*args, **kwargs)
 
         self.presto_conn_id = presto_conn_id
-        self.hook = PrestoHook(presto_conn_id=presto_conn_id)
         self.sql = sql
 
     def execute(self, context=None):
+        hook = PrestoHook(presto_conn_id=self.presto_conn_id)
         logging.info('Executing SQL check: ' + self.sql)
-        records = self.hook.get_first(hql=self.sql)
+        records = hook.get_first(hql=self.sql)
         logging.info("Record: " + str(records))
         if not records:
             raise Exception("The query returned None")
@@ -84,7 +84,6 @@ class PrestoValueCheckOperator(BaseOperator):
             *args, **kwargs):
         super(PrestoValueCheckOperator, self).__init__(*args, **kwargs)
         self.presto_conn_id = presto_conn_id
-        self.hook = PrestoHook(presto_conn_id=presto_conn_id)
         self.sql = sql
         self.pass_value = _convert_to_float_if_possible(pass_value)
         tol = _convert_to_float_if_possible(tolerance)
@@ -94,7 +93,8 @@ class PrestoValueCheckOperator(BaseOperator):
 
     def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql)
-        records = self.hook.get_first(hql=self.sql)
+        hook = PrestoHook(presto_conn_id=self.presto_conn_id)
+        records = hook.get_first(hql=self.sql)
         if not records:
             raise Exception("The query returned None")
         test_results = []
@@ -149,7 +149,6 @@ class PrestoIntervalCheckOperator(BaseOperator):
             *args, **kwargs):
         super(PrestoIntervalCheckOperator, self).__init__(*args, **kwargs)
         self.presto_conn_id = presto_conn_id
-        self.hook = PrestoHook(presto_conn_id=presto_conn_id)
         self.table = table
         self.metrics_thresholds = metrics_thresholds
         self.metrics_sorted = sorted(metrics_thresholds.keys())
@@ -162,10 +161,11 @@ class PrestoIntervalCheckOperator(BaseOperator):
         self.sql2 = sqlt + "'{{ macros.ds_add(ds, "+str(self.days_back)+") }}'"
 
     def execute(self, context=None):
+        hook = PrestoHook(presto_conn_id=self.presto_conn_id)
         logging.info('Executing SQL check: ' + self.sql2)
-        row2 = self.hook.get_first(hql=self.sql2)
+        row2 = hook.get_first(hql=self.sql2)
         logging.info('Executing SQL check: ' + self.sql1)
-        row1 = self.hook.get_first(hql=self.sql1)
+        row1 = hook.get_first(hql=self.sql1)
         if not row2:
             raise Exception("The query {q} returned None").format(q=self.sql2)
         if not row1:

@@ -39,9 +39,12 @@ class HiveOperator(BaseOperator):
 
         super(HiveOperator, self).__init__(*args, **kwargs)
         self.hiveconf_jinja_translate = hiveconf_jinja_translate
-        self.hook = HiveCliHook(hive_cli_conn_id=hive_cli_conn_id)
         self.hql = hql
+        self.hive_cli_conn_id = hive_cli_conn_id
         self.script_begin_tag = script_begin_tag
+
+    def get_hook(self):
+        return HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
 
     def prepare_template(self):
         if self.hiveconf_jinja_translate:
@@ -52,6 +55,7 @@ class HiveOperator(BaseOperator):
 
     def execute(self, context):
         logging.info('Executing: ' + self.hql)
+        self.hook = self.get_hook()
         self.hook.run_cli(hql=self.hql)
 
     def on_kill(self):

@@ -30,10 +30,11 @@ class PostgresOperator(BaseOperator):
             *args, **kwargs):
         super(PostgresOperator, self).__init__(*args, **kwargs)
 
-        self.hook = PostgresHook(postgres_conn_id=postgres_conn_id)
         self.sql = sql
+        self.postgres_conn_id = postgres_conn_id
         self.autocommit = autocommit
 
     def execute(self, context):
         logging.info('Executing: ' + self.sql)
+        self.hook = PostgresHook(postgres_conn_id=self.postgres_conn_id)
         self.hook.run(self.sql, self.autocommit)

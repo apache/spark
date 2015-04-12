@@ -26,10 +26,10 @@ class MySqlOperator(BaseOperator):
     @apply_defaults
     def __init__(self, sql, mysql_conn_id='mysql_default', *args, **kwargs):
         super(MySqlOperator, self).__init__(*args, **kwargs)
-
-        self.hook = MySqlHook(mysql_conn_id=mysql_conn_id)
+        self.mysql_conn_id = mysql_conn_id
         self.sql = sql
 
     def execute(self, context):
         logging.info('Executing: ' + self.sql)
-        self.hook.run(self.sql)
+        hook = MySqlHook(mysql_conn_id=self.mysql_conn_id)
+        hook.run(self.sql)
