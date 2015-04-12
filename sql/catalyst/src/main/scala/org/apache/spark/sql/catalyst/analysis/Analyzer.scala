@@ -55,11 +55,11 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
+      RewriteWhereClause ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
-      RewriteWhereClause ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -215,9 +215,23 @@ class Analyzer(
       case e @ Exists(left, Project(_, Filter(condition, right)), false) =>
           Join(left, right, LeftSemiNotExist, Some(condition))
 
-      case e @ Exists(left, right, exist) =>
-        throw new AnalysisException(
-          s"[${right}] should contain WHERE clause")
+      case e @ InSubquery(left, right @ Project(projectList, _), key, false) =>
+        if (projectList.length == 1) {
+          Join(left, right, LeftSemiNotExist, Some(EqualTo(projectList(0), key)))
+        } else {
+          throw new AnalysisException(
+            s"""Only a single expression need for In subquery but got
+               |${projectList.map(_.prettyString).mkString(",")}""".stripMargin)
+        }
+
+      case e @ InSubquery(left, right @ Project(projectList, _), key, true) =>
+        if (projectList.length == 1) {
+          Join(left, right, LeftSemiExist, Some(EqualTo(projectList(0), key)))
+        } else {
+          throw new AnalysisException(
+            s"""Only a single expression need for In subquery but got
+               |${projectList.map(_.prettyString).mkString(",")}""".stripMargin)
+        }
     }
   }
 
