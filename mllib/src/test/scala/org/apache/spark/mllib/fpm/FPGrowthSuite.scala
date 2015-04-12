@@ -66,7 +66,7 @@ class FPGrowthSuite extends FunSuite with MLlibTestSparkContext {
     assert(model2.freqItemsets.count() === 54)
 
     val model1 = fpg
-      .setMinSupport(0.1)
+      .setMinSupportAbsolute(1)
       .setNumPartitions(8)
       .run(rdd)
     assert(model1.freqItemsets.count() === 625)
