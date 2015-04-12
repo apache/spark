@@ -156,7 +156,7 @@ case class CreateTableAsSelect[T](
  *                     value is the CTE definition.
  */
 case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends UnaryNode {
-  override def output = child.output
+  override def output: Seq[Attribute] = child.output
 }
 
 case class WriteToFile(

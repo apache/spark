@@ -169,7 +169,7 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]) = {
+    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
       try {
         // In hive, if there is same table name in database and CTE definition,
         // hive will use the table in database, not the CTE one.
