@@ -94,7 +94,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |        (select a.key
       |         from src a
       |         where b.value = a.value and a.key > '9'
-      |        ) LIMIT 5""".stripMargin)
+      |        )
+      |order by key, value
+      |LIMIT 5""".stripMargin)
 
   createQueryTest("(correlated)WHERE clause with NOT IN",
     """select *
@@ -103,7 +105,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |        (select a.key
       |         from src a
       |         where b.value = a.value and a.key > '9'
-      |        ) LIMIT 5""".stripMargin)
+      |        )
+      |order by key, value
+      |LIMIT 5""".stripMargin)
 
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
