@@ -267,7 +267,9 @@ object CheckpointReader extends Logging {
             Thread.currentThread().getContextClassLoader)
           cp = ois.readObject.asInstanceOf[Checkpoint]
         } {
-          ois.close()
+          if (ois != null) {
+            ois.close()
+          }
         }
         cp.validate()
         logInfo("Checkpoint successfully loaded from file " + file)
