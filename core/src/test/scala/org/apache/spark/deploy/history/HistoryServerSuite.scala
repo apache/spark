@@ -105,7 +105,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     // TODO multi-attempt stages
   )
 
-  //run a bunch of characterization tests -- just verify the behavior is the same as what is saved
+  // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
   // in the test resource folder
   cases.foreach { case (name, path) =>
       test(name) {
@@ -114,8 +114,9 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
         jsonOpt should be ('defined)
         errOpt should be (None)
         val json = jsonOpt.get
-        val exp = IOUtils.toString(new FileInputStream(new File(expRoot, path + "/json_expectation")))
-        //compare the ASTs so formatting differences don't cause failures
+        val exp = IOUtils.toString(new FileInputStream(
+          new File(expRoot, path + "/json_expectation")))
+        // compare the ASTs so formatting differences don't cause failures
         import org.json4s._
         import org.json4s.jackson.JsonMethods._
         val jsonAst = parse(json)
@@ -261,9 +262,12 @@ object HistoryServerSuite {
 
   def getUrl(path: URL): String = {
     val (code, resultOpt, error) = getContentAndCode(path)
-    if (code == 200)
+    if (code == 200) {
       resultOpt.get
-    else throw new RuntimeException("got code: " + code + " when getting " + path + " w/ error: " + error)
+    } else {
+      throw new RuntimeException(
+        "got code: " + code + " when getting " + path + " w/ error: " + error)
+    }
   }
 
 }

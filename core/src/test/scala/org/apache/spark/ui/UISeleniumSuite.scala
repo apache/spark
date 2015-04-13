@@ -111,9 +111,11 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
       val updatedStorageJson = getJson(ui, "storage/rdd")
       updatedStorageJson.children.length should be (1)
-      (updatedStorageJson \ "storageLevel").extract[String] should be (StorageLevels.MEMORY_ONLY.description)
+      (updatedStorageJson \ "storageLevel").extract[String] should be (
+        StorageLevels.MEMORY_ONLY.description)
       val updatedRddJson = getJson(ui, "storage/rdd/0")
-      (updatedRddJson  \ "storageLevel").extract[String] should be (StorageLevels.MEMORY_ONLY.description)
+      (updatedRddJson  \ "storageLevel").extract[String] should be (
+        StorageLevels.MEMORY_ONLY.description)
     }
   }
 
@@ -431,7 +433,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
     assert(sc.ui.isDefined)
 
     withSpark(sc) { sc =>
-      //run a few jobs & stages ...
+      // run a few jobs & stages ...
       (0 until 5).foreach { idx =>
         // NOTE: if we reverse the order, things don't really behave nicely
         // we lose the stage for a job we keep, and then the job doesn't know
@@ -544,7 +546,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
-      val appListRawJson = HistoryServerSuite.getUrl(new URL(sc.ui.get.appUIAddress + "/json/v1/applications"))
+      val appListRawJson = HistoryServerSuite.getUrl(new URL(
+        sc.ui.get.appUIAddress + "/json/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       (appListJsonAst \ "completed").extract[Boolean] should be (false)
