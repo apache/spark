@@ -223,6 +223,7 @@ private[spark] class ApplicationMaster(
     val appId = client.getAttemptId().getApplicationId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
+        .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
         .getOrElse("")
 
