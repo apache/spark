@@ -131,7 +131,7 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
 object PowerIterationClusteringSuite extends FunSuite {
   def createModel(sc: SparkContext, k: Int, nPoints: Int): PowerIterationClusteringModel = {
     val assignments = sc.parallelize(
-      (0 until nPoints).map(p => new PowerIterationClustering.Assignment(p, Random.nextInt(k))))
+      (0 until nPoints).map(p => PowerIterationClustering.Assignment(p, Random.nextInt(k))))
     new PowerIterationClusteringModel(k, assignments)
   }
 

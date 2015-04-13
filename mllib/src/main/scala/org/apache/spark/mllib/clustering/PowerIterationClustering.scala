@@ -73,7 +73,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataRDD = model.assignments.map(x => (x.id, x.cluster)).toDF()
+      val dataRDD = model.assignments.toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
@@ -87,14 +87,11 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
       val k = (metadata \ "k").extract[Int]
       val assignments = sqlContext.parquetFile(Loader.dataPath(path))
-      Loader.checkSchema[(Long, Int)](assignments.schema)
+      Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
 
       val assignmentsRDD = assignments.map {
-        case Row(id: Long, cluster: Int) => new PowerIterationClustering.Assignment(id, cluster)
+        case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
       }
-
-      val realK = assignmentsRDD.map(_.cluster).distinct().collect().size
-      assert(k == realK)
 
       new PowerIterationClusteringModel(k, assignmentsRDD)
     }
@@ -196,7 +193,7 @@ class PowerIterationClustering private[clustering] (
     val v = powerIter(w, maxIterations)
     val assignments = kMeans(v, k).mapPartitions({ iter =>
       iter.map { case (id, cluster) =>
-        new Assignment(id, cluster)
+        Assignment(id, cluster)
       }
     }, preservesPartitioning = true)
     new PowerIterationClusteringModel(k, assignments)
@@ -213,7 +210,7 @@ object PowerIterationClustering extends Logging {
    * @param cluster assigned cluster id
    */
   @Experimental
-  class Assignment(val id: Long, val cluster: Int) extends Serializable
+  case class Assignment(id: Long, cluster: Int)
 
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
