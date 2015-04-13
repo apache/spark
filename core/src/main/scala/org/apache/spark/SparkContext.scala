@@ -1813,7 +1813,7 @@ object SparkContext extends Logging {
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
    */
   private var contextBeingConstructed: Option[SparkContext] = None
-
+  
   /**
    * Called to ensure that no other SparkContext is running in this JVM.
    *
@@ -1852,6 +1852,19 @@ object SparkContext extends Logging {
         }
       }
     }
+  }
+
+  /**
+   * Because we can only have one active Spark Context per JVM and there are times when multiple
+   * applications may wish to share a SparkContext, this function may be used to get or instantiate
+   * a SparkContext and register it as a singleton object. 
+   */
+  private[spark] def getOrCreate(config: SparkConf = new SparkConf()): SparkContext = {
+    activeContext match {
+      case None => setActiveContext(new SparkContext(config), 
+          config.getBoolean("spark.driver.allowMultipleContexts", false))
+    }
+    activeContext.get
   }
 
   /**

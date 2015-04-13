@@ -67,6 +67,23 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("Test getOrCreateContext") {
+    SparkContext.clearActiveContext()
+    var context: SparkContext = 
+      SparkContext.getOrCreate(new SparkConf().setAppName("test").setMaster("local")
+        .set("spark.driver.allowMultipleContexts", "true"))
+    
+    assert(context.getConf.getAppId)
+    try {
+      val conf = new SparkConf().setAppName("test").setMaster("local")
+          .set("spark.driver.allowMultipleContexts", "true")
+      sc = new SparkContext(conf)
+      secondSparkContext = new SparkContext(conf)
+    } finally {
+      Option(secondSparkContext).foreach(_.stop())
+    }
+  }
+  
   test("BytesWritable implicit conversion is correct") {
     // Regression test for SPARK-3121
     val bytesWritable = new BytesWritable()
