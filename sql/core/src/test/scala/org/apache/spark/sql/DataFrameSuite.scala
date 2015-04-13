@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
@@ -58,6 +58,14 @@ class DataFrameSuite extends QueryTest {
     assert(testData.toString === "[key: int, value: string]")
     assert(testData("key").toString === "key")
     assert($"test".toString === "test")
+  }
+
+  test("rename nested groupby") {
+    val df = Seq((1,(1,1))).toDF()
+
+    checkAnswer(
+      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      Row(1, 1) :: Nil)
   }
 
   test("invalid plan toString, debug mode") {
@@ -321,8 +329,9 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
+    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -431,6 +440,15 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("call udf in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
@@ -505,5 +523,12 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
+  }
+
+  test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
+    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val df = TestSQLContext.createDataFrame(rowRDD, schema)
+    df.rdd.collect()
   }
 }

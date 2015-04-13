@@ -94,10 +94,10 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       new SerializableWritable(rdd.context.hadoopConfiguration))
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
-    if (newRDD.partitions.size != rdd.partitions.size) {
+    if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(
-        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.size + ") has different " +
-          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
+        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.length + ") has different " +
+          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.length + ")")
     }
 
     // Change the dependencies and partitions of the RDD

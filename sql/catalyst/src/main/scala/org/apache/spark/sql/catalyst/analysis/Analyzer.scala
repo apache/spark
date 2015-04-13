@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
- * when all relations are already filled in and the analyser needs only to resolve attribute
+ * when all relations are already filled in and the analyzer needs only to resolve attribute
  * references.
  */
 object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
@@ -140,10 +140,10 @@ class Analyzer(
           case x: Expression if nonSelectedGroupExprSet.contains(x) =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
-            Literal(null, expr.dataType)
+            Literal.create(null, expr.dataType)
           case x if x == g.gid =>
             // replace the groupingId with concrete value (the bit mask)
-            Literal(bitmask, IntegerType)
+            Literal.create(bitmask, IntegerType)
         })
 
         result += GroupExpression(substitution)
@@ -169,21 +169,36 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation): LogicalPlan = {
+    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        // In hive, if there is same table name in database and CTE definition,
+        // hive will use the table in database, not the CTE one.
+        // Taking into account the reasonableness and the implementation complexity,
+        // here use the CTE definition first, check table name only and ignore database name
+        cteRelations.get(u.tableIdentifier.last)
+          .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
+          .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
-        i.copy(
-          table = EliminateSubQueries(getTable(u)))
-      case u: UnresolvedRelation =>
-        getTable(u)
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val (realPlan, cteRelations) = plan match {
+        // TODO allow subquery to define CTE
+        // Add cte table to a temp relation map,drop `with` plan and keep its child
+        case With(child, relations) => (child, relations)
+        case other => (other, Map.empty[String, LogicalPlan])
+      }
+
+      realPlan transform {
+        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
+          i.copy(
+            table = EliminateSubQueries(getTable(u, cteRelations)))
+        case u: UnresolvedRelation =>
+          getTable(u, cteRelations)
+      }
     }
   }
 
@@ -293,7 +308,7 @@ class Analyzer(
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
-            resolveGetField(child, fieldName)
+            GetField(child, fieldName, resolver)
         }
     }
 
@@ -313,36 +328,6 @@ class Analyzer(
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-    /**
-     * Returns the resolved `GetField`, and report error if no desired field or over one
-     * desired fields are found.
-     */
-    protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
-      def findField(fields: Array[StructField]): Int = {
-        val checkField = (f: StructField) => resolver(f.name, fieldName)
-        val ordinal = fields.indexWhere(checkField)
-        if (ordinal == -1) {
-          throw new AnalysisException(
-            s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-        } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-          throw new AnalysisException(
-            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
-        } else {
-          ordinal
-        }
-      }
-      expr.dataType match {
-        case StructType(fields) =>
-          val ordinal = findField(fields)
-          StructGetField(expr, fields(ordinal), ordinal)
-        case ArrayType(StructType(fields), containsNull) =>
-          val ordinal = findField(fields)
-          ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-        case otherType =>
-          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
-      }
-    }
   }
 
   /**

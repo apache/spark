@@ -60,7 +60,7 @@ abstract class StreamingLinearAlgorithm[
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  protected var model: Option[M] = None
+  protected var model: Option[M]
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
@@ -114,7 +114,7 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction.")
     }
-    data.map(model.get.predict)
+    data.map{x => model.get.predict(x)}
   }
 
   /** Java-friendly version of `predictOn`. */
@@ -132,7 +132,7 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction")
     }
-    data.mapValues(model.get.predict)
+    data.mapValues{x => model.get.predict(x)}
   }
 
 

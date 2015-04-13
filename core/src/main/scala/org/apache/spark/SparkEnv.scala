@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
-import akka.actor._
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
@@ -41,7 +40,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -286,16 +285,9 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
-    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
-      if (isDriver) {
-        logInfo("Registering " + name)
-        actorSystem.actorOf(Props(newActor), name = name)
-      } else {
-        AkkaUtils.makeDriverRef(name, conf, actorSystem)
-      }
-    }
-
-    def registerOrLookupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
+    def registerOrLookupEndpoint(
+        name: String, endpointCreator: => RpcEndpoint):
+      RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
         rpcEnv.setupEndpoint(name, endpointCreator)
@@ -312,9 +304,9 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookup(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+    mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(
+        rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
@@ -334,12 +326,13 @@ object SparkEnv extends Logging {
           new NioBlockTransferService(conf, securityManager)
       }
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
-      "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
+      BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus)),
+      conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
+    val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
       serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
       numUsableCores)
 

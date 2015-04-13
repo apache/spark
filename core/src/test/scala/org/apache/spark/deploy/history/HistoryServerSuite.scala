@@ -189,10 +189,10 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
     val page = new HistoryPage(historyServer)
 
-    //when
+    // when
     val response = page.render(request)
 
-    //then
+    // then
     val links = response \\ "a"
     val justHrefs = for {
       l <- links

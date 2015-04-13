@@ -92,7 +92,8 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF().registerTempTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+      .registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(table("bigData").count() === 200000L)
     table("bigData").unpersist(blocking = true)

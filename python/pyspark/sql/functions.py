@@ -123,7 +123,8 @@ class UserDefinedFunction(object):
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
                                                  includes, sc.pythonExec, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
@@ -160,7 +161,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

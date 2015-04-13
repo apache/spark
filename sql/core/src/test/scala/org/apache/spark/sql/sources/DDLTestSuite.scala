@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -31,7 +32,7 @@ class DDLScanSource extends RelationProvider {
 case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
   extends BaseRelation with TableScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(Seq(
       StructField("intType", IntegerType, nullable = false,
         new MetadataBuilder().putString("comment", "test comment").build()),
@@ -57,8 +58,9 @@ case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLConte
     ))
 
 
-  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).
-    map(e => Row(s"people$e", e * 2))
+  override def buildScan(): RDD[Row] = {
+    sqlContext.sparkContext.parallelize(from to to).map(e => Row(s"people$e", e * 2))
+  }
 }
 
 class DDLTestSuite extends DataSourceTest {

@@ -33,7 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -240,8 +240,8 @@ class DataFrame private[sql](
         s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
-    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
-      apply(oldName).as(newName)
+    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
+      Column(oldAttribute).as(newName)
     }
     select(newCols :_*)
   }
@@ -273,7 +273,7 @@ class DataFrame private[sql](
   def printSchema(): Unit = println(schema.treeString)
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purpose.
+   * Prints the plans (logical and physical) to the console for debugging purposes.
    * @group basic
    */
   def explain(extended: Boolean): Unit = {
@@ -285,7 +285,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Only prints the physical plan to the console for debugging purpose.
+   * Only prints the physical plan to the console for debugging purposes.
    * @group basic
    */
   def explain(): Unit = explain(extended = false)
@@ -713,7 +713,7 @@ class DataFrame private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributes = schema.toAttributes
     val rowFunction =
-      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
     val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false, None, logicalPlan)
@@ -734,7 +734,7 @@ class DataFrame private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     def rowFunction(row: Row): TraversableOnce[Row] = {
-      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+      f(row(0).asInstanceOf[A]).map(o => Row(CatalystTypeConverters.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -904,7 +904,8 @@ class DataFrame private[sql](
    */
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions), schema)
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
+      schema, needsConversion = false)
   }
 
   /**
@@ -960,7 +961,10 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
+    queryExecution.executedPlan.execute().mapPartitions { rows =>
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      rows.map(converter(_).asInstanceOf[Row])
+    }
   }
 
   /**
@@ -976,8 +980,8 @@ class DataFrame private[sql](
   def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
-   * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-   * table is tied to the [[SQLContext]] that was used to create this DataFrame.
+   * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
+   * temporary table is tied to the [[SQLContext]] that was used to create this DataFrame.
    *
    * @group basic
    */
@@ -1252,7 +1256,7 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
@@ -1276,7 +1280,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.
