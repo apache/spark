@@ -96,7 +96,9 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(StringType, TimestampType, None)
 
     // ComplexType
-    widenTest(NullType, MapType(IntegerType, StringType, false), Some(MapType(IntegerType, StringType, false)))
+    widenTest(NullType,
+      MapType(IntegerType, StringType, false),
+      Some(MapType(IntegerType, StringType, false)))
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
@@ -113,7 +115,9 @@ class HiveTypeCoercionSuite extends PlanTest {
     // Remove superflous boolean -> boolean casts.
     ruleTest(Cast(Literal(true), BooleanType), Literal(true))
     // Stringify boolean when casting to string.
-    ruleTest(Cast(Literal(false), StringType), If(Literal(false), Literal("true"), Literal("false")))
+    ruleTest(
+      Cast(Literal(false), StringType),
+      If(Literal(false), Literal("true"), Literal("false")))
   }
 
   test("coalesce casts") {

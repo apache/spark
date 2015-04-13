@@ -50,7 +50,7 @@ case class InsertIntoHiveTable(
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val db = Hive.get(sc.hiveconf)
+  @transient private lazy val catalog = sc.catalog
 
   private def newSerializer(tableDesc: TableDesc): Serializer = {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
@@ -199,38 +199,45 @@ case class InsertIntoHiveTable(
           orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
-      db.validatePartitionNameCharacters(partVals)
+      catalog.synchronized {
+        catalog.client.validatePartitionNameCharacters(partVals)
+      }
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        db.loadDynamicPartitions(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          numDynamicPartitions,
-          holdDDLTime,
-          isSkewedStoreAsSubdir
-        )
+        catalog.synchronized {
+          catalog.client.loadDynamicPartitions(
+            outputPath,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            numDynamicPartitions,
+            holdDDLTime,
+            isSkewedStoreAsSubdir)
+        }
       } else {
-        db.loadPartition(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          holdDDLTime,
-          inheritTableSpecs,
-          isSkewedStoreAsSubdir)
+        catalog.synchronized {
+          catalog.client.loadPartition(
+            outputPath,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            holdDDLTime,
+            inheritTableSpecs,
+            isSkewedStoreAsSubdir)
+        }
       }
     } else {
-      db.loadTable(
-        outputPath,
-        qualifiedTableName,
-        overwrite,
-        holdDDLTime)
+      catalog.synchronized {
+        catalog.client.loadTable(
+          outputPath,
+          qualifiedTableName,
+          overwrite,
+          holdDDLTime)
+      }
     }
 
     // Invalidate the cache.

@@ -34,6 +34,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature._
+import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -358,9 +359,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data)
   }
-
-
-
+  
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
@@ -421,6 +420,24 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
+   * to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see
+   * the Py4J documentation.
+   */
+  def trainFPGrowthModel(
+      data: JavaRDD[java.lang.Iterable[Any]],
+      minSupport: Double,
+      numPartitions: Int): FPGrowthModel[Any] = {
+    val fpg = new FPGrowth()
+      .setMinSupport(minSupport)
+      .setNumPartitions(numPartitions)
+
+    val model = fpg.run(data.rdd.map(_.asScala.toArray))
+    new FPGrowthModelWrapper(model)
+  }
+
+  /**
    * Java stub for Normalizer.transform()
    */
   def normalizeVector(p: Double, vector: Vector): Vector = {
@@ -433,9 +450,9 @@ private[python] class PythonMLLibAPI extends Serializable {
   def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
     new Normalizer(p).transform(rdd)
   }
-
+  
   /**
-   * Java stub for IDF.fit(). This stub returns a
+   * Java stub for StandardScaler.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
@@ -476,13 +493,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long): Word2VecModelWrapper = {
+      seed: Long,
+      minCount: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
+      .setMinCount(minCount)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -515,6 +534,10 @@ private[python] class PythonMLLibAPI extends Serializable {
       val similarity = Vectors.dense(result.map(_._2))
       val words = result.map(_._1)
       List(words, similarity).map(_.asInstanceOf[Object]).asJava
+    }
+
+    def getVectors: JMap[String, JList[Float]] = {
+      model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
   }
 

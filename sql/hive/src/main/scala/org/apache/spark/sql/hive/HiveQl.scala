@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.sql.Date
 
 
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -111,13 +113,16 @@ private[hive] object HiveQl {
     
     "TOK_REVOKE",
     
+    "TOK_SHOW_COMPACTIONS",
     "TOK_SHOW_CREATETABLE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
+    "TOK_SHOW_ROLE_PRINCIPALS",
     "TOK_SHOW_ROLES",
     "TOK_SHOW_SET_ROLE",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOW_TBLPROPERTIES",
+    "TOK_SHOW_TRANSACTIONS",
     "TOK_SHOWCOLUMNS",
     "TOK_SHOWDATABASES",
     "TOK_SHOWFUNCTIONS",
@@ -574,11 +579,23 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_QUERY", queryArgs)
         if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
 
-      val (fromClause: Option[ASTNode], insertClauses) = queryArgs match {
-        case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
-          (Some(args.head), insertClauses)
-        case Token("TOK_INSERT", _) :: Nil => (None, queryArgs)
-      }
+      val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
+        queryArgs match {
+          case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+            // check if has CTE
+            insertClauses.last match {
+              case Token("TOK_CTE", cteClauses) =>
+                val cteRelations = cteClauses.map(node => {
+                  val relation = nodeToRelation(node).asInstanceOf[Subquery]
+                  (relation.alias, relation)
+                }).toMap
+                (Some(args.head), insertClauses.init, Some(cteRelations))
+
+              case _ => (Some(args.head), insertClauses, None)
+            }
+
+          case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
+        }
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
@@ -659,7 +676,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   AttributeReference("value", StringType)()), true)
             }
 
-            def matchSerDe(clause: Seq[ASTNode]) = clause match {
+            def matchSerDe(clause: Seq[ASTNode])
+              : (Seq[(String, String)], String, Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
                   case Token(name, Token(value, Nil) :: Nil) => (name, value)
@@ -791,7 +809,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
 
       // If there are multiple INSERTS just UNION them together into on query.
-      queries.reduceLeft(Union)
+      val query = queries.reduceLeft(Union)
+
+      // return With plan if there is CTE
+      cteRelations.map(With(query, _)).getOrElse(query)
 
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
@@ -1283,8 +1304,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         Explode(attributes, nodeToExpr(child))
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+        val functionInfo: FunctionInfo =
+          Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
+            sys.error(s"Couldn't find function $functionName"))
+        val functionClassName = functionInfo.getFunctionClass.getName
+
         HiveGenericUdtf(
-          new HiveFunctionWrapper(functionName),
+          new HiveFunctionWrapper(functionClassName),
           attributes,
           children.map(nodeToExpr))
 

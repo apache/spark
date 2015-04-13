@@ -34,6 +34,7 @@ import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
+import com.google.common.net.InetAddresses
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -313,7 +314,7 @@ private[spark] object Utils extends Logging {
                  transferToEnabled: Boolean = false): Long =
   {
     var count = 0L
-    try {
+    tryWithSafeFinally {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
         && transferToEnabled) {
         // When both streams are File stream, use transferTo to improve copy performance.
@@ -353,7 +354,7 @@ private[spark] object Utils extends Logging {
         }
       }
       count
-    } finally {
+    } {
       if (closeStreams) {
         try {
           in.close()
@@ -789,13 +790,12 @@ private[spark] object Utils extends Logging {
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    * Note, this is typically not used from within core spark.
    */
-  lazy val localIpAddress: String = findLocalIpAddress()
-  lazy val localIpAddressHostname: String = getAddressHostName(localIpAddress)
+  private lazy val localIpAddress: InetAddress = findLocalInetAddress()
 
-  private def findLocalIpAddress(): String = {
+  private def findLocalInetAddress(): InetAddress = {
     val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
     if (defaultIpOverride != null) {
-      defaultIpOverride
+      InetAddress.getByName(defaultIpOverride)
     } else {
       val address = InetAddress.getLocalHost
       if (address.isLoopbackAddress) {
@@ -806,15 +806,20 @@ private[spark] object Utils extends Logging {
         // It's more proper to pick ip address following system output order.
         val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.toList
         val reOrderedNetworkIFs = if (isWindows) activeNetworkIFs else activeNetworkIFs.reverse
+
         for (ni <- reOrderedNetworkIFs) {
-          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
-               !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
+          val addresses = ni.getInetAddresses.toList
+            .filterNot(addr => addr.isLinkLocalAddress || addr.isLoopbackAddress)
+          if (addresses.nonEmpty) {
+            val addr = addresses.find(_.isInstanceOf[Inet4Address]).getOrElse(addresses.head)
+            // because of Inet6Address.toHostName may add interface at the end if it knows about it
+            val strippedAddress = InetAddress.getByAddress(addr.getAddress)
             // We've found an address that looks reasonable!
             logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
-              " a loopback address: " + address.getHostAddress + "; using " + addr.getHostAddress +
-              " instead (on interface " + ni.getName + ")")
+              " a loopback address: " + address.getHostAddress + "; using " +
+              strippedAddress.getHostAddress + " instead (on interface " + ni.getName + ")")
             logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
-            return addr.getHostAddress
+            return strippedAddress
           }
         }
         logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
@@ -822,7 +827,7 @@ private[spark] object Utils extends Logging {
           " external IP address!")
         logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
       }
-      address.getHostAddress
+      address
     }
   }
 
@@ -842,11 +847,14 @@ private[spark] object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddressHostname)
+    customHostname.getOrElse(localIpAddress.getHostAddress)
   }
 
-  def getAddressHostName(address: String): String = {
-    InetAddress.getByName(address).getHostName
+  /**
+   * Get the local machine's URI.
+   */
+  def localHostNameForURI(): String = {
+    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
   def checkHost(host: String, message: String = "") {
@@ -1211,6 +1219,54 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: IOException => throw e
       case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
+  /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
+  def tryLogNonFatalError(block: => Unit) {
+    try {
+      block
+    } catch {
+      case NonFatal(t) =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+    }
+  }
+
+  /**
+   * Execute a block of code, then a finally block, but if exceptions happen in
+   * the finally block, do not suppress the original exception.
+   *
+   * This is primarily an issue with `finally { out.close() }` blocks, where
+   * close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * fail as well. This would then suppress the original/likely more meaningful
+   * exception from the original `out.write` call.
+   */
+  def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
+    // It would be nice to find a method on Try that did this
+    var originalThrowable: Throwable = null
+    try {
+      block
+    } catch {
+      case t: Throwable =>
+        // Purposefully not using NonFatal, because even fatal exceptions
+        // we don't want to have our finallyBlock suppress
+        originalThrowable = t
+        throw originalThrowable
+    } finally {
+      try {
+        finallyBlock
+      } catch {
+        case t: Throwable =>
+          if (originalThrowable != null) {
+            // We could do originalThrowable.addSuppressed(t), but it's
+            // not available in JDK 1.6.
+            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
+            throw originalThrowable
+          } else {
+            throw t
+          }
+      }
     }
   }
 
@@ -2074,7 +2130,7 @@ private[spark] class RedirectThread(
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      try {
+      Utils.tryWithSafeFinally {
         val buf = new Array[Byte](1024)
         var len = in.read(buf)
         while (len != -1) {
@@ -2082,7 +2138,7 @@ private[spark] class RedirectThread(
           out.flush()
           len = in.read(buf)
         }
-      } finally {
+      } {
         if (propagateEof) {
           out.close()
         }

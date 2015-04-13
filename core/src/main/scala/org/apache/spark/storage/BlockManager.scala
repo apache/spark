@@ -26,7 +26,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
-import akka.actor.{ActorSystem, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
@@ -37,6 +36,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -64,7 +64,7 @@ private[spark] class BlockResult(
  */
 private[spark] class BlockManager(
     executorId: String,
-    actorSystem: ActorSystem,
+    rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     defaultSerializer: Serializer,
     maxMemory: Long,
@@ -136,9 +136,9 @@ private[spark] class BlockManager(
   // Whether to compress shuffle output temporarily spilled to disk
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
-  private val slaveActor = actorSystem.actorOf(
-    Props(new BlockManagerSlaveActor(this, mapOutputTracker)),
-    name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
+  private val slaveEndpoint = rpcEnv.setupEndpoint(
+    "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
+    new BlockManagerSlaveEndpoint(rpcEnv, this, mapOutputTracker))
 
   // Pending re-registration action being executed asynchronously or null if none is pending.
   // Accesses should synchronize on asyncReregisterLock.
@@ -167,7 +167,7 @@ private[spark] class BlockManager(
    */
   def this(
       execId: String,
-      actorSystem: ActorSystem,
+      rpcEnv: RpcEnv,
       master: BlockManagerMaster,
       serializer: Serializer,
       conf: SparkConf,
@@ -176,7 +176,7 @@ private[spark] class BlockManager(
       blockTransferService: BlockTransferService,
       securityManager: SecurityManager,
       numUsableCores: Int) = {
-    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
+    this(execId, rpcEnv, master, serializer, BlockManager.getMaxMemory(conf),
       conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
   }
 
@@ -186,7 +186,7 @@ private[spark] class BlockManager(
    * where it is only learned after registration with the TaskScheduler).
    *
    * This method initializes the BlockTransferService and ShuffleClient, registers with the
-   * BlockManagerMaster, starts the BlockManagerWorker actor, and registers with a local shuffle
+   * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
    * service if configured.
    */
   def initialize(appId: String): Unit = {
@@ -202,7 +202,7 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -265,7 +265,7 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -1215,7 +1215,7 @@ private[spark] class BlockManager(
       shuffleClient.close()
     }
     diskBlockManager.stop()
-    actorSystem.stop(slaveActor)
+    rpcEnv.stop(slaveEndpoint)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()

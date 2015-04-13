@@ -60,6 +60,14 @@ class DataFrameSuite extends QueryTest {
     assert($"test".toString === "test")
   }
 
+  test("rename nested groupby") {
+    val df = Seq((1,(1,1))).toDF()
+
+    checkAnswer(
+      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      Row(1, 1) :: Nil)
+  }
+
   test("invalid plan toString, debug mode") {
     val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
@@ -321,8 +329,9 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
+    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -429,6 +438,15 @@ class DataFrameSuite extends QueryTest {
       testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
+  }
+
+  test("call udf in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
   test("withColumn") {

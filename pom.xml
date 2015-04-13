@@ -159,6 +159,8 @@
     <snappy.version>1.1.1.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
 
+    <test.java.home>${java.home}</test.java.home>
+
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
       declared in the projects that build assemblies.
@@ -1194,6 +1196,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1224,6 +1227,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1717,6 +1721,16 @@
     </profile>
 
     <profile>
+      <id>test-java-home</id>
+      <activation>
+        <property><name>env.JAVA_HOME</name></property>
+      </activation>
+      <properties>
+        <test.java.home>${env.JAVA_HOME}</test.java.home>
+      </properties>
+    </profile>
+
+    <profile>
       <id>scala-2.11</id>
       <activation>
         <property><name>scala-2.11</name></property>
@@ -1748,6 +1762,9 @@
     </profile>
     <profile>
       <id>parquet-provided</id>
+    </profile>
+    <profile>
+      <id>sparkr</id>
     </profile>
   </profiles>
 </project>

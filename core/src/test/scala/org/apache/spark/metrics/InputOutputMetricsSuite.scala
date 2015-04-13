@@ -238,7 +238,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
 
     sc.textFile(tmpFilePath, 4)
       .map(key => (key, 1))
-      .reduceByKey(_+_)
+      .reduceByKey(_ + _)
       .saveAsTextFile("file://" + tmpFile.getAbsolutePath)
 
     sc.listenerBus.waitUntilEmpty(500)
