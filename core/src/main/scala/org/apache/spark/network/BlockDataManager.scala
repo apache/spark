@@ -32,8 +32,5 @@ trait BlockDataManager {
   /**
    * Put the block locally, using the given storage level.
    */
-  def putBlockData(
-    blockId: BlockId,
-    data: ManagedBuffer,
-    level: StorageLevel): Unit
+  def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit
 }

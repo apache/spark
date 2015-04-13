@@ -29,7 +29,6 @@ import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, Stre
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, OpenBlocks, StreamHandle, UploadBlock}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.SimpleResourceCleaner
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.

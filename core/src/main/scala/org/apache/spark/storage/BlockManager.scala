@@ -317,10 +317,7 @@ private[spark] class BlockManager(
   /**
    * Put the block locally, using the given storage level.
    */
-  override def putBlockData(
-      blockId: BlockId,
-      data: ManagedBuffer,
-      level: StorageLevel): Unit = {
+  override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
     putBytes(blockId, data.nioByteBuffer(), level)
   }
 
@@ -604,7 +601,7 @@ private[spark] class BlockManager(
       asBlockResult: Boolean,
       resourceCleaner: Option[ResourceCleaner]): Option[Any] = {
     require(blockId != null, "BlockId is null")
-    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a TaskContext if " +
+    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a ResourceCleaner if " +
       "requesting block results")
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
@@ -876,9 +873,9 @@ private[spark] class BlockManager(
     } finally {
       // this is to clean up the byte buffer from the *input* (as opposed to the line above, which
       // disposes the byte buffer that is the *result* of the put).  We might have turned that byte
-      // buffer into an iterator of values, in which case the input ByteBuffer should get disposed.
+      // buffer into an iterator of values, in which case the input ByteBuffer should be disposed.
       // It will automatically get disposed when we get to the end of the iterator, but in case
-      // we don't, we still dispose it here
+      // there is some exception before we do, this will take care of it
       resourceCleaner.doCleanup()
     }
 

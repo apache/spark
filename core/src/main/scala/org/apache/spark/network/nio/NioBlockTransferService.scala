@@ -23,7 +23,7 @@ import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.{SimpleResourceCleaner, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 
 import scala.concurrent.Future
@@ -201,7 +201,6 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   private def putBlock(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel) {
     val startTimeMs = System.currentTimeMillis()
     logDebug("PutBlock " + blockId + " started from " + startTimeMs + " with data: " + bytes)
-    val cleaner = new SimpleResourceCleaner
     blockDataManager.putBlockData(blockId, new NioManagedBuffer(bytes), level)
     logDebug("PutBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " with data size: " + bytes.limit)

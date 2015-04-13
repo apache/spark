@@ -241,8 +241,8 @@ private[spark] class Executor(
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
-            env.blockManager.putBytes(blockId, serializedDirectResult,
-              StorageLevel.MEMORY_AND_DISK_SER)
+            env.blockManager.putBytes(
+              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))

@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{SimpleResourceCleaner, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.

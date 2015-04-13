@@ -46,10 +46,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     putBytes(blockId, _bytes, level)
   }
 
-  def putBytes(
-    blockId: BlockId,
-    _bytes: ByteBuffer,
-    level: StorageLevel): PutResult = {
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
