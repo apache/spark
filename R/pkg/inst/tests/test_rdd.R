@@ -141,7 +141,7 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   unpersist(rdd2)
   expect_false(rdd2@env$isCached)
 
-  setCheckpointDir(sc, "checkpoints")
+  setCheckpointDir(sc, "checkpoint")
   checkpoint(rdd2)
   expect_true(rdd2@env$isCheckpointed)
 
@@ -152,7 +152,7 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   # make sure the data is collectable
   collect(rdd2)
 
-  unlink("checkpoints")
+  unlink("checkpoint")
 })
 
 test_that("reduce on RDD", {
