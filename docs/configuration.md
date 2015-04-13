@@ -48,8 +48,6 @@ The following format is accepted:
     5d (days)
     1y (years)
     
-If no units are provided, the default unit specified in the documentation is assumed.
-
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
