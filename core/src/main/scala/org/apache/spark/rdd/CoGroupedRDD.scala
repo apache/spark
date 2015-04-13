@@ -49,10 +49,12 @@ private[spark] case class NarrowCoGroupSplitDep(
 }
 
 /**
- * Stores information about the narrow dependencies used by a CoGroupedRdd.  narrowDeps maps to
- * the dependencies variable in the parent RDD: for each one to one dependency in dependencies,
- * narrowDeps has a NarrowCoGroupSplitDep (describing the partition for that dependency) at the
- * corresponding index.
+ * Stores information about the narrow dependencies used by a CoGroupedRdd.
+ *
+ * @param narrowDeps maps to the dependencies variable in the parent RDD: for each one to one
+ *                   dependency in dependencies, narrowDeps has a NarrowCoGroupSplitDep (describing
+ *                   the partition for that dependency) at the corresponding index. The size of
+ *                   narrowDeps should always be equal to the number of parents.
  */
 private[spark] class CoGroupPartition(
     idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
