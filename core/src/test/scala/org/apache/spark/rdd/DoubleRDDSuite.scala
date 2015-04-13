@@ -18,15 +18,14 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
-import org.scalatest.Matchers._
 
 import org.apache.spark._
 
 class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   test("sum") {
-    sc.parallelize(Seq.empty[Double]).sum() should be(0.0 +- 0.0001)
-    sc.parallelize(Seq(1.0)).sum() should be(1.0 +- 0.0001)
-    sc.parallelize(Seq(1.0, 2.0)).sum() should be(3.0 +- 0.0001)
+    assert(sc.parallelize(Seq.empty[Double]).sum() === 0.0)
+    assert(sc.parallelize(Seq(1.0)).sum() === 1.0)
+    assert(sc.parallelize(Seq(1.0, 2.0)).sum() === 3.0)
   }
 
   // Verify tests on the histogram functionality. We test with both evenly
