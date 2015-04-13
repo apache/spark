@@ -136,12 +136,21 @@ class GradientBoostedTreesModel(
 
     evaluationArray(0) = predictionAndError.values.mean()
 
-    (1 until numIterations).foreach { nTree =>
-      predictionAndError = GradientBoostedTreesModel.updatePredictionError(
-        remappedData, predictionAndError, treeWeights(nTree), trees(nTree), loss)
+    val broadcastTrees = sc.broadcast(trees)
+    (1 until numIterations).map { nTree =>
+      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
+        val currentTree = broadcastTrees.value(nTree)
+        val currentTreeWeight = treeWeights(nTree)
+        iter.map { case (point, (pred, error)) =>
+          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+          val newError = loss.computeError(newPred, point.label)
+          (newPred, newError)
+        }
+      }
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
+    broadcastTrees.unpersist()
     evaluationArray
   }
 
@@ -190,15 +199,11 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     loss: Loss): RDD[(Double, Double)] = {
 
     val sc = data.sparkContext
-    val broadcastedTreeWeight = sc.broadcast(treeWeight)
-    val broadcastedTree = sc.broadcast(tree)
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
-      val currentTreeWeight = broadcastedTreeWeight.value
-      val currentTree = broadcastedTree.value
       iter.map {
         case (lp, (pred, error)) => {
-          val newPred = pred + currentTree.predict(lp.features) * currentTreeWeight
+          val newPred = pred + tree.predict(lp.features) * treeWeight
           val newError = loss.computeError(newPred, lp.label)
           (newPred, newError)
         }
