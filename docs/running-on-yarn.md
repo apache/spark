@@ -236,7 +236,7 @@ The above starts a YARN client program which starts the default Application Mast
 
 To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".
 
-Now we also can launch a Spark application in Python on YARN. The different is we don't need to specify the class, and replace the <app jar> with Python file.
+Now we also can launch a Spark application in Python on YARN. The different is we don't need to specify the class, and just replace the app jar with Python file.
 
 To run spark-shell:
 
