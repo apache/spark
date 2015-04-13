@@ -320,9 +320,8 @@ private[spark] class BlockManager(
   override def putBlockData(
       blockId: BlockId,
       data: ManagedBuffer,
-      level: StorageLevel,
-      resourceCleaner: ResourceCleaner): Unit = {
-    putBytes(blockId, data.nioByteBuffer(), level, resourceCleaner)
+      level: StorageLevel): Unit = {
+    putBytes(blockId, data.nioByteBuffer(), level)
   }
 
   /**
@@ -653,7 +652,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(values != null, "Values is null")
-    doPut(blockId, IteratorValues(values), level, tellMaster, None, effectiveStorageLevel)
+    doPut(blockId, IteratorValues(values), level, tellMaster, effectiveStorageLevel)
   }
 
   /**
@@ -684,7 +683,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(values != null, "Values is null")
-    doPut(blockId, ArrayValues(values), level, tellMaster, None, effectiveStorageLevel)
+    doPut(blockId, ArrayValues(values), level, tellMaster, effectiveStorageLevel)
   }
 
   /**
@@ -695,12 +694,10 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ByteBuffer,
       level: StorageLevel,
-      resourceCleaner: ResourceCleaner,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, Some(resourceCleaner),
-      effectiveStorageLevel)
+    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
   }
 
   /**
@@ -716,13 +713,10 @@ private[spark] class BlockManager(
       data: BlockValues,
       level: StorageLevel,
       tellMaster: Boolean = true,
-      resourceCleaner: Option[ResourceCleaner],
       effectiveStorageLevel: Option[StorageLevel] = None)
     : Seq[(BlockId, BlockStatus)] = {
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    require(!data.isInstanceOf[ByteBufferValues] || resourceCleaner.isDefined, "Must specify a " +
-      "resourceCleaner for ByteBufferValues")
     effectiveStorageLevel.foreach { level =>
       require(level != null && level.isValid, "Effective StorageLevel is null or invalid")
     }
@@ -752,6 +746,7 @@ private[spark] class BlockManager(
 
     val startTimeMs = System.currentTimeMillis
 
+    val resourceCleaner = new SimpleResourceCleaner
     /* If we're storing values and we need to replicate the data, we'll want access to the values,
      * but because our put will read the whole iterator, there will be no values left. For the
      * case where the put serializes data, we'll remember the bytes, above; but for the case where
@@ -777,104 +772,115 @@ private[spark] class BlockManager(
       case _ => null
     }
 
-    putBlockInfo.synchronized {
-      logTrace("Put for block %s took %s to get into synchronized block"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+    try {
+      putBlockInfo.synchronized {
+        logTrace("Put for block %s took %s to get into synchronized block"
+          .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
-      var marked = false
-      try {
-        // returnValues - Whether to return the values put
-        // blockStore - The type of storage to put these values into
-        val (returnValues, blockStore: BlockStore) = {
-          if (putLevel.useMemory) {
-            // Put it in memory first, even if it also has useDisk set to true;
-            // We will drop it to disk later if the memory store can't hold it.
-            (true, memoryStore)
-          } else if (putLevel.useOffHeap) {
-            // Use tachyon for off-heap storage
-            (false, tachyonStore)
-          } else if (putLevel.useDisk) {
-            // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
-          } else {
-            assert(putLevel == StorageLevel.NONE)
-            throw new BlockException(
-              blockId, s"Attempted to put block $blockId without specifying storage level!")
-          }
-        }
-
-        // Actually put the values
-        val result = data match {
-          case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator, putLevel, returnValues)
-          case ArrayValues(array) =>
-            blockStore.putArray(blockId, array, putLevel, returnValues)
-          case ByteBufferValues(bytes) =>
-            bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel, resourceCleaner.get)
-        }
-        size = result.size
-        result.data match {
-          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
-          case Right (newBytes) => bytesAfterPut = newBytes
-          case _ =>
-        }
-
-        // Keep track of which blocks are dropped from memory
-        if (putLevel.useMemory) {
-          result.droppedBlocks.foreach { updatedBlocks += _ }
-        }
-
-        val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-        if (putBlockStatus.storageLevel != StorageLevel.NONE) {
-          // Now that the block is in either the memory, tachyon, or disk store,
-          // let other threads read it, and tell the master about it.
-          marked = true
-          putBlockInfo.markReady(size)
-          if (tellMaster) {
-            reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
-          }
-          updatedBlocks += ((blockId, putBlockStatus))
-        }
-      } finally {
-        // If we failed in putting the block to memory/disk, notify other possible readers
-        // that it has failed, and then remove it from the block info map.
-        if (!marked) {
-          // Note that the remove must happen before markFailure otherwise another thread
-          // could've inserted a new BlockInfo before we remove it.
-          blockInfo.remove(blockId)
-          putBlockInfo.markFailure()
-          logWarning(s"Putting block $blockId failed")
-        }
-      }
-    }
-    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-
-    // Either we're storing bytes and we asynchronously started replication, or we're storing
-    // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
-      data match {
-        case ByteBufferValues(bytes) =>
-          if (replicationFuture != null) {
-            Await.ready(replicationFuture, Duration.Inf)
-          }
-        case _ =>
-          val remoteStartTime = System.currentTimeMillis
-          // Serialize the block if not already done
-          if (bytesAfterPut == null) {
-            if (valuesAfterPut == null) {
-              throw new SparkException(
-                "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+        var marked = false
+        try {
+          // returnValues - Whether to return the values put
+          // blockStore - The type of storage to put these values into
+          val (returnValues, blockStore: BlockStore) = {
+            if (putLevel.useMemory) {
+              // Put it in memory first, even if it also has useDisk set to true;
+              // We will drop it to disk later if the memory store can't hold it.
+              (true, memoryStore)
+            } else if (putLevel.useOffHeap) {
+              // Use tachyon for off-heap storage
+              (false, tachyonStore)
+            } else if (putLevel.useDisk) {
+              // Don't get back the bytes from put unless we replicate them
+              (putLevel.replication > 1, diskStore)
+            } else {
+              assert(putLevel == StorageLevel.NONE)
+              throw new BlockException(
+                blockId, s"Attempted to put block $blockId without specifying storage level!")
             }
-            bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
           }
-          replicate(blockId, bytesAfterPut, putLevel)
-          logDebug("Put block %s remotely took %s"
-            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
-      }
-    }
 
-    BlockManager.dispose(bytesAfterPut)
+          // Actually put the values
+          val result = data match {
+            case IteratorValues(iterator) =>
+              blockStore.putIterator(blockId, iterator, putLevel, returnValues)
+            case ArrayValues(array) =>
+              blockStore.putArray(blockId, array, putLevel, returnValues)
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              blockStore.putBytes(blockId, bytes, putLevel, resourceCleaner)
+          }
+          size = result.size
+          result.data match {
+            case Left(newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
+            case Right(newBytes) => bytesAfterPut = newBytes
+            case _ =>
+          }
+
+          // Keep track of which blocks are dropped from memory
+          if (putLevel.useMemory) {
+            result.droppedBlocks.foreach {
+              updatedBlocks += _
+            }
+          }
+
+          val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
+          if (putBlockStatus.storageLevel != StorageLevel.NONE) {
+            // Now that the block is in either the memory, tachyon, or disk store,
+            // let other threads read it, and tell the master about it.
+            marked = true
+            putBlockInfo.markReady(size)
+            if (tellMaster) {
+              reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
+            }
+            updatedBlocks += ((blockId, putBlockStatus))
+          }
+        } finally {
+          // If we failed in putting the block to memory/disk, notify other possible readers
+          // that it has failed, and then remove it from the block info map.
+          if (!marked) {
+            // Note that the remove must happen before markFailure otherwise another thread
+            // could've inserted a new BlockInfo before we remove it.
+            blockInfo.remove(blockId)
+            putBlockInfo.markFailure()
+            logWarning(s"Putting block $blockId failed")
+          }
+        }
+      }
+      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+
+      // Either we're storing bytes and we asynchronously started replication, or we're storing
+      // values and need to serialize and replicate them now:
+      if (putLevel.replication > 1) {
+        data match {
+          case ByteBufferValues(bytes) =>
+            if (replicationFuture != null) {
+              Await.ready(replicationFuture, Duration.Inf)
+            }
+          case _ =>
+            val remoteStartTime = System.currentTimeMillis
+            // Serialize the block if not already done
+            if (bytesAfterPut == null) {
+              if (valuesAfterPut == null) {
+                throw new SparkException(
+                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+              }
+              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
+            }
+            replicate(blockId, bytesAfterPut, putLevel)
+            logDebug("Put block %s remotely took %s"
+              .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+        }
+      }
+
+      BlockManager.dispose(bytesAfterPut)
+    } finally {
+      // this is to clean up the byte buffer from the *input* (as opposed to the line above, which
+      // disposes the byte buffer that is the *result* of the put).  We might have turned that byte
+      // buffer into an iterator of values, in which case the input ByteBuffer should get disposed.
+      // It will automatically get disposed when we get to the end of the iterator, but in case
+      // we don't, we still dispose it here
+      resourceCleaner.doCleanup()
+    }
 
     if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"

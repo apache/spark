@@ -202,11 +202,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     val startTimeMs = System.currentTimeMillis()
     logDebug("PutBlock " + blockId + " started from " + startTimeMs + " with data: " + bytes)
     val cleaner = new SimpleResourceCleaner
-    try {
-      blockDataManager.putBlockData(blockId, new NioManagedBuffer(bytes), level, cleaner)
-    } finally {
-      cleaner.doCleanup()
-    }
+    blockDataManager.putBlockData(blockId, new NioManagedBuffer(bytes), level)
     logDebug("PutBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " with data size: " + bytes.limit)
   }

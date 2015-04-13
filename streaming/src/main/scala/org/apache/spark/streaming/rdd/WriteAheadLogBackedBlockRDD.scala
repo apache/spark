@@ -90,7 +90,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     val blockManager = SparkEnv.get.blockManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
-    blockManager.get(blockId) match {
+    blockManager.get(blockId, context) match {
       case Some(block) => // Data is in Block Manager
         val iterator = block.data.asInstanceOf[Iterator[T]]
         logDebug(s"Read partition data of $this from block manager, block $blockId")
@@ -105,7 +105,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
           dataRead.rewind()
         }
-        blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+        blockManager.dataDeserialize(blockId, dataRead, context).asInstanceOf[Iterator[T]]
     }
   }
 

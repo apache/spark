@@ -37,7 +37,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.{SimpleResourceCleaner, ManualClock, Utils}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
@@ -58,6 +58,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
   var tempDirectory: File = null
+  val dummyCleaner = new SimpleResourceCleaner
 
   before {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
@@ -96,7 +97,8 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId, dummyCleaner).map { _.data.map {_.toString}.toList }
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -120,7 +122,8 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId, dummyCleaner).map { _.data.map {_.toString}.toList }
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -135,7 +138,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
           val reader = new WriteAheadLogRandomReader(segment.path, hadoopConf)
           val bytes = reader.read(segment)
           reader.close()
-          blockManager.dataDeserialize(generateBlockId(), bytes).toList
+          blockManager.dataDeserialize(generateBlockId(), bytes, dummyCleaner).toList
         }
         loggedData shouldEqual data
       }

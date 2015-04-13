@@ -65,12 +65,7 @@ class NettyBlockRpcServer(
         val level: StorageLevel =
           serializer.newInstance().deserialize(ByteBuffer.wrap(uploadBlock.metadata))
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
-        val cleaner = new SimpleResourceCleaner
-        try {
-          blockManager.putBlockData(BlockId(uploadBlock.blockId), data, level, cleaner)
-        } finally {
-          cleaner.doCleanup()
-        }
+        blockManager.putBlockData(BlockId(uploadBlock.blockId), data, level)
         responseContext.onSuccess(new Array[Byte](0))
     }
   }

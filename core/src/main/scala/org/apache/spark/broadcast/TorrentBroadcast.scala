@@ -100,17 +100,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
-      val cleaner = new SimpleResourceCleaner
-      try {
-        SparkEnv.get.blockManager.putBytes(
-          BroadcastBlockId(id, "piece" + i),
-          block,
-          StorageLevel.MEMORY_AND_DISK_SER,
-          cleaner,
-          tellMaster = true)
-      } finally {
-        cleaner.doCleanup()
-      }
+      SparkEnv.get.blockManager.putBytes(
+        BroadcastBlockId(id, "piece" + i),
+        block,
+        StorageLevel.MEMORY_AND_DISK_SER,
+        tellMaster = true)
     }
     blocks.length
   }
@@ -132,18 +126,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       def getRemote: Option[ByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
         // If we found the block from remote executors/driver's BlockManager, put the block
         // in this executor's BlockManager.
-        val cleaner = new SimpleResourceCleaner
-        try {
-          SparkEnv.get.blockManager.putBytes(
-            pieceId,
-            block,
-            StorageLevel.MEMORY_AND_DISK_SER,
-            cleaner,
-            tellMaster = true)
+        SparkEnv.get.blockManager.putBytes(
+          pieceId,
+          block,
+          StorageLevel.MEMORY_AND_DISK_SER,
+          tellMaster = true)
           block
-        } finally {
-          cleaner.doCleanup()
-        }
       }
       val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
         throw new SparkException(s"Failed to get $pieceId of $broadcastId"))

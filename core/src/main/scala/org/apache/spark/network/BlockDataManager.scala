@@ -19,7 +19,6 @@ package org.apache.spark.network
 
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.ResourceCleaner
 
 private[spark]
 trait BlockDataManager {
@@ -36,6 +35,5 @@ trait BlockDataManager {
   def putBlockData(
     blockId: BlockId,
     data: ManagedBuffer,
-    level: StorageLevel,
-    resourceCleaner: ResourceCleaner): Unit
+    level: StorageLevel): Unit
 }
