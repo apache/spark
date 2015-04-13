@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import org.scalatest.FunSuite
 
+// scalastyle:off
 class UTF8StringSuite extends FunSuite {
   test("basic") {
     def check(str: String, len: Int) {
