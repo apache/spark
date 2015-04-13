@@ -149,13 +149,13 @@ trait Params extends Identifiable with Serializable {
   def explainParams(): String = params.map(explain).mkString("\n")
 
   /** Checks whether a param is explicitly set. */
-  def isSet(param: Param[_]): Boolean = {
+  final def isSet(param: Param[_]): Boolean = {
     shouldOwn(param)
     paramMap.contains(param)
   }
 
   /** Checks whether a param is explicitly set or has a default value. */
-  def isDefined(param: Param[_]): Boolean = {
+  final def isDefined(param: Param[_]): Boolean = {
     shouldOwn(param)
     defaultParamMap.contains(param) || paramMap.contains(param)
   }
@@ -186,7 +186,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Optionally returns the user-supplied value of a param.
    */
-  protected final def get[T](param: Param[T]): Option[T] = {
+  final def get[T](param: Param[T]): Option[T] = {
     shouldOwn(param)
     paramMap.get(param)
   }
@@ -194,7 +194,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Clears the user-supplied value for the input param.
    */
-  protected final def clear(param: Param[_]): this.type = {
+  final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
     this
@@ -204,7 +204,7 @@ trait Params extends Identifiable with Serializable {
    * Gets the value of a param in the embedded param map or its default value. Throws an exception
    * if neither is set.
    */
-  protected final def getOrDefault[T](param: Param[T]): T = {
+  final def getOrDefault[T](param: Param[T]): T = {
     shouldOwn(param)
     get(param).orElse(getDefault(param)).get
   }
@@ -231,7 +231,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Gets the default value of a parameter.
    */
-  protected final def getDefault[T](param: Param[T]): Option[T] = {
+  final def getDefault[T](param: Param[T]): Option[T] = {
     shouldOwn(param)
     defaultParamMap.get(param)
   }
@@ -239,7 +239,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Tests whether the input param has a default value set.
    */
-  protected final def hasDefault[T](param: Param[T]): Boolean = {
+  final def hasDefault[T](param: Param[T]): Boolean = {
     shouldOwn(param)
     defaultParamMap.contains(param)
   }
