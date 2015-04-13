@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.{Attribute, RowOrdering}
@@ -44,6 +45,27 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   private val bypassMergeThreshold =
     child.sqlContext.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+
+  def serializer(
+      keySchema: Array[DataType],
+      valueSchema: Array[DataType],
+      numPartitions: Int): Serializer = {
+    val useSqlSerializer2 =
+      !(sortBasedShuffleOn && numPartitions > bypassMergeThreshold) &&
+      child.sqlContext.conf.useSqlSerializer2 &&
+      SparkSqlSerializer2.support(keySchema) &&
+      SparkSqlSerializer2.support(valueSchema)
+
+    val serializer = if (useSqlSerializer2) {
+      logInfo("Use ShuffleSerializer")
+      new SparkSqlSerializer2(keySchema, valueSchema)
+    } else {
+      logInfo("Use SparkSqlSerializer")
+      new SparkSqlSerializer(new SparkConf(false))
+    }
+
+    serializer
+  }
 
   override def execute(): RDD[Row] = attachTree(this , "execute") {
     newPartitioning match {
@@ -70,7 +92,11 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         }
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+
+        val keySchema = expressions.map(_.dataType).toArray
+        val valueSchema = child.output.map(_.dataType).toArray
+        shuffled.setSerializer(serializer(keySchema, valueSchema, numPartitions))
+
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
@@ -88,7 +114,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
         val part = new RangePartitioner(numPartitions, rdd, ascending = true)
         val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+
+        val keySchema = sortingExpressions.map(_.dataType).toArray
+        shuffled.setSerializer(serializer(keySchema, null, numPartitions))
 
         shuffled.map(_._1)
 
@@ -107,7 +135,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         }
         val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+
+        val valueSchema = child.output.map(_.dataType).toArray
+        shuffled.setSerializer(serializer(null, valueSchema, 1))
+
         shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
