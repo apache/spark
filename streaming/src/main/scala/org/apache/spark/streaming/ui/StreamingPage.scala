@@ -52,7 +52,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val timeSinceStart = System.currentTimeMillis() - startTime
     <ul class ="unstyled">
       <li>
-        <strong>Started at: </strong> {startTime.toString}
+        <strong>Started at: </strong> {UIUtils.formatDate(startTime)}
       </li>
       <li>
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
