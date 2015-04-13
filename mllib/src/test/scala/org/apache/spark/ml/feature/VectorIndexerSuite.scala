@@ -150,7 +150,8 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
         val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
         val model = vectorIndexer.fit(data)
         val categoryMaps = model.categoryMaps
-        assert(categoryMaps.keys.toSet === categoricalFeatures) // Chose correct categorical features
+        // Chose correct categorical features
+        assert(categoryMaps.keys.toSet === categoricalFeatures)
         val transformed = model.transform(data).select("indexed")
         val indexedRDD: RDD[Vector] = transformed.map(_.getAs[Vector](0))
         val featureAttrs = AttributeGroup.fromStructField(transformed.schema("indexed"))
