@@ -1229,10 +1229,19 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       cleaner: ResourceCleaner,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
+    dataDeserializeHelper(blockId, bytes, cleaner, serializer)._2
+  }
+
+  private[storage] def dataDeserializeHelper(
+      blockId: BlockId,
+      bytes: ByteBuffer,
+      cleaner: ResourceCleaner,
+      serializer: Serializer = defaultSerializer): (ByteBufferInputStream, Iterator[Any]) = {
     bytes.rewind()
-    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    val bbis = new ByteBufferInputStream(bytes, true)
+    val stream = wrapForCompression(blockId, bbis)
     cleaner.addCleaner{ () => stream.close() }
-    serializer.newInstance().deserializeStream(stream).asIterator
+    (bbis, serializer.newInstance().deserializeStream(stream).asIterator)
   }
 
   def stop(): Unit = {

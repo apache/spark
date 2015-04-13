@@ -63,7 +63,7 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
   }
 
 
-  private[util] var disposed = false
+  private[spark] var disposed = false
 
   /**
    * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().

@@ -1243,7 +1243,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
   def makeTestBytes: ByteBuffer = {
     val out = new ByteArrayOutputStream()
-    val serStream = new JavaSerializer(new SparkConf()).newInstance().serializeStream(out)
+    val serStream = serializer.newInstance().serializeStream(out)
     serStream.writeAll((1 to 10).iterator)
 
     val bytes = out.toByteArray
@@ -1251,19 +1251,35 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     ByteBuffer.wrap(bytes)
   }
 
-  class TestResourceCleaner extends ResourceCleaner {
-    var gotCleanerFunc = false
-    override def addCleaner(f: () => Unit): Unit = {
-      gotCleanerFunc = true
-    }
-  }
-
   test("dataDeserialize registers the input stream for cleaning") {
     val bytes = makeTestBytes
     store = makeBlockManager(0)
-    val cleaner = new TestResourceCleaner
-    store.dataDeserialize(BlockId("rdd_0_0"), bytes, cleaner)
-    cleaner.gotCleanerFunc should be (true)
+    val cleaner = new SimpleResourceCleaner
+    val (bufferInputStream, itr) = store.dataDeserializeHelper(BlockId("rdd_0_0"), bytes, cleaner)
+    bufferInputStream.disposed should be (false)
+    try {
+      itr.asInstanceOf[Iterator[Int]].map{x =>
+        if (x > 5)
+          throw new UserException()
+        x
+      }.toArray
+    } catch {
+      case _: UserException =>
+    } finally {
+      cleaner.doCleanup()
+    }
+    bufferInputStream.disposed should be (true)
   }
+
+  test("dataDeserialize disposes the byte buffer on a normal read") {
+    val bytes = makeTestBytes
+    store = makeBlockManager(0)
+    val cleaner = new SimpleResourceCleaner
+    val (bufferInputStream, itr) = store.dataDeserializeHelper(BlockId("rdd_0_0"), bytes, cleaner)
+    bufferInputStream.disposed should be (false)
+    itr.toArray
+    bufferInputStream.disposed should be (true)
+  }
+
 
 }
