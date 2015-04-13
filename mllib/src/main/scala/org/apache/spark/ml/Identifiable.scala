@@ -29,5 +29,5 @@ private[ml] trait Identifiable extends Serializable {
    * random hex chars.
    */
   private[ml] val uid: String =
-    this.getClass.getSimpleName + "-" + UUID.randomUUID().toString.take(8)
+    this.getClass.getSimpleName + "_" + UUID.randomUUID().toString.take(8)
 }
