@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
  * A serializer implementation that always return a single element in a deserialization stream.
  */
 class TestSerializer extends Serializer {
-  override def newInstance() = new TestSerializerInstance
+  override def newInstance(): TestSerializerInstance = new TestSerializerInstance
 }
 
 
@@ -36,7 +36,8 @@ class TestSerializerInstance extends SerializerInstance {
 
   override def serializeStream(s: OutputStream): SerializationStream = ???
 
-  override def deserializeStream(s: InputStream) = new TestDeserializationStream
+  override def deserializeStream(s: InputStream): TestDeserializationStream =
+    new TestDeserializationStream
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = ???
 

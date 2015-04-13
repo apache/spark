@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * Overrides our expression evaluation tests to use generated code on mutable rows.
@@ -43,7 +43,7 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
     }
 
     val actual = plan(inputRow)
-    val expectedRow = new GenericRow(Array[Any](ScalaReflection.convertToCatalyst(expected)))
+    val expectedRow = new GenericRow(Array[Any](CatalystTypeConverters.convertToCatalyst(expected)))
     if (actual.hashCode() != expectedRow.hashCode()) {
       fail(
         s"""

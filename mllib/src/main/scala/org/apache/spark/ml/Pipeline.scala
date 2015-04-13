@@ -47,6 +47,9 @@ abstract class PipelineStage extends Serializable with Logging {
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
+   *
+   * This should be optimistic.  If it is unclear whether the schema will be valid, then it should
+   * be assumed valid until proven otherwise.
    */
   protected def transformSchema(
       schema: StructType,

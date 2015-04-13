@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types._
 
 object Literal {
@@ -44,7 +44,7 @@ object Literal {
   }
 
   def create(v: Any, dataType: DataType): Literal = {
-    Literal(ScalaReflection.convertToCatalyst(v), dataType)
+    Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 }
 

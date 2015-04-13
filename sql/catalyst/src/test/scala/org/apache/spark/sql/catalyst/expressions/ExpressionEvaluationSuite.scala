@@ -25,9 +25,9 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
 
@@ -61,7 +61,7 @@ class ExpressionEvaluationBaseSuite extends FunSuite {
 class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 
   def create_row(values: Any*): Row = {
-    new GenericRow(values.map(ScalaReflection.convertToCatalyst).toArray)
+    new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
   }
 
   test("literals") {

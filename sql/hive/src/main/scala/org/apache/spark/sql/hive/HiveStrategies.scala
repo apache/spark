@@ -21,10 +21,10 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Row, _}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
+import org.apache.spark.sql.catalyst.expressions.{Row, _}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -128,7 +128,7 @@ private[hive] trait HiveStrategies {
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
-                inputData(i) = ScalaReflection.convertToCatalyst(partitionValues(i))
+                inputData(i) = CatalystTypeConverters.convertToCatalyst(partitionValues(i))
                 i += 1
               }
               pruningCondition(inputData)

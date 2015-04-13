@@ -19,12 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.execution.GeneratedAggregate
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
@@ -152,10 +148,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "SELECT count(distinct key) FROM testData3x",
       Row(100) :: Nil)
     // SUM
-     testCodeGen(
-       "SELECT value, sum(key) FROM testData3x GROUP BY value",
-       (1 to 100).map(i => Row(i.toString, 3 * i)))
-     testCodeGen(
+    testCodeGen(
+      "SELECT value, sum(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, 3 * i)))
+    testCodeGen(
       "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",      
       Row(5050 * 3, 5050 * 3.0) :: Nil)
     // AVERAGE
@@ -193,10 +189,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     testCodeGen(
       "SELECT  sum('a'), avg('a'), count(null) FROM testData",
       Row(0, null, 0) :: Nil)
-      
+
     dropTempTable("testData3x")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
+
   test("Add Parser of SQL COALESCE()") {
     checkAnswer(
       sql("""SELECT COALESCE(1, 2)"""),
@@ -406,6 +403,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("CTE feature") {
+    checkAnswer(
+      sql("with q1 as (select * from testData limit 10) select * from q1"),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      sql("""
+        |with q1 as (select * from testData where key= '5'),
+        |q2 as (select * from testData where key = '4')
+        |select * from q1 union all select * from q2""".stripMargin),
+      Row(5, "5") :: Row(4, "4") :: Nil)
+
   }
 
   test("date row") {

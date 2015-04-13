@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
@@ -37,13 +37,15 @@ object RDDConversions {
         Iterator.empty
       } else {
         val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
+        val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
         val schemaFields = schema.fields.toArray
+        val converters = schemaFields.map {
+          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
+        }
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) =
-              ScalaReflection.convertToCatalyst(r.productElement(i), schemaFields(i).dataType)
+            mutableRow(i) = converters(i)(r.productElement(i))
             i += 1
           }
 
@@ -64,11 +66,13 @@ object RDDConversions {
         val bufferedIterator = iterator.buffered
         val mutableRow = new GenericMutableRow(bufferedIterator.head.toSeq.toArray)
         val schemaFields = schema.fields.toArray
+        val converters = schemaFields.map {
+          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
+        }
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) =
-              ScalaReflection.convertToCatalyst(r(i), schemaFields(i).dataType)
+            mutableRow(i) = converters(i)(r(i))
             i += 1
           }
 

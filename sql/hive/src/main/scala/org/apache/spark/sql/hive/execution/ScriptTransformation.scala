@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{BufferedReader, InputStreamReader}
-import java.io.{DataInputStream, DataOutputStream, EOFException}
+import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -28,13 +27,13 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -123,11 +122,11 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
-              new GenericRow(ScalaReflection.convertToCatalyst(
+              new GenericRow(CatalystTypeConverters.convertToCatalyst(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
                 .asInstanceOf[Array[Any]])
             } else {
-              new GenericRow(ScalaReflection.convertToCatalyst(
+              new GenericRow(CatalystTypeConverters.convertToCatalyst(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
                 .asInstanceOf[Array[Any]])
             }
