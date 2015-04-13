@@ -63,10 +63,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <strong>Batch interval: </strong>{formatDurationVerbose(listener.batchDuration)}
       </li>
       <li>
-        <strong>Processed batches: </strong>{listener.numTotalCompletedBatches}
+        <a href="#completed"><strong>Completed batches: </strong></a>{listener.numTotalCompletedBatches}
       </li>
       <li>
-        <strong>Waiting batches: </strong>{listener.numUnprocessedBatches}
+        <a href="#active"><strong>Active batches: </strong></a>{listener.numUnprocessedBatches}
       </li>
       <li>
         <strong>Received events: </strong>{listener.numTotalReceivedRecords}
