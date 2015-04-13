@@ -174,30 +174,37 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).getOrElse(defaultValue)
   }
 
-  /** Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no 
-    * suffix is provided then seconds are assumed. 
-    */
-  def getTimeAsSec(key: String): Long = {
-    Utils.timeStringAsSec(get(key))
+  /** 
+   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no 
+   * suffix is provided then seconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsSeconds(key: String): Long = {
+    Utils.timeStringAsSeconds(get(key))
   }
 
-  /** Get a time parameter as seconds, falling back to a default if not set. If no 
-    * suffix is provided then seconds are assumed. 
-    */
-  def getTimeAsSec(key: String, defaultValue: String): Long = {
-    Utils.timeStringAsSec(get(key, defaultValue))
+  /** 
+   * Get a time parameter as seconds, falling back to a default if not set. If no 
+   * suffix is provided then seconds are assumed.
+   * 
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
   }
 
-  /** Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no 
-    * suffix is provided then milliseconds are assumed. 
-    */
+  /** 
+   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no 
+   * suffix is provided then milliseconds are assumed. 
+   * @throws NoSuchElementException
+   */
   def getTimeAsMs(key: String): Long = {
     Utils.timeStringAsMs(get(key))
   }
 
-  /** Get a time parameter as milliseconds, falling back to a default if not set. If no 
-    * suffix is provided then milliseconds are assumed. 
-    */
+  /** 
+   * Get a time parameter as milliseconds, falling back to a default if not set. If no 
+   * suffix is provided then milliseconds are assumed. 
+   */
   def getTimeAsMs(key: String, defaultValue: String): Long = {
     Utils.timeStringAsMs(get(key, defaultValue))
   }

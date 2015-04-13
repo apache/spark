@@ -48,8 +48,6 @@ The following format is accepted:
     5d (days)
     1y (years)
 
-If no units are provided, the default unit specified in the documentation is assumed. 
-
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
@@ -444,7 +442,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>5s</td>
   <td>
     (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 5 seconds.
+    is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
   </td>
 </tr>
 <tr>

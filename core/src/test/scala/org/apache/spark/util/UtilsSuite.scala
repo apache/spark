@@ -39,58 +39,44 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   
   test("timeConversion") {
     // Test -1
-    assert(Utils.timeStringAsSec("-1") === -1)
+    assert(Utils.timeStringAsSeconds("-1") === -1)
     
     // Test zero
-    assert(Utils.timeStringAsSec("0") === 0)
+    assert(Utils.timeStringAsSeconds("0") === 0)
     
-    assert(Utils.timeStringAsSec("1") === 1)
-    assert(Utils.timeStringAsSec("1s") === 1)
-    assert(Utils.timeStringAsSec("1000ms") === 1)
-    assert(Utils.timeStringAsSec("1000000us") === 1)
-    assert(Utils.timeStringAsSec("1min") === TimeUnit.MINUTES.toSeconds(1))
-    assert(Utils.timeStringAsSec("1h") === TimeUnit.HOURS.toSeconds(1))
-    assert(Utils.timeStringAsSec("1d") === TimeUnit.DAYS.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1") === 1)
+    assert(Utils.timeStringAsSeconds("1s") === 1)
+    assert(Utils.timeStringAsSeconds("1000ms") === 1)
+    assert(Utils.timeStringAsSeconds("1000000us") === 1)
+    assert(Utils.timeStringAsSeconds("1m") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1d") === TimeUnit.DAYS.toSeconds(1))
     
     assert(Utils.timeStringAsMs("1") === 1)
     assert(Utils.timeStringAsMs("1ms") === 1)
     assert(Utils.timeStringAsMs("1000us") === 1)
     assert(Utils.timeStringAsMs("1s") === TimeUnit.SECONDS.toMillis(1))
+    assert(Utils.timeStringAsMs("1m") === TimeUnit.MINUTES.toMillis(1))
     assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
     assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
     assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
     
     // Test invalid strings
-    try {
+    intercept[NumberFormatException] {
       Utils.timeStringAsMs("This breaks 600s")
-      assert(false) // We should never reach this
-    } catch {
-      case e: NumberFormatException => assert(true)
     }
 
-    // Test invalid strings
-    try {
-      Utils.timeStringAsMs("600ds")
-      assert(false) // We should never reach this
-    } catch {
-      case e: NumberFormatException => assert(true)
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600ds")
     }
 
-
-    // Test invalid strings
-    try {
+    intercept[NumberFormatException] {
       Utils.timeStringAsMs("600s This breaks")
-      assert(false) // We should never reach this
-    } catch {
-      case e: NumberFormatException => assert(true)
     }
 
-    // Test invalid strings
-    try {
+    intercept[NumberFormatException] {
       Utils.timeStringAsMs("This 123s breaks")
-      assert(false) // We should never reach this
-    } catch {
-      case e: NumberFormatException => assert(true)
     }
   }
   

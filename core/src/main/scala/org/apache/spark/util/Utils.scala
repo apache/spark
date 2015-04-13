@@ -613,7 +613,7 @@ private[spark] object Utils extends Logging {
         Utils.setupSecureURLConnection(uc, securityMgr)
 
         val timeoutMs = 
-          conf.getTimeAsSec("spark.files.fetchTimeout", "60s").toInt * 1000
+          conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
         uc.setReadTimeout(timeoutMs)
         uc.connect()
@@ -1016,7 +1016,7 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
-  def timeStringAsMs(str: String) : Long = {
+  def timeStringAsMs(str: String): Long = {
     JavaUtils.timeStringAsMs(str)
   }
 
@@ -1024,7 +1024,7 @@ private[spark] object Utils extends Logging {
    * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
-  def timeStringAsSec(str: String) : Long = {
+  def timeStringAsSeconds(str: String): Long = {
     JavaUtils.timeStringAsSec(str)
   }
 

@@ -76,7 +76,7 @@ private[spark] object MetadataCleanerType extends Enumeration {
 // initialization of StreamingContext. It's okay for users trying to configure stuff themselves.
 private[spark] object MetadataCleaner {
   def getDelaySeconds(conf: SparkConf): Int = {
-    conf.getTimeAsSec("spark.cleaner.ttl", "-1").toInt
+    conf.getTimeAsSeconds("spark.cleaner.ttl", "-1").toInt
   }
 
   def getDelaySeconds(
