@@ -39,33 +39,70 @@ import java.sql.Types
  * if `getJDBCType` returns `(null, None)`, the default type handling is used
  * for the given Catalyst type.
  */
-private[sql] abstract class DriverQuirks {
+abstract class DriverQuirks {
+  def canHandle(url : String): Boolean
   def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType
   def getJDBCType(dt: DataType): (String, Option[Int])
 }
 
-private[sql] object DriverQuirks {
+object DriverQuirks {
+
+  private var quirks = List[DriverQuirks]()
+
+  def registerQuirks(quirk: DriverQuirks) {
+    quirks = quirk :: quirks
+  }
+
+  def unregisterQuirks(quirk : DriverQuirks) {
+    quirks = quirks.filterNot(_ == quirk)
+  }
+
+  registerQuirks(new MySQLQuirks())
+  registerQuirks(new PostgresQuirks())
+
   /**
    * Fetch the DriverQuirks class corresponding to a given database url.
    */
   def get(url: String): DriverQuirks = {
-    if (url.substring(0, 10).equals("jdbc:mysql")) {
-      new MySQLQuirks()
-    } else if (url.substring(0, 15).equals("jdbc:postgresql")) {
-      new PostgresQuirks()
-    } else {
-      new NoQuirks()
+    val matchingQuirks = quirks.filter(_.canHandle(url))
+    matchingQuirks.length match {
+      case 0 => new NoQuirks()
+      case 1 => matchingQuirks.head
+      case _ => new AggregatedQuirks(matchingQuirks)
     }
   }
 }
 
-private[sql] class NoQuirks extends DriverQuirks {
+class AggregatedQuirks(quirks: List[DriverQuirks]) extends DriverQuirks {
+  def canHandle(url : String): Boolean =
+    quirks.foldLeft(true)((l,r) => l && r.canHandle(url))
+  def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder) : DataType =
+    quirks.foldLeft(null.asInstanceOf[DataType])((l,r) =>
+      if (l != null) {
+        l
+      } else {
+        r.getCatalystType(sqlType, typeName, size, md)
+      }
+    )
+  def getJDBCType(dt: DataType): (String, Option[Int]) =
+    quirks.foldLeft(null.asInstanceOf[(String, Option[Int])])((l,r) =>
+      if (l != null) {
+        l
+      } else {
+        r.getJDBCType(dt)
+      }
+    )
+}
+
+class NoQuirks extends DriverQuirks {
+  def canHandle(url : String): Boolean = true
   def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType =
     null
   def getJDBCType(dt: DataType): (String, Option[Int]) = (null, None)
 }
 
-private[sql] class PostgresQuirks extends DriverQuirks {
+class PostgresQuirks extends DriverQuirks {
+  def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
   def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
       BinaryType
@@ -84,7 +121,8 @@ private[sql] class PostgresQuirks extends DriverQuirks {
   }
 }
 
-private[sql] class MySQLQuirks extends DriverQuirks {
+class MySQLQuirks extends DriverQuirks {
+  def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
   def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
