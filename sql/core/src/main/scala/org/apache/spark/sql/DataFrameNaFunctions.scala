@@ -307,7 +307,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       } else if (f.dataType == targetColumnType && shouldReplace) {
         replaceCol(f, replacementMap)
       } else {
-        println("returning origina col for " + f.name)
         df.col(f.name)
       }
     }
