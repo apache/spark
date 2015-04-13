@@ -99,7 +99,7 @@ class GaussianDensityKernel
    *              the AMISE bandwidth yet and we use this estimator
    *              as a means to get the AMISE bandwidth)
    *
-   * @param kernel The RDD containing the kernel matrix
+   * @param kernel The RDD containing the matrix
    *               consisting of pairs Xi - Xj, where Xi and Xj
    *               are drawn from the original data set.
    *
