@@ -26,6 +26,7 @@ import akka.actor.{Actor, ActorRef, Props}
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.ps.PSClient
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.ActorLogReceive
 
@@ -126,6 +127,8 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
     localActor ! StatusUpdate(taskId, state, serializedData)
   }
+
+  override def getPSClient: Option[PSClient] = None
 
   override def applicationId(): String = appId
 

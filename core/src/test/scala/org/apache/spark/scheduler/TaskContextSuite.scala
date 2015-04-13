@@ -45,7 +45,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     val task = new ResultTask[String, String](
       0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
     intercept[RuntimeException] {
-      task.run(0, 0)
+      task.run(None, 0, 0)
     }
     assert(TaskContextSuite.completed === true)
   }

@@ -95,6 +95,7 @@ object YarnSparkHadoopUtil {
   val ANY_HOST = "*"
 
   val DEFAULT_NUMBER_EXECUTORS = 2
+  val DEFAULT_NUMBER_PS_SERVERS = 1
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)

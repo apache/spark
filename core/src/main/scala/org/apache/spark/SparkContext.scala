@@ -24,6 +24,7 @@ import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.CountDownLatch
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
@@ -195,6 +196,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] val conf = config.clone()
   conf.validateSettings()
+
+  /** Has the server been marked for start. */
+  val startLatch = new CountDownLatch(1)
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -1439,6 +1443,35 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       val longCallSite = Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse("")
       CallSite(shortCallSite, longCallSite)
     }.getOrElse(Utils.getCallSite())
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark. The allowLocal
+   * flag specifies whether the scheduler can run the computation on the driver rather than
+   * shipping it out to the cluster, for short actions like first().
+   */
+  def runJobWithPS[T, U: ClassTag](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U): Array[U] = {
+    if (stopped) {
+      throw new IllegalStateException("SparkContext has been shutdown")
+    }
+    val callSite = getCallSite
+    val cleanedFunc = clean(func)
+    logInfo("Starting run parameter server job: " + callSite.shortForm)
+    if (conf.getBoolean("spark.logLineage", false)) {
+      logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
+    }
+    val results = new Array[U](rdd.partitions.size)
+    val resultHandler: (Int, U) => Unit = (pid, value) => {
+      logInfo(s"partition number $pid, value: $value")
+      results(pid) = value
+    }
+    dagScheduler.runJob(rdd, cleanedFunc, 0 until rdd.partitions.size, callSite, false, resultHandler, localProperties.get)
+    progressBar.foreach(_.finishAll())
+    rdd.doCheckpoint()
+    results
   }
 
   /**

@@ -28,6 +28,8 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
+import org.apache.spark.ps.CoarseGrainedParameterServerMessage.NotifyServer
+import org.apache.spark.ps.{ServerInfo, PSServerManager}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
@@ -68,6 +70,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   private val listenerBus = scheduler.sc.listenerBus
 
+  private val psServerManager = new PSServerManager
+
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
@@ -97,8 +101,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val (host, _) = Utils.parseHostPort(hostPort)
-          val data = new ExecutorData(sender, sender.path.address, host, cores, cores, logUrls)
+          val (host, port) = Utils.parseHostPort(hostPort)
+          val executorUrl = AkkaUtils.address(
+            AkkaUtils.protocol(),
+            SparkEnv.executorActorSystemName,
+            host,
+            port,
+            "Executor")
+          val data = new ExecutorData(sender, sender.path.address, host, cores, cores, logUrls, executorUrl)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -110,7 +120,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           }
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+          notifyExecutorAndServer(sender, "executor", executorUrl = executorUrl)
           makeOffers()
+        }
+
+      case RegisterServer(executorId, hostPort, cores, containerId) =>
+        println("RegisterServer")
+        val (host, port) = Utils.parseHostPort(hostPort)
+        CoarseGrainedSchedulerBackend.this.synchronized {
+          val serverId = psServerManager.newServerId()
+          val serverUrl = AkkaUtils.address(
+            AkkaUtils.protocol(),
+            SparkEnv.executorActorSystemName,
+            host,
+            port,
+            "Server")
+          val serverInfo = new ServerInfo(serverId, serverUrl, sender.path.address, host, cores)
+          psServerManager.addPSServer(executorId, hostPort, containerId, serverInfo)
+          sender ! RegisteredServer(serverId)
+          notifyExecutorAndServer(sender, "server", serverInfo = serverInfo)
+          checkPSInitialized()
         }
 
       case StatusUpdate(executorId, taskId, state, data) =>
@@ -160,6 +189,35 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
       case RetrieveSparkProps =>
         sender ! sparkProperties
+    }
+
+    /**
+     * Notify executor that a new server has been added
+     * Or notify server that a new executor has been added
+     * @param sender : executor sender
+     * @param serverInfo : server information
+     */
+    def notifyExecutorAndServer(
+        sender: ActorRef,
+        role: String,
+        serverInfo: ServerInfo = null,
+        executorUrl: String = null): Unit = {
+      synchronized {
+        role match {
+          case "executor" =>
+            psServerManager.getAllServers.foreach(e => {
+              val serverRef = context.actorSelection(e._2.serverUrl)
+              serverRef ! NotifyServer(executorUrl)
+              sender ! AddNewPSServer(e._2)
+            })
+          case "server" =>
+            executorDataMap.foreach(e => {
+              val executorRef = e._2.executorActor
+              executorRef ! AddNewPSServer(serverInfo)
+              sender ! NotifyServer(e._2.executorUrl)
+            })
+        }
+      }
     }
 
     // Make fake resource offers on all executors
@@ -264,6 +322,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       case e: Exception =>
         throw new SparkException("Error stopping standalone scheduler's driver actor", e)
     }
+  }
+
+  def checkPSInitialized(): Unit = {
+    val numServers = conf.get("spark.num.servers").toInt
+    assert(numServers > 0)
+    val currentServers = psServerManager.getAllServers.size
+    if (currentServers == numServers)
+      scheduler.sc.startLatch.countDown()
   }
 
   override def reviveOffers() {

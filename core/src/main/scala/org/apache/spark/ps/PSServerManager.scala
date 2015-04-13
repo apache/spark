@@ -15,19 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.ps
 
-import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.TaskState.TaskState
-import org.apache.spark.ps.PSClient
+import scala.collection.mutable.HashMap
 
 /**
- * A pluggable interface used by the Executor to send updates to the cluster scheduler.
+ * PSServerManager
  */
-private[spark] trait ExecutorBackend {
-  def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
+private[spark] class PSServerManager {
 
-  def getPSClient: Option[PSClient]
+  val nextServerId = new AtomicLong(0)
+
+  val containerId2Server = new HashMap[String, ServerInfo]()
+  val executorId2Server = new HashMap[String, ServerInfo]()
+  val executorId2ServerId = new HashMap[String, Long]()
+
+  def addPSServer(executorId: String, hostPort: String, containerId: String, serverInfo: ServerInfo) {
+    containerId2Server(containerId) = serverInfo
+    executorId2Server(executorId) = serverInfo
+    executorId2ServerId(executorId) = serverInfo.serverId
+  }
+
+  def newServerId(): Long = nextServerId.getAndIncrement
+
+  def getAllServers: Iterator[(String, ServerInfo)] = executorId2Server.toArray.toIterator
+
 }
-

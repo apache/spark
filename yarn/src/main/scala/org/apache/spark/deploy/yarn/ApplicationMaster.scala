@@ -90,6 +90,12 @@ private[spark] class ApplicationMaster(
         // Set the master property to match the requested mode.
         System.setProperty("spark.master", "yarn-cluster")
 
+        // Set if need to run a job on `Parameter Server`.
+        System.setProperty("spark.enablePS", args.enablePS.toString)
+
+        // Set the number of servers.
+        System.setProperty("spark.num.servers", args.numPSServers.toString)
+
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
       }
@@ -224,7 +230,9 @@ private[spark] class ApplicationMaster(
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
         .getOrElse("")
 
-    allocator = client.register(yarnConf,
+    val enablePS = args.enablePS
+    allocator = client.register(enablePS,
+      yarnConf,
       if (sc != null) sc.getConf else sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,

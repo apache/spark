@@ -42,6 +42,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.network.util.JavaUtils
 
 class ExecutorRunnable(
+    isPSServer: Boolean,
     container: Container,
     conf: Configuration,
     sparkConf: SparkConf,
@@ -202,6 +203,12 @@ class ExecutorRunnable(
       Seq("--user-class-path", "file:" + absPath)
     }.toSeq
 
+    val workerBackend = if (isPSServer) {
+      "org.apache.spark.ps.CoarseGrainedParameterServerBackend"
+    } else {
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend"
+    }
+
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server",
@@ -212,7 +219,7 @@ class ExecutorRunnable(
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
       "-XX:OnOutOfMemoryError='kill %p'") ++
       javaOpts ++
-      Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      Seq(workerBackend,
         "--driver-url", masterAddress.toString,
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,

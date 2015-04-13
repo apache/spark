@@ -37,6 +37,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
+import org.apache.spark.ps.PSClient
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
@@ -285,6 +286,18 @@ abstract class RDD[T: ClassTag](
   def map[U: ClassTag](f: T => U): RDD[U] = {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+  }
+
+  def runWithPS[U: ClassTag](
+      tableId: Int,
+      func: (Array[T], PSClient) => U): Array[U] = {
+    val f: (TaskContext, Iterator[T]) => U = (taskContext: TaskContext, iter: Iterator[T]) => {
+      val client = taskContext.getPSClient
+      val arr = iter.toArray
+      client.initClock(0)
+      func(arr, client)
+    }
+    sc.runJobWithPS(this, f)
   }
 
   /**

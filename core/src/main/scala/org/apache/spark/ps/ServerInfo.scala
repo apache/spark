@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.ps
 
-import java.nio.ByteBuffer
-
-import org.apache.spark.TaskState.TaskState
-import org.apache.spark.ps.PSClient
+import akka.actor.Address
 
 /**
- * A pluggable interface used by the Executor to send updates to the cluster scheduler.
+ * ServerInfo
  */
-private[spark] trait ExecutorBackend {
-  def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
-
-  def getPSClient: Option[PSClient]
-}
-
+private[spark] class ServerInfo(
+    val serverId: Long,
+    val serverUrl: String,
+    val serverAddress: Address,
+    val serverHost: String,
+    val totalCores: Int) extends Serializable

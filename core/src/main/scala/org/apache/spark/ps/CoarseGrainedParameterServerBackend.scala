@@ -15,132 +15,106 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.ps
 
-import java.io._
 import java.net.URL
 import java.nio.ByteBuffer
-import java.lang.management.ManagementFactory
 
-import scala.collection.mutable
 import scala.concurrent.Await
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import akka.actor.{Actor, ActorSelection, Props}
 import akka.pattern.Patterns
-import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import akka.remote.RemotingLifecycleEvent
+import akka.actor.{Props, ActorSelection, Actor}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
-import org.apache.spark.TaskState.TaskState
+import org.apache.spark.executor.ExecutorBackend
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.ps.CoarseGrainedParameterServerMessage.NotifyClient
-import org.apache.spark.ps.{PSClient, ServerInfo}
-import org.apache.spark.scheduler.TaskDescription
+import org.apache.spark.ps.CoarseGrainedParameterServerMessage._
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, Logging}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.KillTask
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutorFailed
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.LaunchTask
+import org.apache.spark.TaskState._
 import org.apache.spark.util._
 
-private[spark] class CoarseGrainedExecutorBackend(
+/**
+ * `parameter server` ServerBackend
+ */
+private[spark] class CoarseGrainedParameterServerBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
-    cores: Int,
+    executorVCores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
   extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
-  var executor: Executor = null
   var driver: ActorSelection = null
-  val psServers = new HashMap[Long, ServerInfo]()
-  var psClient: Option[PSClient] = None
+
+  var psServer: PSServer = null
 
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
     driver = context.actorSelection(driverUrl)
-    driver ! RegisterExecutor(executorId, hostPort, cores, extractLogUrls)
+    driver ! RegisterServer(executorId, hostPort, executorVCores, System.getProperty("spark.yarn.container.id", ""))
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
-  def extractLogUrls: Map[String, String] = {
-    val prefix = "SPARK_LOG_URL_"
-    sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
-  }
-
   override def receiveWithLogging = {
-    case RegisteredExecutor =>
-      logInfo("Successfully registered with driver")
-      val (hostname, _) = Utils.parseHostPort(hostPort)
-      executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+    case SetParameter(key: String, value: Array[Double], clock: Int) =>
+      logInfo(s"set $key to $value")
+      val success: Boolean = psServer.setParameter[String, Array[Double]](key, value, clock)
+      sender ! success
 
-    case RegisterExecutorFailed(message) =>
-      logError("Slave registration failed: " + message)
-      System.exit(1)
+    case GetParameter(key: String, clock: Int) =>
+      logInfo(s"request $key")
+      val (success, value) = psServer.getParameter[String, Array[Double]](key, clock)
+      logInfo(s"get parameter: $value")
+      sender ! Parameter(success, value)
 
-    case AddNewPSServer(serverInfo) =>
-      println("Adding new ps server")
-      psClient.synchronized {
-        if (!psClient.isDefined) {
-          val clientId: String = executorId
-          psClient = Some(new PSClient(clientId, context, env.conf))
-        }
-        psClient.get.addServer(serverInfo)
-        val serverId = serverInfo.serverId
-        psServers(serverId) = serverInfo
+    case UpdateParameter(key: String, value: Array[Double], clock: Int) =>
+      logInfo(s"update $key")
+      val success: Boolean = psServer.updateParameter[String, Array[Double]](key, value, clock)
+      sender ! success
+
+    case RegisteredServer(serverId: Long) =>
+      logInfo(s"registered server with serverId: $serverId")
+      val sparkConf = env.conf
+      val agg = (deltaKVs: ArrayBuffer[Array[Double]])
+            => {
+        val size = deltaKVs.size
+        deltaKVs.reduce((a, b) => a.zip(b).map(e => {
+          e._1 + e._2
+        })).map(e => e / size)
       }
+      val func = (arr1: Array[Double], arr2: Array[Double]) => arr1.zip(arr2).map(e => e._1 + e._2)
+      psServer = new PSServer(context, sparkConf, serverId, agg, func)
 
-    case NotifyClient(message) =>
-      println(s"message：$message")
-      psClient.get.notifyTasks()
+    case UpdateClock(clientId: String, clock: Int) =>
+      logInfo(s"update clock $clock from client $clientId")
+      val pause: Boolean = psServer.updateClock(clientId, clock)
+      sender ! pause
 
-    case LaunchTask(data) =>
-      if (executor == null) {
-        logError("Received LaunchTask command but executor was null")
-        System.exit(1)
-      } else {
-        val ser = env.closureSerializer.newInstance()
-        val taskDesc = ser.deserialize[TaskDescription](data.value)
-        logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
-          taskDesc.name, taskDesc.serializedTask)
-      }
+    case InitPSClient(clientId: String) =>
+      logInfo(s"client $clientId is coming.")
+      psServer.initPSClient(clientId)
 
-    case KillTask(taskId, _, interruptThread) =>
-      if (executor == null) {
-        logError("Received KillTask command but executor was null")
-        System.exit(1)
-      } else {
-        executor.killTask(taskId, interruptThread)
-      }
+    case NotifyServer(executorUrl: String) =>
+      println("notify server: " + executorUrl)
+      psServer.addPSClient(executorUrl)
 
-    case x: DisassociatedEvent =>
-      if (x.remoteAddress == driver.anchorPath.address) {
-        logError(s"Driver $x disassociated! Shutting down.")
-        System.exit(1)
-      } else {
-        logWarning(s"Received irrelevant DisassociatedEvent $x")
-      }
-
-    case StopExecutor =>
-      logInfo("Driver commanded a shutdown")
-      executor.stop()
-      context.stop(self)
-      context.system.shutdown()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    driver ! StatusUpdate(executorId, taskId, state, data)
+
   }
 
-  override def getPSClient: Option[PSClient] = psClient
+  override def getPSClient: Option[PSClient] = None
+
 }
 
-private[spark] object CoarseGrainedExecutorBackend extends Logging {
+object CoarseGrainedParameterServerBackend extends Logging {
 
   private def run(
       driverUrl: String,
@@ -154,7 +128,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     SignalLogger.register(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      // Debug code
+    // Debug code
       Utils.checkHost(hostname)
 
       // Bootstrap to fetch the driver's Spark properties.
@@ -175,6 +149,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf()
+      val executorVCores = cores * driverConf.get("spark.cores.ratio", "1").toInt
       for ((key, value) <- props) {
         // this is required for SSL in standalone mode
         if (SparkConf.isExecutorStartupConf(key)) {
@@ -184,7 +159,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
       val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, port, cores, isLocal = false)
+        driverConf, executorId, hostname, port, executorVCores, isLocal = false)
 
       // SparkEnv sets spark.driver.port so it shouldn't be 0 anymore.
       val boundPort = env.conf.getInt("spark.executor.port", 0)
@@ -193,17 +168,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Start the CoarseGrainedExecutorBackend actor.
       val sparkHostPort = hostname + ":" + boundPort
       env.actorSystem.actorOf(
-        Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, userClassPath, env),
-        name = "Executor")
-      workerUrl.foreach { url =>
-        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
-      }
+        Props(classOf[CoarseGrainedParameterServerBackend],
+          driverUrl, executorId, sparkHostPort, executorVCores, userClassPath, env),
+        name = "Server")
+
       env.actorSystem.awaitTermination()
     }
   }
 
   def main(args: Array[String]) {
+    LogUtils.setLog4jForStandalone()
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null
@@ -255,18 +229,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   private def printUsageAndExit() = {
     System.err.println(
       """
-      |"Usage: CoarseGrainedExecutorBackend [options]
-      |
-      | Options are:
-      |   --driver-url <driverUrl>
-      |   --executor-id <executorId>
-      |   --hostname <hostname>
-      |   --cores <cores>
-      |   --app-id <appid>
-      |   --worker-url <workerUrl>
-      |   --user-class-path <url>
-      |""".stripMargin)
+        |"Usage: CoarseGrainedParameterServerBackend [options]
+        |
+        | Options are:
+        |   --driver-url <driverUrl>
+        |   --executor-id <executorId>
+        |   --hostname <hostname>
+        |   --cores <cores>
+        |   --app-id <appid>
+        |   --worker-url <workerUrl>
+        |   --user-class-path <url>
+        |""".stripMargin)
     System.exit(1)
   }
-
 }
