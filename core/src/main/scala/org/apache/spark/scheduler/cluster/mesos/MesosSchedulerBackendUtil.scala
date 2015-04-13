@@ -32,7 +32,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
    * which is [host-dir:][container-dir][:rw|ro]
    */
   def parseVolumesSpec(volumes: String): List[Volume] = {
-    volumes.split(",").map(_.split(":")).map { spec: Array[String] =>
+    volumes.split(",").map(_.split(":")).map { spec =>
         val vol: Volume.Builder = Volume
           .newBuilder()
           .setMode(Volume.Mode.RW)
@@ -65,7 +65,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
   }
 
   /**
-   * Parse a portmap spec, simmilar to the form passed to 'docker run -p'
+   * Parse a portmap spec, similar to the form passed to 'docker run -p'
    * the form accepted is host_port:container_port[:proto]
    * Note:
    * the docker form is [ip:]host_port:container_port, but the DockerInfo
@@ -102,7 +102,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
       image: String,
       volumes: Option[List[Volume]] = None,
       network: Option[ContainerInfo.DockerInfo.Network] = None,
-      portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None) = {
+      portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None):Unit = {
 
     val docker = ContainerInfo.DockerInfo.newBuilder().setImage(image)
     network.map(docker.setNetwork _)
