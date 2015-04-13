@@ -125,9 +125,9 @@ class VertexPartitionSuite extends FunSuite {
     val verts = Set((0L, 1), (1L, 1), (2L, 1))
     val vp = VertexPartition(verts.iterator)
     val javaSer = new JavaSerializer(new SparkConf())
-    val kryoSer = new KryoSerializer(new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator"))
+    val conf = new SparkConf()
+    GraphXUtils.registerKryoClasses(conf)
+    val kryoSer = new KryoSerializer(conf)
 
     for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
       val vpSer: VertexPartition[Int] = s.deserialize(s.serialize(vp))

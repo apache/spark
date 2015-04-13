@@ -1,1 +1,0 @@
-in_file(str, filename) - Returns true if str appears in the file

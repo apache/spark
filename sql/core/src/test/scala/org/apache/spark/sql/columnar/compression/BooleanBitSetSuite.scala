@@ -34,7 +34,7 @@ class BooleanBitSetSuite extends FunSuite {
 
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val rows = Seq.fill[Row](count)(makeRandomRow(BOOLEAN))
-    val values = rows.map(_.head)
+    val values = rows.map(_(0))
 
     rows.foreach(builder.appendFrom(_, 0))
     val buffer = builder.build()

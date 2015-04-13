@@ -17,9 +17,6 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.Suite
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 
@@ -29,10 +26,9 @@ import org.apache.spark.SparkContext
 */
 trait LocalSparkContext {
   /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
-  def withSpark[T](f: SparkContext => T) = {
+  def withSpark[T](f: SparkContext => T): T = {
     val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    GraphXUtils.registerKryoClasses(conf)
     val sc = new SparkContext("local", "test", conf)
     try {
       f(sc)

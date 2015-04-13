@@ -24,13 +24,13 @@ import org.apache.hadoop.util.Progressable
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
+
 import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
@@ -168,13 +168,13 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("reduceByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.reduceByKey(_+_).collect()
+    val sums = pairs.reduceByKey(_ + _).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
   }
 
   test("reduceByKey with collectAsMap") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.reduceByKey(_+_).collectAsMap()
+    val sums = pairs.reduceByKey(_ + _).collectAsMap()
     assert(sums.size === 2)
     assert(sums(1) === 7)
     assert(sums(2) === 1)
@@ -182,7 +182,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("reduceByKey with many output partitons") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.reduceByKey(_+_, 10).collect()
+    val sums = pairs.reduceByKey(_ + _, 10).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
   }
 
@@ -192,7 +192,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       def getPartition(key: Any) = key.asInstanceOf[Int]
     }
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 1), (0, 1))).partitionBy(p)
-    val sums = pairs.reduceByKey(_+_)
+    val sums = pairs.reduceByKey(_ + _)
     assert(sums.collect().toSet === Set((1, 4), (0, 1)))
     assert(sums.partitioner === Some(p))
     // count the dependencies to make sure there is only 1 ShuffledRDD
@@ -208,7 +208,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("countApproxDistinctByKey") {
-    def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
+    def error(est: Long, size: Long): Double = math.abs(est - size) / size.toDouble
 
     /* Since HyperLogLog unique counting is approximate, and the relative standard deviation is
      * only a statistical bound, the tests can fail for large values of relativeSD. We will be using
@@ -381,14 +381,16 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Files.createTempDir()
-    emptyDir.deleteOnExit()
-    val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.partitions.size == 0)
-    assert(file.collect().toList === Nil)
-    // Test that a shuffle on the file works, because this used to be a bug
-    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    emptyDir.delete()
+    val emptyDir = Utils.createTempDir()
+    try {
+      val file = sc.textFile(emptyDir.getAbsolutePath)
+      assert(file.partitions.isEmpty)
+      assert(file.collect().toList === Nil)
+      // Test that a shuffle on the file works, because this used to be a bug
+      assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    } finally {
+      Utils.deleteRecursively(emptyDir)
+    }
   }
 
   test("keys and values") {
@@ -463,7 +465,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("foldByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.foldByKey(0)(_+_).collect()
+    val sums = pairs.foldByKey(0)(_ + _).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
   }
 
@@ -503,7 +505,8 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     conf.setOutputCommitter(classOf[FakeOutputCommitter])
 
     FakeOutputCommitter.ran = false
-    pairs.saveAsHadoopFile("ignored", pairs.keyClass, pairs.valueClass, classOf[FakeOutputFormat], conf)
+    pairs.saveAsHadoopFile(
+      "ignored", pairs.keyClass, pairs.valueClass, classOf[FakeOutputFormat], conf)
 
     assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
@@ -550,7 +553,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   private object StratifiedAuxiliary {
-    def stratifier (fractionPositive: Double) = {
+    def stratifier (fractionPositive: Double): (Int) => String = {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
     }
 
@@ -570,7 +573,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     def testSampleExact(stratifiedData: RDD[(String, Int)],
         samplingRate: Double,
         seed: Long,
-        n: Long) = {
+        n: Long): Unit = {
       testBernoulli(stratifiedData, true, samplingRate, seed, n)
       testPoisson(stratifiedData, true, samplingRate, seed, n)
     }
@@ -578,7 +581,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     def testSample(stratifiedData: RDD[(String, Int)],
         samplingRate: Double,
         seed: Long,
-        n: Long) = {
+        n: Long): Unit = {
       testBernoulli(stratifiedData, false, samplingRate, seed, n)
       testPoisson(stratifiedData, false, samplingRate, seed, n)
     }
@@ -588,7 +591,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         exact: Boolean,
         samplingRate: Double,
         seed: Long,
-        n: Long) = {
+        n: Long): Unit = {
       val expectedSampleSize = stratifiedData.countByKey()
         .mapValues(count => math.ceil(count * samplingRate).toInt)
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
@@ -610,7 +613,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         exact: Boolean,
         samplingRate: Double,
         seed: Long,
-        n: Long) = {
+        n: Long): Unit = {
       val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
         math.ceil(count * samplingRate).toInt)
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
@@ -699,27 +702,27 @@ class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
  */
 class NewFakeWriter extends NewRecordWriter[Integer, Integer] {
 
-  def close(p1: NewTaskAttempContext) = ()
+  def close(p1: NewTaskAttempContext): Unit = ()
 
-  def write(p1: Integer, p2: Integer) = ()
+  def write(p1: Integer, p2: Integer): Unit = ()
 
 }
 
 class NewFakeCommitter extends NewOutputCommitter {
-  def setupJob(p1: NewJobContext) = ()
+  def setupJob(p1: NewJobContext): Unit = ()
 
   def needsTaskCommit(p1: NewTaskAttempContext): Boolean = false
 
-  def setupTask(p1: NewTaskAttempContext) = ()
+  def setupTask(p1: NewTaskAttempContext): Unit = ()
 
-  def commitTask(p1: NewTaskAttempContext) = ()
+  def commitTask(p1: NewTaskAttempContext): Unit = ()
 
-  def abortTask(p1: NewTaskAttempContext) = ()
+  def abortTask(p1: NewTaskAttempContext): Unit = ()
 }
 
 class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
-  def checkOutputSpecs(p1: NewJobContext)  = ()
+  def checkOutputSpecs(p1: NewJobContext): Unit = ()
 
   def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriter()
@@ -733,7 +736,7 @@ class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {
 
   var setConfCalled = false
-  def setConf(p1: Configuration) = {
+  def setConf(p1: Configuration): Unit = {
     setConfCalled = true
     ()
   }

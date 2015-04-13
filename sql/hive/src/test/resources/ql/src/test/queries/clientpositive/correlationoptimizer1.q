@@ -104,7 +104,7 @@ FROM (SELECT x.key AS key, count(1) AS cnt
       
 set hive.optimize.correlation=false;
 -- If the key of a GroupByOperator is the right table's key in
--- a Left Outer Join, we cannot use a single MR to execute these two 
+-- a Left Outer Join, we cannot use a single MR to execute these two
 -- operators because those keys with a null value are not grouped.
 EXPLAIN
 SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
@@ -128,6 +128,29 @@ SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
 FROM (SELECT y.key AS key, count(1) AS cnt
       FROM src1 x LEFT OUTER JOIN src y ON (x.key = y.key)
       GROUP BY y.key) tmp;
+
+set hive.optimize.correlation=false;
+-- If a column of the key of a GroupByOperator is the right table's key in
+-- a Left Outer Join, we cannot use a single MR to execute these two
+-- operators because those keys with a null value are not grouped.
+EXPLAIN
+SELECT x.key, y.value, count(1) AS cnt
+FROM src1 x LEFT OUTER JOIN src y ON (x.key = y.key AND x.value = y.value)
+GROUP BY x.key, y.value;
+
+SELECT x.key, y.value, count(1) AS cnt
+FROM src1 x LEFT OUTER JOIN src y ON (x.key = y.key AND x.value = y.value)
+GROUP BY x.key, y.value;
+
+set hive.optimize.correlation=true;
+EXPLAIN
+SELECT x.key, y.value, count(1) AS cnt
+FROM src1 x LEFT OUTER JOIN src y ON (x.key = y.key AND x.value = y.value)
+GROUP BY x.key, y.value;
+
+SELECT x.key, y.value, count(1) AS cnt
+FROM src1 x LEFT OUTER JOIN src y ON (x.key = y.key AND x.value = y.value)
+GROUP BY x.key, y.value;
 
 set hive.optimize.correlation=false;
 -- If the key of a GroupByOperator is the right table's key in

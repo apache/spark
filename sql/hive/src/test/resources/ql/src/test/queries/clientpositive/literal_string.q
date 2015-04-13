@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 EXPLAIN SELECT 'face''book', 'face' 'book', 'face'
                                             'book',
                "face""book", "face" "book", "face"

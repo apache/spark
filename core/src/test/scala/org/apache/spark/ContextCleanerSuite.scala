@@ -28,7 +28,6 @@ import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -65,7 +64,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[Ha
     }
   }
 
-  //------ Helper functions ------
+  // ------ Helper functions ------
 
   protected def newRDD() = sc.makeRDD(1 to 10)
   protected def newPairRDD() = newRDD().map(_ -> 1)
@@ -371,7 +370,7 @@ class CleanerTester(
   val cleanerListener = new CleanerListener {
     def rddCleaned(rddId: Int): Unit = {
       toBeCleanedRDDIds -= rddId
-      logInfo("RDD "+ rddId + " cleaned")
+      logInfo("RDD " + rddId + " cleaned")
     }
 
     def shuffleCleaned(shuffleId: Int): Unit = {
@@ -382,6 +381,10 @@ class CleanerTester(
     def broadcastCleaned(broadcastId: Long): Unit = {
       toBeCleanedBroadcstIds -= broadcastId
       logInfo("Broadcast" + broadcastId + " cleaned")
+    }
+
+    def accumCleaned(accId: Long): Unit = {
+      logInfo("Cleaned accId " + accId + " cleaned")
     }
   }
 

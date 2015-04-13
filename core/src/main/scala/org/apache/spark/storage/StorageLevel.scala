@@ -18,8 +18,10 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -48,11 +50,11 @@ class StorageLevel private(
 
   def this() = this(false, true, false, false)  // For deserialization
 
-  def useDisk = _useDisk
-  def useMemory = _useMemory
-  def useOffHeap = _useOffHeap
-  def deserialized = _deserialized
-  def replication = _replication
+  def useDisk: Boolean = _useDisk
+  def useMemory: Boolean = _useMemory
+  def useOffHeap: Boolean = _useOffHeap
+  def deserialized: Boolean = _deserialized
+  def replication: Int = _replication
 
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
@@ -78,7 +80,7 @@ class StorageLevel private(
       false
   }
 
-  def isValid = (useMemory || useDisk || useOffHeap) && (replication > 0)
+  def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
 
   def toInt: Int = {
     var ret = 0
@@ -97,12 +99,12 @@ class StorageLevel private(
     ret
   }
 
-  override def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeByte(toInt)
     out.writeByte(_replication)
   }
 
-  override def readExternal(in: ObjectInput) {
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val flags = in.readByte()
     _useDisk = (flags & 8) != 0
     _useMemory = (flags & 4) != 0
@@ -181,7 +183,7 @@ object StorageLevel {
       useMemory: Boolean,
       useOffHeap: Boolean,
       deserialized: Boolean,
-      replication: Int) = {
+      replication: Int): StorageLevel = {
     getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication))
   }
@@ -195,7 +197,7 @@ object StorageLevel {
       useDisk: Boolean,
       useMemory: Boolean,
       deserialized: Boolean,
-      replication: Int = 1) = {
+      replication: Int = 1): StorageLevel = {
     getCachedStorageLevel(new StorageLevel(useDisk, useMemory, false, deserialized, replication))
   }
 
@@ -219,8 +221,7 @@ object StorageLevel {
     getCachedStorageLevel(obj)
   }
 
-  private[spark] val storageLevelCache =
-    new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
+  private[spark] val storageLevelCache = new ConcurrentHashMap[StorageLevel, StorageLevel]()
 
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
     storageLevelCache.putIfAbsent(level, level)

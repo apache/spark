@@ -33,7 +33,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 * See [[org.apache.spark.scheduler.Task]] for more information.
 *
  * @param stageId id of the stage this task belongs to
- * @param taskBinary broadcast version of of the RDD and the ShuffleDependency. Once deserialized,
+ * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
@@ -47,7 +47,7 @@ private[spark] class ShuffleMapTask(
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, null, new Partition { override def index = 0 }, null)
+    this(0, null, new Partition { override def index: Int = 0 }, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
@@ -83,5 +83,5 @@ private[spark] class ShuffleMapTask(
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
-  override def toString = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
+  override def toString: String = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
 }

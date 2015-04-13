@@ -14,7 +14,7 @@ create table tstsrcpart like srcpart;
 -- to be thrown during the LOAD step. This behavior is now tested in
 -- clientnegative/archive_corrupt.q
 
-load data local inpath '../data/files/archive_corrupt.rc' overwrite into table tstsrcpart partition (ds='2008-04-08', hr='11');
+load data local inpath '../../data/files/archive_corrupt.rc' overwrite into table tstsrcpart partition (ds='2008-04-08', hr='11');
 
 insert overwrite table tstsrcpart partition (ds='2008-04-08', hr='12')
 select key, value from srcpart where ds='2008-04-08' and hr='12';

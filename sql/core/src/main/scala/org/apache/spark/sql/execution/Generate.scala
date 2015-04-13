@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -39,7 +40,8 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] = {
+  // This must be a val since the generator output expr ids are not preserved by serialization.
+  protected val generatorOutput: Seq[Attribute] = {
     if (join && outer) {
       generator.output.map(_.withNullability(true))
     } else {
@@ -53,7 +55,7 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
@@ -62,7 +64,7 @@ case class Generate(
           newProjection(child.output ++ nullValues, child.output)
 
         val joinProjection =
-          newProjection(child.output ++ generator.output, child.output ++ generator.output)
+          newProjection(child.output ++ generatorOutput, child.output ++ generatorOutput)
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>

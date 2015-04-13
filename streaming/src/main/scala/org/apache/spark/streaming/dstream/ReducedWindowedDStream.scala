@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD}
 import org.apache.spark.Partitioner
@@ -54,7 +52,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   // Reduce each batch of data using reduceByKey which will be further reduced by window
   // by ReducedWindowedDStream
-  val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
+  private val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
   // Persist RDDs to memory by default as these RDDs are going to be reused.
   super.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -62,7 +60,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   def windowDuration: Duration =  _windowDuration
 
-  override def dependencies = List(reducedStream)
+  override def dependencies: List[DStream[_]] = List(reducedStream)
 
   override def slideDuration: Duration = _slideDuration
 

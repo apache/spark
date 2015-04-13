@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming.clickstream
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.examples.streaming.StreamingExamples
 // scalastyle:off
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of
@@ -50,7 +49,7 @@ object PageViewStream {
     val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
-    // Create a NetworkInputDStream on target host:port and convert each line to a PageView
+    // Create a ReceiverInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.socketTextStream(host, port)
                        .flatMap(_.split("\n"))
                        .map(PageView.fromString(_))

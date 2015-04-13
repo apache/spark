@@ -1,0 +1,4 @@
+xpath_long(xml, xpath) - Returns a long value that matches the xpath expression
+Example:
+  > SELECT xpath_long('<a><b>1</b><b>2</b></a>','sum(a/b)') FROM src LIMIT 1;
+  3

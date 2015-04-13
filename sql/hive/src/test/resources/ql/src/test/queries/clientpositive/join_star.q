@@ -7,14 +7,14 @@ create table dim5(f9 int, f10 int);
 create table dim6(f11 int, f12 int);
 create table dim7(f13 int, f14 int);
 
-LOAD DATA LOCAL INPATH '../data/files/fact-data.txt' INTO TABLE fact;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim1;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim2;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim3;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim4;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim5;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim6;
-LOAD DATA LOCAL INPATH '../data/files/dim-data.txt' INTO TABLE dim7;
+LOAD DATA LOCAL INPATH '../../data/files/fact-data.txt' INTO TABLE fact;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim1;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim2;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim3;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim4;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim5;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim6;
+LOAD DATA LOCAL INPATH '../../data/files/dim-data.txt' INTO TABLE dim7;
 
 set hive.auto.convert.join=true;
 set hive.auto.convert.join.noconditionaltask=true;

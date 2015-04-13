@@ -23,6 +23,7 @@ import java.io._
 import java.util.{ArrayList => JArrayList}
 
 import jline.{ConsoleReader, History}
+
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
@@ -38,6 +39,7 @@ import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.hive.HiveShim
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -116,7 +118,7 @@ private[hive] object SparkSQLCLIDriver {
       }
     }
 
-    if (!sessionState.isRemoteMode && !ShimLoader.getHadoopShims.usesJobShell()) {
+    if (!sessionState.isRemoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
@@ -192,28 +194,29 @@ private[hive] object SparkSQLCLIDriver {
     val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
       classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
 
-    def promptWithCurrentDB = s"$prompt$currentDB"
-    def continuedPromptWithDBSpaces = continuedPrompt + ReflectionUtils.invokeStatic(
+    def promptWithCurrentDB: String = s"$prompt$currentDB"
+    def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
-      if (prefix.nonEmpty) {
-        prefix += '\n'
-      }
+      if (!line.startsWith("--")) {
+        if (prefix.nonEmpty) {
+          prefix += '\n'
+        }
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
-        currentPrompt = promptWithCurrentDB
-      } else {
-        prefix = prefix + line
-        currentPrompt = continuedPromptWithDBSpaces
+        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
+          line = prefix + line
+          ret = cli.processLine(line, true)
+          prefix = ""
+          currentPrompt = promptWithCurrentDB
+        } else {
+          prefix = prefix + line
+          currentPrompt = continuedPromptWithDBSpaces
+        }
       }
-
       line = reader.readLine(currentPrompt + "> ")
     }
 
@@ -258,7 +261,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hconf)
+      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
 
       if (proc != null) {
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
@@ -270,8 +273,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
-
           val rc = driver.run(cmd)
+          val end = System.currentTimeMillis()
+          val timeTaken:Double = (end - start) / 1000.0
+
           ret = rc.getResponseCode
           if (ret != 0) {
             console.printError(rc.getErrorMessage())
@@ -288,9 +293,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
           }
 
+          var counter = 0
           try {
             while (!out.checkError() && driver.getResults(res)) {
-              res.foreach(out.println)
+              res.foreach{ l =>
+                counter += 1
+                out.println(l)
+              }
               res.clear()
             }
           } catch {
@@ -307,12 +316,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             ret = cret
           }
 
-          val end = System.currentTimeMillis()
-          if (end > start) {
-            val timeTaken:Double = (end - start) / 1000.0
-            console.printInfo(s"Time taken: $timeTaken seconds", null)
+          var responseMsg = s"Time taken: $timeTaken seconds"
+          if (counter != 0) {
+            responseMsg += s", Fetched $counter row(s)"
           }
-
+          console.printInfo(responseMsg , null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

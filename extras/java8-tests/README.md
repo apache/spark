@@ -8,7 +8,7 @@ to your Java location. The set-up depends a bit on the build system:
   `-java-home` to the sbt launch script. If a Java 8 JDK is detected sbt will automatically
   include the Java 8 test project.
 
-  `$ JAVA_HOME=/opt/jdk1.8.0/ sbt/sbt clean "test-only org.apache.spark.Java8APISuite"`
+  `$ JAVA_HOME=/opt/jdk1.8.0/ build/sbt clean "test-only org.apache.spark.Java8APISuite"`
 
 * For Maven users,
 
@@ -19,6 +19,6 @@ to your Java location. The set-up depends a bit on the build system:
   `$ JAVA_HOME=/opt/jdk1.8.0/ mvn clean install -DskipTests`
   `$ JAVA_HOME=/opt/jdk1.8.0/ mvn test -Pjava8-tests -DwildcardSuites=org.apache.spark.Java8APISuite`
 
-  Note that the above command can only be run from project root directory since this module 
-  depends on core and the test-jars of core and streaming. This means an install step is 
+  Note that the above command can only be run from project root directory since this module
+  depends on core and the test-jars of core and streaming. This means an install step is
   required to make the test dependencies visible to the Java 8 sub-project.

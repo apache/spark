@@ -30,7 +30,10 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val rddId = request.getParameter("id").toInt
+    val parameterId = request.getParameter("id")
+    require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+
+    val rddId = parameterId.toInt
     val storageStatusList = listener.storageStatusList
     val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
       // Rather than crashing, render an "RDD Not Found" page
@@ -39,7 +42,8 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
     // Worker table
     val workers = storageStatusList.map((rddId, _))
-    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
+    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers,
+      id = Some("rdd-storage-by-worker-table"))
 
     // Block table
     val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
@@ -49,7 +53,8 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
       .map { case (blockId, status) =>
         (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
       }
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
+    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks,
+      id = Some("rdd-storage-by-block-table"))
 
     val content =
       <div class="row-fluid">

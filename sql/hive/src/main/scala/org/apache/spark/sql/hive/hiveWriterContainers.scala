@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.IOException
 import java.text.NumberFormat
 import java.util.Date
 
@@ -27,12 +26,16 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.FileSinkDesc
+import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
+import org.apache.hadoop.hive.common.FileUtils
 
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.hive.HiveShim._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -46,6 +49,13 @@ private[hive] class SparkHiveWriterContainer(
   with Serializable {
 
   private val now = new Date()
+  private val tableDesc: TableDesc = fileSinkConf.getTableInfo
+  // Add table properties from storage handler to jobConf, so any custom storage
+  // handler settings can be set to jobConf
+  if (tableDesc != null) {
+    PlanUtils.configureOutputJobPropertiesForStorageHandler(tableDesc)
+    Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
+  }
   protected val conf = new SerializableWritable(jobConf)
 
   private var jobID = 0
@@ -55,8 +65,8 @@ private[hive] class SparkHiveWriterContainer(
   private var taID: SerializableWritable[TaskAttemptID] = null
 
   @transient private var writer: FileSinkOperator.RecordWriter = null
-  @transient private lazy val committer = conf.value.getOutputCommitter
-  @transient private lazy val jobContext = newJobContext(conf.value, jID.value)
+  @transient protected lazy val committer = conf.value.getOutputCommitter
+  @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
   @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
   @transient private lazy val outputFormat =
     conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef,Writable]]
@@ -107,22 +117,8 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   protected def commit() {
-    if (committer.needsTaskCommit(taskContext)) {
-      try {
-        committer.commitTask(taskContext)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException =>
-          logError("Error committing the output of task: " + taID.value, e)
-          committer.abortTask(taskContext)
-          throw e
-      }
-    } else {
-      logInfo("No need to commit output of task: " + taID.value)
-    }
+    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID, attemptID)
   }
-
-  // ********* Private Functions *********
 
   private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
     jobID = jobId
@@ -157,11 +153,17 @@ private[hive] object SparkHiveWriterContainer {
   }
 }
 
+private[spark] object SparkHiveDynamicPartitionWriterContainer {
+  val SUCCESSFUL_JOB_OUTPUT_DIR_MARKER = "mapreduce.fileoutputcommitter.marksuccessfuljobs"
+}
+
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
     @transient jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
+
+  import SparkHiveDynamicPartitionWriterContainer._
 
   private val defaultPartName = jobConf.get(
     ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
@@ -179,16 +181,35 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     commit()
   }
 
+  override def commitJob(): Unit = {
+    // This is a hack to avoid writing _SUCCESS mark file. In lower versions of Hadoop (e.g. 1.0.4),
+    // semantics of FileSystem.globStatus() is different from higher versions (e.g. 2.4.1) and will
+    // include _SUCCESS file when glob'ing for dynamic partition data files.
+    //
+    // Better solution is to add a step similar to what Hive FileSinkOperator.jobCloseOp does:
+    // calling something like Utilities.mvFileToFinalPath to cleanup the output directory and then
+    // load it with loadDynamicPartitions/loadPartition/loadTable.
+    val oldMarker = jobConf.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
+    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
+    super.commitJob()
+    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
+  }
+
   override def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = {
     val dynamicPartPath = dynamicPartColNames
-      .zip(row.takeRight(dynamicPartColNames.length))
+      .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
         val string = if (rawVal == null) null else String.valueOf(rawVal)
-        s"/$col=${if (string == null || string.isEmpty) defaultPartName else string}"
-      }
-      .mkString
+        val colString =
+          if (string == null || string.isEmpty) {
+            defaultPartName
+          } else {
+            FileUtils.escapePathName(string)
+          }
+        s"/$col=$colString"
+      }.mkString
 
-    def newWriter = {
+    def newWriter(): FileSinkOperator.RecordWriter = {
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + dynamicPartPath,
         fileSinkConf.getTableInfo,
@@ -212,6 +233,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         Reporter.NULL)
     }
 
-    writers.getOrElseUpdate(dynamicPartPath, newWriter)
+    writers.getOrElseUpdate(dynamicPartPath, newWriter())
   }
 }

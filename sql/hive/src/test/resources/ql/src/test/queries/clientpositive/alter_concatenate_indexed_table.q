@@ -1,9 +1,9 @@
 set hive.exec.concatenate.check.index =false;
 create table src_rc_concatenate_test(key int, value string) stored as rcfile;
 
-load data local inpath '../data/files/smbbucket_1.rc' into table src_rc_concatenate_test;
-load data local inpath '../data/files/smbbucket_2.rc' into table src_rc_concatenate_test;
-load data local inpath '../data/files/smbbucket_3.rc' into table src_rc_concatenate_test;
+load data local inpath '../../data/files/smbbucket_1.rc' into table src_rc_concatenate_test;
+load data local inpath '../../data/files/smbbucket_2.rc' into table src_rc_concatenate_test;
+load data local inpath '../../data/files/smbbucket_3.rc' into table src_rc_concatenate_test;
 
 show table extended like `src_rc_concatenate_test`;
 
@@ -26,9 +26,9 @@ create table src_rc_concatenate_test_part(key int, value string) partitioned by 
 
 alter table src_rc_concatenate_test_part add partition (ds='2011');
 
-load data local inpath '../data/files/smbbucket_1.rc' into table src_rc_concatenate_test_part partition (ds='2011');
-load data local inpath '../data/files/smbbucket_2.rc' into table src_rc_concatenate_test_part partition (ds='2011');
-load data local inpath '../data/files/smbbucket_3.rc' into table src_rc_concatenate_test_part partition (ds='2011');
+load data local inpath '../../data/files/smbbucket_1.rc' into table src_rc_concatenate_test_part partition (ds='2011');
+load data local inpath '../../data/files/smbbucket_2.rc' into table src_rc_concatenate_test_part partition (ds='2011');
+load data local inpath '../../data/files/smbbucket_3.rc' into table src_rc_concatenate_test_part partition (ds='2011');
 
 show table extended like `src_rc_concatenate_test_part` partition (ds='2011');
 

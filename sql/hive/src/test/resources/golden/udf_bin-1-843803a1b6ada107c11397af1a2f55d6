@@ -1,5 +1,0 @@
-bin(n) - returns n in binary
-n is a BIGINT. Returns NULL if n is NULL.
-Example:
-  > SELECT bin(13) FROM src LIMIT 1
-  '1101'

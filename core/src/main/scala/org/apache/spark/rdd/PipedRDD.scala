@@ -63,7 +63,7 @@ private[spark] class PipedRDD[T: ClassTag](
 
   /**
    * A FilenameFilter that accepts anything that isn't equal to the name passed in.
-   * @param name of file or directory to leave out
+   * @param filterName of file or directory to leave out
    */
   class NotEqualsFileNameFilter(filterName: String) extends FilenameFilter {
     def accept(dir: File, name: String): Boolean = {
@@ -131,7 +131,6 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
-        SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
 
         // input the pipe context firstly
@@ -150,10 +149,10 @@ private[spark] class PipedRDD[T: ClassTag](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream).getLines
+    val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
-      def next() = lines.next()
-      def hasNext = {
+      def next(): String = lines.next()
+      def hasNext: Boolean = {
         if (lines.hasNext) {
           true
         } else {
@@ -163,7 +162,7 @@ private[spark] class PipedRDD[T: ClassTag](
           }
 
           // cleanup task working directory if used
-          if (workInTaskDirectory == true) {
+          if (workInTaskDirectory) {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
               Utils.deleteRecursively(new File(taskDirectory))
             }

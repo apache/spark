@@ -22,7 +22,6 @@ import scala.concurrent.duration.Duration
 
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
-import org.apache.spark.SparkContext._
 
 class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with LocalSparkContext {
 

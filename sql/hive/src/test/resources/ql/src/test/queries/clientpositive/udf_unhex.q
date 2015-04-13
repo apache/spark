@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION unhex;
 DESCRIBE FUNCTION EXTENDED unhex;
 
@@ -9,11 +11,11 @@ SELECT
   unhex('61'),
   unhex('2D34'),
   unhex('')
-FROM src limit 1;
+FROM src tablesample (1 rows);
 
 -- Bad inputs
 SELECT
   unhex('MySQL'),
   unhex('G123'),
   unhex('\0')
-FROM src limit 1;
+FROM src tablesample (1 rows);

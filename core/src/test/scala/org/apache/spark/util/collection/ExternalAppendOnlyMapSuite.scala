@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.io.CompressionCodec
 
 class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
@@ -186,7 +185,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
 
     // reduceByKey
     val rdd = sc.parallelize(1 to 10).map(i => (i%2, 1))
-    val result1 = rdd.reduceByKey(_+_).collect()
+    val result1 = rdd.reduceByKey(_ + _).collect()
     assert(result1.toSet === Set[(Int, Int)]((0, 5), (1, 5)))
 
     // groupByKey

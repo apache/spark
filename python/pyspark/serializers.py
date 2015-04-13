@@ -33,9 +33,8 @@ The serializer is chosen when creating L{SparkContext}:
 [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
 >>> sc.stop()
 
-By default, PySpark serialize objects in batches; the batch size can be
-controlled through SparkContext's C{batchSize} parameter
-(the default size is 1024 objects):
+PySpark serialize objects in batches; By default, the batch size is chosen based
+on the size of objects, also configurable by SparkContext's C{batchSize} parameter:
 
 >>> sc = SparkContext('local', 'test', batchSize=2)
 >>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
@@ -48,16 +47,6 @@ which contains two batches of two objects:
 >>> rdd._jrdd.count()
 8L
 >>> sc.stop()
-
-A batch size of -1 uses an unlimited batch size, and a size of 1 disables
-batching:
-
->>> sc = SparkContext('local', 'test', batchSize=1)
->>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
->>> rdd.glom().collect()
-[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> rdd._jrdd.count()
-16L
 """
 
 import cPickle
@@ -73,13 +62,15 @@ import itertools
 from pyspark import cloudpickle
 
 
-__all__ = ["PickleSerializer", "MarshalSerializer"]
+__all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
 
 
 class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
+    END_OF_STREAM = -4
+    NULL = -5
 
 
 class Serializer(object):
@@ -112,7 +103,10 @@ class Serializer(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return "<%s object>" % self.__class__.__name__
+        return "%s()" % self.__class__.__name__
+
+    def __hash__(self):
+        return hash(str(self))
 
 
 class FramedSerializer(Serializer):
@@ -140,6 +134,10 @@ class FramedSerializer(Serializer):
 
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
+        if serialized is None:
+            raise ValueError("serialized value should not be None")
+        if len(serialized) > (1 << 31):
+            raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         if self._only_write_strings:
             stream.write(str(serialized))
@@ -150,8 +148,10 @@ class FramedSerializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
+        elif length == SpecialLengths.NULL:
+            return None
         obj = stream.read(length)
-        if obj == "":
+        if len(obj) < length:
             raise EOFError
         return self.loads(obj)
 
@@ -177,6 +177,7 @@ class BatchedSerializer(Serializer):
     """
 
     UNLIMITED_BATCH_SIZE = -1
+    UNKNOWN_BATCH_SIZE = 0
 
     def __init__(self, serializer, batchSize=UNLIMITED_BATCH_SIZE):
         self.serializer = serializer
@@ -185,6 +186,10 @@ class BatchedSerializer(Serializer):
     def _batched(self, iterator):
         if self.batchSize == self.UNLIMITED_BATCH_SIZE:
             yield list(iterator)
+        elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
+            n = len(iterator)
+            for i in xrange(0, n, self.batchSize):
+                yield iterator[i: i + self.batchSize]
         else:
             items = []
             count = 0
@@ -209,10 +214,33 @@ class BatchedSerializer(Serializer):
 
     def __eq__(self, other):
         return (isinstance(other, BatchedSerializer) and
-                other.serializer == self.serializer)
+                other.serializer == self.serializer and other.batchSize == self.batchSize)
 
-    def __str__(self):
-        return "BatchedSerializer<%s>" % str(self.serializer)
+    def __repr__(self):
+        return "BatchedSerializer(%s, %d)" % (str(self.serializer), self.batchSize)
+
+
+class FlattenedValuesSerializer(BatchedSerializer):
+
+    """
+    Serializes a stream of list of pairs, split the list of values
+    which contain more than a certain number of objects to make them
+    have similar sizes.
+    """
+    def __init__(self, serializer, batchSize=10):
+        BatchedSerializer.__init__(self, serializer, batchSize)
+
+    def _batched(self, iterator):
+        n = self.batchSize
+        for key, values in iterator:
+            for i in xrange(0, len(values), n):
+                yield key, values[i:i + n]
+
+    def load_stream(self, stream):
+        return self.serializer.load_stream(stream)
+
+    def __repr__(self):
+        return "FlattenedValuesSerializer(%d)" % self.batchSize
 
 
 class AutoBatchedSerializer(BatchedSerializer):
@@ -220,8 +248,8 @@ class AutoBatchedSerializer(BatchedSerializer):
     Choose the size of batch automatically based on the size of object
     """
 
-    def __init__(self, serializer, bestSize=1 << 20):
-        BatchedSerializer.__init__(self, serializer, -1)
+    def __init__(self, serializer, bestSize=1 << 16):
+        BatchedSerializer.__init__(self, serializer, self.UNKNOWN_BATCH_SIZE)
         self.bestSize = bestSize
 
     def dump_stream(self, iterator, stream):
@@ -244,10 +272,10 @@ class AutoBatchedSerializer(BatchedSerializer):
 
     def __eq__(self, other):
         return (isinstance(other, AutoBatchedSerializer) and
-                other.serializer == self.serializer)
+                other.serializer == self.serializer and other.bestSize == self.bestSize)
 
-    def __str__(self):
-        return "BatchedSerializer<%s>" % str(self.serializer)
+    def __repr__(self):
+        return "AutoBatchedSerializer(%s)" % str(self.serializer)
 
 
 class CartesianDeserializer(FramedSerializer):
@@ -279,8 +307,8 @@ class CartesianDeserializer(FramedSerializer):
         return (isinstance(other, CartesianDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
-        return "CartesianDeserializer<%s, %s>" % \
+    def __repr__(self):
+        return "CartesianDeserializer(%s, %s)" % \
                (str(self.key_ser), str(self.val_ser))
 
 
@@ -306,8 +334,8 @@ class PairDeserializer(CartesianDeserializer):
         return (isinstance(other, PairDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
-        return "PairDeserializer<%s, %s>" % (str(self.key_ser), str(self.val_ser))
+    def __repr__(self):
+        return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
 
 
 class NoOpSerializer(FramedSerializer):
@@ -426,7 +454,7 @@ class MarshalSerializer(FramedSerializer):
 class AutoSerializer(FramedSerializer):
 
     """
-    Choose marshal or cPickle as serialization protocol autumatically
+    Choose marshal or cPickle as serialization protocol automatically
     """
 
     def __init__(self):
@@ -456,9 +484,9 @@ class CompressedSerializer(FramedSerializer):
     """
     Compress the serialized data
     """
-
     def __init__(self, serializer):
         FramedSerializer.__init__(self)
+        assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
         self.serializer = serializer
 
     def dumps(self, obj):
@@ -466,6 +494,9 @@ class CompressedSerializer(FramedSerializer):
 
     def loads(self, obj):
         return self.serializer.loads(zlib.decompress(obj))
+
+    def __eq__(self, other):
+        return isinstance(other, CompressedSerializer) and self.serializer == other.serializer
 
 
 class UTF8Deserializer(Serializer):
@@ -481,6 +512,8 @@ class UTF8Deserializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
+        elif length == SpecialLengths.NULL:
+            return None
         s = stream.read(length)
         return s.decode("utf-8") if self.use_unicode else s
 
@@ -492,6 +525,9 @@ class UTF8Deserializer(Serializer):
             return
         except EOFError:
             return
+
+    def __eq__(self, other):
+        return isinstance(other, UTF8Deserializer) and self.use_unicode == other.use_unicode
 
 
 def read_long(stream):
@@ -523,3 +559,8 @@ def write_int(value, stream):
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
