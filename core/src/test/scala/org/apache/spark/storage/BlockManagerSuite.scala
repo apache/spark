@@ -1271,8 +1271,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     bufferInputStream.disposed should be (false)
     try {
       itr.asInstanceOf[Iterator[Int]].map{x =>
-        if (x > 5)
+        if (x > 5) {
           throw new UserException()
+        }
         x
       }.toArray
     } catch {
