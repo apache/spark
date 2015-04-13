@@ -254,7 +254,7 @@ In yarn-cluster mode, the driver runs on a different machine than the client, so
         my-main-jar.jar
         app_arg1 app_arg2
 
-For Spark application in Python also can code dependencies to spark-submit through its --py-files argument by packaging them into a .zip file.
+For Spark application in Python also can add code dependencies to spark-submit through its --py-files argument by packaging them into a .zip file.
 
 # Debugging your Application
 
