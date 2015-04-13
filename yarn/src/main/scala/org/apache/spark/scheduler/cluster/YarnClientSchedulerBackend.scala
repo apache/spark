@@ -132,7 +132,6 @@ private[spark] class YarnClientSchedulerBackend(
           val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
           logError(s"Yarn application has already exited with state $state!")
           sc.stop()
-          Thread.currentThread().interrupt()
         } catch {
           case e: InterruptedException => logInfo("Interrupting monitor thread")
         }
