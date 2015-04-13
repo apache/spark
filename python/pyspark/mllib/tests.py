@@ -44,6 +44,7 @@ from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
+from pyspark.mllib.feature import StandardScaler
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -744,6 +745,29 @@ class Word2VecTests(PySparkTestCase):
         ]
         model = Word2Vec().fit(self.sc.parallelize(data))
         self.assertEquals(len(model.getVectors()), 3)
+
+
+class StandardScalerTests(PySparkTestCase):
+    def test_model_setters(self):
+        data = [
+            [1.0, 2.0, 3.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 4.0, 5.0]
+        ]
+        model = StandardScaler().fit(self.sc.parallelize(data))
+        self.assertIsNotNone(model.setWithMean(True))
+        self.assertIsNotNone(model.setWithStd(True))
+        self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([-1.0, -1.0, -1.0]))
+
+    def test_model_transform(self):
+        data = [
+            [1.0, 2.0, 3.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 4.0, 5.0]
+        ]
+        model = StandardScaler().fit(self.sc.parallelize(data))
+        self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
+
 
 if __name__ == "__main__":
     if not _have_scipy:
