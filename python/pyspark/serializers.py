@@ -194,7 +194,7 @@ class BatchedSerializer(Serializer):
             yield list(iterator)
         elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
             n = len(iterator)
-            for i in xrange(0, n, self.batchSize):
+            for i in range(0, n, self.batchSize):
                 yield iterator[i: i + self.batchSize]
         else:
             items = []
@@ -235,7 +235,7 @@ class FlattenedValuesSerializer(BatchedSerializer):
     def _batched(self, iterator):
         n = self.batchSize
         for key, values in iterator:
-            for i in xrange(0, len(values), n):
+            for i in range(0, len(values), n):
                 yield key, values[i:i + n]
 
     def load_stream(self, stream):

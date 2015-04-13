@@ -116,7 +116,7 @@ def rddToFileName(prefix, suffix, timestamp):
     """
     if isinstance(timestamp, datetime):
         seconds = time.mktime(timestamp.timetuple())
-        timestamp = int(seconds * 1000) + timestamp.microsecond / 1000
+        timestamp = int(seconds * 1000) + timestamp.microsecond // 1000
     if suffix is None:
         return prefix + "-" + str(timestamp)
     else:

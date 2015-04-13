@@ -149,18 +149,18 @@ class MergerTests(unittest.TestCase):
         self.assertEqual(1, len(list(gen_gs(1))))
         self.assertEqual(2, len(list(gen_gs(2))))
         self.assertEqual(100, len(list(gen_gs(100))))
-        self.assertEqual(range(1, 101), [k for k, _ in gen_gs(100)])
-        self.assertTrue(all(range(k) == list(vs) for k, vs in gen_gs(100)))
+        self.assertEqual(list(range(1, 101)), [k for k, _ in gen_gs(100)])
+        self.assertTrue(all(list(range(k)) == list(vs) for k, vs in gen_gs(100)))
 
         for k, vs in gen_gs(50002, 10000):
             self.assertEqual(k, len(vs))
-            self.assertEqual(range(k), list(vs))
+            self.assertEqual(list(range(k)), list(vs))
 
         ser = PickleSerializer()
         l = ser.loads(ser.dumps(list(gen_gs(50002, 30000))))
         for k, vs in l:
             self.assertEqual(k, len(vs))
-            self.assertEqual(range(k), list(vs))
+            self.assertEqual(list(range(k)), list(vs))
 
 
 class SorterTests(unittest.TestCase):
@@ -747,19 +747,19 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(result.count(), 3)
 
     def test_external_group_by_key(self):
-        self.sc._conf.set("spark.python.worker.memory", "5m")
+        self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 200001
         kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
         self.assertEqual(1, filtered.count())
-        self.assertEqual([(1, N/3)], filtered.mapValues(len).collect())
-        self.assertEqual([(N/3, N/3)],
+        self.assertEqual([(1, N // 3)], filtered.mapValues(len).collect())
+        self.assertEqual([(N // 3, N // 3)],
                          filtered.values().map(lambda x: (len(x), len(list(x)))).collect())
         result = filtered.collect()[0][1]
-        self.assertEqual(N/3, len(result))
-        self.assertTrue(isinstance(result.data, shuffle.ExternalList))
+        self.assertEqual(N // 3, len(result))
+        self.assertTrue(isinstance(result.data, shuffle.ExternalListOfList))
 
     def test_sort_on_empty_rdd(self):
         self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())

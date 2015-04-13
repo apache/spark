@@ -787,7 +787,7 @@ class ExternalGroupBy(ExternalMerger):
         # if the memory can not hold all the partition,
         # then use sort based merge. Because of compression,
         # the data on disks will be much smaller than needed memory
-        if (size >> 20) >= self.memory_limit / 10:
+        if size >= self.memory_limit << 17:  # * 1M / 8
             return self._merge_sorted_items(index)
 
         self.data = {}
