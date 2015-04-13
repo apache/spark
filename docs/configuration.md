@@ -41,12 +41,14 @@ actually require one to prevent any sort of starvation issues.
 Properties that specify some time duration should be configured with a unit of time. 
 The following format is accepted:
  
-    5s (seconds)
     25ms (milliseconds)
+    5s (seconds)
     10m or 10min (minutes)
     3h (hours)
     5d (days)
     1y (years)
+    
+If no units are provided, the default unit specified in the documentation is assumed.
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
