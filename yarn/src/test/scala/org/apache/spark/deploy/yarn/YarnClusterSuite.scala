@@ -121,7 +121,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-    hadoopConfDir = new File(tempDir, Client.HADOOP_CONF_DIR)
+    hadoopConfDir = new File(tempDir, Client.LOCALIZED_HADOOP_CONF_DIR)
     assert(hadoopConfDir.mkdir())
     File.createTempFile("token", ".txt", hadoopConfDir)
   }
