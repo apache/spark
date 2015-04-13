@@ -188,7 +188,7 @@ private[nio] class ConnectionManager(
   private val readRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
 
   private val selectorThread = new Thread("connection-manager-thread") {
-    override def run() = ConnectionManager.this.run()
+    override def run(): Unit = ConnectionManager.this.run()
   }
   selectorThread.setDaemon(true)
   // start this thread last, since it invokes run(), which accesses members above

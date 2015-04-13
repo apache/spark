@@ -64,7 +64,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[Ha
     }
   }
 
-  //------ Helper functions ------
+  // ------ Helper functions ------
 
   protected def newRDD() = sc.makeRDD(1 to 10)
   protected def newPairRDD() = newRDD().map(_ -> 1)
@@ -370,7 +370,7 @@ class CleanerTester(
   val cleanerListener = new CleanerListener {
     def rddCleaned(rddId: Int): Unit = {
       toBeCleanedRDDIds -= rddId
-      logInfo("RDD "+ rddId + " cleaned")
+      logInfo("RDD " + rddId + " cleaned")
     }
 
     def shuffleCleaned(shuffleId: Int): Unit = {

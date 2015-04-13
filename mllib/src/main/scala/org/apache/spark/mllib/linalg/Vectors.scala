@@ -185,6 +185,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def hashCode: Int = 7919
 
+  override def typeName: String = "vector"
+
   private[spark] override def asNullable: VectorUDT = this
 }
 

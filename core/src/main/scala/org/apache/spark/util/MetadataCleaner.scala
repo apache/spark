@@ -67,14 +67,15 @@ private[spark] object MetadataCleanerType extends Enumeration {
 
   type MetadataCleanerType = Value
 
-  def systemProperty(which: MetadataCleanerType.MetadataCleanerType) =
-      "spark.cleaner.ttl." + which.toString
+  def systemProperty(which: MetadataCleanerType.MetadataCleanerType): String = {
+    "spark.cleaner.ttl." + which.toString
+  }
 }
 
 // TODO: This mutates a Conf to set properties right now, which is kind of ugly when used in the
 // initialization of StreamingContext. It's okay for users trying to configure stuff themselves.
 private[spark] object MetadataCleaner {
-  def getDelaySeconds(conf: SparkConf) = {
+  def getDelaySeconds(conf: SparkConf): Int = {
     conf.getInt("spark.cleaner.ttl", -1)
   }
 

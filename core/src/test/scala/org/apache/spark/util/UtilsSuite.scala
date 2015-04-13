@@ -106,7 +106,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val second = 1000
     val minute = second * 60
     val hour = minute * 60
-    def str = Utils.msDurationToString(_)
+    def str: (Long) => String = Utils.msDurationToString(_)
 
     val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
 
@@ -199,7 +199,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
-    val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
+    // The parent directory has two child directories
+    val child1: File = Utils.createTempDir(parent.getCanonicalPath)
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
     val child3: File = Utils.createTempDir(child1.getCanonicalPath)
     // set the last modified time of child1 to 30 secs old

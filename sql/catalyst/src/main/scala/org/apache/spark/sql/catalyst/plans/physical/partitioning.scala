@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Row, SortOrder}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -72,7 +72,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
       "a single partition.")
 
   // TODO: This is not really valid...
-  def clustering = ordering.map(_.child).toSet
+  def clustering: Set[Expression] = ordering.map(_.child).toSet
 }
 
 sealed trait Partitioning {
@@ -113,7 +113,7 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies(required: Distribution): Boolean = true
 
-  override def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning): Boolean = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -124,7 +124,7 @@ case object BroadcastPartitioning extends Partitioning {
 
   override def satisfies(required: Distribution): Boolean = true
 
-  override def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning): Boolean = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -139,9 +139,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  override def children = expressions
-  override def nullable = false
-  override def dataType = IntegerType
+  override def children: Seq[Expression] = expressions
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
 
   private[this] lazy val clusteringSet = expressions.toSet
 
@@ -152,7 +152,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case _ => false
   }
 
-  override def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning): Boolean = other match {
     case BroadcastPartitioning => true
     case h: HashPartitioning if h == this => true
     case _ => false
@@ -178,9 +178,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  override def children = ordering
-  override def nullable = false
-  override def dataType = IntegerType
+  override def children: Seq[SortOrder] = ordering
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
 
   private[this] lazy val clusteringSet = ordering.map(_.child).toSet
 
@@ -194,7 +194,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case _ => false
   }
 
-  override def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning): Boolean = other match {
     case BroadcastPartitioning => true
     case r: RangePartitioning if r == this => true
     case _ => false

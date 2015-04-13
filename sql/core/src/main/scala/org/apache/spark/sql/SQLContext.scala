@@ -31,9 +31,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -120,6 +120,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ExtractPythonUdfs ::
         sources.PreInsertCastAndRename ::
         Nil
+
+      override val extendedCheckRules = Seq(
+        sources.PreWriteCheck(catalog)
+      )
     }
 
   @transient
@@ -177,7 +181,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   @transient
-  lazy val emptyDataFrame = DataFrame(this, NoRelation)
+  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -388,9 +392,24 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema, needsConversion = true)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
+    val catalystRows = if (needsConversion) {
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      rowRDD.map(converter(_).asInstanceOf[Row])
+    } else {
+      rowRDD
+    }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
 
@@ -441,7 +460,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { row =>
         new GenericRow(
           extractors.zip(attributeSeq).map { case (e, attr) =>
-            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
           }.toArray[Any]
         ) : Row
       }
@@ -600,7 +619,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**
@@ -629,7 +648,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
   }
 
   /**
@@ -1065,14 +1084,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
-  @transient
-  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
-    override val extendedCheckRules = Seq(
-      sources.PreWriteCheck(catalog)
-    )
-  }
-
-
   protected[sql] def openSession(): SQLSession = {
     detachSession()
     val session = createSession()
@@ -1105,7 +1116,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
-    def assertAnalyzed(): Unit = checkAnalysis(analyzed)
+    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {
@@ -1210,38 +1221,56 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
+    val (dataType, _) = inferDataType(beanClass)
+    dataType.asInstanceOf[StructType].fields.map { f =>
+      AttributeReference(f.name, f.dataType, f.nullable)()
+    }
+  }
+
+  /**
+   * Infers the corresponding SQL data type of a Java class.
+   * @param clazz Java class
+   * @return (SQL data type, nullable)
+   */
+  private def inferDataType(clazz: Class[_]): (DataType, Boolean) = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
-    val beanInfo = Introspector.getBeanInfo(beanClass)
+    clazz match {
+      case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
 
-    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
-    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
-    //       element ordering.
-    val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
-    fields.map { property =>
-      val (dataType, nullable) = property.getPropertyType match {
-        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
-        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
-        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
-        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
-        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
-        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
-        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
-        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
-        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
+      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+      case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+      case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+      case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+      case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+      case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+      case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
-        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
-        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
-        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
-        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
-        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
-        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
-        case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
-        case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
-        case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-      }
-      AttributeReference(property.getName, dataType, nullable)()
+      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+      case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+      case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+      case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+      case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+      case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+      case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+
+      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+      case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+      case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+
+      case c: Class[_] if c.isArray =>
+        val (dataType, nullable) = inferDataType(c.getComponentType)
+        (ArrayType(dataType, nullable), true)
+
+      case _ =>
+        val beanInfo = Introspector.getBeanInfo(clazz)
+        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+        val fields = properties.map { property =>
+          val (dataType, nullable) = inferDataType(property.getPropertyType)
+          new StructField(property.getName, dataType, nullable)
+        }
+        (new StructType(fields), true)
     }
   }
 }
