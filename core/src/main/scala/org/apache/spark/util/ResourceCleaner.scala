@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
  * also indicate code that *should* be run later to clean the resource up (eg. in a finally
  * block for exception handling).  Note that this does not do clean anything up itself.
  */
-trait ResourceCleaner {
+private[spark] trait ResourceCleaner {
   def addCleaner(f: () => Unit): Unit
 }
 
@@ -31,7 +31,7 @@ trait ResourceCleaner {
  * Basic ResourceCleaner that just stores cleaner functions.  The user must ensure that
  * {{doCleanup}} is invoked inside a {{finally}} block.
  */
-class SimpleResourceCleaner extends ResourceCleaner {
+private[spark] class SimpleResourceCleaner extends ResourceCleaner {
   private val cleanerFuncs = new ArrayBuffer[() => Unit]
 
   override def addCleaner(f: () => Unit): Unit = {
