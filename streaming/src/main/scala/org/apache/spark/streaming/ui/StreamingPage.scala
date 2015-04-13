@@ -69,10 +69,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <strong>Waiting batches: </strong>{listener.numUnprocessedBatches}
       </li>
       <li>
-        <strong>Received records: </strong>{listener.numTotalReceivedRecords}
+        <strong>Received events: </strong>{listener.numTotalReceivedRecords}
       </li>
       <li>
-        <strong>Processed records: </strong>{listener.numTotalProcessedRecords}
+        <strong>Processed events: </strong>{listener.numTotalProcessedRecords}
       </li>
     </ul>
   }
@@ -86,10 +86,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
         "Receiver",
         "Status",
         "Location",
-        "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
-        "Minimum rate\n[records/sec]",
-        "Median rate\n[records/sec]",
-        "Maximum rate\n[records/sec]",
+        "Events in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
+        "Minimum rate\n[events/sec]",
+        "Median rate\n[events/sec]",
+        "Maximum rate\n[events/sec]",
         "Last Error"
       )
       val dataRows = (0 until listener.numReceivers).map { receiverId =>
