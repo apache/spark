@@ -286,7 +286,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           appsToRetain += (info.id -> info)
         } else {
           try {
-            fs.delete(new Path(info.logPath), true)
+            fs.delete(new Path(logDir + "/" + info.logPath), true)
           } catch {
             case t: IOException => logError(s"IOException in cleaning logs of ${info.logPath}", t)
             appsToRetain += (info.id -> info)
