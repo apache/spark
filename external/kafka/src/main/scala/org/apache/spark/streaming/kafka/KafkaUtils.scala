@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.io.{DataOutputStream, ByteArrayOutputStream}
 import java.lang.{Integer => JInt}
 import java.lang.{Long => JLong}
 import java.util.{Map => JMap}
@@ -574,6 +575,37 @@ private class KafkaUtilsPythonHelper {
       offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())))
   }
 
+  def createRDD(
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRages: JList[OffsetRange],
+      leaders: JMap[TopicAndPartition, Broker]): JavaPairRDD[Array[Byte], Array[Byte]] = {
+    val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
+      (Array[Byte], Array[Byte])] {
+      def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
+        (t1.key(), t1.message())
+    }
+
+    val jrdd = KafkaUtils.createRDD[
+      Array[Byte],
+      Array[Byte],
+      DefaultDecoder,
+      DefaultDecoder,
+      (Array[Byte], Array[Byte])](
+        jsc,
+        classOf[Array[Byte]],
+        classOf[Array[Byte]],
+        classOf[DefaultDecoder],
+        classOf[DefaultDecoder],
+        classOf[(Array[Byte], Array[Byte])],
+        kafkaParams,
+        offsetRages.toArray(new Array[OffsetRange](offsetRages.size())),
+        leaders,
+        messageHandler
+      )
+    new JavaPairRDD(jrdd.rdd)
+  }
+
   def createDirectStream(
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
@@ -588,6 +620,40 @@ private class KafkaUtilsPythonHelper {
       topics)
   }
 
+  def createDirectStream(
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      fromOffsets: JMap[TopicAndPartition, JLong])
+    : JavaPairInputDStream[Array[Byte], Array[Byte]] = {
+    val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
+      (Array[Byte], Array[Byte])] {
+      def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
+        (t1.key(), t1.message())
+    }
+
+    val jstream = KafkaUtils.createDirectStream[
+      Array[Byte],
+      Array[Byte],
+      DefaultDecoder,
+      DefaultDecoder,
+      (Array[Byte], Array[Byte])](
+        jssc,
+        classOf[Array[Byte]],
+        classOf[Array[Byte]],
+        classOf[DefaultDecoder],
+        classOf[DefaultDecoder],
+        classOf[(Array[Byte], Array[Byte])],
+        kafkaParams,
+        fromOffsets,
+        messageHandler)
+    new JavaPairInputDStream(jstream.inputDStream)
+  }
+
   def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long)
       : OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+
+  def createTopicAndPartition(topic: String, partition: Int): TopicAndPartition =
+    TopicAndPartition(topic, partition)
+
+  def createBroker(host: String, port: Int): Broker = Broker(host, port)
 }

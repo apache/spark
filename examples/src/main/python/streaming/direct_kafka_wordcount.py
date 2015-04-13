@@ -44,7 +44,7 @@ if __name__ == "__main__":
     ssc = StreamingContext(sc, 2)
 
     brokers, topic = sys.argv[1:]
-    kvs = KafkaUtils.createDirectStream(ssc, brokers, [topic])
+    kvs = KafkaUtils.createDirectStream(ssc, {"metadata.broker.list": brokers}, [topic])
     lines = kvs.map(lambda x: x[1])
     counts = lines.flatMap(lambda line: line.split(" ")) \
         .map(lambda word: (word, 1)) \
