@@ -232,32 +232,17 @@ For example:
         lib/spark-examples*.jar \
         10
 
-To launch a Spark application in Python in yarn-cluster mode:
-
-    ./bin/spark-submit --master yarn-cluster [options] path.to.your.python.file [app options]
-
-For example:
-
-    $ ./bin/spark-submit \
-        --master yarn-cluster \
-        --num-executors 3 \
-        --driver-memory 4g \
-        --executor-cores 1 \
-        --queue thequeue \
-        examples/src/main/python/pi.py
-        10
-
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
 
 To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".
+
+Now we also can launch a Spark application in Python on YARN. The different is we don't need to specify the class, and replace the <app jar> with Python file.
 
 To run spark-shell:
 
     $ ./bin/spark-shell --master yarn-client
 
-To run pyspark-shell:
-
-    $ ./bin/pyspark --master yarn-client
+Also same to pyspark shell.
 
 ## Adding Other JARs
 
@@ -270,12 +255,6 @@ In yarn-cluster mode, the driver runs on a different machine than the client, so
         app_arg1 app_arg2
 
 For Spark application in Python also can code dependencies to spark-submit through its --py-files argument by packaging them into a .zip file.
-
-    $ ./bin/spark-submit
-        --master yarn-cluster \
-        --py-files my-other-python-files.zip
-        my-python-app.py
-        app_arg1 app_arg2
 
 # Debugging your Application
 
