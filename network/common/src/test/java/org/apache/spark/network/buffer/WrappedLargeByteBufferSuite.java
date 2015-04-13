@@ -41,7 +41,7 @@ public class WrappedLargeByteBufferSuite {
       System.arraycopy(data, i * 50, b, 0, 50);
       bufs[i] = ByteBuffer.wrap(b);
     }
-    return new WrappedLargeByteBuffer(bufs);
+    return new WrappedLargeByteBuffer(bufs, 50);
   }
 
   @Test
@@ -67,35 +67,32 @@ public class WrappedLargeByteBufferSuite {
     assertEquals(20, nioBuf2.position());
     assertEquals(80, nioBuf2.remaining());
 
-    // merges the data from multiple buffers
-    ByteBuffer[] bufs = new ByteBuffer[2];
-    for (int i = 0; i < 2; i++) {
-      bufs[i] = ByteBuffer.allocate(250);
-      bufs[i].get(data, i * 250, 250);
-      bufs[i].rewind();
-    }
-    WrappedLargeByteBuffer wrappedBB = new WrappedLargeByteBuffer(bufs);
-    ByteBuffer mergedBuffer = wrappedBB.asByteBuffer(500);
-    assertConsistent(wrappedBB);
-    assertEquals(0, mergedBuffer.position());
-    byte[] copyData = new byte[500];
-    mergedBuffer.get(copyData);
-    mergedBuffer.rewind();
-    assertArrayEquals(data, copyData);
-    wrappedBB.skip(20);
-    assertConsistent(wrappedBB);
-    ByteBuffer mergedBuffer2 = wrappedBB.asByteBuffer(500);
-    assertEquals(0, mergedBuffer2.position());
-    mergedBuffer2.get(copyData);
-    assertArrayEquals(data, copyData);
-    assertEquals(0, mergedBuffer.position());
-    assertEquals(20, wrappedBB.position());
-
     // the right error when the buffer is too big
     try {
-      wrappedBB.asByteBuffer(499);
+      WrappedLargeByteBuffer buf2 = new WrappedLargeByteBuffer(
+        new ByteBuffer[]{ByteBuffer.allocate(10), ByteBuffer.allocate(10)}, 10);
+      buf2.asByteBuffer();
       fail("expected an exception");
     } catch (BufferTooLargeException btl) {
+    }
+  }
+
+  @Test
+  public void checkSizesOfInternalBuffers() {
+    errorOnBuffersSized(10, new int[]{9,10});
+    errorOnBuffersSized(10, new int[]{10,10,0,10});
+    errorOnBuffersSized(20, new int[]{10,10,10,10});
+  }
+
+  private void errorOnBuffersSized(int chunkSize, int[] sizes) {
+    ByteBuffer[] bufs = new ByteBuffer[sizes.length];
+    for (int i = 0; i < sizes.length; i++) {
+      bufs[i] = ByteBuffer.allocate(sizes[i]);
+    }
+    try {
+      new WrappedLargeByteBuffer(bufs, chunkSize);
+      fail("expected exception");
+    } catch (IllegalArgumentException iae) {
     }
   }
 
@@ -215,14 +212,14 @@ public class WrappedLargeByteBufferSuite {
     bufs[0].position(50);
     bufs[1].position(5);
 
-    WrappedLargeByteBuffer b1 = new WrappedLargeByteBuffer(bufs);
+    WrappedLargeByteBuffer b1 = new WrappedLargeByteBuffer(bufs, 50);
     assertEquals(55, b1.position());
 
 
     bufs[1].position(50);
     bufs[2].position(50);
     bufs[3].position(35);
-    WrappedLargeByteBuffer b2 = new WrappedLargeByteBuffer(bufs);
+    WrappedLargeByteBuffer b2 = new WrappedLargeByteBuffer(bufs, 50);
     assertEquals(185, b2.position());
 
 

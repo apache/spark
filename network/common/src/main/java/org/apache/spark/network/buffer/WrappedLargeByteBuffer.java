@@ -33,6 +33,13 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   public final ByteBuffer[] underlying;
 
   private final long size;
+  /**
+   * each sub-ByteBuffer (except for the last one) must be exactly this size.  Note that this
+   * class *really* expects this to be LargeByteBufferHelper.MAX_CHUNK.  The only reason it isn't
+   * is so that we can do tests without creating ginormous buffers.  Public methods force it to
+   * be LargeByteBufferHelper.MAX_CHUNK
+   */
+  private final int subBufferSize;
   private long _pos;
   @VisibleForTesting
   int currentBufferIdx;
@@ -41,15 +48,25 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
 
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
+    this(underlying, LargeByteBufferHelper.MAX_CHUNK);
+  }
+
+  @VisibleForTesting
+  WrappedLargeByteBuffer(ByteBuffer[] underlying, int subBufferSize) {
     if (underlying.length == 0) {
       throw new IllegalArgumentException("must wrap at least one ByteBuffer");
     }
     this.underlying = underlying;
+    this.subBufferSize = subBufferSize;
     long sum = 0L;
     boolean startFound = false;
     long initialPosition = -1;
     for (int i = 0; i < underlying.length; i++) {
       ByteBuffer b = underlying[i];
+      if (i != underlying.length -1 && b.capacity() != subBufferSize) {
+        throw new IllegalArgumentException("All buffers, except for the final one, must have " +
+          "size = " + subBufferSize);
+      }
       if (startFound) {
         if (b.position() != 0) {
           throw new IllegalArgumentException("ByteBuffers have inconsistent positions");
@@ -107,7 +124,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       dataCopy[i].position(0);
       b.position(originalPosition);
     }
-    return new WrappedLargeByteBuffer(dataCopy);
+    return new WrappedLargeByteBuffer(dataCopy, subBufferSize);
   }
 
   @Override
@@ -178,7 +195,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     for (int i = 0; i < underlying.length; i++) {
       duplicates[i] = underlying[i].duplicate();
     }
-    return new WrappedLargeByteBuffer(duplicates);
+    return new WrappedLargeByteBuffer(duplicates, subBufferSize);
   }
 
   @Override
@@ -201,25 +218,12 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public ByteBuffer asByteBuffer() throws BufferTooLargeException {
-    return asByteBuffer(LargeByteBufferHelper.MAX_CHUNK);
-  }
-
-  @VisibleForTesting
-  ByteBuffer asByteBuffer(int maxChunkSize) throws BufferTooLargeException {
     if (underlying.length == 1) {
       ByteBuffer b = underlying[0].duplicate();
       b.rewind();
       return b;
-    } else if (size() > maxChunkSize) {
-      throw new BufferTooLargeException(size(), maxChunkSize);
     } else {
-      byte[] merged = new byte[(int) size()];
-      long initialPosition = position();
-      rewind();
-      get(merged, 0, merged.length);
-      rewind();
-      skip(initialPosition);
-      return ByteBuffer.wrap(merged);
+      throw new BufferTooLargeException(size(), LargeByteBufferHelper.MAX_CHUNK);
     }
   }
 

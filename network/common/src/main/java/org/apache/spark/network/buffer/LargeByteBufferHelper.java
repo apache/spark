@@ -51,7 +51,7 @@ public class LargeByteBufferHelper {
       chunks[i] = next;
     }
     if (remaining != 0) throw new IllegalStateException("remaining = " + remaining);
-    return new WrappedLargeByteBuffer(chunks);
+    return new WrappedLargeByteBuffer(chunks, maxChunk);
   }
 
 
