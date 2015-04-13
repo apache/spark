@@ -121,7 +121,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   }
 
   protected lazy val start: Parser[LogicalPlan] =
-    ( start1 | insert | cte )
+    start1 | insert | cte
 
   protected lazy val start1: Parser[LogicalPlan] =
     (select | ("(" ~> select <~ ")")) *
@@ -159,7 +159,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
 
   protected lazy val cte: Parser[LogicalPlan] =
-    WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start <~ ")"), ",") ~ (start1 | insert) ^^ {
+    WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start1 <~ ")"), ",") ~ (start1 | insert) ^^ {
       case r ~ s => With(s, r.map({case n ~ s => (n, Subquery(n, s))}).toMap)
     }
 
