@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * default, one block is mapped to one file with a name given by its BlockId.
  *
  */
-private[spark] class TachyonBlockManager() extends OffHeapBlockManager with Logging {
+private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging {
 
   var blockManager: BlockManager =_
   var rootDirs: String = _
@@ -53,29 +53,28 @@ private[spark] class TachyonBlockManager() extends OffHeapBlockManager with Logg
 
   override def init(blockManager: BlockManager, executorId: String): Unit = {
     this.blockManager = blockManager
-    val storeDir = blockManager.conf.get("spark.offHeapStore.baseDir", "/tmp/spark")
-    val appFolderName = blockManager.conf.get("spark.offHeapStore.folderName")
+    val storeDir = blockManager.conf.get(ExternalBlockStore.BASE_DIR, "/tmp_spark_tachyon")
+    val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
 
     rootDirs = s"$storeDir/$appFolderName/$executorId"
-    master = blockManager.conf.get("spark.tachyonStore.url", "tachyon://localhost:19998")
+    master = blockManager.conf.get(ExternalBlockStore.MASTER_URL, "tachyon://localhost:19998")
     client = if (master != null && master != "") TachyonFS.get(master) else null
-    // original implementation call System.exit, we change it to run without offheap support
+    // original implementation call System.exit, we change it to run without extblkstore support
     if (client == null) {
       logError("Failed to connect to the Tachyon as the master address is not configured")
       throw new IOException("Failed to connect to the Tachyon as the master " +
         "address is not configured")
     }
-    subDirsPerTachyonDir = blockManager.conf.get("spark.offHeapStore.subDirectories",
-      OffHeapBlockManager.SUB_DIRS_PER_DIR).toInt
+    subDirsPerTachyonDir = blockManager.conf.get("spark.externalBlockStore.subDirectories",
+      ExternalBlockStore.SUB_DIRS_PER_DIR).toInt
 
     // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName;
     // then, inside this directory, create multiple subdirectories that we will hash files into,
     // in order to avoid having really large inodes at the top level in Tachyon.
     tachyonDirs = createTachyonDirs()
     subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
+    tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
   }
-
-
 
   override def toString: String = {"ExternalBlockStore-Tachyon"}
 
@@ -175,7 +174,7 @@ private[spark] class TachyonBlockManager() extends OffHeapBlockManager with Logg
       var tachyonDirId: String = null
       var tries = 0
       val rand = new Random()
-      while (!foundLocalDir && tries < OffHeapBlockManager.MAX_DIR_CREATION_ATTEMPTS) {
+      while (!foundLocalDir && tries < ExtBlockStore.MAX_DIR_CREATION_ATTEMPTS) {
         tries += 1
         try {
           tachyonDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
@@ -190,9 +189,9 @@ private[spark] class TachyonBlockManager() extends OffHeapBlockManager with Logg
         }
       }
       if (!foundLocalDir) {
-        logError("Failed " + OffHeapBlockManager.MAX_DIR_CREATION_ATTEMPTS
+        logError("Failed " + ExtBlockStore.MAX_DIR_CREATION_ATTEMPTS
           + " attempts to create tachyon dir in " + rootDir)
-        System.exit(ExecutorExitCode.OFFHEAP_STORE_FAILED_TO_CREATE_DIR)
+        System.exit(ExecutorExitCode.ExtBlk_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created tachyon directory at " + tachyonDir)
       tachyonDir

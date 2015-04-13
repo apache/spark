@@ -373,14 +373,14 @@ private[spark] object JsonProtocol {
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
-    ("OffHeap Size" -> rddInfo.offHeapSize) ~
+    ("ExtBlkStore Size" -> rddInfo.extBlkStoreSize) ~
     ("Disk Size" -> rddInfo.diskSize)
   }
 
   def storageLevelToJson(storageLevel: StorageLevel): JValue = {
     ("Use Disk" -> storageLevel.useDisk) ~
     ("Use Memory" -> storageLevel.useMemory) ~
-    ("Use OffHeap" -> storageLevel.useOffHeap) ~
+    ("Use ExtBlkStore" -> storageLevel.useOffHeap) ~
     ("Deserialized" -> storageLevel.deserialized) ~
     ("Replication" -> storageLevel.replication)
   }
@@ -389,7 +389,7 @@ private[spark] object JsonProtocol {
     val storageLevel = storageLevelToJson(blockStatus.storageLevel)
     ("Storage Level" -> storageLevel) ~
     ("Memory Size" -> blockStatus.memSize) ~
-    ("OffHeap Size" -> blockStatus.offHeapSize) ~
+    ("ExtBlkStore Size" -> blockStatus.extBlkStoreSize) ~
     ("Disk Size" -> blockStatus.diskSize)
   }
 
@@ -787,13 +787,13 @@ private[spark] object JsonProtocol {
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]
-    val offHeapSize = (json \ "OffHeap Size").extract[Long]
+    val extBlkStoreSize = (json \ "ExtBlkStore Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
     val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
-    rddInfo.offHeapSize = offHeapSize
+    rddInfo.extBlkStoreSize = extBlkStoreSize
     rddInfo.diskSize = diskSize
     rddInfo
   }
@@ -801,18 +801,18 @@ private[spark] object JsonProtocol {
   def storageLevelFromJson(json: JValue): StorageLevel = {
     val useDisk = (json \ "Use Disk").extract[Boolean]
     val useMemory = (json \ "Use Memory").extract[Boolean]
-    val useOffHeap = (json \ "Use OffHeap").extract[Boolean]
+    val useExtBlkStore = (json \ "Use ExtBlkStore").extract[Boolean]
     val deserialized = (json \ "Deserialized").extract[Boolean]
     val replication = (json \ "Replication").extract[Int]
-    StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication)
+    StorageLevel(useDisk, useMemory, useExtBlkStore, deserialized, replication)
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
-    val offHeapSize = (json \ "OffHeap Size").extract[Long]
-    BlockStatus(storageLevel, memorySize, diskSize, offHeapSize)
+    val extBlkStoreSize = (json \ "ExtBlkStore Size").extract[Long]
+    BlockStatus(storageLevel, memorySize, diskSize, extBlkStoreSize)
   }
 
   def executorInfoFromJson(json: JValue): ExecutorInfo = {

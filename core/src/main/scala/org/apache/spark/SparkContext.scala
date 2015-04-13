@@ -249,8 +249,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Generate the random name for a temp folder in OffHeap
   // Add a timestamp as the suffix here to make it more safe
-  val offHeapFolderName = "spark-" + randomUUID.toString()
-  conf.set("spark.offHeapStore.folderName", offHeapFolderName)
+  val extBlkFolderName = "spark-" + randomUUID.toString()
+  @deprecated("Use extBlkFolderName instead.", "1.4.0")
+  val tachyonFolderName = extBlkFolderName
+  conf.set("spark.extBlkStore.folderName", extBlkFolderName)
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 

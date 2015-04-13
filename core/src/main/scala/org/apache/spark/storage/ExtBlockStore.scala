@@ -25,29 +25,28 @@ import scala.util.control.NonFatal
 
 
 /**
- * Stores BlockManager blocks on OffHeap.
+ * Stores BlockManager blocks on ExtBlkStore.
  * We capture any potential exception from underlying implementation
  * and return with the expected failure value
  */
-private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String)
+private[spark] class ExtBlockStore(blockManager: BlockManager, executorId: String)
   extends BlockStore(blockManager: BlockManager) with Logging {
 
-  lazy val offHeapManager: Option[OffHeapBlockManager] =
-    OffHeapBlockManager.create(blockManager, executorId)
+  lazy val extBlkStoreManager: Option[ExtBlockManager] = createBlkManager()
 
-  logInfo("OffHeap started")
+  logInfo("ExtBlkStore started")
 
   override def getSize(blockId: BlockId): Long = {
     try {
-      offHeapManager.map(_.getSize(blockId)).getOrElse(0)
+      extBlkStoreManager.map(_.getSize(blockId)).getOrElse(0)
     } catch {
-      case NonFatal(t) => logError(s"error in getSize from $blockId")
-        0
+      case NonFatal(t) => logError(s"error in getSize from $blockId", t)
+        0L
     }
   }
 
   override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
-    putIntoOffHeapStore(blockId, bytes, returnValues = true)
+    putIntoExtBlkStore(blockId, bytes, returnValues = true)
   }
 
   override def putArray(
@@ -65,10 +64,10 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
       returnValues: Boolean): PutResult = {
     logDebug(s"Attempting to write values for block $blockId")
     val bytes = blockManager.dataSerialize(blockId, values)
-    putIntoOffHeapStore(blockId, bytes, returnValues)
+    putIntoExtBlkStore(blockId, bytes, returnValues)
   }
 
-  private def putIntoOffHeapStore(
+  private def putIntoExtBlkStore(
       blockId: BlockId,
       bytes: ByteBuffer,
       returnValues: Boolean): PutResult = {
@@ -76,14 +75,14 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
     byteBuffer.rewind()
-    logDebug(s"Attempting to put block $blockId into OffHeap store")
-    // we should never hit here if offHeapManager is None. Handle it anyway for safety.
+    logDebug(s"Attempting to put block $blockId into ExtBlk store")
+    // we should never hit here if extBlkStoreManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
-      if (offHeapManager.isDefined) {
-        offHeapManager.get.putBytes(blockId, bytes)
+      if (extBlkStoreManager.isDefined) {
+        extBlkStoreManager.get.putBytes(blockId, bytes)
         val finishTime = System.currentTimeMillis
-        logDebug("Block %s stored as %s file in OffHeap store in %d ms".format(
+        logDebug("Block %s stored as %s file in ExtBlkStore in %d ms".format(
           blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
 
         if (returnValues) {
@@ -96,7 +95,7 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
         PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
       }
     } catch {
-      case NonFatal(t) => logError(s"error in putBytes $blockId")
+      case NonFatal(t) => logError(s"error in putBytes $blockId", t)
         PutResult(bytes.limit(), null, Seq((blockId, BlockStatus.empty)))
     }
   }
@@ -104,9 +103,9 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
   // We assume the block is removed even if exception thrown
   override def remove(blockId: BlockId): Boolean = {
     try {
-      offHeapManager.map(_.removeFile(blockId)).getOrElse(true)
+      extBlkStoreManager.map(_.removeFile(blockId)).getOrElse(true)
     } catch {
-      case NonFatal(t) => logError(s"error in removing $blockId")
+      case NonFatal(t) => logError(s"error in removing $blockId", t)
         true
     }
   }
@@ -117,24 +116,54 @@ private[spark] class OffHeapStore(blockManager: BlockManager, executorId: String
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     try {
-      offHeapManager.flatMap(_.getBytes(blockId))
+      extBlkStoreManager.flatMap(_.getBytes(blockId))
     } catch {
-      case NonFatal(t) =>logError(s"error in getBytes from $blockId")
+      case NonFatal(t) =>logError(s"error in getBytes from $blockId", t)
         None
     }
   }
 
   override def contains(blockId: BlockId): Boolean = {
     try {
-      val ret = offHeapManager.map(_.fileExists(blockId)).getOrElse(false)
+      val ret = extBlkStoreManager.map(_.fileExists(blockId)).getOrElse(false)
       if (!ret) {
         logInfo(s"remove block $blockId")
         blockManager.removeBlock(blockId, true)
       }
       ret
     } catch {
-      case NonFatal(t) => logError(s"error in getBytes from $blockId")
+      case NonFatal(t) => logError(s"error in getBytes from $blockId", t)
         false
     }
   }
+
+  // create concrete block manager and fall back to Tachyon by default.
+  private def createBlkManager(): Option[ExtBlockManager] = {
+    // fall back to default for backward compatibility.
+    val clsName = blockManager.conf.getOption(ExtBlockStore.BLOCK_MANAGER_NAME)
+      .getOrElse(ExtBlockStore.DEFAULT_BLK_MANAGER_NAME)
+
+    try {
+      val instance = Class.forName(clsName)
+        .newInstance()
+        .asInstanceOf[ExtBlockManager]
+      instance.init(blockManager, executorId)
+      instance.addShutdownHook();
+      Some(instance)
+    } catch {
+      case NonFatal(t) =>
+        logError("Cannot initialize external block store", t)
+        None
+    }
+  }
+}
+
+private[spark] object ExtBlockStore extends Logging {
+  val MAX_DIR_CREATION_ATTEMPTS = 10
+  val SUB_DIRS_PER_DIR = "64"
+  val BASE_DIR = "spark.extBlkStore.baseDir"
+  val FOLD_NAME = "spark.extBlkStore.folderName"
+  val MASTER_URL = "spark.extBlkStore.url"
+  val BLOCK_MANAGER_NAME = "spark.extBlkStore.blockManager"
+  val DEFAULT_BLK_MANAGER_NAME = "org.apache.spark.storage.TachyonBlockManager"
 }

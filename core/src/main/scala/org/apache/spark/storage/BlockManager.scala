@@ -78,10 +78,10 @@ private[spark] class BlockManager(
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
   // Actual storage of where blocks are kept
-  private var offHeapInitialized = false
+  private var extBlkStoreInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val offHeapStore: OffHeapStore = new OffHeapStore(this, executorId)
+  private[spark] lazy val extBlkStore: ExtBlockStore = new ExtBlockStore(this, executorId)
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
@@ -367,10 +367,10 @@ private[spark] class BlockManager(
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val inOffHeapSize = status.offHeapSize
+      val inExtBlkStoreSize = status.extBlkStoreSize
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inOffHeapSize)
+        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExtBlkStoreSize)
     } else {
       true
     }
@@ -388,15 +388,15 @@ private[spark] class BlockManager(
           BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
-          val inOffHeap = level.useOffHeap && offHeapStore.contains(blockId)
+          val inExtBlkStore = level.useOffHeap && extBlkStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
-          val replication = if (inMem || inOffHeap || onDisk) level.replication else 1
-          val storageLevel = StorageLevel(onDisk, inMem, inOffHeap, deserialized, replication)
+          val replication = if (inMem || inExtBlkStore || onDisk) level.replication else 1
+          val storageLevel = StorageLevel(onDisk, inMem, inExtBlkStore, deserialized, replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
-          val offHeapSize = if (inOffHeap) offHeapStore.getSize(blockId) else 0L
+          val extBlkStoreSize = if (inExtBlkStore) extBlkStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
-          BlockStatus(storageLevel, memSize, diskSize, offHeapSize)
+          BlockStatus(storageLevel, memSize, diskSize, extBlkStoreSize)
       }
     }
   }
@@ -476,11 +476,11 @@ private[spark] class BlockManager(
           }
         }
 
-        // Look for the block in offheap
+        // Look for the block in external blk store
         if (level.useOffHeap) {
-          logDebug(s"Getting block $blockId from offheap")
-          if (offHeapStore.contains(blockId)) {
-            offHeapStore.getBytes(blockId) match {
+          logDebug(s"Getting block $blockId from ExtBlkStore")
+          if (extBlkStore.contains(blockId)) {
+            extBlkStore.getBytes(blockId) match {
               case Some(bytes) =>
                 if (!asBlockResult) {
                   return Some(bytes)
@@ -489,7 +489,7 @@ private[spark] class BlockManager(
                     dataDeserialize(blockId, bytes), DataReadMethod.Memory, info.size))
                 }
               case None =>
-                logDebug(s"Block $blockId not found in offHeap")
+                logDebug(s"Block $blockId not found in extBlkStore")
             }
           }
         }
@@ -757,8 +757,8 @@ private[spark] class BlockManager(
             // We will drop it to disk later if the memory store can't hold it.
             (true, memoryStore)
           } else if (putLevel.useOffHeap) {
-            // Use off-heap storage
-            (false, offHeapStore)
+            // Use external blk storage
+            (false, extBlkStore)
           } else if (putLevel.useDisk) {
             // Don't get back the bytes from put unless we replicate them
             (putLevel.replication > 1, diskStore)
@@ -793,7 +793,7 @@ private[spark] class BlockManager(
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         if (putBlockStatus.storageLevel != StorageLevel.NONE) {
-          // Now that the block is in either the memory, offheap, or disk store,
+          // Now that the block is in either the memory, extBlkStore, or disk store,
           // let other threads read it, and tell the master about it.
           marked = true
           putBlockInfo.markReady(size)
@@ -1090,10 +1090,11 @@ private[spark] class BlockManager(
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
         val removedFromMemory = memoryStore.remove(blockId)
         val removedFromDisk = diskStore.remove(blockId)
-        val removedFromOffHeap = if (offHeapInitialized) offHeapStore.remove(blockId) else false
-        if (!removedFromMemory && !removedFromDisk && !removedFromOffHeap) {
+        val removedFromExtBlkStore =
+          if (extBlkStoreInitialized) extBlkStore.remove(blockId) else false
+        if (!removedFromMemory && !removedFromDisk && !removedFromExtBlkStore) {
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
-            "the disk, memory, or offheap store")
+            "the disk, memory, or external blk store")
         }
         blockInfo.remove(blockId)
         if (tellMaster && info.tellMaster) {
@@ -1127,7 +1128,7 @@ private[spark] class BlockManager(
           val level = info.level
           if (level.useMemory) { memoryStore.remove(id) }
           if (level.useDisk) { diskStore.remove(id) }
-          if (level.useOffHeap) { offHeapStore.remove(id) }
+          if (level.useOffHeap) { extBlkStore.remove(id) }
           iterator.remove()
           logInfo(s"Dropped block $id")
         }
@@ -1207,8 +1208,8 @@ private[spark] class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if (offHeapInitialized) {
-      offHeapStore.clear()
+    if (extBlkStoreInitialized) {
+      extBlkStore.clear()
     }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()

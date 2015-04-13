@@ -526,7 +526,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("tachyon storage") {
     // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
     val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
-    conf.set("spark.offHeapStore.blockManager", "org.apache.spark.storage.TachyonBlockManager")
+    conf.set(ExtBlockStore.BLOCK_MANAGER_NAME, ExtBlockStore.DEFAULT_BLK_MANAGER_NAME)
     if (tachyonUnitTestEnabled) {
       store = makeBlockManager(1200)
       val a1 = new Array[Byte](400)

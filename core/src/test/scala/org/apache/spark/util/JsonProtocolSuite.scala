@@ -32,7 +32,7 @@ import org.apache.spark.executor._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
-class StorageSuite extends FunSuite {
+class JsonProtocolSuite extends FunSuite {
 
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
@@ -785,14 +785,14 @@ class StorageSuite extends FunSuite {
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
-      |          "Use OffHeap": false,
+      |          "Use ExtBlkStore": false,
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
-      |        "OffHeap Size": 0,
+      |        "ExtBlkStore Size": 0,
       |        "Disk Size": 501
       |      }
       |    ],
@@ -969,12 +969,12 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1052,12 +1052,12 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1135,12 +1135,12 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1168,14 +1168,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 500
       |        }
       |      ],
@@ -1207,14 +1207,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 1000
       |        },
       |        {
@@ -1223,14 +1223,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 1001
       |        }
       |      ],
@@ -1262,14 +1262,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 1500
       |        },
       |        {
@@ -1278,14 +1278,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 1501
       |        },
       |        {
@@ -1294,14 +1294,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 1502
       |        }
       |      ],
@@ -1333,14 +1333,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 2000
       |        },
       |        {
@@ -1349,14 +1349,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 2001
       |        },
       |        {
@@ -1365,14 +1365,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 2002
       |        },
       |        {
@@ -1381,14 +1381,14 @@ class StorageSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use OffHeap": false,
+      |            "Use ExtBlkStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,
-      |          "OffHeap Size": 0,
+      |          "ExtBlkStore Size": 0,
       |          "Disk Size": 2003
       |        }
       |      ],

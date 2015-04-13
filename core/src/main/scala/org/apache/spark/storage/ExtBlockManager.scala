@@ -23,13 +23,13 @@ import org.apache.spark.Logging
 import scala.util.control.NonFatal
 
 
-trait OffHeapBlockManager {
+private[spark] abstract class ExtBlockManager {
 
   /**
    * desc for the implementation.
    *
    */
-  def desc(): String = {"OffHeap"}
+  def desc(): String = {"External Block Store"}
 
   /**
    * initialize a concrete block manager implementation.
@@ -39,7 +39,7 @@ trait OffHeapBlockManager {
   def init(blockManager: BlockManager, executorId: String): Unit
 
   /**
-   * remove the cache from offheap
+   * remove the cache from ExtBlkStore
    *
    * @throws java.io.IOException when FS failure in removing file.
    */
@@ -53,14 +53,14 @@ trait OffHeapBlockManager {
   def fileExists(blockId: BlockId): Boolean
 
   /**
-   * save the cache to the offheap.
+   * save the cache to the ExtBlkStore.
    *
    * @throws java.io.IOException when FS failure in put blocks.
    */
   def putBytes(blockId: BlockId, bytes: ByteBuffer)
 
   /**
-   * retrieve the cache from offheap
+   * retrieve the cache from ExtBlkStore
    *
    * @throws java.io.IOException when FS failure in get blocks.
    */
@@ -78,32 +78,4 @@ trait OffHeapBlockManager {
    *
    */
   def addShutdownHook()
-
-  final def setup(blockManager: BlockManager, executorId: String): Unit = {
-    init(blockManager, executorId)
-    addShutdownHook()
-  }
-}
-
-object OffHeapBlockManager extends Logging{
-  val MAX_DIR_CREATION_ATTEMPTS = 10
-  val SUB_DIRS_PER_DIR = "64"
-  def create(blockManager: BlockManager, executorId: String): Option[OffHeapBlockManager] = {
-    val sNames = blockManager.conf.getOption("spark.offHeapStore.blockManager")
-    sNames match {
-      case Some(name) =>
-        try {
-          val instance = Class.forName(name)
-            .newInstance()
-            .asInstanceOf[OffHeapBlockManager]
-          instance.setup(blockManager, executorId)
-          Some(instance)
-        } catch {
-          case NonFatal(t) =>
-            logError("Cannot initialize offHeap store")
-            None
-        }
-      case None => None
-    }
-  }
 }

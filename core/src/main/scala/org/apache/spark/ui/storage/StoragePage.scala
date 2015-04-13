@@ -42,7 +42,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Cached Partitions",
     "Fraction Cached",
     "Size in Memory",
-    "Size in OffHeap",
+    "Size in ExtBlkStore",
     "Size on Disk")
 
   /** Render an HTML row representing an RDD */
@@ -59,7 +59,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
-      <td sorttable_customkey={rdd.offHeapSize.toString}>{Utils.bytesToString(rdd.offHeapSize)}</td>
+      <td sorttable_customkey={rdd.extBlkStoreSize.toString}>{Utils.bytesToString(rdd.extBlkStoreSize)}</td>
       <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
     // scalastyle:on
