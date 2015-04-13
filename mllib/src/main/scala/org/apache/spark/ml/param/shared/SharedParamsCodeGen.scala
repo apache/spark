@@ -40,7 +40,7 @@ private[shared] object SharedParamsCodeGen {
         Some("\"rawPrediction\"")),
       ParamDesc[String]("probabilityCol",
         "column name for predicted class conditional probabilities", Some("\"probability\"")),
-      ParamDesc[Double]("threshold", "threshold in prediction"),
+      ParamDesc[Double]("threshold", "threshold in binary classification prediction"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name"),

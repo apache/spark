@@ -30,7 +30,7 @@ object SchemaUtils {
   // TODO: Move the utility methods to SQL.
 
   /**
-   * Check whether the given schema contains an column of the required data type.
+   * Check whether the given schema contains a column of the required data type.
    * @param colName  column name
    * @param dataType  required column data type
    */
@@ -43,7 +43,7 @@ object SchemaUtils {
   /**
    * Appends a new column to the input schema. This fails if the given output column already exists.
    * @param schema input schema
-   * @param colName new column name. If this column name is en empty string "", this method returns
+   * @param colName new column name. If this column name is an empty string "", this method returns
    *                the input schema unchanged. This allows users to disable output columns.
    * @param dataType new column data type
    * @return new schema with the input column appended

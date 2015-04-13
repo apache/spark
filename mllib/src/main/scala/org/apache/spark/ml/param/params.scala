@@ -210,7 +210,10 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Sets a default value. Make sure that the input param is initialized before this gets called.
+   * Sets a default value for a param.
+   * @param param  param to set the default value. Make sure that this param is initialized before
+   *               this method gets called.
+   * @param value  the default value
    */
   protected final def setDefault[T](param: Param[T], value: T): this.type = {
     shouldOwn(param)
@@ -219,7 +222,10 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Sets default values. Make sure that the input params are initialized before this gets called.
+   * Sets default values for a list of params.
+   * @param paramPairs  a list of param pairs that specify params and their default values to set
+   *                    respectively. Make sure that the params are initialized before this method
+   *                    gets called.
    */
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
@@ -247,7 +253,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Extracts the embedded default param values and user-supplied values, and then merges them with
    * extra values from input into a flat param map, where the latter value is used if there exist
-   * conflicts.
+   * conflicts, i.e., with ordering: default param values < user-supplied values < extraParamMap.
    */
   protected final def extractParamMap(extraParamMap: ParamMap): ParamMap = {
     defaultParamMap ++ paramMap ++ extraParamMap

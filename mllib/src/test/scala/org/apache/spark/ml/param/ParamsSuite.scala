@@ -126,5 +126,8 @@ class ParamsSuite extends FunSuite {
     intercept[IllegalArgumentException] {
       solver.validate()
     }
+
+    solver.clear(maxIter)
+    assert(!solver.isDefined(maxIter))
   }
 }
