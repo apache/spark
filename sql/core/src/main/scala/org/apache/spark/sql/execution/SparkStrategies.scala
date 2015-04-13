@@ -215,6 +215,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           table: ParquetRelation, partition, child, overwrite, ifNotExists) =>
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
+        val partitionColNames = relation.partitioningAttributes.map(_.name).toSet
+        val filtersToPush = filters.filter { pred =>
+            val referencedColNames = pred.references.map(_.name).toSet
+            referencedColNames.intersect(partitionColNames).isEmpty
+          }
         val prunePushedDownFilters =
           if (sqlContext.conf.parquetFilterPushDown) {
             (predicates: Seq[Expression]) => {
@@ -226,6 +231,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // "A AND B" in the higher-level filter, not just "B".
               predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
                 case (predicate, None) => predicate
+                // Filter needs to be applied above when it contains partitioning
+                // columns
+                case (predicate, _) if(!predicate.references.map(_.name).toSet
+                  .intersect (partitionColNames).isEmpty) => predicate
               }
             }
           } else {
@@ -238,7 +247,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           ParquetTableScan(
             _,
             relation,
-            if (sqlContext.conf.parquetFilterPushDown) filters else Nil)) :: Nil
+            if (sqlContext.conf.parquetFilterPushDown) filtersToPush else Nil)) :: Nil
 
       case _ => Nil
     }
