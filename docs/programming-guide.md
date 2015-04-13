@@ -867,7 +867,7 @@ There are three recommended ways to do this:
 For example, to pass a longer function, consider the code below:
 
 {% highlight r %}
-"""MyScript.py"""
+"""MyScript.R"""
 myFunc <- function(s) {
     words = strsplit(s, " ")[[1]]
     length(words)

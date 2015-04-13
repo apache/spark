@@ -225,7 +225,11 @@ For example, we'll define a `mymax` function to make this code easier to underst
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight r %}
-> wordCounts <- reduceByKey(map(flatMap(textFile, function(line) strsplit(line, " ")[[1]]), function(word) list(word, 1)), "+", 2)
+> wordCounts <- reduceByKey(
+    map(
+      flatMap(textFile, function(line) strsplit(line, " ")[[1]]),
+      function(word) list(word, 1)),
+    "+", 2)
 {% endhighlight %}
 
 Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, numeric) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
@@ -256,10 +260,10 @@ scala> linesWithSpark.cache()
 res7: spark.RDD[String] = spark.FilteredRDD@17e51082
 
 scala> linesWithSpark.count()
-res8: Long = 15
+res8: Long = 19
 
 scala> linesWithSpark.count()
-res9: Long = 15
+res9: Long = 19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -274,10 +278,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 >>> linesWithSpark.cache()
 
 >>> linesWithSpark.count()
-15
+19
 
 >>> linesWithSpark.count()
-15
+19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -292,10 +296,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 > cache(linesWithSpark)
 
 > count(linesWithSpark)
-[1] 15
+[1] 19
 
 > count(linesWithSpark)
-[1] 15
+[1] 19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
