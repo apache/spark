@@ -40,12 +40,9 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
     }, "The vector type should be preserved after normalization.")
   }
 
-  def assertValues(lhs: Array[Vector], rhs: Array[Array[Double]]): Unit = {
-    assert((lhs, rhs).zipped.forall {
-      case (vector1: DenseVector, vector2) =>
-        Vectors.dense(vector1.values) ~== Vectors.dense(vector2) absTol 1E-1
-      case (vector1: SparseVector, vector2) =>
-        Vectors.dense(vector1.values) ~== Vectors.dense(vector2) absTol 1E-1
+  def assertValues(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
+    assert((lhs, rhs).zipped.forall { (vector1, vector2) =>
+      vector1 ~== vector2 absTol 1E-1
     }, "The vector value is not correct after normalization.")
   }
 
@@ -66,19 +63,20 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
       .setInputCol("features")
       .setOutputCol("poly_features")
 
-    val twoDegreeExpansion: Array[Array[Double]] = Array(
-      Array(-2.0, 2.3, 4.0, -4.6, 5.29),
-      Array(-2.0, 2.3, 4.0, -4.6, 5.29),
-      Array.fill[Double](9)(0.0),
-      Array(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0),
-      Array())
+    val twoDegreeExpansion: Array[Vector] = Array(
+      Vectors.sparse(9, Array(0, 1, 3, 4, 6), Array(-2.0, 2.3, 4.0, -4.6, 5.29)),
+      Vectors.dense(-2.0, 2.3, 4.0, -4.6, 5.29),
+      Vectors.dense(Array.fill[Double](9)(0.0)),
+      Vectors.dense(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0),
+      Vectors.sparse(9, Array.empty[Int], Array.empty[Double]))
 
     val result = collectResult(polynomialMapper.transform(dataFrame))
+
+    println(result.mkString("\n"))
 
     assertTypeOfVector(data, result)
 
     assertValues(result, twoDegreeExpansion)
-
   }
 
   test("Polynomial expansion with setter") {
@@ -99,13 +97,14 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
       .setOutputCol("poly_features")
       .setDegree(3)
 
-    val threeDegreeExpansion: Array[Array[Double]] = Array(
-      Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
-      Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
-      Array.fill[Double](19)(0.0),
-      Array(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0, 0.216, -0.396, -1.08, 0.73, 1.98,
-        5.4, -1.33, -3.63, -9.9, -27.0),
-      Array())
+    val threeDegreeExpansion: Array[Vector] = Array(
+      Vectors.sparse(19, Array(0, 1, 3, 4, 6, 9, 10, 12, 15),
+        Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167)),
+      Vectors.dense(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
+      Vectors.dense(Array.fill[Double](19)(0.0)),
+      Vectors.dense(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0, 0.216, -0.396, -1.08, 0.73,
+        1.98, 5.4, -1.33, -3.63, -9.9, -27.0),
+      Vectors.sparse(19, Array.empty[Int], Array.empty[Double]))
 
     val result = collectResult(polynomialMapper.transform(dataFrame))
 

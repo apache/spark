@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
@@ -80,8 +81,8 @@ object PolynomialMapper {
   }
 
   /**
-   * Given a pre-built array of Double, fill it with expanded monomials until a given polynomial
-   * degree.
+   * Given a pre-built array of Double, fill it with expanded monomials to a given polynomial
+   * degree. The function works for dense vector.
    * @param values the array of Double, which represents a dense vector.
    * @param prevStart the start offset of elements that filled in the last function call.
    * @param prevLen the length of elements that filled in the last function.
@@ -123,18 +124,80 @@ object PolynomialMapper {
   }
 
   /**
-   * For polynomial expanding a `SparseVector`, we treat it as a dense vector and call
-   * `fillDenseVector` to fill in the `values` of `SparseVector`. For its `indices` part, we encode
-   * the indices from `nVariables` one by one, because we do not care of the real indices.
+   * Given an array buffer, fill it with expanded monomials to a given polynomial degree. The
+   * function works for sparse vector.
+   * @param indices the indices buffer, which represents the indices of the expanded sparse vector.
+   * @param values the values buffer, which contains the monomials.
+   * @param prevStart the start offset that filled in the last function call.
+   * @param prevLen the length of elements that filled in the last function call.
+   * @param currDegree the current degree that we want to expand.
+   * @param finalDegree the final expected degree that we want to expand.
+   * @param nVariables number of variables in the original feature vector.
+   * @param originalLen the length of the original sparse vector.
    */
-  private def fillPseudoSparseVectorIndices(indices: Array[Int], startFrom: Int, startWith: Int) = {
-    var i = startFrom
-    var j = startWith
-    while (i < indices.size) {
-      indices(i) = j
-      i += 1
-      j += 1
+  @tailrec
+  private def fillSparseVector (
+      indices: ArrayBuffer[Int],
+      values: ArrayBuffer[Double],
+      prevStart: Int,
+      prevLen: Int,
+      currDegree: Int,
+      finalDegree: Int,
+      nVariables: Int,
+      originalLen: Int): Unit = {
+
+    if (currDegree > finalDegree) {
+      return
     }
+
+    val currStart = prevStart + prevLen
+    var currLen = 0
+    var leftIndex = 0
+    while (leftIndex < originalLen) {
+      var rightIndex = 0
+      while (rightIndex < prevLen) {
+        val targetIdx = indexSparseVector(nVariables, currDegree, indices(leftIndex),
+          indices(prevStart + rightIndex))
+        if (targetIdx == -1) {
+          // ignore the invalid indices composition.
+        } else {
+          indices += targetIdx
+          values += values(leftIndex) * values(prevStart + rightIndex)
+          currLen += 1
+        }
+        rightIndex += 1
+      }
+      leftIndex += 1
+    }
+
+    fillSparseVector(indices, values, currStart, currLen, currDegree + 1, finalDegree, nVariables,
+      originalLen)
+  }
+
+  /**
+   * Compute the target index of monomial for sparse vector. The function simulates the process of
+   * `x * x's degree-1 polynomial expansion = x's degree polynomial expansion`.
+   * @param nVariables number of variables in the original feature vector.
+   * @param degree current degree that we want to expand.
+   * @param leftIdx the index of the LHS vector, i.e. `x`.
+   * @param rightIdx the index of the RHS vector, i.e. `x's degree-1 polynomial expansion`.
+   * @return target monomial's index. -1 represents invalid composition of elements.
+   */
+  private def indexSparseVector(nVariables: Int, degree: Int, leftIdx: Int, rightIdx: Int): Int = {
+    val startIdxOfRightVector = numExpandedDims(degree - 2, nVariables)
+    val lenOfRightVector = numMonomials(degree - 1, nVariables)
+    val startIdxOfTargetVector = numExpandedDims(degree - 1, nVariables)
+    val rightResetIdx = rightIdx - startIdxOfRightVector
+    val rightIgnoredLen = lenOfRightVector - numMonomials(degree - 1, nVariables - leftIdx)
+    val targetResetIdx = rightResetIdx - rightIgnoredLen
+    val targetComplementaryLen = (0 until leftIdx)
+      .map(x => numMonomials(degree - 1, nVariables - x)).sum
+    val targetIdx = if (targetResetIdx >= 0) {
+      startIdxOfTargetVector + targetComplementaryLen + targetResetIdx
+    } else {
+      -1
+    }
+    targetIdx
   }
 
   /**
@@ -143,28 +206,35 @@ object PolynomialMapper {
    */
   private def transform(degree: Int)(feature: Vector): Vector = {
     val expectedDims = numExpandedDims(degree, feature.size)
+
     feature match {
       case f: DenseVector =>
-        val originalDims = f.size
-        val res = Array.fill[Double](expectedDims)(0.0)
+        val originalLen = f.size
+
+        val values = Array.fill[Double](expectedDims)(0.0)
+
         for (i <- 0 until f.size) {
-          res(i) = f(i)
+          values(i) = f(i)
         }
-        fillDenseVector(res, 0, originalDims, 2, degree, originalDims)
-        Vectors.dense(res)
+
+        fillDenseVector(values, 0, originalLen, 2, degree, originalLen)
+
+        Vectors.dense(values)
 
       case f: SparseVector =>
-        val originalDims = f.indices.size
-        val expandedDims = numExpandedDims(degree, f.indices.size)
-        val resIndices = Array.fill[Int](expandedDims)(0)
-        val resValues = Array.fill[Double](expandedDims)(0.0)
+        val originalLen = f.indices.size
+
+        val indices = ArrayBuffer.empty[Int]
+        val values = ArrayBuffer.empty[Double]
+
         for (i <- 0 until f.indices.size) {
-          resIndices(i) = f.indices(i)
-          resValues(i) = f.values(i)
+          indices += f.indices(i)
+          values += f.values(i)
         }
-        fillDenseVector(resValues, 0, f.indices.size, 2, degree, originalDims)
-        fillPseudoSparseVectorIndices(resIndices, f.indices.size, feature.size)
-        Vectors.sparse(expectedDims, resIndices, resValues)
+
+        fillSparseVector(indices, values, 0, originalLen, 2, degree, feature.size, originalLen)
+
+        Vectors.sparse(expectedDims, indices.toArray, values.toArray)
     }
   }
 }
