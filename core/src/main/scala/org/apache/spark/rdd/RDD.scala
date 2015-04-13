@@ -1199,9 +1199,19 @@ abstract class RDD[T: ClassTag](
    * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint() {
-    if (context.checkpointDir.isEmpty) {
+      checkpoint(false)
+  }
+
+  def checkpoint(localStorage:Boolean) {
+    checkpointLocalStorage = localStorage
+    if (!localStorage && context.checkpointDir.isEmpty) {
       throw new Exception("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
+      if (localStorage && (storageLevel.replication == 1 || !storageLevel.useDisk)) {
+        //Should this be an exception condition?
+        logWarning("When checkpointing to local storage it recommended that the RDD's " +
+          "storage level has replication and will spill to disk (e.g. MEMORY_AND_DISK_2)")
+      }
       checkpointData = Some(new RDDCheckpointData(this))
       checkpointData.get.markForCheckpoint()
     }
@@ -1260,18 +1270,24 @@ abstract class RDD[T: ClassTag](
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
 
+  private var checkpointLocalStorage = false
+
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
+      doCheckpoint(checkpointLocalStorage)
+  }
+
+  private[spark] def doCheckpoint(localStorage:Boolean) {
     if (!doCheckpointCalled) {
       doCheckpointCalled = true
       if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
+        checkpointData.get.doCheckpoint(localStorage)
       } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
+        dependencies.foreach(_.rdd.doCheckpoint(localStorage))
       }
     }
   }
