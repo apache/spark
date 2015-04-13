@@ -203,7 +203,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     val completedBatchesContent = {
-      <h4 id="active">Completed Batches ({completedBatches.size})</h4> ++
+      <h4 id="completed">
+        Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
+      </h4> ++
         new CompletedBatchTable(completedBatches).toNodeSeq
     }
 
