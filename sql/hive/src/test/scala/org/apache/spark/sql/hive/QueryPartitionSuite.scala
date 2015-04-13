@@ -34,7 +34,7 @@ class QueryPartitionSuite extends QueryTest {
     testData.registerTempTable("testData")
 
     val tmpDir = Files.createTempDir()
-    //create the table for test
+    // create the table for test
     sql(s"CREATE TABLE table_with_partition(key int,value string) " +
       "PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
     sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
