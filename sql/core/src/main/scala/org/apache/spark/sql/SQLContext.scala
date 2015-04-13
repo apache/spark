@@ -31,9 +31,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -404,7 +404,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      rowRDD.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row])
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      rowRDD.map(converter(_).asInstanceOf[Row])
     } else {
       rowRDD
     }
@@ -459,7 +460,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { row =>
         new GenericRow(
           extractors.zip(attributeSeq).map { case (e, attr) =>
-            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
           }.toArray[Any]
         ) : Row
       }

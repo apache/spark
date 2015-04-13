@@ -128,10 +128,13 @@ private[spark] class YarnClientSchedulerBackend(
     assert(client != null && appId != null, "Application has not been submitted yet!")
     val t = new Thread {
       override def run() {
-        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
-        logError(s"Yarn application has already exited with state $state!")
-        sc.stop()
-        Thread.currentThread().interrupt()
+        try {
+          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+          logError(s"Yarn application has already exited with state $state!")
+          sc.stop()
+        } catch {
+          case e: InterruptedException => logInfo("Interrupting monitor thread")
+        }
       }
     }
     t.setName("Yarn application state monitor")

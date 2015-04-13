@@ -21,14 +21,14 @@ import org.scalatest.Matchers
 
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.{Time, Milliseconds, TestSuiteBase}
+import org.apache.spark.streaming.{Duration, Time, Milliseconds, TestSuiteBase}
 
 class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
 
-  override def batchDuration = Milliseconds(100)
+  override def batchDuration: Duration = Milliseconds(100)
 
   test("onBatchSubmitted, onBatchStarted, onBatchCompleted, " +
     "onReceiverStarted, onReceiverError, onReceiverStopped") {

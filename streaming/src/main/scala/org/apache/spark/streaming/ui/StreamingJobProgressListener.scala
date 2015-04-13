@@ -149,7 +149,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }.toMap
   }
 
-  def lastReceivedBatchRecords: Map[Int, Long] = {
+  def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       (0 until numReceivers).map { receiverId =>
@@ -160,19 +160,19 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  def receiverInfo(receiverId: Int): Option[ReceiverInfo] = {
+  def receiverInfo(receiverId: Int): Option[ReceiverInfo] = synchronized {
     receiverInfos.get(receiverId)
   }
 
-  def lastCompletedBatch: Option[BatchInfo] = {
+  def lastCompletedBatch: Option[BatchInfo] = synchronized {
     completedBatchInfos.sortBy(_.batchTime)(Time.ordering).lastOption
   }
 
-  def lastReceivedBatch: Option[BatchInfo] = {
+  def lastReceivedBatch: Option[BatchInfo] = synchronized {
     retainedBatches.lastOption
   }
 
-  private def retainedBatches: Seq[BatchInfo] = synchronized {
+  private def retainedBatches: Seq[BatchInfo] = {
     (waitingBatchInfos.values.toSeq ++
       runningBatchInfos.values.toSeq ++ completedBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }
