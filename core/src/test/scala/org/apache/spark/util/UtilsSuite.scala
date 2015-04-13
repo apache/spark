@@ -17,15 +17,13 @@
 
 package org.apache.spark.util
 
-import java.lang.NumberFormatException
-import java.util.concurrent.TimeUnit
-
 import scala.util.Random
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
@@ -61,14 +59,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
     assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
     assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
-
-    assert(Utils.timeStringAsUs("1") === 1)
-    assert(Utils.timeStringAsUs("1us") === 1)
-    assert(Utils.timeStringAsUs("1ms") === TimeUnit.MILLISECONDS.toMicros(1))
-    assert(Utils.timeStringAsUs("1s") === TimeUnit.SECONDS.toMicros(1))
-    assert(Utils.timeStringAsUs("1min") === TimeUnit.MINUTES.toMicros(1))
-    assert(Utils.timeStringAsUs("1h") === TimeUnit.HOURS.toMicros(1))
-    assert(Utils.timeStringAsUs("1d") === TimeUnit.DAYS.toMicros(1))
     
     // Test invalid strings
     try {

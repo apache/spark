@@ -35,13 +35,12 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may 
+Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may 
 actually require one to prevent any sort of starvation issues.
 
 Properties that specify some time duration should be configured with a unit of time. 
 The following format is accepted:
  
-    200us (microseconds)
     5s (seconds)
     25ms (milliseconds)
     10m or 10min (minutes)
@@ -444,8 +443,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.retryWait</code></td>
   <td>5s</td>
   <td>
-    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
+    (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 5 seconds.
   </td>
 </tr>
 <tr>
@@ -745,8 +744,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
-    <td>10000ms</td>
-    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    <td>10s</td>
+    <td>Interval between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
     tasks.</td>
 </tr>
@@ -755,7 +754,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>60s</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver, in seconds.
+    the driver.
   </td>
 </tr>
 <tr>
@@ -870,7 +869,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     This is set to a larger value to disable the transport failure detector that comes built in to 
     Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger 
-    interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more 
+    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more 
     informative for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` 
     if you need to. A likely positive use case for using failure detector would be: a sensistive 
     failure detector can help evict rogue executors quickly. However this is usually not the case 
@@ -885,7 +884,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
      This is set to a larger value to disable the transport failure detector that comes built in to Akka.
      It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart 
-     beat pause in seconds for Akka. This can be used to control sensitivity to GC pauses. Tune
+     beat pause for Akka. This can be used to control sensitivity to GC pauses. Tune
      this along with `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
@@ -901,7 +900,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.timeout</code></td>
   <td>100s</td>
   <td>
-    Communication timeout between Spark nodes, in seconds.
+    Communication timeout between Spark nodes.
   </td>
 </tr>
 <tr>
@@ -953,8 +952,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
-    Default timeout for all network interactions, in seconds. This config will be used in
-    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
+    Default timeout for all network interactions. This config will be used in place of 
+    <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
@@ -1002,9 +1001,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.locality.wait</code></td>
-  <td>3000ms</td>
+  <td>3s</td>
   <td>
-    Number of milliseconds to wait to launch a data-local task before giving up and launching it
+    How long to wait to launch a data-local task before giving up and launching it
     on a less-local node. The same wait will be used to step through multiple locality levels
     (process-local, node-local, rack-local and then any). It is also possible to customize the
     waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
@@ -1037,10 +1036,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
-  <td>30000ms</td>
+  <td>30s</td>
   <td>
-    Maximum amount of time to wait for resources to register before scheduling begins
-    (in milliseconds).
+    Maximum amount of time to wait for resources to register before scheduling begins.
   </td>
 </tr>
 <tr>
@@ -1067,10 +1065,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.revive.interval</code></td>
-  <td>1000ms</td>
+  <td>1s</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks
-    (in milliseconds).
+    The interval length for the scheduler to revive the worker resource offers to run tasks.
   </td>
 </tr>
 <tr>
@@ -1085,7 +1082,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.interval</code></td>
   <td>100ms</td>
   <td>
-    How often Spark will check for tasks to speculate, in milliseconds.
+    How often Spark will check for tasks to speculate.
   </td>
 </tr>
 <tr>
@@ -1142,8 +1139,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
   <td>600s</td>
   <td>
-    If dynamic allocation is enabled and an executor has been idle for more than this duration
-    (in seconds), the executor will be removed. For more detail, see this
+    If dynamic allocation is enabled and an executor has been idle for more than this duration, 
+    the executor will be removed. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
@@ -1173,7 +1170,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>5s</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
-    this duration (in seconds), new executors will be requested. For more detail, see this
+    this duration, new executors will be requested. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
@@ -1230,7 +1227,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
   <td>60s</td>
   <td>
-    Number of seconds for the connection to wait for ack to occur before timing
+    How long for the connection to wait for ack to occur before timing
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
   </td>
@@ -1239,7 +1236,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.core.connection.auth.wait.timeout</code></td>
   <td>30s</td>
   <td>
-    Number of seconds for the connection to wait for authentication to occur before timing
+    How long for the connection to wait for authentication to occur before timing
     out and giving up.
   </td>
 </tr>
@@ -1362,7 +1359,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
-    Interval (milliseconds) at which data received by Spark Streaming receivers is chunked
+    Interval at which data received by Spark Streaming receivers is chunked
     into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
      tuning</a> section in the Spark Streaming programing guide for more details.

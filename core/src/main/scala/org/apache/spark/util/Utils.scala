@@ -25,8 +25,6 @@ import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
-import org.apache.spark.network.util.JavaUtils
-
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -48,6 +46,7 @@ import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1011,14 +1010,6 @@ private[spark] object Utils extends Logging {
     filesAndDirs.filter(_.isDirectory).exists(
       subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
     )
-  }
-
-  /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
-   * no suffix is provided, the passed number is assumed to be in us.
-   */
-  def timeStringAsUs(str: String): Long = {
-    JavaUtils.timeStringAsUs(str)
   }
 
   /**

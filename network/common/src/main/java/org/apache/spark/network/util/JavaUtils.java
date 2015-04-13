@@ -170,15 +170,7 @@ public class JavaUtils {
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
     }
   }
-
-  /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
-   * no suffix is provided, the passed number is assumed to be in us.
-   */
-  public static long timeStringAsUs(String str) {
-    return parseTimeString(str, TimeUnit.MICROSECONDS);
-  }
-
+  
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
