@@ -97,7 +97,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId, dummyCleaner).map { _.data.map {_.toString}.toList }
+          blockManager.getLocal(blockId, dummyCleaner).map(_.data.map(_.toString).toList)
             .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
@@ -122,7 +122,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId, dummyCleaner).map { _.data.map {_.toString}.toList }
+          blockManager.getLocal(blockId, dummyCleaner).map(_.data.map(_.toString).toList)
             .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data

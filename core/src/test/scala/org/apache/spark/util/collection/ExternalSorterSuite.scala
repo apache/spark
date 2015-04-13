@@ -561,10 +561,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: String) = ArrayBuffer[String](i)
-    def mergeValue(buffer: ArrayBuffer[String], i: String) = buffer += i
-    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String]) =
-      buffer1 ++= buffer2
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
+    def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
+    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String])
+      : ArrayBuffer[String] = buffer1 ++= buffer2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner _, mergeValue _, mergeCombiners _)
@@ -641,14 +641,17 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: Int) = ArrayBuffer[Int](i)
-    def mergeValue(buffer: ArrayBuffer[Int], i: Int) = buffer += i
-    def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]) = buf1 ++= buf2
+    def createCombiner(i: Int): ArrayBuffer[Int] = ArrayBuffer[Int](i)
+    def mergeValue(buffer: ArrayBuffer[Int], i: Int): ArrayBuffer[Int] = buffer += i
+    def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]): ArrayBuffer[Int] = {
+      buf1 ++= buf2
+    }
 
     val agg = new Aggregator[Int, Int, ArrayBuffer[Int]](createCombiner, mergeValue, mergeCombiners)
     val sorter = new ExternalSorter[Int, Int, ArrayBuffer[Int]](Some(agg), None, None, None)
 
-    sorter.insertAll((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
+    sorter.insertAll(
+      (1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
 
     val it = sorter.iterator(dummyCleaner)
     while (it.hasNext) {
@@ -662,9 +665,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: String) = ArrayBuffer[String](i)
-    def mergeValue(buffer: ArrayBuffer[String], i: String) = buffer += i
-    def mergeCombiners(buf1: ArrayBuffer[String], buf2: ArrayBuffer[String]) = buf1 ++= buf2
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
+    def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
+    def mergeCombiners(buf1: ArrayBuffer[String], buf2: ArrayBuffer[String]): ArrayBuffer[String] =
+      buf1 ++= buf2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner, mergeValue, mergeCombiners)
@@ -728,7 +732,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     // Using wrongOrdering to show integer overflow introduced exception.
     val rand = new Random(100L)
     val wrongOrdering = new Ordering[String] {
-      override def compare(a: String, b: String) = {
+      override def compare(a: String, b: String): Int = {
         val h1 = if (a == null) 0 else a.hashCode()
         val h2 = if (b == null) 0 else b.hashCode()
         h1 - h2
@@ -750,9 +754,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
 
     // Using aggregation and external spill to make sure ExternalSorter using
     // partitionKeyComparator.
-    def createCombiner(i: String) = ArrayBuffer(i)
-    def mergeValue(c: ArrayBuffer[String], i: String) = c += i
-    def mergeCombiners(c1: ArrayBuffer[String], c2: ArrayBuffer[String]) = c1 ++= c2
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer(i)
+    def mergeValue(c: ArrayBuffer[String], i: String): ArrayBuffer[String] = c += i
+    def mergeCombiners(c1: ArrayBuffer[String], c2: ArrayBuffer[String]): ArrayBuffer[String] =
+      c1 ++= c2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner, mergeValue, mergeCombiners)

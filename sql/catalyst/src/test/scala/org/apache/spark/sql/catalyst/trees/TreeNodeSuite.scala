@@ -25,12 +25,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
-  def children = optKey.toSeq
-  def nullable = true
-  def dataType = NullType
+  def children: Seq[Expression] = optKey.toSeq
+  def nullable: Boolean = true
+  def dataType: NullType = NullType
   override lazy val resolved = true
   type EvaluatedType = Any
-  def eval(input: Row) = null.asInstanceOf[Any]
+  def eval(input: Row): Any = null.asInstanceOf[Any]
 }
 
 class TreeNodeSuite extends FunSuite {
