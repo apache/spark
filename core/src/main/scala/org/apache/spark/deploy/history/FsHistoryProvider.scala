@@ -273,35 +273,28 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def cleanLogs(): Unit = {
     try {
-      val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
-        .getOrElse(Seq[FileStatus]())
       val maxAge = conf.getLong("spark.history.fs.cleaner.maxAge.seconds",
         DEFAULT_SPARK_HISTORY_FS_MAXAGE_S) * 1000
 
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
+      // Scan all logs from the log directory.
+      // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { info =>
-        if (now - info.lastUpdated <= maxAge) {
+        if (now - info.lastUpdated <= maxAge || !info.completed) {
           appsToRetain += (info.id -> info)
+        } else {
+          try {
+            fs.delete(new Path(info.logPath), true)
+          } catch {
+            case t: IOException => logError(s"IOException in cleaning logs of ${info.logPath}", t)
+            appsToRetain += (info.id -> info)
+          }
         }
       }
 
       applications = appsToRetain
-
-      // Scan all logs from the log directory.
-      // Only directories older than the specified max age will be deleted
-      statusList.foreach { dir =>
-        try {
-          if (now - dir.getModificationTime() > maxAge) {
-            // if path is a directory and set to  true,
-            // the directory is deleted else throws an exception
-            fs.delete(dir.getPath, true)
-          }
-        } catch {
-          case t: IOException => logError(s"IOException in cleaning logs of $dir", t)
-        }
-      }
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
