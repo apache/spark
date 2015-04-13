@@ -27,7 +27,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
@@ -137,7 +136,7 @@ class GradientBoostedTreesModel(
 
     evaluationArray(0) = predictionAndError.values.mean()
 
-    (1 until numIterations).map { nTree =>
+    (1 until numIterations).foreach { nTree =>
       predictionAndError = GradientBoostedTreesModel.updatePredictionError(
         remappedData, predictionAndError, treeWeights(nTree), trees(nTree), loss)
       evaluationArray(nTree) = predictionAndError.values.mean()
@@ -153,7 +152,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   /**
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
-   * @param Training data.
+   * @param data: training data.
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
@@ -175,9 +174,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   /**
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
-   * @param training data.
+   * @param data: training data.
    * @param predictionAndError: predictionError RDD
-   * @param nTree: tree index.
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
