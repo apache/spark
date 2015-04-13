@@ -274,14 +274,14 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Quotes a string so that it can be used in a command string and be parsed back into a single
-   * argument by python's "shlex.split()" function.
-   *
+   * Quotes a string so that it can be used in a command string.
    * Basically, just add simple escapes. E.g.:
    *    original single argument : ab "cd" ef
    *    after: "ab \"cd\" ef"
+   *
+   * This can be parsed back into a single argument by python's "shlex.split()" function.
    */
-  static String quoteForPython(String s) {
+  static String quoteForCommandString(String s) {
     StringBuilder quoted = new StringBuilder().append('"');
     for (int i = 0; i < s.length(); i++) {
       int cp = s.codePointAt(i);

@@ -436,14 +436,14 @@ private[spark] class Executor(
    * This thread stops running when the executor is stopped.
    */
   private def startDriverHeartbeater(): Unit = {
-    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
     val thread = new Thread() {
       override def run() {
         // Sleep a random interval so the heartbeats don't end up in sync
-        Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+        Thread.sleep(intervalMs + (math.random * intervalMs).asInstanceOf[Int])
         while (!isStopped) {
           reportHeartBeat()
-          Thread.sleep(interval)
+          Thread.sleep(intervalMs)
         }
       }
     }

@@ -45,10 +45,12 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
-    conn.prepareStatement("create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    conn.prepareStatement(
+      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
     conn.commit()
 
     sql(
@@ -132,25 +134,25 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("SELECT *") {
-    assert(sql("SELECT * FROM foobar").collect().size == 3)
+    assert(sql("SELECT * FROM foobar").collect().size === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size == 0)
-    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size == 2)
-    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size == 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size == 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size == 2)
-    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size == 2)
+    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
+    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
+    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
+    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size == 1)
+    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {
     val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
-    assert(names.size == 3)
+    assert(names.size === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
@@ -158,10 +160,10 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   test("SELECT second field") {
     val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size == 3)
-    assert(ids(0) == 1)
-    assert(ids(1) == 2)
-    assert(ids(2) == 3)
+    assert(ids.size === 3)
+    assert(ids(0) === 1)
+    assert(ids(1) === 2)
+    assert(ids(2) === 3)
   }
 
   test("SELECT * partitioned") {
@@ -169,46 +171,46 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("SELECT WHERE (simple predicates) partitioned") {
-    assert(sql("SELECT * FROM parts WHERE THEID < 1").collect().size == 0)
-    assert(sql("SELECT * FROM parts WHERE THEID != 2").collect().size == 2)
-    assert(sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size == 1)
+    assert(sql("SELECT * FROM parts WHERE THEID < 1").collect().size === 0)
+    assert(sql("SELECT * FROM parts WHERE THEID != 2").collect().size === 2)
+    assert(sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size === 1)
   }
 
   test("SELECT second field partitioned") {
     val ids = sql("SELECT THEID FROM parts").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size == 3)
-    assert(ids(0) == 1)
-    assert(ids(1) == 2)
-    assert(ids(2) == 3)
+    assert(ids.size === 3)
+    assert(ids(0) === 1)
+    assert(ids(1) === 2)
+    assert(ids(2) === 3)
   }
 
   test("Basic API") {
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect.size == 3)
+    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect().size === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
-      .collect.size == 3)
+      .collect.size === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts).collect.size == 3)
+    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts).collect().size === 3)
   }
 
   test("H2 integral types") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NOT NULL").collect()
-    assert(rows.size == 1)
-    assert(rows(0).getInt(0) == 1)
-    assert(rows(0).getBoolean(1) == false)
-    assert(rows(0).getInt(2) == 3)
-    assert(rows(0).getInt(3) == 4)
-    assert(rows(0).getLong(4) == 1234567890123L)
+    assert(rows.size === 1)
+    assert(rows(0).getInt(0) === 1)
+    assert(rows(0).getBoolean(1) === false)
+    assert(rows(0).getInt(2) === 3)
+    assert(rows(0).getInt(3) === 4)
+    assert(rows(0).getLong(4) === 1234567890123L)
   }
 
   test("H2 null entries") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NULL").collect()
-    assert(rows.size == 1)
+    assert(rows.size === 1)
     assert(rows(0).isNullAt(0))
     assert(rows(0).isNullAt(1))
     assert(rows(0).isNullAt(2))
@@ -230,27 +232,27 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
-    assert(cal.get(Calendar.HOUR_OF_DAY) == 12)
-    assert(cal.get(Calendar.MINUTE) == 34)
-    assert(cal.get(Calendar.SECOND) == 56)
+    assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
+    assert(cal.get(Calendar.MINUTE) === 34)
+    assert(cal.get(Calendar.SECOND) === 56)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
-    assert(cal.get(Calendar.YEAR) == 1996)
-    assert(cal.get(Calendar.MONTH) == 0)
-    assert(cal.get(Calendar.DAY_OF_MONTH) == 1)
+    assert(cal.get(Calendar.YEAR) === 1996)
+    assert(cal.get(Calendar.MONTH) === 0)
+    assert(cal.get(Calendar.DAY_OF_MONTH) === 1)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](2))
-    assert(cal.get(Calendar.YEAR) == 2002)
-    assert(cal.get(Calendar.MONTH) == 1)
-    assert(cal.get(Calendar.DAY_OF_MONTH) == 20)
-    assert(cal.get(Calendar.HOUR) == 11)
-    assert(cal.get(Calendar.MINUTE) == 22)
-    assert(cal.get(Calendar.SECOND) == 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos == 543543543)
+    assert(cal.get(Calendar.YEAR) === 2002)
+    assert(cal.get(Calendar.MONTH) === 1)
+    assert(cal.get(Calendar.DAY_OF_MONTH) === 20)
+    assert(cal.get(Calendar.HOUR) === 11)
+    assert(cal.get(Calendar.MINUTE) === 22)
+    assert(cal.get(Calendar.SECOND) === 33)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543543)
   }
 
   test("H2 floating-point types") {
     val rows = sql("SELECT * FROM flttypes").collect()
-    assert(rows(0).getDouble(0) == 1.00000000000000022) // Yes, I meant ==.
-    assert(rows(0).getDouble(1) == 1.00000011920928955) // Yes, I meant ==.
+    assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
+    assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
     assert(rows(0).getAs[BigDecimal](2)
         .equals(new BigDecimal("123456789012345.54321543215432100000")))
   }
@@ -264,7 +266,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |         user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
     val rows = sql("SELECT * FROM hack").collect()
-    assert(rows(0).getDouble(0) == 1.00000011920928955) // Yes, I meant ==.
+    assert(rows(0).getDouble(0) === 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
   }

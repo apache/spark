@@ -106,7 +106,9 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
     check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
-    check(List(mutable.HashMap("one" -> 1, "two" -> 2),mutable.HashMap(1->"one",2->"two",3->"three")))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1->"one",2->"two",3->"three")))
   }
 
   test("ranges") {
@@ -169,7 +171,10 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("kryo with collect") {
     val control = 1 :: 2 :: Nil
-    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    val result = sc.parallelize(control, 2)
+      .map(new ClassWithoutNoArgConstructor(_))
+      .collect()
+      .map(_.x)
     assert(control === result.toSeq)
   }
 
@@ -237,7 +242,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
     // Set a special, broken ClassLoader and make sure we get an exception on deserialization
     ser.setDefaultClassLoader(new ClassLoader() {
-      override def loadClass(name: String) = throw new UnsupportedOperationException
+      override def loadClass(name: String): Class[_] = throw new UnsupportedOperationException
     })
     intercept[UnsupportedOperationException] {
       ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
@@ -287,14 +292,14 @@ object KryoTest {
 
   class ClassWithNoArgConstructor {
     var x: Int = 0
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithNoArgConstructor => x == c.x
       case _ => false
     }
   }
 
   class ClassWithoutNoArgConstructor(val x: Int) {
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithoutNoArgConstructor => x == c.x
       case _ => false
     }
