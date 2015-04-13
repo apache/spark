@@ -31,27 +31,28 @@ object SchemaUtils {
 
   /**
    * Check whether the given schema contains an column of the required data type.
-   * @param colName  Parameter name for the input column.
-   * @param dataType  SQL DataType of the input column.
+   * @param colName  column name
+   * @param dataType  required column data type
    */
   def checkColumnType(schema: StructType, colName: String, dataType: DataType): Unit = {
     val actualDataType = schema(colName).dataType
     require(actualDataType.equals(dataType),
-      s"Input column $colName must be of type $dataType but was actually $actualDataType.")
+      s"Column $colName must be of type $dataType but was actually $actualDataType.")
   }
 
   /**
-   * Appends a new column to the input schema.
+   * Appends a new column to the input schema. This fails if the given output column already exists.
    * @param schema input schema
-   * @param colName new column name
-   * @param dataType new column type
-   * @return schema with the input column appended
+   * @param colName new column name. If this column name is en empty string "", this method returns
+   *                the input schema unchanged. This allows users to disable output columns.
+   * @param dataType new column data type
+   * @return new schema with the input column appended
    */
   def appendColumn(
       schema: StructType,
       colName: String,
       dataType: DataType): StructType = {
-    require(colName.nonEmpty)
+    if (colName.isEmpty) return schema
     val fieldNames = schema.fieldNames
     require(!fieldNames.contains(colName), s"Column $colName already exists.")
     val outputFields = schema.fields :+ StructField(colName, dataType, nullable = false)

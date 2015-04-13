@@ -28,7 +28,7 @@ import scala.language.reflectiveCalls
 
 class XORShiftRandomSuite extends FunSuite with Matchers {
 
-  def fixture = new {
+  def fixture: Object {val seed: Long; val hundMil: Int; val xorRand: XORShiftRandom} = new {
     val seed = 1L
     val xorRand = new XORShiftRandom(seed)
     val hundMil = 1e8.toInt

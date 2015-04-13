@@ -640,6 +640,15 @@ class Matrix(object):
         """
         raise NotImplementedError
 
+    @staticmethod
+    def _convert_to_array(array_like, dtype):
+        """
+        Convert Matrix attributes which are array-like or buffer to array.
+        """
+        if isinstance(array_like, basestring):
+            return np.frombuffer(array_like, dtype=dtype)
+        return np.asarray(array_like, dtype=dtype)
+
 
 class DenseMatrix(Matrix):
     """
@@ -647,13 +656,8 @@ class DenseMatrix(Matrix):
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
-        if isinstance(values, basestring):
-            values = np.frombuffer(values, dtype=np.float64)
-        elif not isinstance(values, np.ndarray):
-            values = np.array(values, dtype=np.float64)
+        values = self._convert_to_array(values, np.float64)
         assert len(values) == numRows * numCols
-        if values.dtype != np.float64:
-            values.astype(np.float64)
         self.values = values
 
     def __reduce__(self):
@@ -669,6 +673,17 @@ class DenseMatrix(Matrix):
                [ 1.,  3.]])
         """
         return self.values.reshape((self.numRows, self.numCols), order='F')
+
+    def toSparse(self):
+        """Convert to SparseMatrix"""
+        indices = np.nonzero(self.values)[0]
+        colCounts = np.bincount(indices / self.numRows)
+        colPtrs = np.cumsum(np.hstack(
+            (0, colCounts, np.zeros(self.numCols - colCounts.size))))
+        values = self.values[indices]
+        rowIndices = indices % self.numRows
+
+        return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
 
     def __getitem__(self, indices):
         i, j = indices
@@ -687,6 +702,82 @@ class DenseMatrix(Matrix):
                 all(self.values == other.values))
 
 
+class SparseMatrix(Matrix):
+    """Sparse Matrix stored in CSC format."""
+    def __init__(self, numRows, numCols, colPtrs, rowIndices, values,
+                 isTransposed=False):
+        Matrix.__init__(self, numRows, numCols)
+        self.isTransposed = isTransposed
+        self.colPtrs = self._convert_to_array(colPtrs, np.int32)
+        self.rowIndices = self._convert_to_array(rowIndices, np.int32)
+        self.values = self._convert_to_array(values, np.float64)
+
+        if self.isTransposed:
+            if self.colPtrs.size != numRows + 1:
+                raise ValueError("Expected colPtrs of size %d, got %d."
+                                 % (numRows + 1, self.colPtrs.size))
+        else:
+            if self.colPtrs.size != numCols + 1:
+                raise ValueError("Expected colPtrs of size %d, got %d."
+                                 % (numCols + 1, self.colPtrs.size))
+        if self.rowIndices.size != self.values.size:
+            raise ValueError("Expected rowIndices of length %d, got %d."
+                             % (self.rowIndices.size, self.values.size))
+
+    def __reduce__(self):
+        return SparseMatrix, (
+            self.numRows, self.numCols, self.colPtrs.tostring(),
+            self.rowIndices.tostring(), self.values.tostring(),
+            self.isTransposed)
+
+    def __getitem__(self, indices):
+        i, j = indices
+        if i < 0 or i >= self.numRows:
+            raise ValueError("Row index %d is out of range [0, %d)"
+                             % (i, self.numRows))
+        if j < 0 or j >= self.numCols:
+            raise ValueError("Column index %d is out of range [0, %d)"
+                             % (j, self.numCols))
+
+        # If a CSR matrix is given, then the row index should be searched
+        # for in ColPtrs, and the column index should be searched for in the
+        # corresponding slice obtained from rowIndices.
+        if self.isTransposed:
+            j, i = i, j
+
+        colStart = self.colPtrs[j]
+        colEnd = self.colPtrs[j + 1]
+        nz = self.rowIndices[colStart: colEnd]
+        ind = np.searchsorted(nz, i) + colStart
+        if ind < colEnd and self.rowIndices[ind] == i:
+            return self.values[ind]
+        else:
+            return 0.0
+
+    def toArray(self):
+        """
+        Return an numpy.ndarray
+        """
+        A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
+        for k in xrange(self.colPtrs.size - 1):
+            startptr = self.colPtrs[k]
+            endptr = self.colPtrs[k + 1]
+            if self.isTransposed:
+                A[k, self.rowIndices[startptr:endptr]] = self.values[startptr:endptr]
+            else:
+                A[self.rowIndices[startptr:endptr], k] = self.values[startptr:endptr]
+        return A
+
+    def toDense(self):
+        densevals = np.reshape(
+            self.toArray(), (self.numRows * self.numCols), order='F')
+        return DenseMatrix(self.numRows, self.numCols, densevals)
+
+    # TODO: More efficient implementation:
+    def __eq__(self, other):
+        return np.all(self.toArray == other.toArray)
+
+
 class Matrices(object):
     @staticmethod
     def dense(numRows, numCols, values):
@@ -694,6 +785,13 @@ class Matrices(object):
         Create a DenseMatrix
         """
         return DenseMatrix(numRows, numCols, values)
+
+    @staticmethod
+    def sparse(numRows, numCols, colPtrs, rowIndices, values):
+        """
+        Create a SparseMatrix
+        """
+        return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
 
 
 def _test():

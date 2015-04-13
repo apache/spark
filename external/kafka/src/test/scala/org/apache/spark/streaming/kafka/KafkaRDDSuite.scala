@@ -22,18 +22,22 @@ import scala.util.Random
 import kafka.serializer.StringDecoder
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 
-class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
-  val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-  var sc: SparkContext = _
+class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
+
+  private var kafkaTestUtils: KafkaTestUtils = _
+
+  private val sparkConf = new SparkConf().setMaster("local[4]")
+    .setAppName(this.getClass.getSimpleName)
+  private var sc: SparkContext = _
+
   override def beforeAll {
     sc = new SparkContext(sparkConf)
-
-    setupKafka()
+    kafkaTestUtils = new KafkaTestUtils
+    kafkaTestUtils.setup()
   }
 
   override def afterAll {
@@ -41,17 +45,21 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
       sc.stop
       sc = null
     }
-    tearDownKafka()
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown()
+      kafkaTestUtils = null
+    }
   }
 
   test("basic usage") {
     val topic = "topicbasic"
-    createTopic(topic)
+    kafkaTestUtils.createTopic(topic)
     val messages = Set("the", "quick", "brown", "fox")
-    sendMessages(topic, messages.toArray)
+    kafkaTestUtils.sendMessages(topic, messages.toArray)
 
 
-    val kafkaParams = Map("metadata.broker.list" -> brokerAddress,
+    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
@@ -67,15 +75,15 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
     val topic = "topic1"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
-    createTopic(topic)
+    kafkaTestUtils.createTopic(topic)
 
-    val kafkaParams = Map("metadata.broker.list" -> brokerAddress,
+    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
 
     val kc = new KafkaCluster(kafkaParams)
 
     // this is the "lots of messages" case
-    sendMessages(topic, sent)
+    kafkaTestUtils.sendMessages(topic, sent)
     // rdd defined from leaders after sending messages, should get the number sent
     val rdd = getRdd(kc, Set(topic))
 
@@ -92,14 +100,14 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
     // shouldn't get anything, since message is sent after rdd was defined
     val sentOnlyOne = Map("d" -> 1)
 
-    sendMessages(topic, sentOnlyOne)
+    kafkaTestUtils.sendMessages(topic, sentOnlyOne)
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = getRdd(kc, Set(topic))
     // send lots of messages after rdd was defined, they shouldn't show up
-    sendMessages(topic, Map("extra" -> 22))
+    kafkaTestUtils.sendMessages(topic, Map("extra" -> 22))
 
     assert(rdd3.isDefined)
     assert(rdd3.get.count === sentOnlyOne.values.sum, "didn't get exactly one message")

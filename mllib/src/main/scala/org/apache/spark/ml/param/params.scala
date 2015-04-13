@@ -201,6 +201,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+<<<<<<< HEAD
    * Gets the value of a param in the embedded param map or its default value. Throws an exception
    * if neither is set.
    */
