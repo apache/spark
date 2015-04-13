@@ -18,10 +18,17 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
+import org.scalatest.Matchers._
 
 import org.apache.spark._
 
 class DoubleRDDSuite extends FunSuite with SharedSparkContext {
+  test("sum") {
+    sc.parallelize(Seq.empty[Double]).sum() should be(0.0 +- 0.0001)
+    sc.parallelize(Seq(1.0)).sum() should be(1.0 +- 0.0001)
+    sc.parallelize(Seq(1.0, 2.0)).sum() should be(3.0 +- 0.0001)
+  }
+
   // Verify tests on the histogram functionality. We test with both evenly
   // and non-evenly spaced buckets as the bucket lookup function changes.
   test("WorksOnEmpty") {
