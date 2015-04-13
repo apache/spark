@@ -198,23 +198,31 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Check whether the given schema contains an input column.
-   * @param colName  Parameter name for the input column.
-   * @param dataType  SQL DataType of the input column.
+   * @param colName  Input column name
+   * @param dataType  Input column DataType
    */
   protected def checkInputColumn(schema: StructType, colName: String, dataType: DataType): Unit = {
     val actualDataType = schema(colName).dataType
-    require(actualDataType.equals(dataType),
-      s"Input column $colName must be of type $dataType" +
-        s" but was actually $actualDataType.  Column param description: ${getParam(colName)}")
+    require(actualDataType.equals(dataType), s"Input column $colName must be of type $dataType" +
+      s" but was actually $actualDataType.  Column param description: ${getParam(colName)}")
   }
 
+  /**
+   * Add an output column to the given schema.
+   * This fails if the given output column already exists.
+   * @param schema  Initial schema (not modified)
+   * @param colName  Output column name.  If this column name is an empy String "", this method
+   *                 returns the initial schema, unchanged.  This allows users to disable output
+   *                 columns.
+   * @param dataType  Output column DataType
+   */
   protected def addOutputColumn(
       schema: StructType,
       colName: String,
       dataType: DataType): StructType = {
     if (colName.length == 0) return schema
     val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(colName), s"Prediction column $colName already exists.")
+    require(!fieldNames.contains(colName), s"Output column $colName already exists.")
     val outputFields = schema.fields ++ Seq(StructField(colName, dataType, nullable = false))
     StructType(outputFields)
   }
