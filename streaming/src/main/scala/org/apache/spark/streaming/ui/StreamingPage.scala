@@ -50,6 +50,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Generate basic stats of the streaming program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime
+    // scalastyle:off
     <ul class ="unstyled">
       <li>
         <strong>Started at: </strong> {UIUtils.formatDate(startTime)}
@@ -76,6 +77,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <strong>Processed events: </strong>{listener.numTotalProcessedRecords}
       </li>
     </ul>
+    // scalastyle:on
   }
 
   /** Generate stats of data received by the receivers in the streaming program */
