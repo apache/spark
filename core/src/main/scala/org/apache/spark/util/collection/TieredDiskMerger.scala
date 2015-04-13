@@ -93,8 +93,8 @@ private[spark] class TieredDiskMerger[K, C](
    * Notify the merger that no more on disk blocks will be registered.
    */
   def doneRegisteringOnDiskBlocks(): Unit = {
-    doneRegistering = true
     mergeReadyMonitor.synchronized {
+      doneRegistering = true
       mergeReadyMonitor.notify()
     }
   }
@@ -175,7 +175,9 @@ private[spark] class TieredDiskMerger[K, C](
       while (!doneRegistering || onDiskBlocks.size() > maxMergeFactor) {
         while (!shouldMergeNow()) {
           mergeReadyMonitor.synchronized {
-            mergeReadyMonitor.wait()
+            if (!shouldMergeNow()) {
+              mergeReadyMonitor.wait()
+            }
           }
         }
 
