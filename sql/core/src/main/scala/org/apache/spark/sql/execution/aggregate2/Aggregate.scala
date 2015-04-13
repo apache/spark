@@ -96,7 +96,7 @@ sealed trait Aggregate {
       // we connect all of the aggregation buffers in a single Row,
       // and "BIND" the attribute references in a Hack way.
       val bufferDataTypes = ae.bufferDataType
-      ae.initialBoundReference(for (i <- 0 until bufferDataTypes.length) yield {
+      ae.initialize(for (i <- 0 until bufferDataTypes.length) yield {
         BoundReference(pos + i, bufferDataTypes(i), true)
       })
       pos += bufferDataTypes.length
@@ -245,7 +245,7 @@ case class AggregatePreShuffle(
           var idx = 0
           while (idx < aggregates.length) {
             val ae = aggregates(idx)
-            ae.iterate(ae.eval(currentRow), buffer)
+            ae.update(ae.eval(currentRow), buffer)
             idx += 1
           }
         }
@@ -268,7 +268,7 @@ case class AggregatePreShuffle(
                 // AggregationExpression that distinctLike=true
                 // This is a trade off between memory & computing
                 ae.reset(buffer)
-                ae.iterate(value, buffer)
+                ae.update(value, buffer)
                 idx += 1
               }
 
@@ -278,7 +278,7 @@ case class AggregatePreShuffle(
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
-                ae.iterate(ae.eval(currentRow), inputbuffer.buffer)
+                ae.update(ae.eval(currentRow), inputbuffer.buffer)
                 idx += 1
               }
 
@@ -411,11 +411,11 @@ case class DistinctAggregate(
 
             if (ae.distinct) {
               if (value != null && !seens(idx).contains(value)) {
-                ae.iterate(value, buffer)
+                ae.update(value, buffer)
                 seens(idx).add(value)
               }
             } else {
-              ae.iterate(value, buffer)
+              ae.update(value, buffer)
             }
             idx += 1
           }
@@ -440,7 +440,7 @@ case class DistinctAggregate(
                 val ae = aggregates(idx)
                 val value = ae.eval(currentRow)
                 ae.reset(buffer)
-                ae.iterate(value, buffer)
+                ae.update(value, buffer)
 
                 if (ae.distinct) {
                   val seen = new OpenHashSet[Any]()
@@ -462,11 +462,11 @@ case class DistinctAggregate(
 
                 if (ae.distinct) {
                   if (value != null && !inputBufferSeens.seens(idx).contains(value)) {
-                    ae.iterate(value, inputBufferSeens.buffer)
+                    ae.update(value, inputBufferSeens.buffer)
                     inputBufferSeens.seens(idx).add(value)
                   }
                 } else {
-                  ae.iterate(value, inputBufferSeens.buffer)
+                  ae.update(value, inputBufferSeens.buffer)
                 }
                 idx += 1
               }

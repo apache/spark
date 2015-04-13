@@ -66,14 +66,14 @@ trait AggregateFunction2 {
   self: Product =>
 
   // Specify the BoundReference for Aggregate Buffer
-  def initialBoundReference(buffers: Seq[BoundReference]): Unit
+  def initialize(buffers: Seq[BoundReference]): Unit
 
   // Initialize (reinitialize) the aggregation buffer
   def reset(buf: MutableRow): Unit
 
   // Expect the aggregate function fills the aggregation buffer when
   // fed with each value in the group
-  def iterate(arguments: Any, buf: MutableRow): Unit
+  def update(arguments: Any, buf: MutableRow): Unit
 
   // Merge 2 aggregation buffer, and write back to the later one
   def merge(value: Row, buf: MutableRow): Unit
@@ -132,7 +132,7 @@ case class Min(
   @transient var aggr: BoundReference = _
 
   /* Initialization on executors */
-  override def initialBoundReference(buffers: Seq[BoundReference]): Unit = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
     buffer = MutableLiteral(null, dataType)
@@ -143,7 +143,7 @@ case class Min(
     buf(aggr) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       arg.value = argument
       buffer.value = buf(aggr)
@@ -199,7 +199,7 @@ case class Average(child: Expression, distinct: Boolean = false)
   @transient var divide: Divide = _
 
   /* Initialization on executors */
-  override def initialBoundReference(buffers: Seq[BoundReference]): Unit = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     count = buffers(0)
     sum = buffers(1)
 
@@ -218,7 +218,7 @@ case class Average(child: Expression, distinct: Boolean = false)
     buf(sum) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       arg.value = argument
       buf(count) = buf.getLong(count) + 1
@@ -261,7 +261,7 @@ case class Max(child: Expression)
   @transient var buffer: MutableLiteral = _
   @transient var cmp: GreaterThan = _
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
     buffer = MutableLiteral(null, dataType)
@@ -272,7 +272,7 @@ case class Max(child: Expression)
     buf(aggr) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       arg.value = argument
       buffer.value = buf(aggr)
@@ -306,7 +306,7 @@ case class Count(child: Expression)
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
   }
 
@@ -314,7 +314,7 @@ case class Count(child: Expression)
     buf(aggr) = 0L
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       if (buf.isNullAt(aggr)) {
         buf(aggr) = 1L
@@ -347,7 +347,7 @@ case class CountDistinct(children: Seq[Expression])
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
   }
 
@@ -355,7 +355,7 @@ case class CountDistinct(children: Seq[Expression])
     buf(aggr) = 0L
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (!argument.asInstanceOf[Seq[_]].exists(_ == null)) {
       // CountDistinct supports multiple expression, and ONLY IF
       // none of its expressions value equals null
@@ -416,7 +416,7 @@ case class Sum(child: Expression, distinct: Boolean = false)
 
   lazy val DEFAULT_VALUE = Cast(Literal.create(0, IntegerType), dataType).eval()
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
     sum = Add(arg, aggr)
@@ -426,7 +426,7 @@ case class Sum(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       if (buf.isNullAt(aggr)) {
         buf(aggr) = argument
@@ -465,7 +465,7 @@ case class First(child: Expression, distinct: Boolean = false)
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
   }
 
@@ -473,7 +473,7 @@ case class First(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (buf.isNullAt(aggr)) {
       if (argument != null) {
         buf(aggr) = argument
@@ -502,7 +502,7 @@ case class Last(child: Expression, distinct: Boolean = false)
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     aggr = buffers(0)
   }
 
@@ -510,7 +510,7 @@ case class Last(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def iterate(argument: Any, buf: MutableRow): Unit = {
+  override def update(argument: Any, buf: MutableRow): Unit = {
     if (argument != null) {
       buf(aggr) = argument
     }

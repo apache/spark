@@ -525,7 +525,7 @@ private[hive] case class HiveGenericUdaf2(
   ///////////////////////////////////////////////////////////////////////////////////////////////
   @transient var bound: BoundReference = _
 
-  override def initialBoundReference(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]) = {
     bound = buffers(0)
     mode match {
       case FINAL => evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(bufferObjectInspector))
@@ -545,7 +545,7 @@ private[hive] case class HiveGenericUdaf2(
 
   // Expect the aggregate function fills the aggregation buffer when fed with each value
   // in the group
-  override def iterate(arguments: Any, buf: MutableRow): Unit = {
+  override def update(arguments: Any, buf: MutableRow): Unit = {
     val args = arguments.asInstanceOf[Seq[AnyRef]].zip(inspectors).map {
       case (value, oi) => wrap(value, oi)
     }.toArray
