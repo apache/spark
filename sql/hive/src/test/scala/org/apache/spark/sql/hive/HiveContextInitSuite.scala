@@ -17,19 +17,16 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.apache.spark.sql.hive.test.TestHive
+import org.scalatest.FunSuite
 
-class HiveContextInitSuite extends FunSuite with BeforeAndAfterAll {
+class HiveContextInitSuite extends FunSuite {
   test("SPARK-6675 Hive setConf") {
-    val sparkConf = new SparkConf()
-    val hc =
-      new TestHiveContext(new SparkContext("local", s"TestSQLContext", sparkConf))
-     hc.setConf("hive.metastore.warehouse.dir", "/home/spark/hive/warehouse_test")
-     hc.setConf("spark.sql.shuffle.partitions", "10")
-     assert(hc.getAllConfs.get("hive.metastore.warehouse.dir")
+    val hc = new HiveContext(TestHive.sparkContext)
+    hc.setConf("hive.metastore.warehouse.dir", "/home/spark/hive/warehouse_test")
+    hc.setConf("spark.sql.shuffle.partitions", "10")
+    assert(hc.getAllConfs.get("hive.metastore.warehouse.dir")
        .toList.contains("/home/spark/hive/warehouse_test"))
-     assert(hc.getAllConfs.get("spark.sql.shuffle.partitions").toList.contains("10"))
+    assert(hc.getAllConfs.get("spark.sql.shuffle.partitions").toList.contains("10"))
   }
 }
