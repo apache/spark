@@ -42,6 +42,7 @@ private[shared] object SharedParamCodeGen {
         "column name for predicted class conditional probabilities", Some("\"probability\"")),
       ParamDesc[Double]("threshold", "threshold in prediction"),
       ParamDesc[String]("inputCol", "input column name"),
+      ParamDesc[Array[String]]("labelCols", "label column names"),
       ParamDesc[String]("outputCol", "output column name"),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")))

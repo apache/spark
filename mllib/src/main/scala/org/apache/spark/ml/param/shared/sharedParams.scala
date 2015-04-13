@@ -189,6 +189,23 @@ trait HasInputCol extends Params {
 
 /**
  * :: DeveloperApi ::
+ * Trait for shared param inputCol.
+ */
+@DeveloperApi
+trait HasInputCols extends Params {
+
+  /**
+   * Param for input column names.
+   * @group param
+   */
+  final val inputCols: Param[Array[String]] = new Param(this, "inputCols", "input column names")
+
+  /** @group getParam */
+  final def getInputCols: Array[String] = getOrDefault(inputCols)
+}
+
+/**
+ * :: DeveloperApi ::
  * Trait for shared param outputCol.
  */
 @DeveloperApi
