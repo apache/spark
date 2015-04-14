@@ -278,6 +278,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+      val appsToClean = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
@@ -285,16 +286,21 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         if (now - info.lastUpdated <= maxAge || !info.completed) {
           appsToRetain += (info.id -> info)
         } else {
-          try {
-            fs.delete(new Path(logDir + "/" + info.logPath), true)
-          } catch {
-            case t: IOException => logError(s"IOException in cleaning logs of ${info.logPath}", t)
-            appsToRetain += (info.id -> info)
-          }
+          appsToClean += (info.id -> info)
         }
       }
 
       applications = appsToRetain
+
+      appsToClean.values.foreach { info =>
+        try {
+          fs.delete(new Path(logDir + "/" + info.logPath), true)
+        } catch {
+          case t: IOException =>
+            logError(s"IOException in cleaning logs of ${info.logPath}", t)
+            applications += (info.id -> info)
+        }
+      }
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
