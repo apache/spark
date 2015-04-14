@@ -79,7 +79,7 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
     out.close()
 
     val lb = out.largeBuffer(128)
-    //just make sure that we test reading from multiple chunks
+    // just make sure that we test reading from multiple chunks
     lb.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
 
     val rawIn = new LargeByteBufferInputStream(lb)
