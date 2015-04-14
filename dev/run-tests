@@ -234,7 +234,8 @@ echo "Running PySpark tests"
 echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
-
+# add Python3 PATH for jenkins
+export PATH="${PATH}:/home/anaconda/bin/envs/py3k/bin"
 ./python/run-tests
 
 echo ""
