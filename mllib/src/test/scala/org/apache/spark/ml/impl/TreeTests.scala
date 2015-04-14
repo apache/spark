@@ -15,15 +15,66 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.ml.impl
+
+import scala.collection.JavaConverters._
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.impl.tree._
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SQLContext, DataFrame}
 
-private[mllib] object TreeTests extends FunSuite {
+
+private[ml] object TreeTests extends FunSuite {
 
   /**
+   * Convert the given data to a DataFrame, and set the features and label metadata.
+   * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
+   *              This must be non-empty.
+   * @param categoricalFeatures  Map: categorical feature index -> number of distinct values
+   * @param numClasses  Number of classes label can take.  If 0, mark as continuous.
+   * @return DataFrame with metadata
+   */
+  def setMetadata(
+      data: RDD[LabeledPoint],
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): DataFrame = {
+    val sqlContext = new SQLContext(data.sparkContext)
+    import sqlContext.implicits._
+    val df = data.toDF()
+    val numFeatures = data.first().features.size
+    val featuresAttributes = Range(0, numFeatures).map { feature =>
+      if (categoricalFeatures.contains(feature)) {
+        NominalAttribute.defaultAttr.withIndex(feature).withNumValues(categoricalFeatures(feature))
+      } else {
+        NumericAttribute.defaultAttr.withIndex(feature)
+      }
+    }.toArray
+    val featuresMetadata = new AttributeGroup("features", featuresAttributes).toMetadata()
+    val labelAttribute = if (numClasses == 0) {
+      NumericAttribute.defaultAttr.withName("label")
+    } else {
+      NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+    }
+    val labelMetadata = labelAttribute.toMetadata()
+    df.select(df("features").as("features", featuresMetadata),
+      df("label").as("label", labelMetadata))
+  }
+
+  /** Java-friendly version of [[setMetadata()]] */
+  def setMetadata(
+      data: JavaRDD[LabeledPoint],
+      categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
+      numClasses: Int): DataFrame = {
+    setMetadata(data.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      numClasses)
+  }
+
+    /**
    * Check if the two trees are exactly the same.
    * Note: I hesitate to override Node.equals since it could cause problems if users
    *       make mistakes such as creating loops of Nodes.

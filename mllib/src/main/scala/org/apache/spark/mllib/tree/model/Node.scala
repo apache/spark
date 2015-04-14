@@ -175,7 +175,7 @@ class Node (
   }
 }
 
-private[mllib] object Node {
+private[spark] object Node {
 
   /**
    * Return a node with the given node id (but nothing else set).

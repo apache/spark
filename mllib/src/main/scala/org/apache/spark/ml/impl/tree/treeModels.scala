@@ -18,7 +18,6 @@
 package org.apache.spark.ml.impl.tree
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.mllib.linalg.Vector
 
 
 /**
@@ -60,34 +59,4 @@ private[ml] trait DecisionTreeModel {
     val header = toString + "\n"
     header + rootNode.subtreeToString(2)
   }
-}
-
-/** Abstraction for models which are ensembles of decision trees */
-private[ml] trait TreeEnsembleModel {
-
-  /** Trees in this ensemble */
-  def getTrees: Array[DecisionTreeModel]
-
-  /** Weights for each tree, zippable with [[getTrees]] */
-  def getTreeWeights: Array[Double]
-
-  /** Summary of the model */
-  override def toString: String = {
-    // Implementing classes should generally override this method to be more descriptive.
-    s"TreeEnsembleModel with $numTrees trees"
-  }
-
-  /** Full description of model */
-  def toDebugString: String = {
-    val header = toString + "\n"
-    header + getTrees.zip(getTreeWeights).zipWithIndex.map { case ((tree, weight), treeIndex) =>
-      s"  Tree $treeIndex (weight $weight):\n" + tree.rootNode.subtreeToString(4)
-    }.fold("")(_ + _)
-  }
-
-  /** Number of trees in ensemble */
-  val numTrees: Int = getTrees.size
-
-  /** Total number of nodes, summed over all trees in the ensemble. */
-  lazy val totalNumNodes: Int = getTrees.map(_.numNodes).sum
 }

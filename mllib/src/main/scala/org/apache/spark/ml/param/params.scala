@@ -297,7 +297,7 @@ private[spark] object Params {
       parent: E,
       child: M): Unit = {
     parent.params.foreach { param =>
-      if (paramMap.contains(param)) {
+      if (paramMap.contains(param) && child.params.map(_.name).contains(param.name)) {
         child.set(child.getParam(param.name), paramMap(param))
       }
     }
