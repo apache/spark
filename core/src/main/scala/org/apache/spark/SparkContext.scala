@@ -1864,9 +1864,9 @@ object SparkContext extends Logging {
    * SparkContext constructor. 
    */
   def getOrCreate(config: SparkConf): SparkContext = {
-    activeContext match {
-      case None => setActiveContext(new SparkContext(config), 
-          config.getBoolean("spark.driver.allowMultipleContexts", false))
+    if (activeContext.isEmpty) {
+      setActiveContext(new SparkContext(config), 
+        config.getBoolean("spark.driver.allowMultipleContexts", false))
     }
     activeContext.get
   }
