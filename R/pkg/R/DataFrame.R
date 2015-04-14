@@ -1159,8 +1159,6 @@ setMethod("intersect",
 #' df2 <- jsonFile(sqlCtx, path2)
 #' exceptDF <- except(df, df2)
 #' }
-setGeneric("except", function(x, y) { standardGeneric("except") })
-
 #' @rdname except
 #' @export
 setMethod("except",

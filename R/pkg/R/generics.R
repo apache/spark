@@ -229,6 +229,11 @@ setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") }
 
 
 ############ Binary Functions #############
+
+#' @rdname cartesian
+#' @export
+setGeneric("cartesian", function(x, other) { standardGeneric("cartesian") })
+
 #' @rdname countByKey
 #' @export
 setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
@@ -236,10 +241,6 @@ setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
 #' @rdname flatMapValues
 #' @export
 setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
-
-#' @rdname cartesian
-#' @export
-setGeneric("cartesian", function(x, other) { standardGeneric("cartesian") })
 
 #' @rdname intersection
 #' @export
@@ -257,10 +258,6 @@ setGeneric("lookup", function(x, key) { standardGeneric("lookup") })
 #' @rdname mapValues
 #' @export
 setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
-
-#' @rdname values
-#' @export
-setGeneric("values", function(x) { standardGeneric("values") })
 
 #' @rdname sampleByKey
 #' @export
@@ -367,6 +364,7 @@ setGeneric("subtractByKey",
              standardGeneric("subtractByKey")
            })
 
+
 ################### Broadcast Variable Methods #################
 
 #' @rdname broadcast
@@ -388,6 +386,10 @@ setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 #' @rdname explain
 #' @export
 setGeneric("explain", function(x, ...) { standardGeneric("explain") })
+
+#' @rdname except
+#' @export
+setGeneric("except", function(x, y) { standardGeneric("except") })
 
 #' @rdname filter
 #' @export
