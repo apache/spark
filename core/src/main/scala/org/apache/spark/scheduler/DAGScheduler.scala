@@ -818,12 +818,7 @@ class DAGScheduler(
       }
     }
 
-    val properties = if (jobIdToActiveJob.contains(jobId)) {
-      jobIdToActiveJob(stage.jobId).properties
-    } else {
-      // this stage will be assigned to "default" pool
-      null
-    }
+    val properties = jobIdToActiveJob.get(stage.jobId).map(_.properties).orNull
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
