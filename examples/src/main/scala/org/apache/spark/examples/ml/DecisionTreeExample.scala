@@ -22,11 +22,13 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
+import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.attribute.{Attribute, BinaryAttribute, NominalAttribute}
-import org.apache.spark.ml.classification.DecisionTreeClassifier
+import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.feature.{VectorIndexer, StringIndexer}
 import org.apache.spark.ml.impl.tree.DecisionTreeModel
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, MulticlassMetrics}
@@ -240,9 +242,14 @@ object DecisionTreeExample {
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
       case "regression" =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.") // TODO
-      case _ =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+        new DecisionTreeRegressor().setFeaturesCol("indexedFeatures")
+          .setMaxDepth(params.maxDepth)
+          .setMaxBins(params.maxBins)
+          .setMinInstancesPerNode(params.minInstancesPerNode)
+          .setMinInfoGain(params.minInfoGain)
+          .setCacheNodeIds(params.cacheNodeIds)
+          .setCheckpointInterval(params.checkpointInterval)
+      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
@@ -253,7 +260,14 @@ object DecisionTreeExample {
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    val treeModel = pipelineModel.getModel(dt).asInstanceOf[DecisionTreeModel]
+    val treeModel: DecisionTreeModel = algo match {
+      case "classification" =>
+        pipelineModel.getModel[DecisionTreeClassificationModel](
+          dt.asInstanceOf[DecisionTreeClassifier])
+      case "regression" =>
+        pipelineModel.getModel[DecisionTreeRegressionModel](dt.asInstanceOf[DecisionTreeRegressor])
+      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+    }
     if (treeModel.numNodes < 20) {
       println(treeModel.toDebugString) // Print full model.
     } else {
@@ -272,12 +286,10 @@ object DecisionTreeExample {
 
     // For classification, print number of classes for reference.
     if (algo == "classification") {
-      val numClasses = Attribute.fromStructField(trainingFullPredictions.schema("label")) match {
-        case nomAttr: NominalAttribute => nomAttr.getNumValues.get
-        case binAttr: BinaryAttribute => 2
-        case other => throw new RuntimeException("DecisionTreeExample had unknown failure" +
-          " when indexing labels for classification." +
-          s" Unexpected attribute type: ${other.attrType}")
+      val numClasses = MetadataUtils.getNumClasses(trainingFullPredictions.schema("label")) match {
+        case Some(n) => n
+        case None => throw new RuntimeException(
+          "DecisionTreeExample had unknown failure when indexing labels for classification.")
       }
       println(s"numClasses = $numClasses.")
     }
