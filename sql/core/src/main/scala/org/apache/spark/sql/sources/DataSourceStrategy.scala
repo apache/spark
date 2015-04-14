@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
@@ -108,11 +109,32 @@ private[sql] object DataSourceStrategy extends Strategy {
           scanBuilder(requestedColumns, pushedFilters))
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
-      val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
+
+      val (requestedColumns, conditionExpr) =
+        relation match {
+          // Eliminate partition filters from execution.Filter if
+          // partition key is included neither in original schema nor in filter's parents,
+          // this would also eliminate unnecessary row construction using partition values
+          case LogicalRelation(pr2 @ ParquetRelation2(_, _, _, _))
+            if !pr2.partitionKeysIncludedInDataSchema =>
+
+            val partitionColumnSet = pr2.partitionColumns.map(_.name).toSet
+            val notPartitionFilters = filterPredicates.filterNot {
+              f => f.references.map(_.name).toSet.subsetOf(partitionColumnSet)
+            }
+            val notPartitionFilterSet = AttributeSet(notPartitionFilters.flatMap(_.references))
+
+            ((projectSet ++ notPartitionFilterSet).map(relation.attributeMap).toSeq,
+              notPartitionFilters.reduceLeftOption(expressions.And))
+
+          case _ =>
+            ((projectSet ++ filterSet).map(relation.attributeMap).toSeq,
+              filterCondition)
+        }
 
       val scan =
         execution.PhysicalRDD(requestedColumns, scanBuilder(requestedColumns, pushedFilters))
-      execution.Project(projectList, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
+      execution.Project(projectList, conditionExpr.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
 
