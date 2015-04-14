@@ -164,6 +164,17 @@ case class GeneratedAggregate(
           updateMax :: Nil,
           currentMax)
 
+      case m @ Min(expr) =>
+        val currentMin = AttributeReference("currentMin", expr.dataType, nullable = true)()
+        val initialValue = Literal.create(null, expr.dataType)
+        val updateMin = MinOf(currentMin, expr)
+
+        AggregateEvaluation(
+          currentMin :: Nil,
+          initialValue :: Nil,
+          updateMin :: Nil,
+          currentMin)
+
       case CollectHashSet(Seq(expr)) =>
         val set =
           AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
@@ -188,6 +199,8 @@ case class GeneratedAggregate(
           initialValue :: Nil,
           collectSets :: Nil,
           CountSet(set))
+
+      case o => sys.error(s"$o can't be codegened.")
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)

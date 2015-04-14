@@ -524,6 +524,30 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           }
         """.children
 
+      case MinOf(e1, e2) =>
+        val eval1 = expressionEvaluator(e1)
+        val eval2 = expressionEvaluator(e2)
+
+        eval1.code ++ eval2.code ++
+        q"""
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(e1.dataType)} = ${defaultPrimitive(e1.dataType)}
+
+          if (${eval1.nullTerm}) {
+            $nullTerm = ${eval2.nullTerm}
+            $primitiveTerm = ${eval2.primitiveTerm}
+          } else if (${eval2.nullTerm}) {
+            $nullTerm = ${eval1.nullTerm}
+            $primitiveTerm = ${eval1.primitiveTerm}
+          } else {
+            if (${eval1.primitiveTerm} < ${eval2.primitiveTerm}) {
+              $primitiveTerm = ${eval1.primitiveTerm}
+            } else {
+              $primitiveTerm = ${eval2.primitiveTerm}
+            }
+          }
+        """.children
+
       case UnscaledValue(child) =>
         val childEval = expressionEvaluator(child)
 
