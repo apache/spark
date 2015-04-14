@@ -56,7 +56,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
   
-  /** @grour setParam */
+  /** @group setParam */
   def setWithMean(value: Boolean): this.type = set(withMean, value)
   
   /** @group setParam */
@@ -66,8 +66,9 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val scaler = new feature.StandardScaler(withMean = map(withMean), withStd = map(withStd)).fit(input)
-    val model = new StandardScalerModel(this, map, scaler)
+    val scaler = new feature.StandardScaler(withMean = map(withMean), withStd = map(withStd))
+    val scalerModel = scaler.fit(input)
+    val model = new StandardScalerModel(this, map, scalerModel)
     Params.inheritValues(map, this, model)
     model
   }
