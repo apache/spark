@@ -35,6 +35,8 @@ import itertools
 import threading
 import hashlib
 
+from py4j.protocol import Py4JJavaError
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -829,6 +831,17 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
+    def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
+        # Regression test for SPARK-5969
+        seq = [(i * 59 % 101, i) for i in range(101)]  # unsorted sequence
+        rdd = self.sc.parallelize(seq)
+        for ascending in [True, False]:
+            sort = rdd.sortByKey(ascending=ascending, numPartitions=5)
+            self.assertEqual(sort.collect(), sorted(seq, reverse=not ascending))
+            sizes = sort.glom().map(len).collect()
+            for size in sizes:
+                self.assertGreater(size, 0)
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -1482,6 +1495,20 @@ class WorkerTests(PySparkTestCase):
         t.join(5)
         self.assertTrue(not t.isAlive())
         self.assertEqual(100000, rdd.count())
+
+    def test_with_different_versions_of_python(self):
+        rdd = self.sc.parallelize(range(10))
+        rdd.count()
+        version = sys.version_info
+        sys.version_info = (2, 0, 0)
+        log4j = self.sc._jvm.org.apache.log4j
+        old_level = log4j.LogManager.getRootLogger().getLevel()
+        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
+        try:
+            self.assertRaises(Py4JJavaError, lambda: rdd.count())
+        finally:
+            sys.version_info = version
+            log4j.LogManager.getRootLogger().setLevel(old_level)
 
 
 class SparkSubmitTests(unittest.TestCase):

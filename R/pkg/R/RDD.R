@@ -279,7 +279,7 @@ setMethod("unpersist",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' setCheckpointDir(sc, "checkpoints")
+#' setCheckpointDir(sc, "checkpoint")
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' checkpoint(rdd)
 #'}
