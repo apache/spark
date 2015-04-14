@@ -58,6 +58,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
+      val graphData = scala.collection.mutable.Map[String, String]()
 
       val numCompleted = tasks.count(_.taskInfo.finished)
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
@@ -285,6 +286,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val schedulerDelays = validTasks.map { case TaskUIData(info, metrics, _) =>
             getSchedulerDelay(info, metrics.get).toDouble
           }
+          graphData("Scheduler Delays") = schedulerDelays.mkString("[", ",", "]")
+
           val schedulerDelayTitle = <td><span data-toggle="tooltip"
             title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler Delay</span></td>
           val schedulerDelayQuantiles = schedulerDelayTitle +:
@@ -431,6 +434,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val maybeAccumulableTable: Seq[Node] =
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
+      val showVisualization =
+        <div id="chartContainer">
+          <strong>Data Visualization</strong>
+          <script type="text/javascript">
+            {Unparsed(s"renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})")}
+          </script>
+        </div>
+
       val content =
         summary ++
         showAdditionalMetrics ++
@@ -438,7 +449,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4>Tasks</h4> ++ taskTable
+        <h4>Tasks</h4> ++ taskTable ++
+        showVisualization
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
