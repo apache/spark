@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 # A set of S3 classes and methods that support the SparkSQL `StructType` and `StructField
 # datatypes. These are used to create and interact with DataFrame schemas.
 
@@ -37,7 +54,7 @@ structType.structField <- function(x, ...) {
   sfObjList <- lapply(fields, function(field) {
     field$jobj
   })
-  stObj <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+  stObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructType",
                        listToSeq(sfObjList))
   structType(stObj)
@@ -121,7 +138,7 @@ structField.character <- function(x, type, nullable = TRUE) {
   } else {
     stop(paste("Unsupported type for Dataframe:", type))
   }
-  sfObj <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+  sfObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructField",
                        x,
                        dataType,
