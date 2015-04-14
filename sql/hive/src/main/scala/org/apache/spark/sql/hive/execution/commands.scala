@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+import java.net.URI
+import java.net.URLClassLoader
+
+import scala.tools.nsc.util.ScalaClassLoader
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
@@ -27,6 +32,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.SparkFiles
+import org.apache.spark.SparkContext
+import org.apache.spark.util.Utils
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -77,13 +85,48 @@ private[hive]
 case class AddJar(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.runSqlHive(s"ADD JAR $path")
-    hiveContext.sparkContext.addJar(path)
+    val currClassLoader = Utils.getContextOrSparkClassLoader
+    currClassLoader match {
+      // only URLCLassLoader is supported by Hive
+      case u: URLClassLoader => 
+        val hiveContext = sqlContext.asInstanceOf[HiveContext]
+        hiveContext.runSqlHive(s"ADD JAR $path")
+        hiveContext.sparkContext.addJar(path)
+      // try adding file URL to to parent Class Loader, useful for spark shell
+      case _ =>
+        currClassLoader.getParent match {
+          case c : ScalaClassLoader.URLClassLoader =>
+            sqlContext.sparkContext.addJar(path)
+            val filenamePath = downloadFile(sqlContext.sparkContext) 
+            val uri = new URI("file://" + filenamePath)
+            c.addURL(uri.toURL)
+          case _ =>
+            val classloader_class = currClassLoader.getClass.getName
+            throw new AnalysisException(
+              s"Current class loader $classloader_class does not support Add JAR.")    
+        }
+    }
     Seq.empty[Row]
   }
-}
 
+  private def downloadFile(sparkContext: SparkContext): String = {
+    val filename = path.split("/").last
+    val uri = new URI(path)
+    val filenamePath: String = uri.getScheme match {
+      case null | "local" | "file" => uri.getPath
+      case _ =>
+        Utils.fetchFile(path,
+          new File(SparkFiles.getRootDirectory()),
+          sparkContext.conf,
+          sparkContext.env.securityManager,
+          sparkContext.hadoopConfiguration,
+          System.currentTimeMillis, useCache = false)
+        SparkFiles.get(filename)
+    }
+    filenamePath
+  }
+}
+    
 private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 

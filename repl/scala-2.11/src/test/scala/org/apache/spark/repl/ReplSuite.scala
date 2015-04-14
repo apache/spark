@@ -81,7 +81,24 @@ class ReplSuite extends FunSuite {
     assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
   }
+  
+  def getHiveFile(path: String): File = {
+    val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+    } else {
+      new File(".." + File.separator + "sql" + File.separator + "hive" + File.separator + "src" 
+        + File.separator + "test" + File.separator + "resources")
+    }
 
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
+    /** The location of the hive source code. */
+    lazy val hiveDevHome = Option(System.getenv("HIVE_DEV_HOME")).map(new File(_))
+    hiveDevHome
+      .map(new File(_, stripped))
+      .filter(_.exists)
+      .getOrElse(new File(inRepoTests, stripped))
+  }
+  
   test("propagation of local properties") {
     // A mock ILoop that doesn't install the SIGINT handler.
     class ILoop(out: PrintWriter) extends SparkILoop(None, out) {
@@ -331,5 +348,42 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
+  }
+  
+  test("SPARK-5818 ADD JAR in hql from spark-shell") {
+    val testJar = getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    val output = runInterpreter("local",
+      s"""
+        |import org.apache.spark.SparkContext
+        |import org.apache.spark.sql.SQLContext
+        |var ignoredTest = false
+        |try {
+        |  val hiveContextClass = 
+        |    Thread.currentThread.getContextClassLoader.loadClass("org.apache.spark.sql.hive.HiveContext")
+        |  val hiveContext = hiveContextClass.getConstructor(classOf[SparkContext])
+        |     .newInstance(sc).asInstanceOf[SQLContext]
+        |  hiveContext.sql("add jar $testJar")
+        |} catch {
+        |  case cnf: java.lang.ClassNotFoundException =>
+        |    println("Ignoring test: as no HiveContext found")
+        |    ignoredTest = true  
+        |}
+        |if (ignoredTest == false) {
+        |  val testData = Array((1,1))
+        |  // test if jar is accessible to all executors
+        |  sc.parallelize(1 to 4).foreach{ x => 
+        |      Thread.currentThread.getContextClassLoader.loadClass("org.apache.hadoop.hive.serde2.TestSerDe")
+        |  }
+        |  // test if jar is accessible to driver
+        |  Thread.currentThread.getContextClassLoader.loadClass("org.apache.hadoop.hive.serde2.TestSerDe")
+        |}
+        |
+      """.stripMargin)
+    if (output.contains("Ignoring test:")) {
+      markup("Ignored test as no HiveContext found")
+    } else {
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+    }
   }
 }
