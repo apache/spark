@@ -524,14 +524,17 @@ private[master] class Master(
   }
 
   /**
-   * Schedule executors to be launched on the workers.There are two modes of launching executors.
-   * The first attempts to spread out an application's executors on as many workers as possible,
-   * while the second does the opposite (i.e. launch them on as few workers as possible). The former
-   * is usually better for data locality purposes and is the default. The number of cores assigned
-   * to each executor is configurable. When this is explicitly set, multiple executors from the same
-   * application may be launched on the same worker if the worker has enough cores and memory.
-   * Otherwise, each executor grabs all the cores available on the worker by default, in which case
-   * only one executor may be launched on each worker.
+   * Schedule executors to be launched on the workers.
+   *
+   * There are two modes of launching executors. The first attempts to spread out an application's
+   * executors on as many workers as possible, while the second does the opposite (i.e. launch them
+   * on as few workers as possible). The former is usually better for data locality purposes and is
+   * the default.
+   *
+   * The number of cores assigned to each executor is configurable. When this is explicitly set,
+   * multiple executors from the same application may be launched on the same worker if the worker
+   * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
+   * worker by default, in which case only one executor may be launched on each worker.
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
@@ -541,7 +544,7 @@ private[master] class Master(
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree > 0)
+            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(0))
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
@@ -562,9 +565,8 @@ private[master] class Master(
     } else {
       // Pack each app into as few workers as possible until we've assigned all its cores
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0 &&
-          worker.memoryFree >= app.desc.memoryPerExecutorMB) {
-            allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
+        for (app <- waitingApps if app.coresLeft > 0) {
+          allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
         }
       }
     }
@@ -597,7 +599,7 @@ private[master] class Master(
    */
   private def schedule(): Unit = {
     if (state != RecoveryState.ALIVE) { return }
-    // start in-cluster drivers, they take strict precedence over applications
+    // Drivers take strict precedence over executors
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
       for (driver <- waitingDrivers) {
@@ -607,7 +609,6 @@ private[master] class Master(
         }
       }
     }
-    // start executors
     startExecutorsOnWorkers()
   }
 
