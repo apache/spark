@@ -35,4 +35,6 @@ class TestParams extends Params {
     require(m(maxIter) >= 0)
     require(m.contains(inputCol))
   }
+
+  def clearMaxIter(): this.type = clear(maxIter)
 }

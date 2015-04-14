@@ -161,10 +161,10 @@ trait HasProbabilityCol extends Params {
 trait HasThreshold extends Params {
 
   /**
-   * Param for threshold in prediction.
+   * Param for threshold in binary classification prediction.
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in prediction")
+  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction")
 
   /** @group getParam */
   final def getThreshold: Double = getOrDefault(threshold)

@@ -129,7 +129,7 @@ class ParamsSuite extends FunSuite {
       solver.validate()
     }
 
-    solver.clear(maxIter)
+    solver.clearMaxIter()
     assert(!solver.isDefined(maxIter))
   }
 }
