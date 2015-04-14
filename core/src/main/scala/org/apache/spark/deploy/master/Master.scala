@@ -544,7 +544,7 @@ private[master] class Master(
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(0))
+            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
