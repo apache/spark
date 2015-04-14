@@ -237,6 +237,10 @@ setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
 #' @export
 setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
 
+#' @rdname cartesian
+#' @export
+setGeneric("cartesian", function(x, other) { standardGeneric("cartesian") })
+
 #' @rdname intersection
 #' @export
 setGeneric("intersection", function(x, other, numPartitions = 1L) {

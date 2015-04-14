@@ -5,6 +5,7 @@ exportMethods(
               "aggregateByKey",
               "aggregateRDD",
               "cache",
+              "cartesian",
               "checkpoint",
               "coalesce",
               "cogroup",
