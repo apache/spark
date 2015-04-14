@@ -20,17 +20,21 @@ package org.apache.spark.ml.param
 /** A subclass of Params for testing. */
 class TestParams extends Params {
 
-  val maxIter = new IntParam(this, "maxIter", "max number of iterations", Some(100))
+  val maxIter = new IntParam(this, "maxIter", "max number of iterations")
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
-  def getMaxIter: Int = get(maxIter)
+  def getMaxIter: Int = getOrDefault(maxIter)
 
   val inputCol = new Param[String](this, "inputCol", "input column name")
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
-  def getInputCol: String = get(inputCol)
+  def getInputCol: String = getOrDefault(inputCol)
 
-  override def validate(paramMap: ParamMap) = {
-    val m = this.paramMap ++ paramMap
+  setDefault(maxIter -> 10)
+
+  override def validate(paramMap: ParamMap): Unit = {
+    val m = extractParamMap(paramMap)
     require(m(maxIter) >= 0)
     require(m.contains(inputCol))
   }
+
+  def clearMaxIter(): this.type = clear(maxIter)
 }

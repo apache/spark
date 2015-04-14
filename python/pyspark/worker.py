@@ -88,7 +88,11 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         if isinstance(command, Broadcast):
             command = pickleSer.loads(command.value)
-        (func, profiler, deserializer, serializer) = command
+        (func, profiler, deserializer, serializer), version = command
+        if version != sys.version_info[:2]:
+            raise Exception(("Python in worker has different version %s than that in " +
+                            "driver %s, PySpark cannot run with different minor versions") %
+                            (sys.version_info[:2], version))
         init_time = time.time()
 
         def process():

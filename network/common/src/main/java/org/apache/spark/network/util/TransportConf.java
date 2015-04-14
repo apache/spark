@@ -37,8 +37,11 @@ public class TransportConf {
 
   /** Connect timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
-    int defaultTimeout = conf.getInt("spark.network.timeout", 120);
-    return conf.getInt("spark.shuffle.io.connectionTimeout", defaultTimeout) * 1000;
+    long defaultNetworkTimeoutS = JavaUtils.timeStringAsSec(
+      conf.get("spark.network.timeout", "120s"));
+    long defaultTimeoutMs = JavaUtils.timeStringAsSec(
+      conf.get("spark.shuffle.io.connectionTimeout", defaultNetworkTimeoutS + "s")) * 1000;
+    return (int) defaultTimeoutMs;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */
@@ -68,7 +71,9 @@ public class TransportConf {
   public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
 
   /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
-  public int saslRTTimeoutMs() { return conf.getInt("spark.shuffle.sasl.timeout", 30) * 1000; }
+  public int saslRTTimeoutMs() {
+    return (int) JavaUtils.timeStringAsSec(conf.get("spark.shuffle.sasl.timeout", "30s")) * 1000;
+  }
 
   /**
    * Max number of times we will try IO exceptions (such as connection timeouts) per request.
@@ -80,7 +85,9 @@ public class TransportConf {
    * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
    * Only relevant if maxIORetries &gt; 0.
    */
-  public int ioRetryWaitTimeMs() { return conf.getInt("spark.shuffle.io.retryWait", 5) * 1000; }
+  public int ioRetryWaitTimeMs() {
+    return (int) JavaUtils.timeStringAsSec(conf.get("spark.shuffle.io.retryWait", "5s")) * 1000;
+  }
 
   /**
    * Minimum size of a block that we should start using memory map rather than reading in through

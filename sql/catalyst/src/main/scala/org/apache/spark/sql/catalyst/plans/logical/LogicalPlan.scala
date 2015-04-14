@@ -205,13 +205,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         try {
-
-          // The foldLeft adds UnresolvedGetField for every remaining parts of the name,
-          // and aliased it with the last part of the name.
-          // For example, consider name "a.b.c", where "a" is resolved to an existing attribute.
-          // Then this will add UnresolvedGetField("b") and UnresolvedGetField("c"), and alias
+          // The foldLeft adds GetFields for every remaining parts of the identifier,
+          // and aliases it with the last part of the identifier.
+          // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+          // Then this will add GetField("c", GetField("b", a)), and alias
           // the final expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression)(resolveGetField(_, _, resolver))
+          val fieldExprs = nestedFields.foldLeft(a: Expression)(GetField(_, _, resolver))
           val aliasName = nestedFields.last
           Some(Alias(fieldExprs, aliasName)())
         } catch {
@@ -228,41 +227,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
         throw new AnalysisException(
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
-    }
-  }
-
-  /**
-   * Returns the resolved `GetField`, and report error if no desired field or over one
-   * desired fields are found.
-   *
-   * TODO: this code is duplicated from Analyzer and should be refactored to avoid this.
-   */
-  protected def resolveGetField(
-      expr: Expression,
-      fieldName: String,
-      resolver: Resolver): Expression = {
-    def findField(fields: Array[StructField]): Int = {
-      val checkField = (f: StructField) => resolver(f.name, fieldName)
-      val ordinal = fields.indexWhere(checkField)
-      if (ordinal == -1) {
-        throw new AnalysisException(
-          s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-      } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-        throw new AnalysisException(
-          s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
-      } else {
-        ordinal
-      }
-    }
-    expr.dataType match {
-      case StructType(fields) =>
-        val ordinal = findField(fields)
-        StructGetField(expr, fields(ordinal), ordinal)
-      case ArrayType(StructType(fields), containsNull) =>
-        val ordinal = findField(fields)
-        ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-      case otherType =>
-        throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
     }
   }
 }
