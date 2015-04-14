@@ -23,7 +23,7 @@ import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
@@ -1804,7 +1804,8 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
    */
-  private var activeContext: Option[SparkContext] = None
+  private val activeContext: AtomicReference[Option[SparkContext]] = 
+    new AtomicReference[Option[SparkContext]](None)
 
   /**
    * Points to a partially-constructed SparkContext if some thread is in the SparkContext
@@ -1839,7 +1840,7 @@ object SparkContext extends Logging {
           logWarning(warnMsg)
         }
 
-        activeContext.foreach { ctx =>
+        activeContext.get().foreach { ctx =>
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
@@ -1864,11 +1865,11 @@ object SparkContext extends Logging {
    * SparkContext constructor. 
    */
   def getOrCreate(config: SparkConf): SparkContext = {
-    if (activeContext.isEmpty) {
+    if (activeContext.get().isEmpty) {
       setActiveContext(new SparkContext(config), 
         config.getBoolean("spark.driver.allowMultipleContexts", false))
     }
-    activeContext.get
+    activeContext.get().get
   }
   
   /** Allow not passing a SparkConf (useful if just retrieving) */ 
@@ -1902,7 +1903,7 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = None
-      activeContext = Some(sc)
+      activeContext.set(Some(sc))
     }
   }
 
@@ -1913,7 +1914,7 @@ object SparkContext extends Logging {
    */
   private[spark] def clearActiveContext(): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      activeContext = None
+      activeContext.set(None)
     }
   }
 
