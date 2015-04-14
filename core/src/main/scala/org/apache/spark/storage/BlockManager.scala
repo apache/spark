@@ -454,7 +454,7 @@ private[spark] class BlockManager(
 
   private def doGetLocal(blockId: BlockId,
                          asBlockResult: Boolean,
-                         isDiskToMemory: Boolean = True): Option[Any] = {
+                         isDiskToMemory: Boolean = true): Option[Any] = {
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
