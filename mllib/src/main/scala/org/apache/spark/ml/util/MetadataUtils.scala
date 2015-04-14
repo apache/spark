@@ -19,15 +19,19 @@ package org.apache.spark.ml.util
 
 import scala.collection.immutable.HashMap
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute,
   NumericAttribute}
 import org.apache.spark.sql.types.StructField
 
 
 /**
+ * :: Experimental ::
+ *
  * Helper utilities for tree-based algorithms
  */
-private[ml] object MetadataUtils {
+@Experimental
+object MetadataUtils {
 
   /**
    * Examine a schema to identify the number of classes in a label column.

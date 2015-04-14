@@ -33,8 +33,6 @@ trait DecisionTreeModel {
   /** Root of the decision tree */
   def rootNode: Node
 
-  //def predict(features: Vector): Double
-
   /** Number of nodes in tree, including leaf nodes. */
   def numNodes: Int = {
     1 + rootNode.numDescendants

@@ -85,9 +85,7 @@ class DecisionTreeClassifier
     DecisionTreeClassificationModel.fromOld(oldModel, this, paramMap)
   }
 
-  /**
-   * Create a Strategy instance to use with the old API.
-   */
+  /** Create a Strategy instance to use with the old API. */
   override private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
@@ -104,11 +102,14 @@ object DecisionTreeClassifier {
 }
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-class DecisionTreeClassificationModel(
+@AlphaComponent
+class DecisionTreeClassificationModel private[ml] (
     override val parent: DecisionTreeClassifier,
     override val fittingParamMap: ParamMap,
     override val rootNode: Node)
