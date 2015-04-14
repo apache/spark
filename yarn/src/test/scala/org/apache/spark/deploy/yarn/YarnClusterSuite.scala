@@ -306,7 +306,7 @@ private object YarnClusterDriver extends Logging with Matchers {
     }
 
     val sc = new SparkContext(new SparkConf()
-      .set("spark.extraListeners", "org.apache.spark.deploy.yarn.SaveExecutorInfo")
+      .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
     val status = new File(args(0))
     var result = "failure"
@@ -321,12 +321,9 @@ private object YarnClusterDriver extends Logging with Matchers {
     }
 
     // verify log urls are present
-    val listenerOpt = sc.listenerBus.listeners.find {
-      case _: SaveExecutorInfo => true
-      case _ => false
-    }.map(_.asInstanceOf[SaveExecutorInfo])
-    assert(listenerOpt.isDefined)
-    val listener = listenerOpt.get
+    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
+    assert(listeners.size == 1)
+    val listener = listeners(0)
     val executorInfos = listener.addedExecutorInfos.values
     assert(executorInfos.nonEmpty)
     executorInfos.foreach { info =>
