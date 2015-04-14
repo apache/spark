@@ -117,8 +117,7 @@ case class Limit(limit: Int, child: SparkPlan)
     }
     val part = new HashPartitioner(1)
     val shuffled = new ShuffledRDD[Boolean, Row, Row](rdd, part)
-    val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
+    shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
     shuffled.mapPartitions(_.take(limit).map(_._2))
   }
 }

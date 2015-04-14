@@ -46,7 +46,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     child.sqlContext.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
 
   override def execute(): RDD[Row] = attachTree(this , "execute") {
-    lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    lazy val sparkConf = child.sqlContext.sparkContext.getConf
+
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
