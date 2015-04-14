@@ -32,7 +32,7 @@ import org.apache.spark.util.StatCounter
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */
   def sum(): Double = {
-    self.reduce(_ + _)
+    self.fold(0.0)(_ + _)
   }
 
   /**
