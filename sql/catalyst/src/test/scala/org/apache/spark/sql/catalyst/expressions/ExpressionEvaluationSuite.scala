@@ -233,6 +233,16 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(MaxOf(2, Literal.create(null, IntegerType)), 2)
   }
 
+  test("MinOf") {
+    checkEvaluation(MinOf(1, 2), 1)
+    checkEvaluation(MinOf(2, 1), 1)
+    checkEvaluation(MinOf(1L, 2L), 1L)
+    checkEvaluation(MinOf(2L, 1L), 1L)
+
+    checkEvaluation(MinOf(Literal.create(null, IntegerType), 1), 1)
+    checkEvaluation(MinOf(1, Literal.create(null, IntegerType)), 1)
+  }
+
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal.create(null, StringType).like("a"), null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)

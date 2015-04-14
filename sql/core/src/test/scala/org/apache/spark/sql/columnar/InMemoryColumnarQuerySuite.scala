@@ -42,7 +42,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       .toDF().registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.logical.statistics.sizeInBytes >
+      table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
         conf.autoBroadcastJoinThreshold)
   }
 

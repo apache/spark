@@ -37,11 +37,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content =
+    val content = listener.synchronized {
       generateBasicStats() ++ <br></br> ++
       <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateReceiverStats() ++
       generateBatchStatsTable()
+    }
     UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
   }
 

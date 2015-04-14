@@ -432,7 +432,10 @@ private[sql] case class ParquetRelation2(
 
     // FileInputFormat cannot handle empty lists.
     if (selectedFiles.nonEmpty) {
-      FileInputFormat.setInputPaths(job, selectedFiles.map(_.getPath): _*)
+      // In order to encode the authority of a Path containning special characters such as /,
+      // we need to use the string retruned by the URI of the path to create a new Path.
+      val selectedPaths = selectedFiles.map(status => new Path(status.getPath.toUri.toString))
+      FileInputFormat.setInputPaths(job, selectedPaths: _*)
     }
 
     // Try to push down filters when filter push-down is enabled.
@@ -484,10 +487,31 @@ private[sql] case class ParquetRelation2(
         val cacheMetadata = useCache
 
         @transient
-        val cachedStatus = selectedFiles
+        val cachedStatus = selectedFiles.map { st =>
+          // In order to encode the authority of a Path containning special characters such as /,
+          // we need to use the string retruned by the URI of the path to create a new Path.
+          val newPath = new Path(st.getPath.toUri.toString)
+
+          new FileStatus(
+            st.getLen,
+            st.isDir,
+            st.getReplication,
+            st.getBlockSize,
+            st.getModificationTime,
+            st.getAccessTime,
+            st.getPermission,
+            st.getOwner,
+            st.getGroup,
+            newPath)
+        }
 
         @transient
-        val cachedFooters = selectedFooters
+        val cachedFooters = selectedFooters.map { f =>
+          // In order to encode the authority of a Path containning special characters such as /,
+          // we need to use the string retruned by the URI of the path to create a new Path.
+          new Footer(new Path(f.getFile.toUri.toString), f.getParquetMetadata)
+        }
+
 
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {

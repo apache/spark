@@ -132,6 +132,22 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
+    def setWithMean(self, withMean):
+        """
+        Setter of the boolean which decides
+        whether it uses mean or not
+        """
+        self.call("setWithMean", withMean)
+        return self
+
+    def setWithStd(self, withStd):
+        """
+        Setter of the boolean which decides
+        whether it uses std or not
+        """
+        self.call("setWithStd", withStd)
+        return self
+
 
 class StandardScaler(object):
     """

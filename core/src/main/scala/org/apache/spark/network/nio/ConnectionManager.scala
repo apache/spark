@@ -82,7 +82,8 @@ private[nio] class ConnectionManager(
     new HashedWheelTimer(Utils.namedThreadFactory("AckTimeoutMonitor"))
 
   private val ackTimeout =
-    conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 120))
+    conf.getTimeAsSeconds("spark.core.connection.ack.wait.timeout",
+      conf.get("spark.network.timeout", "120s"))
 
   // Get the thread counts from the Spark Configuration.
   // 

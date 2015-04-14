@@ -232,19 +232,26 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     testCode(conf)
   }
 
-  def newEnv = MutableHashMap[String, String]()
+  def newEnv: MutableHashMap[String, String] = MutableHashMap[String, String]()
 
-  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;|<CPS>")
+  def classpath(env: MutableHashMap[String, String]): Array[String] =
+    env(Environment.CLASSPATH.name).split(":|;|<CPS>")
 
-  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]) = (a ++ b).flatten.toArray
+  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]): Array[String] =
+    (a ++ b).flatten.toArray
 
-  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
-    Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
+  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B = {
+    Try(clazz.getField(field))
+      .map(_.get(null).asInstanceOf[A])
+      .toOption
+      .map(mapTo)
+      .getOrElse(defaults)
+  }
 
   def getFieldValue2[A: ClassTag, A1: ClassTag, B](
         clazz: Class[_],
         field: String,
-        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B) : B = {
+        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B): B = {
     Try(clazz.getField(field)).map(_.get(null)).map {
       case v: A => mapTo(v)
       case v1: A1 => mapTo1(v1)
