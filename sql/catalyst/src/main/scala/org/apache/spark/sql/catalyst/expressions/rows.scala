@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{StructType, NativeType}
+import org.apache.spark.sql.types.{DataType, StructType, NativeType}
 
 
 /**
@@ -231,4 +231,11 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     }
     return 0
   }
+}
+
+object RowOrdering {
+  def getOrderingFromDataTypes(dataTypes: Seq[DataType]): RowOrdering =
+    new RowOrdering(dataTypes.zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
 }

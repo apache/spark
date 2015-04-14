@@ -46,11 +46,8 @@ case class SortMergeJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  private val orders: Seq[SortOrder] = leftKeys.zipWithIndex.map {
-    case(expr, index) => SortOrder(BoundReference(index, expr.dataType, expr.nullable), Ascending)
-  }
   // this is to manually construct an ordering that can be used to compare keys from both sides
-  private val keyOrdering: RowOrdering = new RowOrdering(orders)
+  private val keyOrdering: RowOrdering = RowOrdering.getOrderingFromDataTypes(leftKeys.map(_.dataType))
 
   private def requiredOrders(keys: Seq[Expression], side: SparkPlan): Ordering[Row] =
     newOrdering(keys.map(SortOrder(_, Ascending)), side.output)
