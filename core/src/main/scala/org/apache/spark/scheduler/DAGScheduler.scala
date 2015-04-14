@@ -818,12 +818,8 @@ class DAGScheduler(
       }
     }
 
-    val activeJob = jobIdToActiveJob.get(stage.jobId).getOrElse(null)
-    val properties = if (activeJob != null) { 
-        activeJob.properties 
-    } else { 
-        null
-    }
+    val properties = jobIdToActiveJob.get(stage.jobId).map(_.properties).getOrElse(null)    
+
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
