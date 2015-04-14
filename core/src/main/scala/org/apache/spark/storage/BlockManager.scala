@@ -523,7 +523,7 @@ private[spark] class BlockManager(
           }
           assert(0 == bytes.position())
 
-          if (!level.useMemory || isDiskToMemory) {
+          if (!level.useMemory || !isDiskToMemory) {
             // If the block shouldn't be stored in memory, we can just return it
             if (asBlockResult) {
               return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
