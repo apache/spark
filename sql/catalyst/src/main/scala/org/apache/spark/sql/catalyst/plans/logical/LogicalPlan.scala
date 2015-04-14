@@ -117,6 +117,15 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     resolve(name, children.flatMap(_.output), resolver, throwErrors)
 
   /**
+   * Optionally resolves the given string (`name`) to a [[NamedExpression]] using the input
+   * from all child nodes of this LogicalPlan. The given string is considered a string literal,
+   * i.e. the string itself should match the attribute name and the attribute name alone.
+   */
+  def resolveQuoted(name: String, resolver: Resolver): Option[NamedExpression] = {
+    output.find { attribute => resolver(name, attribute.name) }
+  }
+
+  /**
    * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
    * LogicalPlan. The attribute is expressed as string in the following form:
    * `[scope].AttributeName.[nested].[fields]...`.
