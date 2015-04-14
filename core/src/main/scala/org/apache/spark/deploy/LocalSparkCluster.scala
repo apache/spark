@@ -52,7 +52,7 @@ class LocalSparkCluster(
     /* Start the Master */
     val (rpcEnv, _, _) = Master.startRpcEnvAndEndpoint(localHostname, 0, 0, _conf)
     masterRpcEnvs += rpcEnv
-    val masterUrl = "spark://" + localHostname + ":" + rpcEnv.address.port
+    val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + rpcEnv.address.port
     val masters = Array(masterUrl)
 
     /* Start the Workers */

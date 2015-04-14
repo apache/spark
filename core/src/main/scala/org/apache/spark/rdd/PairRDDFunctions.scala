@@ -823,7 +823,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * RDD will be <= us.
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
-    subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.size)))
+    subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.length)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =

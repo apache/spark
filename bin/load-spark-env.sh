@@ -20,6 +20,7 @@
 # This script loads spark-env.sh if it exists, and ensures it is only loaded once.
 # spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
 # conf/ subdirectory.
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
@@ -41,8 +42,8 @@ fi
 
 if [ -z "$SPARK_SCALA_VERSION" ]; then
 
-    ASSEMBLY_DIR2="$SPARK_HOME/assembly/target/scala-2.11"
-    ASSEMBLY_DIR1="$SPARK_HOME/assembly/target/scala-2.10"
+    ASSEMBLY_DIR2="$FWDIR/assembly/target/scala-2.11"
+    ASSEMBLY_DIR1="$FWDIR/assembly/target/scala-2.10"
 
     if [[ -d "$ASSEMBLY_DIR2" && -d "$ASSEMBLY_DIR1" ]]; then
         echo -e "Presence of build for both scala versions(SCALA 2.10 and SCALA 2.11) detected." 1>&2

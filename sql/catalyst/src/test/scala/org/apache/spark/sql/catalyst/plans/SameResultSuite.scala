@@ -32,7 +32,7 @@ class SameResultSuite extends FunSuite {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
 
-  def assertSameResult(a: LogicalPlan, b: LogicalPlan, result: Boolean = true) = {
+  def assertSameResult(a: LogicalPlan, b: LogicalPlan, result: Boolean = true): Unit = {
     val aAnalyzed = a.analyze
     val bAnalyzed = b.analyze
 
