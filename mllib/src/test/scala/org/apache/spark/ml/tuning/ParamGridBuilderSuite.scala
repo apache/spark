@@ -60,7 +60,7 @@ class ParamGridBuilderSuite extends FunSuite {
       (20, "input1"))
     validateGrid(maps1, expected1)
 
-    val maps2 = (new ParamGridBuilder()).build()
+    val maps2 = new ParamGridBuilder().build()
     val expected2 = mutable.Set.empty[(Int, String)]
     validateGrid(maps2, expected2)
   }
