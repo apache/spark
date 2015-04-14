@@ -135,7 +135,7 @@ class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     } else {
       ""
     }
-    <td valign="middle">{failureReasonSummary}{details}</td>
+    <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>
   }
 
   private def jobsTable(jobInfos: Seq[(OutputOpId, JobId)]): Seq[Node] = {
@@ -203,7 +203,7 @@ class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
           </li>
           <li>
             <strong>Scheduling delay: </strong>
-            {formattedSchedulingDelay} records
+            {formattedSchedulingDelay}
           </li>
           <li>
             <strong>Processing time: </strong>
@@ -211,7 +211,7 @@ class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
           </li>
           <li>
             <strong>Total delay: </strong>
-            {formattedTotalDelay} records
+            {formattedTotalDelay}
           </li>
         </ul>
       </div>
