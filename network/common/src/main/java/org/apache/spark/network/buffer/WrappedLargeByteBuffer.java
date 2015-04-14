@@ -60,7 +60,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
    * @param subBufferSize
    */
   @VisibleForTesting
-  public WrappedLargeByteBuffer(ByteBuffer[] underlying, int subBufferSize) {
+  WrappedLargeByteBuffer(ByteBuffer[] underlying, int subBufferSize) {
     if (underlying.length == 0) {
       throw new IllegalArgumentException("must wrap at least one ByteBuffer");
     }

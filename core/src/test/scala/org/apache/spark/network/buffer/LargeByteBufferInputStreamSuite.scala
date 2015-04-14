@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.network.buffer
 
 import java.io.{FileInputStream, FileOutputStream, OutputStream, File}
 import java.nio.ByteBuffer

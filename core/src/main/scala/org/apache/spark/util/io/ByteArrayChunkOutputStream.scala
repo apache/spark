@@ -43,7 +43,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
    */
   private var position = chunkSize
 
-  private[util] var size: Long = 0L
+  private[spark] var size: Long = 0L
 
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()

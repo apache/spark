@@ -14,13 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.network.buffer
 
 import scala.util.Random
 
 import org.scalatest.{FunSuite, Matchers}
-
-import org.apache.spark.network.buffer.WrappedLargeByteBuffer
 
 class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
 

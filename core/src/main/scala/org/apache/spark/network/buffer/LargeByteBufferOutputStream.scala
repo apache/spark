@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.network.buffer
 
 import java.io.OutputStream
 import java.nio.ByteBuffer
 
-import org.apache.spark.network.buffer.{LargeByteBufferHelper, WrappedLargeByteBuffer, LargeByteBuffer}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
-private[spark]
-class LargeByteBufferOutputStream(chunkSize: Int = 65536)
+private[spark] class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   extends OutputStream {
 
-  private[util] val output = new ByteArrayChunkOutputStream(chunkSize)
+  private[buffer] val output = new ByteArrayChunkOutputStream(chunkSize)
 
   override def write(b: Int): Unit = {
     output.write(b)
@@ -45,7 +43,7 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
    * exposed for testing.  You don't really ever want to call this method -- the returned
    * buffer will not implement {{asByteBuffer}} correctly.
    */
-  private[util] def largeBuffer(maxChunk: Int): WrappedLargeByteBuffer = {
+  private[buffer] def largeBuffer(maxChunk: Int): WrappedLargeByteBuffer = {
     // LargeByteBuffer is supposed to make a "best effort" to get all the data
     // in one nio.ByteBuffer, so we want to try to merge the smaller chunks together
     // as much as possible.  This is necessary b/c there are a number of parts of spark that

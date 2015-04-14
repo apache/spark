@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.network.buffer
 
 import java.io.InputStream
-
-import org.apache.spark.network.buffer.LargeByteBuffer
-import org.apache.spark.storage.BlockManager
 
 /**
  * Reads data from a LargeByteBuffer, and optionally cleans it up using buffer.dispose()
@@ -62,7 +59,7 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
   }
 
   // only for testing
-  private[util] var disposed = false
+  private[buffer] var disposed = false
 
   /**
    * Clean up the buffer, and potentially dispose of it
