@@ -41,8 +41,11 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
     largeBuffer(LargeByteBufferHelper.MAX_CHUNK)
   }
 
-  // exposed for testing
-  private[util] def largeBuffer(maxChunk: Int): LargeByteBuffer = {
+  /**
+   * exposed for testing.  You don't really ever want to call this method -- the returned
+   * buffer will not implement {{asByteBuffer}} correctly.
+   */
+  private[util] def largeBuffer(maxChunk: Int): WrappedLargeByteBuffer = {
     // LargeByteBuffer is supposed to make a "best effort" to get all the data
     // in one nio.ByteBuffer, so we want to try to merge the smaller chunks together
     // as much as possible.  This is necessary b/c there are a number of parts of spark that
@@ -58,7 +61,7 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
       pos += nextSize
       remaining -= nextSize
     }
-    new WrappedLargeByteBuffer(chunks.map(ByteBuffer.wrap))
+    new WrappedLargeByteBuffer(chunks.map(ByteBuffer.wrap), maxChunk)
   }
 
   override def close(): Unit = {

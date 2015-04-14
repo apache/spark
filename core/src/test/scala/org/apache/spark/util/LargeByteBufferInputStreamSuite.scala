@@ -63,7 +63,7 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
   }
 
   test("dispose on close") {
-    //don't need to read to the end -- dispose anytime we close
+    // don't need to read to the end -- dispose anytime we close
     val data = new Array[Byte](10)
     val in = new LargeByteBufferInputStream(LargeByteBufferHelper.asLargeByteBuffer(data),
       dispose = true)

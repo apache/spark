@@ -51,8 +51,16 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     this(underlying, LargeByteBufferHelper.MAX_CHUNK);
   }
 
+  /**
+   * you do **not** want to call this version.  It leads to a buffer which doesn't properly
+   * support {@link #asByteBuffer}.  The only reason it exists is to we can have tests which
+   * don't require 2GB of memory
+   *
+   * @param underlying
+   * @param subBufferSize
+   */
   @VisibleForTesting
-  WrappedLargeByteBuffer(ByteBuffer[] underlying, int subBufferSize) {
+  public WrappedLargeByteBuffer(ByteBuffer[] underlying, int subBufferSize) {
     if (underlying.length == 0) {
       throw new IllegalArgumentException("must wrap at least one ByteBuffer");
     }
@@ -223,7 +231,11 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       b.rewind();
       return b;
     } else {
-      throw new BufferTooLargeException(size(), LargeByteBufferHelper.MAX_CHUNK);
+      // NOTE: if subBufferSize != LargeByteBufferHelper.MAX_CAPACITY, in theory
+      // we could copy the data into a new buffer.  But we don't want to do any copying.
+      // The only reason we allow smaller subBufferSize is so that we can have tests which
+      // don't require 2GB of memory
+      throw new BufferTooLargeException(size(), underlying[0].capacity());
     }
   }
 

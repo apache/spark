@@ -71,6 +71,8 @@ public class WrappedLargeByteBufferSuite {
     try {
       WrappedLargeByteBuffer buf2 = new WrappedLargeByteBuffer(
         new ByteBuffer[]{ByteBuffer.allocate(10), ByteBuffer.allocate(10)}, 10);
+      // you really shouldn't ever construct a WrappedLargeByteBuffer with
+      // multiple small chunks, so this is somewhat contrived
       buf2.asByteBuffer();
       fail("expected an exception");
     } catch (BufferTooLargeException btl) {
