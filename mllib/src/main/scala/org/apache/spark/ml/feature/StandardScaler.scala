@@ -32,15 +32,15 @@ import org.apache.spark.sql.types.{StructField, StructType}
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
   val withMean: BooleanParam = new BooleanParam(this, 
     "withMean", 
-    "Center data with mean before scaling", 
-    defaultValue = Some(false)
+    "Center data with mean before scaling"
   )
   val withStd: BooleanParam = new BooleanParam(this,
     "withStd", 
-    "Scale to unit standard deviation", 
-    defaultValue = Some(true)
+    "Scale to unit standard deviation"
   )
 }
+
+setDefault(withMean -> false, withStd -> true)
 
 /**
  * :: AlphaComponent ::
