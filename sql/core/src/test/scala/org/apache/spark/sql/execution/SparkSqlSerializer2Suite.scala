@@ -53,12 +53,9 @@ class SparkSqlSerializer2DataTypeSuite extends FunSuite {
   checkSupported(TimestampType, isSupported = true)
   checkSupported(StringType, isSupported = true)
   checkSupported(BinaryType, isSupported = true)
+  checkSupported(DecimalType(10, 5), isSupported = true)
+  checkSupported(DecimalType.Unlimited, isSupported = true)
 
-  // Because at the runtime we accepts three kinds of Decimals
-  // (Java BigDecimal, Scala BigDecimal, and Spark SQL's Decimal), we do support DecimalType
-  // right now. We will support it once we fixed the internal type.
-  checkSupported(DecimalType(10, 5), isSupported = false)
-  checkSupported(DecimalType.Unlimited, isSupported = false)
   // For now, ArrayType, MapType, and StructType are not supported.
   checkSupported(ArrayType(DoubleType, true), isSupported = false)
   checkSupported(ArrayType(StringType, false), isSupported = false)
@@ -84,7 +81,8 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
     val supportedTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DateType, TimestampType)
+        FloatType, DoubleType, DecimalType.Unlimited, DecimalType(6, 5),
+        DateType, TimestampType)
 
     val fields = supportedTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, true)
@@ -103,9 +101,11 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
           i.toByte,
           i.toShort,
           i,
-          i.toLong,
+          Long.MaxValue - i.toLong,
           (i + 0.25).toFloat,
           (i + 0.75),
+          BigDecimal(Long.MaxValue.toString + ".12345"),
+          new java.math.BigDecimal(s"${i % 9 + 1}" + ".23456"),
           new Date(i),
           new Timestamp(i))
       }
@@ -159,7 +159,7 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
     checkSerializer(df.queryExecution.executedPlan, serializerClass)
     checkAnswer(
       df,
-      Row(1000, 1000, 0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000))
+      Row(1000, 1000, 0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000))
   }
 }
 
