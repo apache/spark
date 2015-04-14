@@ -309,6 +309,10 @@ def parse_args():
     parser.add_option(
         "--instance-initiated-shutdown-behavior", default="stop",
         choices=["stop", "terminate"])
+    parser.add_option(
+        "--instance-profile-name", default=None,
+        help="IAM profile name to launch instances under")
+
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -605,7 +609,8 @@ def launch_cluster(conn, opts, cluster_name):
                 block_device_map=block_map,
                 subnet_id=opts.subnet_id,
                 placement_group=opts.placement_group,
-                user_data=user_data_content)
+                user_data=user_data_content,
+                instance_profile_name=opts.instance_profile_name)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -660,7 +665,8 @@ def launch_cluster(conn, opts, cluster_name):
                                       subnet_id=opts.subnet_id,
                                       placement_group=opts.placement_group,
                                       user_data=user_data_content,
-                                      instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior)
+                                      instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+                                      instance_profile_name=opts.instance_profile_name)
                 slave_nodes += slave_res.instances
                 print("Launched {s} slave{plural_s} in {z}, regid = {r}".format(
                       s=num_slaves_this_zone,
@@ -692,7 +698,8 @@ def launch_cluster(conn, opts, cluster_name):
                                subnet_id=opts.subnet_id,
                                placement_group=opts.placement_group,
                                user_data=user_data_content,
-                               instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior)
+                               instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+                               instance_profile_name=opts.instance_profile_name)
 
         master_nodes = master_res.instances
         print("Launched master in %s, regid = %s" % (zone, master_res.id))
