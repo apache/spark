@@ -147,7 +147,7 @@
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
     <commons.httpclient.version>4.2.6</commons.httpclient.version>
-    <commons.math3.version>3.1.1</commons.math3.version>
+    <commons.math3.version>3.4.1</commons.math3.version>
     <test_classpath_file>${project.build.directory}/spark-test-classpath.txt</test_classpath_file>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
@@ -158,6 +158,8 @@
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+
+    <test.java.home>${java.home}</test.java.home>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -1194,6 +1196,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1224,6 +1227,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1714,6 +1718,16 @@
         <module>external/kafka</module>
         <module>external/kafka-assembly</module>
       </modules>
+    </profile>
+
+    <profile>
+      <id>test-java-home</id>
+      <activation>
+        <property><name>env.JAVA_HOME</name></property>
+      </activation>
+      <properties>
+        <test.java.home>${env.JAVA_HOME}</test.java.home>
+      </properties>
     </profile>
 
     <profile>

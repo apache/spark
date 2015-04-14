@@ -33,7 +33,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   val broadcast = rdd.context.broadcast(list)
   val bid = broadcast.id
 
-  def doSomething() = {
+  def doSomething(): Set[(Int, Boolean)] = {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched

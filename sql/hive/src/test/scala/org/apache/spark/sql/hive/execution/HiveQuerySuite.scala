@@ -542,6 +542,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  createQueryTest("CTE feature #1",
+    "with q1 as (select key from src) select * from q1 where key = 5")
+
+  createQueryTest("CTE feature #2",
+    """with q1 as (select * from src where key= 5),
+      |q2 as (select * from src s2 where key = 4)
+      |select value from q1 union all select value from q2
+    """.stripMargin)
+
+  createQueryTest("CTE feature #3",
+    """with q1 as (select key from src)
+      |from q1
+      |select * where key = 4
+    """.stripMargin)
+
   test("predicates contains an empty AttributeSet() references") {
     sql(
       """
@@ -796,6 +811,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         """.stripMargin)
     }
     sql("DROP TABLE alter1")
+  }
+
+  test("ADD JAR command 2") {
+    // this is a test case from mapjoin_addjar.q
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    if (HiveShim.version == "0.13.1") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """CREATE TABLE t1(a string, b string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+      sql("select * from src join t1 on src.key = t1.a")
+      sql("DROP TABLE t1")
+    }
   }
 
   test("ADD FILE command") {
