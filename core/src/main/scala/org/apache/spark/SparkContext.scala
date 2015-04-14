@@ -1800,9 +1800,9 @@ object SparkContext extends Logging {
   private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
 
   /**
-   * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `None`.
+   * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `null`.
    *
-   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
+   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
   private val activeContext: AtomicReference[SparkContext] = 
     new AtomicReference[SparkContext](null)
@@ -1840,7 +1840,7 @@ object SparkContext extends Logging {
           logWarning(warnMsg)
         }
 
-        if(activeContext.get() != null) {
+        if (activeContext.get() != null) {
           val ctx = activeContext.get()
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
