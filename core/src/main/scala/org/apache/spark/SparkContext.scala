@@ -1860,14 +1860,13 @@ object SparkContext extends Logging {
    * This function may be used to get or instantiate a SparkContext and register it as a 
    * singleton object. Because we can only have one active SparkContext per JVM, 
    * this is useful when applications may wish to share a SparkContext. 
-   * 
-   * Note: This function cannot be used to create multiple SparkContexts even if multiple contexts
-   * are allowed. 
+   *
+   * Note: This function cannot be used to create multiple SparkContext instances 
+   * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
     if (activeContext.get() == null) {
-      setActiveContext(new SparkContext(config), 
-        config.getBoolean("spark.driver.allowMultipleContexts", false))
+      setActiveContext(new SparkContext(config), allowMultipleContexts = false)
     }
     activeContext.get()
   }
@@ -1877,10 +1876,10 @@ object SparkContext extends Logging {
    * singleton object. Because we can only have one active SparkContext per JVM, 
    * this is useful when applications may wish to share a SparkContext.
    * 
-   * This method allows not passing a SparkConf (useful if just retrieving) 
+   * This method allows not passing a SparkConf (useful if just retrieving).
    * 
-   * Note: This function cannot be used to create multiple SparkContexts even if multiple contexts
-   * are allowed. 
+   * Note: This function cannot be used to create multiple SparkContext instances 
+   * even if multiple contexts are allowed. 
    */ 
   def getOrCreate(): SparkContext = {
     getOrCreate(new SparkConf())

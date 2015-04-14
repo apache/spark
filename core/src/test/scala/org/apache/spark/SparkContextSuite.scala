@@ -77,6 +77,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     assert(sc.getConf.get("spark.app.name").equals("test"))
     sc2 = SparkContext.getOrCreate(new SparkConf().setAppName("test2").setMaster("local"))
     assert(sc2.getConf.get("spark.app.name").equals("test"))
+    assert(sc === sc2)
     
     // Try creating second context to confirm that it's still possible, if desired
     sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
