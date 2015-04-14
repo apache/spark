@@ -40,7 +40,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
   )
 }
 
-setDefault(withMean -> false, withStd -> true)
+
 
 /**
  * :: AlphaComponent ::
@@ -50,6 +50,8 @@ setDefault(withMean -> false, withStd -> true)
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  setDefault(withMean -> false, withStd -> true)
+  
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
