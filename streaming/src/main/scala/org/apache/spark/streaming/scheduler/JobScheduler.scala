@@ -174,21 +174,24 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     def run() {
       ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
       ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
-      eventActor ! JobStarted(job)
-      // Disable checks for existing output directories in jobs launched by the streaming scheduler,
-      // since we may need to write output to an existing directory during checkpoint recovery;
-      // see SPARK-4835 for more details.
-      PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
-        job.run()
+      try {
+        eventActor ! JobStarted(job)
+        // Disable checks for existing output directories in jobs launched by the streaming
+        // scheduler, since we may need to write output to an existing directory during checkpoint
+        // recovery; see SPARK-4835 for more details.
+        PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          job.run()
+        }
+        eventActor ! JobCompleted(job)
+      } finally {
+        ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, null)
+        ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, null)
       }
-      ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, null)
-      ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, null)
-      eventActor ! JobCompleted(job)
     }
   }
 }
 
 private[streaming] object JobScheduler {
-  private[streaming] val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime"
-  private[streaming] val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId"
+  val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime"
+  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId"
 }
