@@ -139,7 +139,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
     checkAnswer(
-      sql("SELECT testUDFToListString(s) FROM inputTable"), //.collect(),
+      sql("SELECT testUDFToListString(s) FROM inputTable"),
       Seq(Row("data1" :: "data2" :: "data3" :: Nil)))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
 
@@ -152,7 +152,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
     checkAnswer(
-      sql("SELECT testUDFToListInt(s) FROM inputTable"), //.collect(),
+      sql("SELECT testUDFToListInt(s) FROM inputTable"),
       Seq(Row(1 :: 2 :: 3 :: Nil)))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
 
