@@ -64,11 +64,17 @@ class MySqlHook(BaseHook):
         conn = self.get_conn()
         cur = conn.cursor()
         for row in rows:
-            values = tuple([
-                str(s).replace("'", "''") if isinstance(s, basestring) else s
-                for s in row])
-            sql = "INSERT INTO {0} VALUES {1};".format(table, values)
-            logging.info(sql)
+            l = []
+            for cell in row:
+                if isinstance(cell, basestring):
+                    l.append("'" + str(cell).replace("'", "''") + "'")
+                elif cell is None:
+                    l.append('NULL')
+                else:
+                    l.append(str(cell))
+            values = tuple(l)
+            sql = "INSERT INTO {0} VALUES ({1});".format(
+                table, ",".join(values))
             cur.execute(sql)
         conn.commit()
         cur.close()

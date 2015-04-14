@@ -7,6 +7,7 @@ from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
 
+
 class HiveStatsCollectionOperator(BaseOperator):
     """
     Gathers partition statistics using a dynmically generated Presto
@@ -32,6 +33,10 @@ class HiveStatsCollectionOperator(BaseOperator):
     :param col_blacklist: list of columns to blacklist, consider
         blacklisting blobs, large json columns, ...
     :type col_blacklist: list
+    :param assignment_func: a function that receives a column name and
+        a type, and returns a dict of metric names and an Presto expressions.
+        If None is returned, the global defaults are applied.
+    :type assignment_func: function
     """
 
     __mapper_args__ = {
@@ -47,6 +52,7 @@ class HiveStatsCollectionOperator(BaseOperator):
             partition,
             extra_exprs=None,
             col_blacklist=None,
+            assignment_func=None,
             metastore_conn_id='metastore_default',
             presto_conn_id='presto_default',
             mysql_conn_id='airflow_db',
@@ -60,20 +66,25 @@ class HiveStatsCollectionOperator(BaseOperator):
         self.metastore_conn_id = metastore_conn_id
         self.presto_conn_id = presto_conn_id
         self.mysql_conn_id = mysql_conn_id
+        self.assignment_func = assignment_func
         self.ds = '{{ ds }}'
 
     def get_default_exprs(self, col, col_type):
         if col in self.col_blacklist:
             return {}
         d = {}
-        d[col + '_non_null'] = "COUNT({col})"
+        d[(col, 'non_null')] = "COUNT({col})"
         if col_type in ['double', 'int', 'bigint', 'float', 'double']:
-            d[col + '_sum'] = 'SUM({col})'
-            d[col + '_min'] = 'MIN({col})'
-            d[col + '_max'] = 'MAX({col})'
+            d[(col, 'sum')] = 'SUM({col})'
+            d[(col, 'min')] = 'MIN({col})'
+            d[(col, 'max')] = 'MAX({col})'
+            d[(col, 'avg')] = 'AVG({col})'
+        elif col_type == 'boolean':
+            d[(col, 'true')] = 'SUM(CASE WHEN {col} THEN 1 ELSE 0 END)'
+            d[(col, 'false')] = 'SUM(CASE WHEN NOT {col} THEN 1 ELSE 0 END)'
         elif col_type in ['string']:
-            d[col + '_len'] = 'SUM(CAST(LENGTH({col}) AS BIGINT))'
-            d[col + '_approx_distinct'] = 'APPROX_DISTINCT({col})'
+            d[(col, 'len')] = 'SUM(CAST(LENGTH({col}) AS BIGINT))'
+            d[(col, 'approx_distinct')] = 'APPROX_DISTINCT({col})'
 
         return {k: v.format(col=col) for k, v in d.items()}
 
@@ -83,13 +94,19 @@ class HiveStatsCollectionOperator(BaseOperator):
         field_types = {col.name: col.type for col in table.sd.cols}
 
         exprs = {
-            'count': 'COUNT(*)'
+            ('', 'count'): 'COUNT(*)'
         }
         for col, col_type in field_types.items():
-            exprs.update(self.get_default_exprs(col, col_type))
+            d = {}
+            if self.assignment_func:
+                d = self.assignment_func(col, col_type)
+            if not d:
+                d = self.get_default_exprs(col, col_type)
+            exprs.update(d)
         exprs = OrderedDict(exprs)
-        exprs_str = ",\n        ".join(
-            [v + " AS " + k for k, v in exprs.items()])
+        exprs_str = ",\n        ".join([
+            v + " AS " + k[0] + '__' + k[1]
+            for k, v in exprs.items()])
 
         where_clause = [
             "{0} = '{1}'".format(k, v) for k, v in self.partition.items()]
@@ -123,5 +140,7 @@ class HiveStatsCollectionOperator(BaseOperator):
         mysql.run(sql)
 
         logging.info("Pivoting and loading cells into the Airflow db")
-        rows = [(self.ds, self.table, part_json) + r for r in zip(exprs, row)]
+        rows = [
+            (self.ds, self.table, part_json) + (r[0][0], r[0][1], r[1])
+            for r in zip(exprs, row)]
         mysql.insert_rows(table='hive_stats', rows=rows)
