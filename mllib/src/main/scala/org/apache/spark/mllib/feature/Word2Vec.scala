@@ -34,7 +34,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
@@ -431,6 +431,14 @@ class Word2Vec extends Serializable with Logging {
 class Word2VecModel private[mllib] (
     private val model: Map[String, Array[Float]]) extends Serializable with Saveable {
 
+  private val numDim = model.head._2.size
+  private val numWords = model.size
+  private val flatVec = model.toSeq.flatMap { case(w, v) =>
+    v.map(_.toDouble)}.toArray
+  private val wordVecMat = new DenseMatrix(numWords, numDim, flatVec, isTransposed=true)
+  private val wordVecNorms = model.map { case (word, vec) =>
+    blas.snrm2(numDim, vec, 1)}.toArray
+
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
     val n = v1.length
@@ -481,19 +489,13 @@ class Word2VecModel private[mllib] (
     require(num > 0, "Number of similar words should > 0")
 
     val fVector = vector.toArray
-    val flatVec = model.toSeq.flatMap { case(w, v) =>
-      v.map(_.toDouble)}.toArray
 
-    val numDim = model.head._2.size
-    val numWords = model.size
-    val cosineArray = Array.fill[Double](numWords)(0)
-
-    blas.dgemv(
-      "T", numDim, numWords, 1.0, flatVec, numDim, fVector, 1, 0.0, cosineArray, 1)
+    val cosineVec = new DenseVector(Array.fill[Double](numWords)(0))
+    BLAS.gemv(1.0, wordVecMat, vector.asInstanceOf[DenseVector], 0.0, cosineVec)
 
     // Need not divide with the norm of the given vector since it is constant.
     val updatedCosines = model.zipWithIndex.map { case (vec, ind) =>
-      cosineArray(ind) / blas.snrm2(numDim, vec._2, 1) }
+      cosineVec(ind) / wordVecNorms(ind) }
 
     model.keys.zip(updatedCosines)
       .toSeq
