@@ -50,7 +50,7 @@ private[deploy] class ExecutorRunner(
     val workerUrl: String,
     conf: SparkConf,
     val appLocalDirs: Seq[String],
-    var state: ExecutorState.Value)
+    @volatile var state: ExecutorState.Value)
   extends Logging {
 
   private val fullId = appId + "/" + execId

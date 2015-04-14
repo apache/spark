@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.sql.catalyst.expressions.{Projection, Row}
+import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -29,16 +31,43 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 private[joins] sealed trait HashedRelation {
   def get(key: Row): CompactBuffer[Row]
+
+  // This is a helper method to implement Externalizable, and is used by
+  // GeneralHashedRelation and UniqueKeyHashedRelation
+  protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
+    out.writeInt(serialized.length) // Write the length of serialized bytes first
+    out.write(serialized)
+  }
+
+  // This is a helper method to implement Externalizable, and is used by
+  // GeneralHashedRelation and UniqueKeyHashedRelation
+  protected def readBytes(in: ObjectInput): Array[Byte] = {
+    val serializedSize = in.readInt() // Read the length of serialized bytes first
+    val bytes = new Array[Byte](serializedSize)
+    in.readFully(bytes)
+    bytes
+  }
 }
 
 
 /**
  * A general [[HashedRelation]] backed by a hash map that maps the key into a sequence of values.
  */
-private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, CompactBuffer[Row]])
-  extends HashedRelation with Serializable {
+private[joins] final class GeneralHashedRelation(
+    private var hashTable: JavaHashMap[Row, CompactBuffer[Row]])
+  extends HashedRelation with Externalizable {
+
+  def this() = this(null) // Needed for serialization
 
   override def get(key: Row): CompactBuffer[Row] = hashTable.get(key)
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
+  }
 }
 
 
@@ -46,8 +75,10 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
  */
-private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
-  extends HashedRelation with Serializable {
+private[joins] final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[Row, Row])
+  extends HashedRelation with Externalizable {
+
+  def this() = this(null) // Needed for serialization
 
   override def get(key: Row): CompactBuffer[Row] = {
     val v = hashTable.get(key)
@@ -55,6 +86,14 @@ private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, R
   }
 
   def getValue(key: Row): Row = hashTable.get(key)
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
+  }
 }
 
 

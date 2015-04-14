@@ -81,7 +81,7 @@ test_that("textFile() followed by a saveAsTextFile() returns the same content", 
   fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName1)
 
-  rdd <- textFile(sc, fileName1)
+  rdd <- textFile(sc, fileName1, 1L)
   saveAsTextFile(rdd, fileName2)
   rdd <- textFile(sc, fileName2)
   expect_equal(collect(rdd), as.list(mockFile))
@@ -93,7 +93,7 @@ test_that("textFile() followed by a saveAsTextFile() returns the same content", 
 test_that("saveAsTextFile() on a parallelized list works as expected", {
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   l <- list(1, 2, 3)
-  rdd <- parallelize(sc, l)
+  rdd <- parallelize(sc, l, 1L)
   saveAsTextFile(rdd, fileName)
   rdd <- textFile(sc, fileName)
   expect_equal(collect(rdd), lapply(l, function(x) {toString(x)}))
