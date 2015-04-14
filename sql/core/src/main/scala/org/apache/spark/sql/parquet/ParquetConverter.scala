@@ -18,44 +18,383 @@
 package org.apache.spark.sql.parquet
 
 import java.sql.Timestamp
-import java.util.{TimeZone, Calendar}
+import java.util.{Calendar, TimeZone}
 
-import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import jodd.datetime.JDateTime
 import parquet.column.Dictionary
-import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
-import parquet.schema.MessageType
+import parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
+import parquet.schema.{GroupType, PrimitiveType => ParquetPrimitiveType, Type}
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.parquet.timestamp.NanoTime
+import org.apache.spark.sql.types._
 
 /**
- * Collection of converters of Parquet types (group and primitive types) that
- * model arrays and maps. The conversions are partly based on the AvroParquet
- * converters that are part of Parquet in order to be able to process these
- * types.
- *
- * There are several types of converters:
- * <ul>
- *   <li>[[org.apache.spark.sql.parquet.CatalystPrimitiveConverter]] for primitive
- *   (numeric, boolean and String) types</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystNativeArrayConverter]] for arrays
- *   of native JVM element types; note: currently null values are not supported!</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystArrayConverter]] for arrays of
- *   arbitrary element types (including nested element types); note: currently
- *   null values are not supported!</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystStructConverter]] for structs</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystMapConverter]] for maps; note:
- *   currently null values are not supported!</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystPrimitiveRowConverter]] for rows
- *   of only primitive element types</li>
- *   <li>[[org.apache.spark.sql.parquet.CatalystGroupConverter]] for other nested
- *   records, including the top-level row record</li>
- * </ul>
+ * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
+ * corresponding parent container. For example, a converter for a `Struct` field may set converted
+ * values to a [[MutableRow]]; or a converter for array element may append converted values to an
+ * [[ArrayBuffer]].
  */
+private[parquet] trait ParentContainerUpdater {
+  def set(value: Any): Unit = ()
+  def setBoolean(value: Boolean): Unit = set(value)
+  def setByte(value: Byte): Unit = set(value)
+  def setShort(value: Short): Unit = set(value)
+  def setInt(value: Int): Unit = set(value)
+  def setLong(value: Long): Unit = set(value)
+  def setFloat(value: Float): Unit = set(value)
+  def setDouble(value: Double): Unit = set(value)
+}
+
+/** A no-op updater used for root converter (who doesn't have a parent). */
+private[parquet] object NoopUpdater extends ParentContainerUpdater
+
+/**
+ * This Parquet converter converts Parquet records to Spark SQL rows.
+ *
+ * @param parquetType Parquet type of Parquet records
+ * @param sparkType Spark SQL schema that corresponds to the Parquet record type
+ * @param updater An updater which takes care of the converted row object
+ */
+private[parquet] class CatalystRowConverter(
+    parquetType: GroupType,
+    sparkType: StructType,
+    updater: ParentContainerUpdater)
+  extends GroupConverter {
+
+  /**
+   * Updater used together with [[CatalystRowConverter]].  It sets converted filed values to the
+   * `ordinal`-th cell in `row`.
+   */
+  private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
+    override def set(value: Any): Unit = row(ordinal) = value
+    override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
+    override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
+    override def setShort(value: Short): Unit = row.setShort(ordinal, value)
+    override def setInt(value: Int): Unit = row.setInt(ordinal, value)
+    override def setLong(value: Long): Unit = row.setLong(ordinal, value)
+    override def setDouble(value: Double): Unit = row.setDouble(ordinal, value)
+    override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
+  }
+
+  /** Represents the converted row object once an entire Parquet record is converted. */
+  val currentRow = new SpecificMutableRow(sparkType.map(_.dataType))
+
+  // Converters for each field.
+  private val fieldConverters: Array[Converter] = {
+    parquetType.getFields.zip(sparkType).zipWithIndex.map {
+      case ((parquetFieldType, sparkField), ordinal) =>
+        // Converted field value should be set to the `ordinal`-th cell of `currentRow`
+        newConverter(parquetFieldType, sparkField.dataType, new RowUpdater(currentRow, ordinal))
+    }.toArray
+  }
+
+  override def getConverter(fieldIndex: Int): Converter = fieldConverters(fieldIndex)
+
+  override def end(): Unit = updater.set(currentRow)
+
+  override def start(): Unit = {
+    var i = 0
+    while (i < currentRow.length) {
+      currentRow.setNullAt(i)
+      i += 1
+    }
+  }
+
+  /**
+   * Creates a converter for the given Parquet type `parquetType` and Spark SQL data type
+   * `sparkType`. Converted values are handled by `updater`.
+   */
+  private def newConverter(
+      parquetType: Type,
+      sparkType: DataType,
+      updater: ParentContainerUpdater): Converter = {
+
+    sparkType match {
+      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
+        new CatalystPrimitiveConverter(updater)
+
+      case ByteType =>
+        new PrimitiveConverter {
+          override def addInt(value: Int): Unit =
+            updater.setByte(value.asInstanceOf[ByteType#JvmType])
+        }
+
+      case ShortType =>
+        new PrimitiveConverter {
+          override def addInt(value: Int): Unit =
+            updater.setShort(value.asInstanceOf[ShortType#JvmType])
+        }
+
+      case t: DecimalType =>
+        new CatalystDecimalConverter(t, updater)
+
+      case StringType =>
+        new CatalystStringConverter(updater)
+
+      case TimestampType =>
+        new PrimitiveConverter {
+          override def addBinary(value: Binary): Unit = {
+            updater.set(CatalystTimestampConverter.convertToTimestamp(value))
+          }
+        }
+
+      case DateType =>
+        new PrimitiveConverter {
+          override def addInt(value: Int): Unit = {
+            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
+            updater.set(value.asInstanceOf[DateType#JvmType])
+          }
+        }
+
+      case t: ArrayType =>
+        new CatalystArrayConverter(parquetType.asGroupType(), t, updater)
+
+      case t: MapType =>
+        new CatalystMapConverter(parquetType.asGroupType(), t, updater)
+
+      case t: StructType =>
+        new CatalystRowConverter(parquetType.asGroupType(), t, updater)
+
+      case t: UserDefinedType[_] =>
+        val sparkTypeForUDT = t.sqlType
+        val parquetTypeForUDT = ParquetTypesConverter.fromDataType(sparkTypeForUDT, "<placeholder>")
+        newConverter(parquetTypeForUDT, sparkTypeForUDT, updater)
+
+      case _ =>
+        throw new RuntimeException(
+          s"Unable to create Parquet converter for data type ${sparkType.json}")
+    }
+  }
+
+  /**
+   * Parquet converter for Parquet primitive types.  Note that not all Spark SQL primitive types
+   * are handled by this converter.  Parquet primitive types are only a subset of those of Spark
+   * SQL.  For example, BYTE, SHORT and INT in Spark SQL are all covered by INT32 in Parquet.
+   */
+  private final class CatalystPrimitiveConverter(updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
+    override def addBoolean(value: Boolean): Unit = updater.setBoolean(value)
+    override def addInt(value: Int): Unit = updater.setInt(value)
+    override def addLong(value: Long): Unit = updater.setLong(value)
+    override def addFloat(value: Float): Unit = updater.setFloat(value)
+    override def addDouble(value: Double): Unit = updater.setDouble(value)
+    override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
+  }
+
+  /**
+   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   */
+  private final class CatalystStringConverter(updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
+    private var expandedDictionary: Array[String] = null
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) {
+        dictionary.decodeToBinary(_).toStringUsingUTF8
+      }
+    }
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+    override def addBinary(value: Binary): Unit = updater.set(value.toStringUsingUTF8)
+  }
+
+  /**
+   * Parquet converter for fixed-precision decimals.
+   *
+   * @todo Handle fixed-precision decimals stored as INT32 and INT64
+   */
+  private final class CatalystDecimalConverter(
+      decimalType: DecimalType,
+      updater: ParentContainerUpdater)
+    extends PrimitiveConverter {
+
+    override def addBinary(value: Binary): Unit = {
+      updater.set(toDecimal(value))
+    }
+
+    private def toDecimal(value: Binary): Decimal = {
+      val precision = decimalType.precision
+      val scale = decimalType.scale
+      val bytes = value.getBytes
+
+      require(bytes.length <= 16, "Decimal field too large to read")
+
+      var unscaled = 0L
+      var i = 0
+
+      while (i < bytes.length) {
+        unscaled = (unscaled << 8) | (bytes(i) & 0xff)
+        i += 1
+      }
+
+      val bits = 8 * bytes.length
+      unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+      Decimal(unscaled, precision, scale)
+    }
+  }
+
+  /**
+   * Parquet converter for arrays.  Spark SQL arrays are represented as Parquet lists.  Standard
+   * Parquet lists are represented as a 3-level group annotated by `LIST`:
+   * {{{
+   *   <list-repetition> group <name> (LIST) {            <-- parquetSchema points here
+   *     repeated group list {
+   *       <element-repetition> <element-type> element;
+   *     }
+   *   }
+   * }}}
+   * The `parquetSchema` constructor argument points to the outermost group.
+   *
+   * However, before this representation is standardized, some Parquet libraries/tools also use some
+   * non-standard formats to represent list-like structures.  Backwards-compatibility rules for
+   * handling these cases are described in Parquet format spec.
+   *
+   * @see https://github.com/apache/incubator-parquet-format/blob/master/LogicalTypes.md#lists
+   */
+  private final class CatalystArrayConverter(
+      parquetSchema: GroupType,
+      sparkSchema: ArrayType,
+      updater: ParentContainerUpdater)
+    extends GroupConverter {
+
+    // TODO This is slow! Needs specialization.
+    private val currentArray = ArrayBuffer.empty[Any]
+
+    private val elementConverter: Converter = {
+      val repeatedType = parquetSchema.getType(0)
+      val elementType = sparkSchema.elementType
+
+      if (isElementType(repeatedType, elementType)) {
+        newConverter(repeatedType, elementType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentArray += value
+        })
+      } else {
+        new ElementConverter(repeatedType.asGroupType().getType(0), elementType)
+      }
+    }
+
+    override def getConverter(fieldIndex: Int): Converter = elementConverter
+
+    override def end(): Unit = updater.set(currentArray)
+
+    override def start(): Unit = currentArray.clear()
+
+    // scalastyle:off
+    /**
+     * Returns whether the given type is the element type of a list or is a syntactic group with
+     * one field that is the element type.  This is determined by checking whether the type can be
+     * a syntactic group and by checking whether a potential syntactic group matches the expected
+     * schema.
+     * {{{
+     *   <list-repetition> group <name> (LIST) {
+     *     repeated group list {                          <-- repeatedType points here
+     *       <element-repetition> <element-type> element;
+     *     }
+     *   }
+     * }}}
+     * In short, here we handle Parquet list backwards-compatibility rules on the read path.  This
+     * method is based on `AvroIndexedRecordConverter.isElementType`.
+     *
+     * @see https://github.com/apache/incubator-parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
+     */
+    // scalastyle:on
+    private def isElementType(repeatedType: Type, elementType: DataType): Boolean = {
+      (repeatedType, elementType) match {
+        case (t: ParquetPrimitiveType, _) => true
+        case (t: GroupType, _) if t.getFieldCount > 1 => true
+        case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
+        case _ => false
+      }
+    }
+
+    /** Array element converter */
+    private final class ElementConverter(parquetType: Type, sparkType: DataType)
+      extends GroupConverter {
+
+      private var currentElement: Any = _
+
+      private val converter = newConverter(parquetType, sparkType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentElement = value
+      })
+
+      override def getConverter(fieldIndex: Int): Converter = converter
+
+      override def end(): Unit = currentArray += currentElement
+
+      override def start(): Unit = currentElement = null
+    }
+  }
+
+  /** Parquet converter for maps */
+  private final class CatalystMapConverter(
+      parquetType: GroupType,
+      sparkType: MapType,
+      updater: ParentContainerUpdater)
+    extends GroupConverter {
+
+    private val currentMap = mutable.Map.empty[Any, Any]
+
+    private val keyValueConverter = {
+      val repeatedType = parquetType.getType(0).asGroupType()
+      new KeyValueConverter(
+        repeatedType.getType(0),
+        repeatedType.getType(1),
+        sparkType.keyType,
+        sparkType.valueType)
+    }
+
+    override def getConverter(fieldIndex: Int): Converter = keyValueConverter
+
+    override def end(): Unit = updater.set(currentMap)
+
+    override def start(): Unit = currentMap.clear()
+
+    /** Parquet converter for key-value pairs within the map. */
+    private final class KeyValueConverter(
+        parquetKeyType: Type,
+        parquetValueType: Type,
+        sparkKeyType: DataType,
+        sparkValueType: DataType)
+      extends GroupConverter {
+
+      private var currentKey: Any = _
+
+      private var currentValue: Any = _
+
+      private val converters = Array(
+        // Converter for keys
+        newConverter(parquetKeyType, sparkKeyType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentKey = value
+        }),
+
+        // Converter for values
+        newConverter(parquetValueType, sparkValueType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentValue = value
+        }))
+
+      override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+      override def end(): Unit = currentMap(currentKey) = currentValue
+
+      override def start(): Unit = {
+        currentKey = null
+        currentValue = null
+      }
+    }
+  }
+}
 
 private[sql] object CatalystConverter {
   // The type internally used for fields
@@ -79,419 +418,6 @@ private[sql] object CatalystConverter {
   type ArrayScalaType[T] = Seq[T]
   type StructScalaType[T] = Row
   type MapScalaType[K, V] = Map[K, V]
-
-  protected[parquet] def createConverter(
-      field: FieldType,
-      fieldIndex: Int,
-      parent: CatalystConverter): Converter = {
-    val fieldType: DataType = field.dataType
-    fieldType match {
-      case udt: UserDefinedType[_] => {
-        createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
-      }
-      // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType, false) => {
-        new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
-      }
-      // This is for other types of arrays, including those with nested fields
-      case ArrayType(elementType: DataType, false) => {
-        new CatalystArrayConverter(elementType, fieldIndex, parent)
-      }
-      case ArrayType(elementType: DataType, true) => {
-        new CatalystArrayContainsNullConverter(elementType, fieldIndex, parent)
-      }
-      case StructType(fields: Array[StructField]) => {
-        new CatalystStructConverter(fields, fieldIndex, parent)
-      }
-      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) => {
-        new CatalystMapConverter(
-          Array(
-            new FieldType(MAP_KEY_SCHEMA_NAME, keyType, false),
-            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, valueContainsNull)),
-          fieldIndex,
-          parent)
-      }
-      // Strings, Shorts and Bytes do not have a corresponding type in Parquet
-      // so we need to treat them separately
-      case StringType =>
-        new CatalystPrimitiveStringConverter(parent, fieldIndex)
-      case ShortType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addInt(value: Int): Unit =
-            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.JvmType])
-        }
-      }
-      case ByteType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addInt(value: Int): Unit =
-            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
-        }
-      }
-      case DateType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addInt(value: Int): Unit =
-            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
-        }
-      }
-      case d: DecimalType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addBinary(value: Binary): Unit =
-            parent.updateDecimal(fieldIndex, value, d)
-        }
-      }
-      case TimestampType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addBinary(value: Binary): Unit =
-            parent.updateTimestamp(fieldIndex, value)
-        }
-      }
-      // All other primitive types use the default converter
-      case ctype: PrimitiveType => { // note: need the type tag here!
-        new CatalystPrimitiveConverter(parent, fieldIndex)
-      }
-      case _ => throw new RuntimeException(
-        s"unable to convert datatype ${field.dataType.toString} in CatalystConverter")
-    }
-  }
-
-  protected[parquet] def createRootConverter(
-      parquetSchema: MessageType,
-      attributes: Seq[Attribute]): CatalystConverter = {
-    // For non-nested types we use the optimized Row converter
-    if (attributes.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))) {
-      new CatalystPrimitiveRowConverter(attributes.toArray)
-    } else {
-      new CatalystGroupConverter(attributes.toArray)
-    }
-  }
-}
-
-private[parquet] abstract class CatalystConverter extends GroupConverter {
-  /**
-   * The number of fields this group has
-   */
-  protected[parquet] val size: Int
-
-  /**
-   * The index of this converter in the parent
-   */
-  protected[parquet] val index: Int
-
-  /**
-   * The parent converter
-   */
-  protected[parquet] val parent: CatalystConverter
-
-  /**
-   * Called by child converters to update their value in its parent (this).
-   * Note that if possible the more specific update methods below should be used
-   * to avoid auto-boxing of native JVM types.
-   *
-   * @param fieldIndex
-   * @param value
-   */
-  protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit
-
-  protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
-    updateField(fieldIndex, value.getBytes)
-
-  protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    updateField(fieldIndex, value)
-
-  protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
-    updateField(fieldIndex, readTimestamp(value))
-
-  protected[parquet] def updateDecimal(fieldIndex: Int, value: Binary, ctype: DecimalType): Unit =
-    updateField(fieldIndex, readDecimal(new Decimal(), value, ctype))
-
-  protected[parquet] def isRootConverter: Boolean = parent == null
-
-  protected[parquet] def clearBuffer(): Unit
-
-  /**
-   * Should only be called in the root (group) converter!
-   *
-   * @return
-   */
-  def getCurrentRecord: Row = throw new UnsupportedOperationException
-
-  /**
-   * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
-   * a long (i.e. precision <= 18)
-   */
-  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Unit = {
-    val precision = ctype.precisionInfo.get.precision
-    val scale = ctype.precisionInfo.get.scale
-    val bytes = value.getBytes
-    require(bytes.length <= 16, "Decimal field too large to read")
-    var unscaled = 0L
-    var i = 0
-    while (i < bytes.length) {
-      unscaled = (unscaled << 8) | (bytes(i) & 0xFF)
-      i += 1
-    }
-    // Make sure unscaled has the right sign, by sign-extending the first bit
-    val numBits = 8 * bytes.length
-    unscaled = (unscaled << (64 - numBits)) >> (64 - numBits)
-    dest.set(unscaled, precision, scale)
-  }
-
-  /**
-   * Read a Timestamp value from a Parquet Int96Value
-   */
-  protected[parquet] def readTimestamp(value: Binary): Timestamp = {
-    CatalystTimestampConverter.convertToTimestamp(value)
-  }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
- *
- * @param schema The corresponding Catalyst schema in the form of a list of attributes.
- */
-private[parquet] class CatalystGroupConverter(
-    protected[parquet] val schema: Array[FieldType],
-    protected[parquet] val index: Int,
-    protected[parquet] val parent: CatalystConverter,
-    protected[parquet] var current: ArrayBuffer[Any],
-    protected[parquet] var buffer: ArrayBuffer[Row])
-  extends CatalystConverter {
-
-  def this(schema: Array[FieldType], index: Int, parent: CatalystConverter) =
-    this(
-      schema,
-      index,
-      parent,
-      current = null,
-      buffer = new ArrayBuffer[Row](
-        CatalystArrayConverter.INITIAL_ARRAY_SIZE))
-
-  /**
-   * This constructor is used for the root converter only!
-   */
-  def this(attributes: Array[Attribute]) =
-    this(attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)), 0, null)
-
-  protected [parquet] val converters: Array[Converter] =
-    schema.zipWithIndex.map {
-      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
-    }.toArray
-
-  override val size = schema.size
-
-  override def getCurrentRecord: Row = {
-    assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
-    // TODO: use iterators if possible
-    // Note: this will ever only be called in the root converter when the record has been
-    // fully processed. Therefore it will be difficult to use mutable rows instead, since
-    // any non-root converter never would be sure when it would be safe to re-use the buffer.
-    new GenericRow(current.toArray)
-  }
-
-  override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
-
-  // for child converters to update upstream values
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-    current.update(fieldIndex, value)
-  }
-
-  override protected[parquet] def clearBuffer(): Unit = buffer.clear()
-
-  override def start(): Unit = {
-    current = ArrayBuffer.fill(size)(null)
-    converters.foreach {
-      converter => if (!converter.isPrimitive) {
-        converter.asInstanceOf[CatalystConverter].clearBuffer
-      }
-    }
-  }
-
-  override def end(): Unit = {
-    if (!isRootConverter) {
-      assert(current != null) // there should be no empty groups
-      buffer.append(new GenericRow(current.toArray))
-      parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
-    }
-  }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object. Note that his
- * converter is optimized for rows of primitive types (non-nested records).
- */
-private[parquet] class CatalystPrimitiveRowConverter(
-    protected[parquet] val schema: Array[FieldType],
-    protected[parquet] var current: MutableRow)
-  extends CatalystConverter {
-
-  // This constructor is used for the root converter only
-  def this(attributes: Array[Attribute]) =
-    this(
-      attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)),
-      new SpecificMutableRow(attributes.map(_.dataType)))
-
-  protected [parquet] val converters: Array[Converter] =
-    schema.zipWithIndex.map {
-      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
-    }.toArray
-
-  override val size = schema.size
-
-  override val index = 0
-
-  override val parent = null
-
-  // Should be only called in root group converter!
-  override def getCurrentRecord: Row = current
-
-  override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
-
-  // for child converters to update upstream values
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-    throw new UnsupportedOperationException // child converters should use the
-    // specific update methods below
-  }
-
-  override protected[parquet] def clearBuffer(): Unit = {}
-
-  override def start(): Unit = {
-    var i = 0
-    while (i < size) {
-      current.setNullAt(i)
-      i = i + 1
-    }
-  }
-
-  override def end(): Unit = {}
-
-  // Overridden here to avoid auto-boxing for primitive types
-  override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit =
-    current.setBoolean(fieldIndex, value)
-
-  override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
-    current.setInt(fieldIndex, value)
-
-  override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
-    current.update(fieldIndex, value)
-
-  override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
-    current.setLong(fieldIndex, value)
-
-  override protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit =
-    current.setShort(fieldIndex, value)
-
-  override protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit =
-    current.setByte(fieldIndex, value)
-
-  override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit =
-    current.setDouble(fieldIndex, value)
-
-  override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit =
-    current.setFloat(fieldIndex, value)
-
-  override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
-    current.update(fieldIndex, value.getBytes)
-
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    current.setString(fieldIndex, value)
-
-  override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
-    current.update(fieldIndex, readTimestamp(value))
-
-  override protected[parquet] def updateDecimal(
-      fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
-    var decimal = current(fieldIndex).asInstanceOf[Decimal]
-    if (decimal == null) {
-      decimal = new Decimal
-      current(fieldIndex) = decimal
-    }
-    readDecimal(decimal, value, ctype)
-  }
-}
-
-/**
- * A `parquet.io.api.PrimitiveConverter` that converts Parquet types to Catalyst types.
- *
- * @param parent The parent group converter.
- * @param fieldIndex The index inside the record.
- */
-private[parquet] class CatalystPrimitiveConverter(
-    parent: CatalystConverter,
-    fieldIndex: Int) extends PrimitiveConverter {
-  override def addBinary(value: Binary): Unit =
-    parent.updateBinary(fieldIndex, value)
-
-  override def addBoolean(value: Boolean): Unit =
-    parent.updateBoolean(fieldIndex, value)
-
-  override def addDouble(value: Double): Unit =
-    parent.updateDouble(fieldIndex, value)
-
-  override def addFloat(value: Float): Unit =
-    parent.updateFloat(fieldIndex, value)
-
-  override def addInt(value: Int): Unit =
-    parent.updateInt(fieldIndex, value)
-
-  override def addLong(value: Long): Unit =
-    parent.updateLong(fieldIndex, value)
-}
-
-/**
- * A `parquet.io.api.PrimitiveConverter` that converts Parquet Binary to Catalyst String.
- * Supports dictionaries to reduce Binary to String conversion overhead.
- *
- * Follows pattern in Parquet of using dictionaries, where supported, for String conversion.
- *
- * @param parent The parent group converter.
- * @param fieldIndex The index inside the record.
- */
-private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
-  extends CatalystPrimitiveConverter(parent, fieldIndex) {
-
-  private[this] var dict: Array[String] = null
-
-  override def hasDictionarySupport: Boolean = true
-
-  override def setDictionary(dictionary: Dictionary):Unit =
-    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
-
-
-  override def addValueFromDictionary(dictionaryId: Int): Unit =
-    parent.updateString(fieldIndex, dict(dictionaryId))
-
-  override def addBinary(value: Binary): Unit =
-    parent.updateString(fieldIndex, value.toStringUsingUTF8)
-}
-
-private[parquet] object CatalystArrayConverter {
-  val INITIAL_ARRAY_SIZE = 20
 }
 
 private[parquet] object CatalystTimestampConverter {
@@ -559,367 +485,4 @@ private[parquet] object CatalystTimestampConverter {
       hour * NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
     NanoTime(julianDay, nanosOfDay).toBinary
   }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that converts a single-element groups that
- * match the characteristics of an array (see
- * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
- *
- * @param elementType The type of the array elements (complex or primitive)
- * @param index The position of this (array) field inside its parent converter
- * @param parent The parent converter
- * @param buffer A data buffer
- */
-private[parquet] class CatalystArrayConverter(
-    val elementType: DataType,
-    val index: Int,
-    protected[parquet] val parent: CatalystConverter,
-    protected[parquet] var buffer: Buffer[Any])
-  extends CatalystConverter {
-
-  def this(elementType: DataType, index: Int, parent: CatalystConverter) =
-    this(
-      elementType,
-      index,
-      parent,
-      new ArrayBuffer[Any](CatalystArrayConverter.INITIAL_ARRAY_SIZE))
-
-  protected[parquet] val converter: Converter = CatalystConverter.createConverter(
-    new CatalystConverter.FieldType(
-      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
-      elementType,
-      false),
-    fieldIndex=0,
-    parent=this)
-
-  override def getConverter(fieldIndex: Int): Converter = converter
-
-  // arrays have only one (repeated) field, which is its elements
-  override val size = 1
-
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-    // fieldIndex is ignored (assumed to be zero but not checked)
-    if(value == null) {
-      throw new IllegalArgumentException("Null values inside Parquet arrays are not supported!")
-    }
-    buffer += value
-  }
-
-  override protected[parquet] def clearBuffer(): Unit = {
-    buffer.clear()
-  }
-
-  override def start(): Unit = {
-    if (!converter.isPrimitive) {
-      converter.asInstanceOf[CatalystConverter].clearBuffer
-    }
-  }
-
-  override def end(): Unit = {
-    assert(parent != null)
-    // here we need to make sure to use ArrayScalaType
-    parent.updateField(index, buffer.toArray.toSeq)
-    clearBuffer()
-  }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that converts a single-element groups that
- * match the characteristics of an array (see
- * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
- *
- * @param elementType The type of the array elements (native)
- * @param index The position of this (array) field inside its parent converter
- * @param parent The parent converter
- * @param capacity The (initial) capacity of the buffer
- */
-private[parquet] class CatalystNativeArrayConverter(
-    val elementType: NativeType,
-    val index: Int,
-    protected[parquet] val parent: CatalystConverter,
-    protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
-  extends CatalystConverter {
-
-  type NativeType = elementType.JvmType
-
-  private var buffer: Array[NativeType] = elementType.classTag.newArray(capacity)
-
-  private var elements: Int = 0
-
-  protected[parquet] val converter: Converter = CatalystConverter.createConverter(
-    new CatalystConverter.FieldType(
-      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
-      elementType,
-      false),
-    fieldIndex=0,
-    parent=this)
-
-  override def getConverter(fieldIndex: Int): Converter = converter
-
-  // arrays have only one (repeated) field, which is its elements
-  override val size = 1
-
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
-    throw new UnsupportedOperationException
-
-  // Overridden here to avoid auto-boxing for primitive types
-  override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.getBytes.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit = {
-    checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
-    elements += 1
-  }
-
-  override protected[parquet] def clearBuffer(): Unit = {
-    elements = 0
-  }
-
-  override def start(): Unit = {}
-
-  override def end(): Unit = {
-    assert(parent != null)
-    // here we need to make sure to use ArrayScalaType
-    parent.updateField(
-      index,
-      buffer.slice(0, elements).toSeq)
-    clearBuffer()
-  }
-
-  private def checkGrowBuffer(): Unit = {
-    if (elements >= capacity) {
-      val newCapacity = 2 * capacity
-      val tmp: Array[NativeType] = elementType.classTag.newArray(newCapacity)
-      Array.copy(buffer, 0, tmp, 0, capacity)
-      buffer = tmp
-      capacity = newCapacity
-    }
-  }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that converts a single-element groups that
- * match the characteristics of an array contains null (see
- * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
- *
- * @param elementType The type of the array elements (complex or primitive)
- * @param index The position of this (array) field inside its parent converter
- * @param parent The parent converter
- * @param buffer A data buffer
- */
-private[parquet] class CatalystArrayContainsNullConverter(
-    val elementType: DataType,
-    val index: Int,
-    protected[parquet] val parent: CatalystConverter,
-    protected[parquet] var buffer: Buffer[Any])
-  extends CatalystConverter {
-
-  def this(elementType: DataType, index: Int, parent: CatalystConverter) =
-    this(
-      elementType,
-      index,
-      parent,
-      new ArrayBuffer[Any](CatalystArrayConverter.INITIAL_ARRAY_SIZE))
-
-  protected[parquet] val converter: Converter = new CatalystConverter {
-
-    private var current: Any = null
-
-    val converter = CatalystConverter.createConverter(
-      new CatalystConverter.FieldType(
-        CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
-        elementType,
-        false),
-      fieldIndex = 0,
-      parent = this)
-
-    override def getConverter(fieldIndex: Int): Converter = converter
-
-    override def end(): Unit = parent.updateField(index, current)
-
-    override def start(): Unit = {
-      current = null
-    }
-
-    override protected[parquet] val size: Int = 1
-    override protected[parquet] val index: Int = 0
-    override protected[parquet] val parent = CatalystArrayContainsNullConverter.this
-
-    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-      current = value
-    }
-
-    override protected[parquet] def clearBuffer(): Unit = {}
-  }
-
-  override def getConverter(fieldIndex: Int): Converter = converter
-
-  // arrays have only one (repeated) field, which is its elements
-  override val size = 1
-
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-    buffer += value
-  }
-
-  override protected[parquet] def clearBuffer(): Unit = {
-    buffer.clear()
-  }
-
-  override def start(): Unit = {}
-
-  override def end(): Unit = {
-    assert(parent != null)
-    // here we need to make sure to use ArrayScalaType
-    parent.updateField(index, buffer.toArray.toSeq)
-    clearBuffer()
-  }
-}
-
-/**
- * This converter is for multi-element groups of primitive or complex types
- * that have repetition level optional or required (so struct fields).
- *
- * @param schema The corresponding Catalyst schema in the form of a list of
- *               attributes.
- * @param index
- * @param parent
- */
-private[parquet] class CatalystStructConverter(
-    override protected[parquet] val schema: Array[FieldType],
-    override protected[parquet] val index: Int,
-    override protected[parquet] val parent: CatalystConverter)
-  extends CatalystGroupConverter(schema, index, parent) {
-
-  override protected[parquet] def clearBuffer(): Unit = {}
-
-  // TODO: think about reusing the buffer
-  override def end(): Unit = {
-    assert(!isRootConverter)
-    // here we need to make sure to use StructScalaType
-    // Note: we need to actually make a copy of the array since we
-    // may be in a nested field
-    parent.updateField(index, new GenericRow(current.toArray))
-  }
-}
-
-/**
- * A `parquet.io.api.GroupConverter` that converts two-element groups that
- * match the characteristics of a map (see
- * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.MapType]].
- *
- * @param schema
- * @param index
- * @param parent
- */
-private[parquet] class CatalystMapConverter(
-    protected[parquet] val schema: Array[FieldType],
-    override protected[parquet] val index: Int,
-    override protected[parquet] val parent: CatalystConverter)
-  extends CatalystConverter {
-
-  private val map = new HashMap[Any, Any]()
-
-  private val keyValueConverter = new CatalystConverter {
-    private var currentKey: Any = null
-    private var currentValue: Any = null
-    val keyConverter = CatalystConverter.createConverter(schema(0), 0, this)
-    val valueConverter = CatalystConverter.createConverter(schema(1), 1, this)
-
-    override def getConverter(fieldIndex: Int): Converter = {
-      if (fieldIndex == 0) keyConverter else valueConverter
-    }
-
-    override def end(): Unit = CatalystMapConverter.this.map += currentKey -> currentValue
-
-    override def start(): Unit = {
-      currentKey = null
-      currentValue = null
-    }
-
-    override protected[parquet] val size: Int = 2
-    override protected[parquet] val index: Int = 0
-    override protected[parquet] val parent: CatalystConverter = CatalystMapConverter.this
-
-    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
-      fieldIndex match {
-        case 0 =>
-          currentKey = value
-        case 1 =>
-          currentValue = value
-        case _ =>
-          new RuntimePermission(s"trying to update Map with fieldIndex $fieldIndex")
-      }
-    }
-
-    override protected[parquet] def clearBuffer(): Unit = {}
-  }
-
-  override protected[parquet] val size: Int = 1
-
-  override protected[parquet] def clearBuffer(): Unit = {}
-
-  override def start(): Unit = {
-    map.clear()
-  }
-
-  override def end(): Unit = {
-    // here we need to make sure to use MapScalaType
-    parent.updateField(index, map.toMap)
-  }
-
-  override def getConverter(fieldIndex: Int): Converter = keyValueConverter
-
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
-    throw new UnsupportedOperationException
 }

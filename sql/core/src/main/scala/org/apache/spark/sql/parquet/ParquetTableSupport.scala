@@ -33,18 +33,16 @@ import org.apache.spark.sql.types._
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
- *
- *@param root The root group converter for the record.
  */
-private[parquet] class RowRecordMaterializer(root: CatalystConverter)
+private[parquet] class RowRecordMaterializer(parquetSchema: MessageType, attributes: Seq[Attribute])
   extends RecordMaterializer[Row] {
 
-  def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
-    this(CatalystConverter.createRootConverter(parquetSchema, attributes))
+  private val rootConverter =
+    new CatalystRowConverter(parquetSchema, StructType.fromAttributes(attributes), NoopUpdater)
 
-  override def getCurrentRecord: Row = root.getCurrentRecord
+  override def getCurrentRecord: Row = rootConverter.currentRow
 
-  override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
+  override def getRootConverter: GroupConverter = rootConverter
 }
 
 /**
