@@ -56,7 +56,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   var executor: Executor = null
   var driver: ActorSelection = null
-  val psServers = new HashMap[Long, ServerInfo]()
+  val psServers = new mutable.HashMap[Long, ServerInfo]()
   var psClient: Option[PSClient] = None
 
   override def preStart() {

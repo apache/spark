@@ -49,7 +49,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     }.foreach(println)
 
   */
-
   override def eval(input: Row): Any = {
     val result = children.size match {
       case 0 => function.asInstanceOf[() => Any]()

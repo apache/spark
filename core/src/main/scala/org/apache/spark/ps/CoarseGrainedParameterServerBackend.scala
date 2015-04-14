@@ -57,7 +57,8 @@ private[spark] class CoarseGrainedParameterServerBackend(
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
     driver = context.actorSelection(driverUrl)
-    driver ! RegisterServer(executorId, hostPort, executorVCores, System.getProperty("spark.yarn.container.id", ""))
+    driver ! RegisterServer(executorId, hostPort, executorVCores,
+      System.getProperty("spark.yarn.container.id", ""))
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
@@ -177,7 +178,6 @@ object CoarseGrainedParameterServerBackend extends Logging {
   }
 
   def main(args: Array[String]) {
-    LogUtils.setLog4jForStandalone()
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null

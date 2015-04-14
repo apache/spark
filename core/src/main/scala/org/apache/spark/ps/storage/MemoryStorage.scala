@@ -128,7 +128,8 @@ class MemoryStorage(conf: SparkConf) extends PSStorage {
    * @tparam V: type of Value
    * @return
    */
-  override def toIterator[K: ClassTag, V: ClassTag](): Iterator[(K, V)] = keyValues.toIterator.asInstanceOf[Iterator[(K, V)]]
+  override def toIterator[K: ClassTag, V: ClassTag](): Iterator[(K, V)] =
+    keyValues.toIterator.asInstanceOf[Iterator[(K, V)]]
 
   /**
    * apply `agg` and `func` to deltas and original values
@@ -137,12 +138,14 @@ class MemoryStorage(conf: SparkConf) extends PSStorage {
    * @tparam K: type of Key
    * @tparam V: type of Value
    */
-  override def applyDelta[K: ClassTag, V: ClassTag](agg: ArrayBuffer[V] => V, func: (V, V) => V): Unit = {
+  override def applyDelta[K: ClassTag, V: ClassTag](agg: ArrayBuffer[V] => V, func: (V, V) => V)
+  : Unit = {
     updatedKeyValues.foreach( e => {
       if (keyValues.contains(e._1)) {
         val deltaV = agg(e._2.asInstanceOf[ArrayBuffer[V]])
         println(s"update agg delta ${deltaV.asInstanceOf[Array[Double]].mkString(", ")}")
-        keyValues(e._1) = func(keyValues(e._1).asInstanceOf[V], deltaV.asInstanceOf[V]).asInstanceOf[Array[Double]]
+        keyValues(e._1) = func(keyValues(e._1).asInstanceOf[V], deltaV.asInstanceOf[V]).
+          asInstanceOf[Array[Double]]
         println(s"set ${e._1} to ${keyValues(e._1).mkString(", ")}")
         e._2.clear()
       }

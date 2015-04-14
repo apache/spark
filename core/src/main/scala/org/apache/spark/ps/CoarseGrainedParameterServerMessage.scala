@@ -24,20 +24,28 @@ private[spark] sealed trait CoarseGrainedParameterServerMessage extends Serializ
 
 private[spark] object CoarseGrainedParameterServerMessage {
 
-  case class SetParameter(key: String, value: Array[Double], clock: Int) extends CoarseGrainedParameterServerMessage
+  case class SetParameter(key: String, value: Array[Double], clock: Int)
+    extends CoarseGrainedParameterServerMessage
 
-  case class GetParameter(key: String, clock: Int) extends CoarseGrainedParameterServerMessage
+  case class GetParameter(key: String, clock: Int)
+    extends CoarseGrainedParameterServerMessage
 
-  case class UpdateParameter(key: String, value: Array[Double], clock: Int) extends CoarseGrainedParameterServerMessage
+  case class UpdateParameter(key: String, value: Array[Double], clock: Int)
+    extends CoarseGrainedParameterServerMessage
 
-  case class Parameter(success: Boolean, value: Array[Double]) extends CoarseGrainedParameterServerMessage
+  case class Parameter(success: Boolean, value: Array[Double])
+    extends CoarseGrainedParameterServerMessage
 
-  case class UpdateClock(clientId: String, clock: Int) extends CoarseGrainedParameterServerMessage
+  case class UpdateClock(clientId: String, clock: Int)
+    extends CoarseGrainedParameterServerMessage
 
-  case class NotifyServer(executorUrl: String) extends CoarseGrainedParameterServerMessage
+  case class NotifyServer(executorUrl: String)
+    extends CoarseGrainedParameterServerMessage
 
-  case class InitPSClient(clientId: String) extends CoarseGrainedParameterServerMessage
+  case class InitPSClient(clientId: String)
+    extends CoarseGrainedParameterServerMessage
 
-  case class NotifyClient(message: String) extends CoarseGrainedParameterServerMessage
+  case class NotifyClient(message: String)
+   extends CoarseGrainedParameterServerMessage
 
 }

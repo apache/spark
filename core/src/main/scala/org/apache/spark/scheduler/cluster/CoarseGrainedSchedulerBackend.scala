@@ -108,7 +108,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
             host,
             port,
             "Executor")
-          val data = new ExecutorData(sender, sender.path.address, host, cores, cores, logUrls, executorUrl)
+          val data = new ExecutorData(sender, sender.path.address, host, cores,
+            cores, logUrls, executorUrl)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -328,8 +329,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     val numServers = conf.get("spark.num.servers").toInt
     assert(numServers > 0)
     val currentServers = psServerManager.getAllServers.size
-    if (currentServers == numServers)
+    if (currentServers == numServers) {
       scheduler.sc.startLatch.countDown()
+    }
   }
 
   override def reviveOffers() {

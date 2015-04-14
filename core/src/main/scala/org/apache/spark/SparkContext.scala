@@ -1468,7 +1468,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo(s"partition number $pid, value: $value")
       results(pid) = value
     }
-    dagScheduler.runJob(rdd, cleanedFunc, 0 until rdd.partitions.size, callSite, false, resultHandler, localProperties.get)
+    dagScheduler.runJob(rdd, cleanedFunc, 0 until rdd.partitions.size,
+      callSite, false, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
     results

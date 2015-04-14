@@ -133,7 +133,6 @@ private[ps] object PSStorage {
   private val FALLBACK_KV_STORAGE = "RocksDB"
 
   private val psKVStorageNames = Map(
-    "DiskStorage" -> classOf[DiskStorage].getName,
     "MemoryStorage" -> classOf[MemoryStorage].getName)
 
   def getKVStorage(sparkConf: SparkConf): PSStorage = {
@@ -147,7 +146,8 @@ private[ps] object PSStorage {
       case e: ClassNotFoundException => None
       case e: IllegalArgumentException => None
     }
-    st.getOrElse(throw new IllegalArgumentException(s"Key/Value Storage [$stClass] is not available. " +
+    st.getOrElse(throw new IllegalArgumentException(
+      s"Key/Value Storage [$stClass] is not available. " +
       s"Consider setting $configKey=$FALLBACK_KV_STORAGE"))
   }
 }

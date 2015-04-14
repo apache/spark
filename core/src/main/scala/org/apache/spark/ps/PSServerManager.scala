@@ -32,7 +32,11 @@ private[spark] class PSServerManager {
   val executorId2Server = new HashMap[String, ServerInfo]()
   val executorId2ServerId = new HashMap[String, Long]()
 
-  def addPSServer(executorId: String, hostPort: String, containerId: String, serverInfo: ServerInfo) {
+  def addPSServer(
+      executorId: String,
+      hostPort: String,
+      containerId: String,
+      serverInfo: ServerInfo) {
     containerId2Server(containerId) = serverInfo
     executorId2Server(executorId) = serverInfo
     executorId2ServerId(executorId) = serverInfo.serverId
