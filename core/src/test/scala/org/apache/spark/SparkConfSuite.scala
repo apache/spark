@@ -197,6 +197,22 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     serializer.newInstance().serialize(new StringBuffer())
   }
 
+  test("deprecated configs") {
+    val conf = new SparkConf()
+    val newName = "spark.history.fs.update.interval.seconds"
+
+    assert(!conf.contains(newName))
+
+    conf.set("spark.history.updateInterval", "1")
+    assert(conf.get(newName) === "1")
+
+    conf.set("spark.history.fs.updateInterval", "2")
+    assert(conf.get(newName) === "2")
+
+    conf.set(newName, "3")
+    assert(conf.get(newName) === "3")
+  }
+
 }
 
 class Class1 {}
