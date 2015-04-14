@@ -70,10 +70,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
-    listeners.filter {
-      case listener if(listener.getClass == c) => true
-      case _ => false
-    }.map (_.asInstanceOf[T]).toSeq
+    listeners.filter(listener.getClass == c).map (_.asInstanceOf[T]).toSeq
   }
 
 }

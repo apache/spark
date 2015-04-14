@@ -67,21 +67,16 @@ class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext {
       }
     }
     val conf = new MySparkConf().set(
-      "spark.extraListeners",
-      "org.apache.spark.deploy.SaveExecutorInfo")
+      "spark.extraListeners", classOf[SaveExecutorInfo].getName)
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
     // Trigger a job so that executors get added
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
-    val listenerOpt = sc.listenerBus.listeners.find {
-      case _: SaveExecutorInfo => true
-      case _ => false
-    }.map(_.asInstanceOf[SaveExecutorInfo])
-
-    assert(listenerOpt.isDefined)
-    val listener = listenerOpt.get
+    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo()
+    assert(listeners.size == 1)
+    val listener = listeners(0)
     listener.addedExecutorInfos.values.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
       info.logUrlMap.values.foreach { logUrl =>
