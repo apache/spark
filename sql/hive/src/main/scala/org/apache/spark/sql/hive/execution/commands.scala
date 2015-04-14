@@ -80,7 +80,7 @@ case class AddJar(path: String) extends RunnableCommand {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
-    Seq.empty[Row]
+    Seq(Row(0))
   }
 }
 
