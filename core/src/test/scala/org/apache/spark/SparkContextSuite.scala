@@ -67,11 +67,10 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("Test getOrCreateContext") {
+  test("Test getOrCreate") {
     var sc2: SparkContext = null
     SparkContext.clearActiveContext()
     val conf = new SparkConf().setAppName("test").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true")
     
     sc = SparkContext.getOrCreate(conf)
     
