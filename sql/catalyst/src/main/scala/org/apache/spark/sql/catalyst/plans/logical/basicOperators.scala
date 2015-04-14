@@ -40,34 +40,41 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
+ * @param generator the generator expression
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
- * @param alias when set, this string is applied to the schema of the output of the transformation
- *              as a qualifier.
+ * @param child Children logical plan node
+ * @param qualifier Qualifier for the attributes of generator(UDTF)
+ * @param attributeNames the column names for the generator(UDTF), will be _c0, _c1 .. _cN if
+ *                       leave as default (empty)
+ * @param gOutput The output of Generator.
  */
 case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    alias: Option[String],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    qualifier: Option[String] = None,
+    attributeNames: Seq[String] = Nil,
+    gOutput: Seq[Attribute] = Nil)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] = {
-    val output = alias
-      .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
-      .getOrElse(generator.output)
-    if (join && outer) {
-      output.map(_.withNullability(true))
-    } else {
-      output
-    }
+  override lazy val resolved: Boolean = {
+    generator.resolved &&
+      childrenResolved &&
+      attributeNames.length > 0 &&
+      gOutput.map(_.name) == attributeNames
   }
 
-  override def output: Seq[Attribute] =
-    if (join) child.output ++ generatorOutput else generatorOutput
+  // we don't want the gOutput to be taken as part of the expressions
+  // as that will cause exceptions like unresolved attributes etc.
+  override def expressions: Seq[Expression] = generator :: Nil
+
+  def output: Seq[Attribute] = {
+    if (join) child.output ++ gOutput else gOutput
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {

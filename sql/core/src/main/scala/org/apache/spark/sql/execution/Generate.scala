@@ -31,40 +31,29 @@ import org.apache.spark.sql.catalyst.expressions._
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
+ * @param output the output attributes of this node, which constructed in analysis phase,
+ *               and we can not change it, as the parent node bound with it already.
  */
 @DeveloperApi
 case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    child: SparkPlan)
+    child: SparkPlan,
+    output: Seq[Attribute])
   extends UnaryNode {
-
-  // This must be a val since the generator output expr ids are not preserved by serialization.
-  protected val generatorOutput: Seq[Attribute] = {
-    if (join && outer) {
-      generator.output.map(_.withNullability(true))
-    } else {
-      generator.output
-    }
-  }
-
-  // This must be a val since the generator output expr ids are not preserved by serialization.
-  override val output =
-    if (join) child.output ++ generatorOutput else generatorOutput
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   override def execute(): RDD[Row] = {
     if (join) {
       child.execute().mapPartitions { iter =>
-        val nullValues = Seq.fill(generator.output.size)(Literal(null))
+        val nullValues = Seq.fill(generator.elementTypes.size)(Literal(null))
         // Used to produce rows with no matches when outer = true.
         val outerProjection =
           newProjection(child.output ++ nullValues, child.output)
 
-        val joinProjection =
-          newProjection(child.output ++ generatorOutput, child.output ++ generatorOutput)
+        val joinProjection = newProjection(output, output)
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>

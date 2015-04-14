@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -59,6 +58,7 @@ class Analyzer(
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
+      ResolveGenerate ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -473,10 +473,47 @@ class Analyzer(
    */
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, _)), child) =>
-        Generate(g, join = false, outer = false, None, child)
+      case Project(Seq(Alias(g: Generator, name)), child) =>
+        Generate(g, join = false, outer = false, child, qualifier = None, name :: Nil, Nil)
+      case Project(Seq(MultiAlias(g: Generator, names)), child) =>
+        Generate(g, join = false, outer = false, child, qualifier = None, names, Nil)
     }
   }
+
+  object ResolveGenerate extends Rule[LogicalPlan] {
+    // Construct the output attributes for the generator,
+    // The output attribute names can be either specified or
+    // auto generated.
+    private def makeGeneratorOutput(
+        generator: Generator,
+        attributeNames: Seq[String],
+        qualifier: Option[String]): Array[Attribute] = {
+      val elementTypes = generator.elementTypes
+
+      val raw = if (attributeNames.size == elementTypes.size) {
+        attributeNames.zip(elementTypes).map {
+          case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
+        }
+      } else {
+        elementTypes.zipWithIndex.map {
+          // keep the default column names as Hive does _c0, _c1, _cN
+          case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
+        }
+      }
+
+      qualifier.map(q => raw.map(_.withQualifiers(q :: Nil))).getOrElse(raw).toArray[Attribute]
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Generate if !p.child.resolved || !p.generator.resolved => p
+      case p: Generate if p.resolved == false =>
+        // if the generator output names are not specified, we will use the default ones.
+        val gOutput = makeGeneratorOutput(p.generator, p.attributeNames, p.qualifier)
+        Generate(
+          p.generator, p.join, p.outer, p.child, p.qualifier, gOutput.map(_.name), gOutput)
+    }
+  }
+
 }
 
 /**
