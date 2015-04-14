@@ -381,13 +381,13 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | "(" ~> expression <~ ")"
     | function
     | dotExpressionHeader
-    | ident ^^ UnresolvedAttribute
+    | ident ^^ {case i => UnresolvedAttribute.quoted(i)}
     | signedPrimary
     | "~" ~> expression ^^ BitwiseNot
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
     (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
-      case i1 ~ i2 ~ rest => UnresolvedAttribute((Seq(i1, i2) ++ rest).mkString("."))
+      case i1 ~ i2 ~ rest => UnresolvedAttribute(Seq(i1, i2) ++ rest)
     }
 }

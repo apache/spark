@@ -46,8 +46,12 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             if (operator.childrenResolved) {
+              val nameParts = a match {
+                case UnresolvedAttribute(nameParts) => nameParts
+                case _ => Seq(a.name)
+              }
               // Throw errors for specific problems with get field.
-              operator.resolveChildren(a.name, resolver, throwErrors = true)
+              operator.resolveChildren(nameParts, resolver, throwErrors = true)
             }
 
             val from = operator.inputSet.map(_.name).mkString(", ")
