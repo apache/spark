@@ -74,7 +74,7 @@ private[ml] object TreeTests extends FunSuite {
       numClasses)
   }
 
-    /**
+  /**
    * Check if the two trees are exactly the same.
    * Note: I hesitate to override Node.equals since it could cause problems if users
    *       make mistakes such as creating loops of Nodes.

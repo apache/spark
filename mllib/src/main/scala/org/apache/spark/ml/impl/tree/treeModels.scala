@@ -28,7 +28,7 @@ import org.apache.spark.annotation.AlphaComponent
  * TODO: Add support for predicting probabilities and raw predictions
  */
 @AlphaComponent
-private[ml] trait DecisionTreeModel {
+trait DecisionTreeModel {
 
   /** Root of the decision tree */
   def rootNode: Node
