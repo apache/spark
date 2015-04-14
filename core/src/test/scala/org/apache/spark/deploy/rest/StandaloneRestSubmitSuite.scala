@@ -392,7 +392,8 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
    * If `faulty` is true, start an [[FaultyStandaloneRestServer]] instead.
    * Return the master URL that corresponds to the address of this server.
    */
-  private def startServer(makeFakeMaster: RpcEnv => RpcEndpoint, faulty: Boolean = false): String = {
+  private def startServer(
+      makeFakeMaster: RpcEnv => RpcEndpoint, faulty: Boolean = false): String = {
     val name = "test-standalone-rest-protocol"
     val conf = new SparkConf
     val localhost = Utils.localHostName()
