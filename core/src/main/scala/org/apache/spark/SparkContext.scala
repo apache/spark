@@ -1804,8 +1804,8 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
    */
-  private val activeContext: AtomicReference[Option[SparkContext]] = 
-    new AtomicReference[Option[SparkContext]](None)
+  private val activeContext: AtomicReference[SparkContext] = 
+    new AtomicReference[SparkContext](null)
 
   /**
    * Points to a partially-constructed SparkContext if some thread is in the SparkContext
@@ -1840,7 +1840,8 @@ object SparkContext extends Logging {
           logWarning(warnMsg)
         }
 
-        activeContext.get().foreach { ctx =>
+        if(activeContext.get() != null) {
+          val ctx = activeContext.get()
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
@@ -1865,11 +1866,11 @@ object SparkContext extends Logging {
    * SparkContext constructor. 
    */
   def getOrCreate(config: SparkConf): SparkContext = {
-    if (activeContext.get().isEmpty) {
+    if (activeContext.get() != null) {
       setActiveContext(new SparkContext(config), 
         config.getBoolean("spark.driver.allowMultipleContexts", false))
     }
-    activeContext.get().get
+    activeContext.get()
   }
   
   /** Allow not passing a SparkConf (useful if just retrieving) */ 
@@ -1903,7 +1904,7 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = None
-      activeContext.set(Some(sc))
+      activeContext.set(sc)
     }
   }
 
@@ -1914,7 +1915,7 @@ object SparkContext extends Logging {
    */
   private[spark] def clearActiveContext(): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      activeContext.set(None)
+      activeContext.set(null)
     }
   }
 
