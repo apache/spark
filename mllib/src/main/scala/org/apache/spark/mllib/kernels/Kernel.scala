@@ -16,16 +16,13 @@
  */
 package org.apache.spark.mllib.kernels
 
-import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
  * Declares a trait Kernel which would serve
  * as a base trait for all classes implementing
  * Machine Learning Kernels.
- *
- **/
-
+ * */
 trait Kernel {
 
   /**
@@ -36,7 +33,6 @@ trait Kernel {
    * @param y a local Vector.
    *
    * @return the value of the Kernel function.
-   *
    * */
   def evaluate(x: LabeledPoint, y: LabeledPoint): Double
 }

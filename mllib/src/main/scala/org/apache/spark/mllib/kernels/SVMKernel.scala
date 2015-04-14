@@ -112,12 +112,12 @@ object SVMKernel extends Logging with Serializable {
       val result: DenseVector[Double] =
         DenseVector.tabulate(v.length)(
           (i) => {
-            //Get row number i of kernel
+            // Get row number i of kernel
             val row = DenseVector.apply(kernel
               .filter((point) => i == point._1._1)
               .map((p) => p._2)
               .collect())
-            //dot product with v
+            // dot product with v
             vbr.value.t * row
           }
         )

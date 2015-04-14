@@ -64,12 +64,12 @@ class GreedyEntropySelector(
     val r = scala.util.Random
     var it: Int = 0
 
-    //All the elements not in the working set
+    // All the elements not in the working set
     var newDataset: RDD[Long] = data.keys.filter((p) => !workingset.contains(p))
-    //Existing best value of the entropy
+    // Existing best value of the entropy
     var oldEntropy: Double = this.measure.evaluate(data.filter((point) =>
       workingset.contains(point._1)))
-    //Store the value of entropy after an element swap
+    // Store the value of entropy after an element swap
     var newEntropy: Double = 0.0
     var d: Double = Double.NegativeInfinity
     var rand: Int = 0
@@ -85,9 +85,9 @@ class GreedyEntropySelector(
 
       val point2 = newDataset.takeSample(false, 1).apply(0)
 
-      //Update the working set
+      // Update the working set
       workingset(rand) = point2
-      //Calculate the new entropy
+      // Calculate the new entropy
       newEntropy = this.measure.evaluate(data.filter((p) =>
         workingset.contains(p._1)))
 
@@ -123,7 +123,7 @@ class GreedyEntropySelector(
     } while(math.abs(d) >= this.delta &&
       it <= this.MAX_ITERATIONS)
     logInfo("Working set obtained, now starting process of packaging it as an RDD")
-    //Time to return the final working set
+    // Time to return the final working set
     data.filter((p) => workingset.contains(p._1))
   }
 

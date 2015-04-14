@@ -70,7 +70,7 @@ class GaussianDensityKernel
     this.bandwidth = b
   }
 
-  override def eval(x: Vector) = evalWithBandwidth(x, this.bandwidth)
+  override def eval(x: Vector):Double = evalWithBandwidth(x, this.bandwidth)
 
   /**
    * Calculates the derivative at point x for the Gaussian
@@ -139,37 +139,32 @@ class GaussianDensityKernel
   override def optimalBandwidth(data: RDD[Vector]): Unit = {
     val dataSize: Long = data.count()
 
-    //First calculate variance of all dimensions
+    // First calculate variance of all dimensions
     val columnStats = Statistics.colStats(data)
     // And then the standard deviation
     val colvar = columnStats.variance.toBreeze
     val colstd = colvar.map((v) => sqrt(v))
 
-    //Now calculate the initial estimates of R(f^6) and R(f^8)
-
-    /*val Rf6: DenseVector[Double] = DenseVector.tabulate(colstd.size)(
-      (i) => -15.0*pow(colstd(i), -7.0)/(16*sqrt(Pi)))*/
+    // Now calculate the initial estimates of R(f^6) and R(f^8)
 
     val Rf8: DenseVector[Double] = DenseVector.tabulate(colstd.size)(
       (i) => 105*pow(colstd(i), -9.0)/(32*sqrt(Pi)))
 
     /*
     * Use the earlier result to calculate
-    * h1 and h2 bandwidths for each dimension
+    * h2, the bandwidth for each dimension
     * */
 
-    /*val h1: DenseVector[Double] = DenseVector.tabulate(colstd.size)((i) =>
-      pow(-2*this.derivative(4, 0.0)/(dataSize*this.mu*Rf6(i)), 1/7))*/
     val h2: DenseVector[Double] = DenseVector.tabulate(colstd.size)((i) =>
       pow(-2*this.derivative(6, 0.0)/(dataSize*this.mu*Rf8(i)), 1/9))
 
 
     /*
-    * Use h1 and h2 to calculate more
-    * refined estimates of R(f^6) and R(f^8)
+    * Use h2 to calculate more
+    * refined estimates of R(f^6)
     * */
 
-    //Get an 0-indexed version of the original data set
+    // Get an 0-indexed version of the original data set
     val mappedData = SVMKernel.indexedRDD(data)
 
     /*

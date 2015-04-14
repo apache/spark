@@ -35,4 +35,4 @@ trait DensityKernel extends Kernel with Serializable  {
 
   protected def derivative(n: Int, x: Double): Double
 
-  }
+}

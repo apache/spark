@@ -34,7 +34,7 @@ trait KernelEstimator extends Logging {
   /**
    * Calculate the AMISE (Asymptotic Mean Integrated Square Error)
    * optimal bandwidth assignment by 'solve the equation plug in method'
-   **/
+   * */
   def optimalBandwidth(data: RDD[Vector]): Unit
 
 }
