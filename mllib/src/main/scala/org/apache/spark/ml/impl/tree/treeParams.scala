@@ -41,8 +41,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    */
   val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree." +
-      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
-      Some(5))
+      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
@@ -52,8 +51,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * @group param
    */
   val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for discretizing" +
-    " continuous features.  Must be >=2 and >= number of categories for any categorical feature.",
-    Some(32))
+    " continuous features.  Must be >=2 and >= number of categories for any categorical feature.")
 
   /**
    * Minimum number of instances each child must have after split.
@@ -66,8 +64,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum number" +
     " of instances each child must have after split.  If a split cause left or right child to" +
     " have less than minInstancesPerNode, this split will not be considered as a valid split." +
-    " Should be >= 1.",
-    Some(1))
+    " Should be >= 1.")
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
@@ -75,7 +72,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * @group param
    */
   val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
-    "Minimum information gain for a split to be considered at a tree node.", Some(0.0))
+    "Minimum information gain for a split to be considered at a tree node.")
 
   /**
    * Maximum memory in MB allocated to histogram aggregation.
@@ -83,7 +80,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * @group expertParam
    */
   val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
-    "Maximum memory in MB allocated to histogram aggregation.", Some(256))
+    "Maximum memory in MB allocated to histogram aggregation.")
 
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
@@ -95,7 +92,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   val cacheNodeIds: BooleanParam = new BooleanParam(this, "cacheNodeIds", "If false, the" +
     " algorithm will pass trees to executors to match instances with nodes. If true, the" +
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
-    " trees.", Some(false))
+    " trees.")
 
   /**
    * Specifies how often to checkpoint the cached node IDs.
@@ -109,7 +106,10 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies how" +
     " often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
     " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
-    " checkpoint directory is set in the SparkContext. Must be >= 1.", Some(10))
+    " checkpoint directory is set in the SparkContext. Must be >= 1.")
+
+  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
+    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
   def setMaxDepth(value: Int): M = {
@@ -119,7 +119,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group getParam */
-  def getMaxDepth: Int = get(maxDepth)
+  def getMaxDepth: Int = getOrDefault(maxDepth)
 
   /** @group setParam */
   def setMaxBins(value: Int): M = {
@@ -129,7 +129,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group getParam */
-  def getMaxBins: Int = get(maxBins)
+  def getMaxBins: Int = getOrDefault(maxBins)
 
   /** @group setParam */
   def setMinInstancesPerNode(value: Int): M = {
@@ -139,7 +139,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group getParam */
-  def getMinInstancesPerNode: Int = get(minInstancesPerNode)
+  def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
 
   /** @group setParam */
   def setMinInfoGain(value: Double): M = {
@@ -148,7 +148,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group getParam */
-  def getMinInfoGain: Double = get(minInfoGain)
+  def getMinInfoGain: Double = getOrDefault(minInfoGain)
 
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): M = {
@@ -158,7 +158,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group expertGetParam */
-  def getMaxMemoryInMB: Int = get(maxMemoryInMB)
+  def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
 
   /** @group expertSetParam */
   def setCacheNodeIds(value: Boolean): M = {
@@ -167,7 +167,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group expertGetParam */
-  def getCacheNodeIds: Boolean = get(cacheNodeIds)
+  def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
 
   /** @group expertSetParam */
   def setCheckpointInterval(value: Int): M = {
@@ -177,7 +177,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
   }
 
   /** @group expertGetParam */
-  def getCheckpointInterval: Int = get(checkpointInterval)
+  def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -216,7 +216,9 @@ private[ml] trait TreeClassifierParams[M] extends Params {
    */
   val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}", Some("gini"))
+    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
+
+  setDefault(impurity -> "gini")
 
   /** @group setParam */
   def setImpurity(value: String): M = {
@@ -229,7 +231,7 @@ private[ml] trait TreeClassifierParams[M] extends Params {
   }
 
   /** @group getParam */
-  def getImpurity: String = get(impurity)
+  def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
   protected def getOldImpurity: OldImpurity = {
@@ -263,7 +265,9 @@ private[ml] trait TreeRegressorParams[M] extends Params {
    */
   val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}", Some("variance"))
+    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
+
+  setDefault(impurity -> "variance")
 
   /** @group setParam */
   def setImpurity(value: String): M = {
@@ -276,7 +280,7 @@ private[ml] trait TreeRegressorParams[M] extends Params {
   }
 
   /** @group getParam */
-  def getImpurity: String = get(impurity)
+  def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
   protected def getOldImpurity: OldImpurity = {

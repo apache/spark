@@ -18,10 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.MetadataUtils
 import org.apache.spark.ml.impl.estimator.{Predictor, PredictionModel}
 import org.apache.spark.ml.impl.tree._
 import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
@@ -87,7 +87,6 @@ class DecisionTreeClassifier
 
   /**
    * Create a Strategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
    */
   override private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
@@ -125,7 +124,7 @@ class DecisionTreeClassificationModel(
 
   override protected def copy(): DecisionTreeClassificationModel = {
     val m = new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
 

@@ -110,10 +110,12 @@ private[ml] object TreeTests extends FunSuite {
     }
   }
 
+  // TODO: Reinstate after adding ensembles
   /**
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
    */
+  /*
   def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
     try {
       a.getTrees.zip(b.getTrees).foreach { case (treeA, treeB) =>
@@ -125,4 +127,5 @@ private[ml] object TreeTests extends FunSuite {
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
+  */
 }

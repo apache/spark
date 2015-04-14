@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl
+package org.apache.spark.ml.util
 
 import scala.collection.immutable.HashMap
 

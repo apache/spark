@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils
  */
 @Experimental
 class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
-  extends TreeEnsembleModel(algo, trees, Array.fill(trees.size)(1.0),
+  extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
     combiningStrategy = if (algo == Classification) Vote else Average)
   with Saveable {
 
@@ -105,7 +105,7 @@ class GradientBoostedTreesModel(
   extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum)
   with Saveable {
 
-  require(trees.size == treeWeights.size)
+  require(trees.length == treeWeights.length)
 
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
@@ -139,7 +139,7 @@ class GradientBoostedTreesModel(
     evaluationArray(0) = predictionAndError.values.mean()
 
     val broadcastTrees = sc.broadcast(trees)
-    (1 until numIterations).map { nTree =>
+    (1 until numIterations).foreach { nTree =>
       predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
         val currentTree = broadcastTrees.value(nTree)
         val currentTreeWeight = localTreeWeights(nTree)
@@ -202,12 +202,10 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     loss: Loss): RDD[(Double, Double)] = {
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
-      iter.map {
-        case (lp, (pred, error)) => {
-          val newPred = pred + tree.predict(lp.features) * treeWeight
-          val newError = loss.computeError(newPred, lp.label)
-          (newPred, newError)
-        }
+      iter.map { case (lp, (pred, error)) =>
+        val newPred = pred + tree.predict(lp.features) * treeWeight
+        val newError = loss.computeError(newPred, lp.label)
+        (newPred, newError)
       }
     }
     newPredError
@@ -346,7 +344,7 @@ private[tree] sealed class TreeEnsembleModel(
   /**
    * Get number of trees in ensemble.
    */
-  def numTrees: Int = trees.size
+  def numTrees: Int = trees.length
 
   /**
    * Get total number of nodes, summed over all trees in the ensemble.

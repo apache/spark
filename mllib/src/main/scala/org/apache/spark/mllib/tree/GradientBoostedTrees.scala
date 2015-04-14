@@ -194,8 +194,6 @@ object GradientBoostedTrees extends Logging {
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = firstTreeWeight
-    val startingModel = new GradientBoostedTreesModel(
-      Regression, Array(firstTreeModel), baseLearnerWeights.slice(0, 1))
 
     var predError: RDD[(Double, Double)] = GradientBoostedTreesModel.
       computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
