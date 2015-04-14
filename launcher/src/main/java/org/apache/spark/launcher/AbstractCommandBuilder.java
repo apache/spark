@@ -186,12 +186,12 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    final String assembly = AbstractCommandBuilder.class.getProtectionDomain().getCodeSource().
-	getLocation().getPath();
+    String assembly = getenv(ENV_SPARK_ASSEMBLY);
+    checkState(assembly != null, "%s env variable not set!", ENV_SPARK_ASSEMBLY);
     addToClassPath(cp, assembly);
 
-    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only 
-    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate 
+    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
+    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
     // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
