@@ -23,12 +23,17 @@ class ParamsSuite extends FunSuite {
 
   test("param") {
     val solver = new TestParams()
-    import solver.maxIter
+    import solver.{maxIter, inputCol}
 
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "max number of iterations")
     assert(maxIter.parent.eq(solver))
-    assert(maxIter.toString === "maxIter: max number of iterations")
+    assert(maxIter.toString === "maxIter: max number of iterations (default: 10)")
+
+    solver.setMaxIter(5)
+    assert(maxIter.toString === "maxIter: max number of iterations (default: 10, current: 5)")
+
+    assert(inputCol.toString === "inputCol: input column name (undefined)")
   }
 
   test("param pair") {
@@ -99,10 +104,7 @@ class ParamsSuite extends FunSuite {
     assert(!solver.isDefined(inputCol))
     intercept[NoSuchElementException](solver.getInputCol)
 
-    assert(
-      solver.explain(maxIter) === "maxIter: max number of iterations (default: 10, current: 100)")
-    assert(solver.explain(inputCol) === "inputCol: input column name (undefined)")
-    assert(solver.explainParams() === Seq(inputCol, maxIter).map(solver.explain).mkString("\n"))
+    assert(solver.explainParams() === Seq(inputCol, maxIter).mkString("\n"))
 
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))

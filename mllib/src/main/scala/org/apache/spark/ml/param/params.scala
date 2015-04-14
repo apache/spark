@@ -49,7 +49,20 @@ class Param[T] (val parent: Params, val name: String, val doc: String) extends S
    */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
-  override def toString: String = s"$name: $doc"
+  /**
+   * Converts this param's name, doc, and optionally its default value and the user-supplied
+   * value in its parent to string.
+   */
+  override def toString: String = {
+    val valueStr = if (parent.isDefined(this)) {
+      val defaultValueStr = parent.getDefault(this).map("default: " + _)
+      val currentValueStr = parent.get(this).map("current: " + _)
+      (defaultValueStr ++ currentValueStr).mkString("(", ", ", ")")
+    } else {
+      "(undefined)"
+    }
+    s"$name: $doc $valueStr"
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
@@ -129,24 +142,9 @@ trait Params extends Identifiable with Serializable {
   def validate(): Unit = validate(ParamMap.empty)
 
   /**
-   * Explain a param and optionally its default value and the user-supplied value.
-   */
-  def explain(param: Param[_]): String = {
-    shouldOwn(param)
-    val valueStr = if (isDefined(param)) {
-      val defaultValueStr = getDefault(param).map("default: " + _)
-      val currentValueStr = get(param).map("current: " + _)
-      (defaultValueStr ++ currentValueStr).mkString("(", ", ", ")")
-    } else {
-      "(undefined)"
-    }
-    s"${param.name}: ${param.doc} $valueStr"
-  }
-
-  /**
    * Returns the documentation of all params.
    */
-  def explainParams(): String = params.map(explain).mkString("\n")
+  def explainParams(): String = params.mkString("\n")
 
   /** Checks whether a param is explicitly set. */
   final def isSet(param: Param[_]): Boolean = {
