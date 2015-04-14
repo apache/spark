@@ -86,8 +86,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    * Files with mod times older than this "window" of remembering will be ignored. So if new
    * files are visible within this window, then the file will get selected in the next batch.
    */
-  private val minRememberDuration =
-    Seconds(ssc.conf.getLong("spark.streaming.minRememberDuration", 60L))
+  private val minRememberDurationS =
+    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.minRememberDuration", "60s"))
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
@@ -105,7 +105,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    * selected and processed.
    */
   private val numBatchesToRemember = FileInputDStream
-    .calculateNumBatchesToRemember(slideDuration, minRememberDuration)
+    .calculateNumBatchesToRemember(slideDuration, minRememberDurationS)
   private val durationToRemember = slideDuration * numBatchesToRemember
   remember(durationToRemember)
 
@@ -344,10 +344,10 @@ object FileInputDStream {
 
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
-   * at least last minRememberDuration duration can be remembered.
+   * at least last minRememberDurationS duration can be remembered.
    */
   def calculateNumBatchesToRemember(batchDuration: Duration,
-                                    minRememberDuration: Duration): Int = {
-    math.ceil(minRememberDuration.milliseconds.toDouble / batchDuration.milliseconds).toInt
+                                    minRememberDurationS: Duration): Int = {
+    math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
 }
