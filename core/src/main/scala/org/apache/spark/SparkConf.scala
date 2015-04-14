@@ -405,7 +405,7 @@ private[spark] object SparkConf extends Logging {
    */
   private val deprecatedConfigs = Map[String, DeprecatedConfig](
     "spark.yarn.user.classpath.first" ->
-      DeprecatedConfig("1.3", "Use spark.{driver,executor}.userClassPathFirst instead.")
+      DeprecatedConfig("1.3", "Please use spark.{driver,executor}.userClassPathFirst instead.")
     )
 
   /**
@@ -417,7 +417,8 @@ private[spark] object SparkConf extends Logging {
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
       AlternateConfig("spark.files.userClassPathFirst", "1.3")),
-    "spark.history.fs.update.interval.seconds" -> Seq(
+    "spark.history.fs.update.interval" -> Seq(
+      AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
       AlternateConfig("spark.history.fs.updateInterval", "1.3"),
       AlternateConfig("spark.history.updateInterval", "1.3"))
     )
@@ -478,14 +479,14 @@ private[spark] object SparkConf extends Logging {
   def logDeprecationWarning(key: String): Unit = {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
-        s"The configuration option '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
         s"may be removed in the future. ${cfg.deprecationMessage}")
     }
 
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
-        s"The configuration option '$key' has been replaced as of Spark ${cfg.version} " +
-        s"and may be removed in the future. Please use the new config '$newKey' instead.")
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"and may be removed in the future. Please use the new key '$newKey' instead.")
     }
   }
 

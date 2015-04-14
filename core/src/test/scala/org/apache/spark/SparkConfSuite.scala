@@ -199,7 +199,7 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
   test("deprecated configs") {
     val conf = new SparkConf()
-    val newName = "spark.history.fs.update.interval.seconds"
+    val newName = "spark.history.fs.update.interval"
 
     assert(!conf.contains(newName))
 
@@ -209,8 +209,14 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     conf.set("spark.history.fs.updateInterval", "2")
     assert(conf.get(newName) === "2")
 
-    conf.set(newName, "3")
+    conf.set("spark.history.fs.update.interval.seconds", "3")
     assert(conf.get(newName) === "3")
+
+    conf.set(newName, "4")
+    assert(conf.get(newName) === "4")
+
+    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    assert(count === 4)
   }
 
 }
