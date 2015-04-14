@@ -39,7 +39,7 @@ class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       <th>Duration</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
-      <th>Last Error</th>
+      <th>Error</th>
   }
 
   private def makeOutputOpIdRow(outputOpId: OutputOpId, jobs: Seq[JobUIData]): Seq[Node] = {
