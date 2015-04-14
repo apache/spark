@@ -212,7 +212,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
 These configs are used to write to the dfs and connect to the YARN ResourceManager.
 
-There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
+There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN. For Spark application can run in either mode, for interactive shell(s) can only in yarn-client mode.
 
 Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.  Thus, the master parameter is simply "yarn-client" or "yarn-cluster".
 
@@ -236,13 +236,9 @@ The above starts a YARN client program which starts the default Application Mast
 
 To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".
 
-Now we also can launch a Spark application in Python on YARN. The different is we don't need to specify the class, and just replace the app jar with Python file.
-
 To run spark-shell:
 
     $ ./bin/spark-shell --master yarn-client
-
-Also same to pyspark shell.
 
 ## Adding Other JARs
 
