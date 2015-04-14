@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import parquet.Log
 import parquet.hadoop.util.ContextUtil
-import parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetOutputCommitter}
+import parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetOutputCommitter, ParquetOutputFormat}
 
 private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
@@ -40,22 +40,24 @@ private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: T
     try {
       val configuration = ContextUtil.getConfiguration(jobContext)
       val fileSystem = outputPath.getFileSystem(configuration)
-      val outputStatus = fileSystem.getFileStatus(outputPath)
-      val footers = ParquetFileReader.readAllFootersInParallel(configuration, outputStatus)
-      try {
-        ParquetFileWriter.writeMetadataFile(configuration, outputPath, footers)
-        if (configuration.getBoolean("mapreduce.fileoutputcommitter.marksuccessfuljobs", true)) {
-          val successPath = new Path(outputPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
-          fileSystem.create(successPath).close()
-        }
-      } catch {
-        case e: Exception => {
-          LOG.warn("could not write summary file for " + outputPath, e)
-          val metadataPath = new Path(outputPath, ParquetFileWriter.PARQUET_METADATA_FILE)
-          if (fileSystem.exists(metadataPath)) {
-            fileSystem.delete(metadataPath, true)
+      if (configuration.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
+        val outputStatus = fileSystem.getFileStatus(outputPath)
+        val footers = ParquetFileReader.readAllFootersInParallel(configuration, outputStatus)
+        try {
+          ParquetFileWriter.writeMetadataFile(configuration, outputPath, footers)
+        } catch {
+          case e: Exception => {
+            LOG.warn("could not write summary file for " + outputPath, e)
+            val metadataPath = new Path(outputPath, ParquetFileWriter.PARQUET_METADATA_FILE)
+            if (fileSystem.exists(metadataPath)) {
+              fileSystem.delete(metadataPath, true)
+            }
           }
         }
+      }
+      if (configuration.getBoolean("mapreduce.fileoutputcommitter.marksuccessfuljobs", true)) {
+        val successPath = new Path(outputPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
+        fileSystem.create(successPath).close()
       }
     } catch {
       case e: Exception => LOG.warn("could not write summary file for " + outputPath, e)
