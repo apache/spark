@@ -155,7 +155,7 @@
     <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
-    <snappy.version>1.1.1.6</snappy.version>
+    <snappy.version>1.1.1.7</snappy.version>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
