@@ -82,7 +82,8 @@ private[nio] class ConnectionManager(
     new HashedWheelTimer(Utils.namedThreadFactory("AckTimeoutMonitor"))
 
   private val ackTimeout =
-    conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 120))
+    conf.getTimeAsSeconds("spark.core.connection.ack.wait.timeout",
+      conf.get("spark.network.timeout", "120s"))
 
   // Get the thread counts from the Spark Configuration.
   // 
@@ -188,7 +189,7 @@ private[nio] class ConnectionManager(
   private val readRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
 
   private val selectorThread = new Thread("connection-manager-thread") {
-    override def run() = ConnectionManager.this.run()
+    override def run(): Unit = ConnectionManager.this.run()
   }
   selectorThread.setDaemon(true)
   // start this thread last, since it invokes run(), which accesses members above

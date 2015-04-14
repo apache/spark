@@ -56,7 +56,7 @@ class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext {
   test("verify that log urls reflect SPARK_PUBLIC_DNS (SPARK-6175)") {
     val SPARK_PUBLIC_DNS = "public_dns"
     class MySparkConf extends SparkConf(false) {
-      override def getenv(name: String) = {
+      override def getenv(name: String): String = {
         if (name == "SPARK_PUBLIC_DNS") SPARK_PUBLIC_DNS
         else super.getenv(name)
       }

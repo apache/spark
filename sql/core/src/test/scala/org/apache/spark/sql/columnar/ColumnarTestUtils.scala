@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types.{Decimal, DataType, NativeType}
 
 object ColumnarTestUtils {
-  def makeNullRow(length: Int) = {
+  def makeNullRow(length: Int): GenericMutableRow = {
     val row = new GenericMutableRow(length)
     (0 until length).foreach(row.setNullAt)
     row
@@ -93,7 +93,7 @@ object ColumnarTestUtils {
 
   def makeUniqueValuesAndSingleValueRows[T <: NativeType](
       columnType: NativeColumnType[T],
-      count: Int) = {
+      count: Int): (Seq[T#JvmType], Seq[GenericMutableRow]) = {
 
     val values = makeUniqueRandomValues(columnType, count)
     val rows = values.map { value =>

@@ -24,21 +24,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
 
 class CachedTableSuite extends QueryTest {
-  /**
-   * Throws a test failed exception when the number of cached tables differs from the expected
-   * number.
-   */
-  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
-    val planWithCaching = query.queryExecution.withCachedData
-    val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
-    }
-
-    assert(
-      cachedData.size == numCachedTables,
-      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
-        planWithCaching)
-  }
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
@@ -92,12 +77,12 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("Drop cached table") {
-    sql("CREATE TABLE test(a INT)")
-    cacheTable("test")
-    sql("SELECT * FROM test").collect()
-    sql("DROP TABLE test")
+    sql("CREATE TABLE cachedTableTest(a INT)")
+    cacheTable("cachedTableTest")
+    sql("SELECT * FROM cachedTableTest").collect()
+    sql("DROP TABLE cachedTableTest")
     intercept[AnalysisException] {
-      sql("SELECT * FROM test").collect()
+      sql("SELECT * FROM cachedTableTest").collect()
     }
   }
 

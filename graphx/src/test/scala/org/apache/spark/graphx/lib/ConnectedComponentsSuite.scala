@@ -32,7 +32,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
       val ccGraph = gridGraph.connectedComponents()
-      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
       assert(maxCCid === 0)
     }
   } // end of Grid connected components
@@ -42,7 +42,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse
       val ccGraph = gridGraph.connectedComponents()
-      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
       assert(maxCCid === 0)
     }
   } // end of Grid connected components
@@ -50,8 +50,8 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
 
   test("Chain Connected Components") {
     withSpark { sc =>
-      val chain1 = (0 until 9).map(x => (x, x+1) )
-      val chain2 = (10 until 20).map(x => (x, x+1) )
+      val chain1 = (0 until 9).map(x => (x, x + 1))
+      val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
       val ccGraph = twoChains.connectedComponents()
@@ -73,12 +73,12 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
 
   test("Reverse Chain Connected Components") {
     withSpark { sc =>
-      val chain1 = (0 until 9).map(x => (x, x+1) )
-      val chain2 = (10 until 20).map(x => (x, x+1) )
+      val chain1 = (0 until 9).map(x => (x, x + 1))
+      val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
       val ccGraph = twoChains.connectedComponents()
-      val vertices = ccGraph.vertices.collect
+      val vertices = ccGraph.vertices.collect()
       for ( (id, cc) <- vertices ) {
         if (id < 10) {
           assert(cc === 0)
@@ -120,9 +120,9 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
       // Build the initial Graph
       val graph = Graph(users, relationships, defaultUser)
       val ccGraph = graph.connectedComponents()
-      val vertices = ccGraph.vertices.collect
+      val vertices = ccGraph.vertices.collect()
       for ( (id, cc) <- vertices ) {
-        assert(cc == 0)
+        assert(cc === 0)
       }
     }
   } // end of toy connected components

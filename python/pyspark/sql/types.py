@@ -33,8 +33,7 @@ __all__ = [
 
 
 class DataType(object):
-
-    """Spark SQL DataType"""
+    """Base class for data types."""
 
     def __repr__(self):
         return self.__class__.__name__
@@ -67,7 +66,6 @@ class DataType(object):
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
 class PrimitiveTypeSingleton(type):
-
     """Metaclass for PrimitiveType"""
 
     _instances = {}
@@ -79,66 +77,45 @@ class PrimitiveTypeSingleton(type):
 
 
 class PrimitiveType(DataType):
-
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
 
 
 class NullType(PrimitiveType):
+    """Null type.
 
-    """Spark SQL NullType
-
-    The data type representing None, used for the types which has not
-    been inferred.
+    The data type representing None, used for the types that cannot be inferred.
     """
 
 
 class StringType(PrimitiveType):
-
-    """Spark SQL StringType
-
-    The data type representing string values.
+    """String data type.
     """
 
 
 class BinaryType(PrimitiveType):
-
-    """Spark SQL BinaryType
-
-    The data type representing bytearray values.
+    """Binary (byte array) data type.
     """
 
 
 class BooleanType(PrimitiveType):
-
-    """Spark SQL BooleanType
-
-    The data type representing bool values.
+    """Boolean data type.
     """
 
 
 class DateType(PrimitiveType):
-
-    """Spark SQL DateType
-
-    The data type representing datetime.date values.
+    """Date (datetime.date) data type.
     """
 
 
 class TimestampType(PrimitiveType):
-
-    """Spark SQL TimestampType
-
-    The data type representing datetime.datetime values.
+    """Timestamp (datetime.datetime) data type.
     """
 
 
 class DecimalType(DataType):
-
-    """Spark SQL DecimalType
-
-    The data type representing decimal.Decimal values.
+    """Decimal (decimal.Decimal) data type.
     """
 
     def __init__(self, precision=None, scale=None):
@@ -166,80 +143,55 @@ class DecimalType(DataType):
 
 
 class DoubleType(PrimitiveType):
-
-    """Spark SQL DoubleType
-
-    The data type representing float values.
+    """Double data type, representing double precision floats.
     """
 
 
 class FloatType(PrimitiveType):
-
-    """Spark SQL FloatType
-
-    The data type representing single precision floating-point values.
+    """Float data type, representing single precision floats.
     """
 
 
 class ByteType(PrimitiveType):
-
-    """Spark SQL ByteType
-
-    The data type representing int values with 1 singed byte.
+    """Byte data type, i.e. a signed integer in a single byte.
     """
     def simpleString(self):
         return 'tinyint'
 
 
 class IntegerType(PrimitiveType):
-
-    """Spark SQL IntegerType
-
-    The data type representing int values.
+    """Int data type, i.e. a signed 32-bit integer.
     """
     def simpleString(self):
         return 'int'
 
 
 class LongType(PrimitiveType):
+    """Long data type, i.e. a signed 64-bit integer.
 
-    """Spark SQL LongType
-
-    The data type representing long values. If the any value is
-    beyond the range of [-9223372036854775808, 9223372036854775807],
-    please use DecimalType.
+    If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
+    please use :class:`DecimalType`.
     """
     def simpleString(self):
         return 'bigint'
 
 
 class ShortType(PrimitiveType):
-
-    """Spark SQL ShortType
-
-    The data type representing int values with 2 signed bytes.
+    """Short data type, i.e. a signed 16-bit integer.
     """
     def simpleString(self):
         return 'smallint'
 
 
 class ArrayType(DataType):
+    """Array data type.
 
-    """Spark SQL ArrayType
-
-    The data type representing list values. An ArrayType object
-    comprises two fields, elementType (a DataType) and containsNull (a bool).
-    The field of elementType is used to specify the type of array elements.
-    The field of containsNull is used to specify if the array has None values.
-
+    :param elementType: :class:`DataType` of each element in the array.
+    :param containsNull: boolean, whether the array can contain null (None) values.
     """
 
     def __init__(self, elementType, containsNull=True):
-        """Creates an ArrayType
-
-        :param elementType: the data type of elements.
-        :param containsNull: indicates whether the list contains None values.
-
+        """
         >>> ArrayType(StringType()) == ArrayType(StringType(), True)
         True
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
@@ -268,29 +220,17 @@ class ArrayType(DataType):
 
 
 class MapType(DataType):
+    """Map data type.
 
-    """Spark SQL MapType
+    :param keyType: :class:`DataType` of the keys in the map.
+    :param valueType: :class:`DataType` of the values in the map.
+    :param valueContainsNull: indicates whether values can contain null (None) values.
 
-    The data type representing dict values. A MapType object comprises
-    three fields, keyType (a DataType), valueType (a DataType) and
-    valueContainsNull (a bool).
-
-    The field of keyType is used to specify the type of keys in the map.
-    The field of valueType is used to specify the type of values in the map.
-    The field of valueContainsNull is used to specify if values of this
-    map has None values.
-
-    For values of a MapType column, keys are not allowed to have None values.
-
+    Keys in a map data type are not allowed to be null (None).
     """
 
     def __init__(self, keyType, valueType, valueContainsNull=True):
-        """Creates a MapType
-        :param keyType: the data type of keys.
-        :param valueType: the data type of values.
-        :param valueContainsNull: indicates whether values contains
-        null values.
-
+        """
         >>> (MapType(StringType(), IntegerType())
         ...        == MapType(StringType(), IntegerType(), True))
         True
@@ -325,30 +265,16 @@ class MapType(DataType):
 
 
 class StructField(DataType):
+    """A field in :class:`StructType`.
 
-    """Spark SQL StructField
-
-    Represents a field in a StructType.
-    A StructField object comprises three fields, name (a string),
-    dataType (a DataType) and nullable (a bool). The field of name
-    is the name of a StructField. The field of dataType specifies
-    the data type of a StructField.
-
-    The field of nullable specifies if values of a StructField can
-    contain None values.
-
+    :param name: string, name of the field.
+    :param dataType: :class:`DataType` of the field.
+    :param nullable: boolean, whether the field can be null (None) or not.
+    :param metadata: a dict from string to simple type that can be serialized to JSON automatically
     """
 
     def __init__(self, name, dataType, nullable=True, metadata=None):
-        """Creates a StructField
-        :param name: the name of this field.
-        :param dataType: the data type of this field.
-        :param nullable: indicates whether values of this field
-                         can be null.
-        :param metadata: metadata of this field, which is a map from string
-                         to simple type that can be serialized to JSON
-                         automatically
-
+        """
         >>> (StructField("f1", StringType(), True)
         ...      == StructField("f1", StringType(), True))
         True
@@ -384,17 +310,13 @@ class StructField(DataType):
 
 
 class StructType(DataType):
+    """Struct type, consisting of a list of :class:`StructField`.
 
-    """Spark SQL StructType
-
-    The data type representing rows.
-    A StructType object comprises a list of L{StructField}.
-
+    This is the data type representing a :class:`Row`.
     """
 
     def __init__(self, fields):
-        """Creates a StructType
-
+        """
         >>> struct1 = StructType([StructField("f1", StringType(), True)])
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
@@ -425,9 +347,9 @@ class StructType(DataType):
 
 
 class UserDefinedType(DataType):
-    """
+    """User-defined type (UDT).
+
     .. note:: WARN: Spark Internal Use Only
-    SQL User-Defined Type (UDT).
     """
 
     @classmethod
@@ -512,7 +434,7 @@ def _parse_datatype_json_string(json_string):
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
     ...     assert datatype == pickled
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
+    ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_primitive_types.values():
@@ -645,8 +567,8 @@ def _infer_schema(row):
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
-        elif hasattr(row, "__FIELDS__"):  # Row
-            items = zip(row.__FIELDS__, tuple(row))
+        elif hasattr(row, "__fields__"):  # Row
+            items = zip(row.__fields__, tuple(row))
         else:
             names = ['_%d' % i for i in range(1, len(row) + 1)]
             items = zip(names, row)
@@ -725,7 +647,7 @@ def _python_to_sql_converter(dataType):
             if isinstance(obj, dict):
                 return tuple(c(obj.get(n)) for n, c in zip(names, converters))
             elif isinstance(obj, tuple):
-                if hasattr(obj, "_fields") or hasattr(obj, "__FIELDS__"):
+                if hasattr(obj, "_fields") or hasattr(obj, "__fields__"):
                     return tuple(c(v) for c, v in zip(converters, obj))
                 elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
                     d = dict(obj)
@@ -1075,12 +997,13 @@ def _restore_object(dataType, obj):
     # same object in most cases.
     k = id(dataType)
     cls = _cached_cls.get(k)
-    if cls is None:
+    if cls is None or cls.__datatype is not dataType:
         # use dataType as key to avoid create multiple class
         cls = _cached_cls.get(dataType)
         if cls is None:
             cls = _create_cls(dataType)
             _cached_cls[dataType] = cls
+        cls.__datatype = dataType
         _cached_cls[k] = cls
     return cls(obj)
 
@@ -1197,8 +1120,8 @@ def _create_cls(dataType):
     class Row(tuple):
 
         """ Row in DataFrame """
-        __DATATYPE__ = dataType
-        __FIELDS__ = tuple(f.name for f in dataType.fields)
+        __datatype = dataType
+        __fields__ = tuple(f.name for f in dataType.fields)
         __slots__ = ()
 
         # create property for fast access
@@ -1206,22 +1129,22 @@ def _create_cls(dataType):
 
         def asDict(self):
             """ Return as a dict """
-            return dict((n, getattr(self, n)) for n in self.__FIELDS__)
+            return dict((n, getattr(self, n)) for n in self.__fields__)
 
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                                          for n in self.__FIELDS__))
+                                          for n in self.__fields__))
 
         def __reduce__(self):
-            return (_restore_object, (self.__DATATYPE__, tuple(self)))
+            return (_restore_object, (self.__datatype, tuple(self)))
 
     return Row
 
 
 def _create_row(fields, values):
     row = Row(*values)
-    row.__FIELDS__ = fields
+    row.__fields__ = fields
     return row
 
 
@@ -1261,7 +1184,7 @@ class Row(tuple):
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__FIELDS__ = names
+            row.__fields__ = names
             return row
 
         else:
@@ -1271,11 +1194,11 @@ class Row(tuple):
         """
         Return as an dict
         """
-        if not hasattr(self, "__FIELDS__"):
+        if not hasattr(self, "__fields__"):
             raise TypeError("Cannot convert a Row class into dict")
-        return dict(zip(self.__FIELDS__, self))
+        return dict(zip(self.__fields__, self))
 
-    # let obect acs like class
+    # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
         return _create_row(self, args)
@@ -1286,21 +1209,21 @@ class Row(tuple):
         try:
             # it will be slow when it has many fields,
             # but this will not be used in normal cases
-            idx = self.__FIELDS__.index(item)
+            idx = self.__fields__.index(item)
             return self[idx]
         except IndexError:
             raise AttributeError(item)
 
     def __reduce__(self):
-        if hasattr(self, "__FIELDS__"):
-            return (_create_row, (self.__FIELDS__, tuple(self)))
+        if hasattr(self, "__fields__"):
+            return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
     def __repr__(self):
-        if hasattr(self, "__FIELDS__"):
+        if hasattr(self, "__fields__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
-                                         for k, v in zip(self.__FIELDS__, self))
+                                         for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join(self)
 
@@ -1315,7 +1238,7 @@ def _test():
     globs = pyspark.sql.types.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['ExamplePoint'] = ExamplePoint
     globs['ExamplePointUDT'] = ExamplePointUDT
     (failure_count, test_count) = doctest.testmod(

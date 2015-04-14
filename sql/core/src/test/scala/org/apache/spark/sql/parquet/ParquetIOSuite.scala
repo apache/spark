@@ -218,7 +218,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("compression codec") {
-    def compressionCodecFor(path: String) = {
+    def compressionCodecFor(path: String): String = {
       val codecs = ParquetTypesConverter
         .readMetaData(new Path(path), Some(configuration))
         .getBlocks

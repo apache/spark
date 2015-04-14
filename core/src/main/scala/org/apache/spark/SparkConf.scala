@@ -133,7 +133,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set multiple parameters together */
-  def setAll(settings: Traversable[(String, String)]) = {
+  def setAll(settings: Traversable[(String, String)]): SparkConf = {
     this.settings.putAll(settings.toMap.asJava)
     this
   }
@@ -173,6 +173,42 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def get(key: String, defaultValue: String): String = {
     getOption(key).getOrElse(defaultValue)
   }
+
+  /** 
+   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no 
+   * suffix is provided then seconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsSeconds(key: String): Long = {
+    Utils.timeStringAsSeconds(get(key))
+  }
+
+  /** 
+   * Get a time parameter as seconds, falling back to a default if not set. If no 
+   * suffix is provided then seconds are assumed.
+   * 
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /** 
+   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no 
+   * suffix is provided then milliseconds are assumed. 
+   * @throws NoSuchElementException
+   */
+  def getTimeAsMs(key: String): Long = {
+    Utils.timeStringAsMs(get(key))
+  }
+
+  /** 
+   * Get a time parameter as milliseconds, falling back to a default if not set. If no 
+   * suffix is provided then milliseconds are assumed. 
+   */
+  def getTimeAsMs(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsMs(get(key, defaultValue))
+  }
+  
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
