@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.{SparkConf, ShuffleDependency, SparkContext}
+import org.apache.spark.{SparkEnv, SparkConf, ShuffleDependency, SparkContext}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
@@ -70,6 +70,8 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
 
   @transient var sparkContext: SparkContext = _
   @transient var sqlContext: SQLContext = _
+  // We may have an existing SparkEnv (e.g. the one used by TestSQLContext).
+  @transient val existingSparkEnv = SparkEnv.get
   var allColumns: String = _
   val serializerClass: Class[Serializer] =
     classOf[SparkSqlSerializer2].asInstanceOf[Class[Serializer]]
@@ -118,6 +120,10 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   override def afterAll(): Unit = {
     sqlContext.dropTempTable("shuffle")
     sparkContext.stop()
+    sqlContext = null
+    sparkContext = null
+    // Set the existing SparkEnv back.
+    SparkEnv.set(existingSparkEnv)
     super.afterAll()
   }
 
@@ -168,6 +174,7 @@ class SparkSqlSerializer2HashShuffleSuite extends SparkSqlSerializer2Suite {
   override def beforeAll(): Unit = {
     val sparkConf =
       new SparkConf()
+        .set("spark.driver.allowMultipleContexts", "true")
         .set("spark.sql.testkey", "true")
         .set("spark.shuffle.manager", "hash")
 
@@ -184,6 +191,7 @@ class SparkSqlSerializer2SortShuffleSuite extends SparkSqlSerializer2Suite {
     // spark.shuffle.sort.bypassMergeThreshold is also 5.
     val sparkConf =
       new SparkConf()
+        .set("spark.driver.allowMultipleContexts", "true")
         .set("spark.sql.testkey", "true")
         .set("spark.shuffle.manager", "sort")
         .set("spark.shuffle.sort.bypassMergeThreshold", "5")
@@ -204,6 +212,7 @@ class SparkSqlSerializer2SortMergeShuffleSuite extends SparkSqlSerializer2Suite 
   override def beforeAll(): Unit = {
     val sparkConf =
       new SparkConf()
+        .set("spark.driver.allowMultipleContexts", "true")
         .set("spark.sql.testkey", "true")
         .set("spark.shuffle.manager", "sort")
         .set("spark.shuffle.sort.bypassMergeThreshold", "0") // Always do sort merge.
