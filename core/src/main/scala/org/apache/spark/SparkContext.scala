@@ -1813,7 +1813,7 @@ object SparkContext extends Logging {
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
    */
   private var contextBeingConstructed: Option[SparkContext] = None
-  
+
   /**
    * Called to ensure that no other SparkContext is running in this JVM.
    *
