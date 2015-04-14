@@ -19,6 +19,10 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
+import org.apache.spark.scheduler.SparkListener
+
+import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
@@ -63,5 +67,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread.
    */
   def onPostEvent(listener: L, event: E): Unit
+
+  private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
+    val c = implicitly[ClassTag[T]].runtimeClass
+    listeners.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+  }
 
 }
