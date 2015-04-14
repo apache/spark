@@ -250,8 +250,6 @@ In yarn-cluster mode, the driver runs on a different machine than the client, so
         my-main-jar.jar
         app_arg1 app_arg2
 
-For Spark application in Python also can add code dependencies to spark-submit through its --py-files argument by packaging them into a .zip file.
-
 # Debugging your Application
 
 In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the `yarn.log-aggregation-enable` config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
