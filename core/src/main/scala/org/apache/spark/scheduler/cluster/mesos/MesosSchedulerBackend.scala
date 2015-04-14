@@ -271,7 +271,8 @@ private[spark] class MesosSchedulerBackend(
         slaveIdToWorkerOffer.get(slaveId).foreach(o =>
           listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
             // TODO: Add support for log urls for Mesos
-            new ExecutorInfo(o.host, o.cores, Map.empty)))
+            // TODO: Add support for debug port for Mesos
+            new ExecutorInfo(o.host, o.cores, Map.empty, None)))
         )
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }

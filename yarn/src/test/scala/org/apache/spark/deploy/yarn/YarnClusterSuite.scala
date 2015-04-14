@@ -33,7 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -173,6 +173,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     testUseClassPathFirst(false)
   }
 
+  test("executors' debug ports are notified in client mode") {
+    testExecutorDebugPortNotified(true)
+  }
+
+  test("executors' debug ports are notified in cluster mode") {
+    testExecutorDebugPortNotified(false)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     var result = File.createTempFile("result", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -195,6 +203,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
         "spark.executor.userClassPathFirst" -> "true"))
     checkResult(driverResult, "OVERRIDDEN")
     checkResult(executorResult, "OVERRIDDEN")
+  }
+
+  private def testExecutorDebugPortNotified(clientMode: Boolean): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    runSpark(clientMode, mainClassName(YarnExecutorDebugPortTest.getClass),
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = Map("spark.executor.jdwp.enabled" -> "true"))
+    checkResult(result)
   }
 
   private def runSpark(
@@ -282,10 +298,10 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 }
 
-private class SaveExecutorInfo extends SparkListener {
+private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
 
-  override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 }
@@ -293,7 +309,6 @@ private class SaveExecutorInfo extends SparkListener {
 private object YarnClusterDriver extends Logging with Matchers {
 
   val WAIT_TIMEOUT_MILLIS = 10000
-  var listener: SaveExecutorInfo = null
 
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
@@ -306,10 +321,9 @@ private object YarnClusterDriver extends Logging with Matchers {
       System.exit(1)
     }
 
-    listener = new SaveExecutorInfo
     val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", "org.apache.spark.deploy.yarn.SaveExecutorInfo")
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
-    sc.addSparkListener(listener)
     val status = new File(args(0))
     var result = "failure"
     try {
@@ -323,7 +337,15 @@ private object YarnClusterDriver extends Logging with Matchers {
     }
 
     // verify log urls are present
-    listener.addedExecutorInfos.values.foreach { info =>
+    val listenerOpt = sc.listenerBus.listeners.find {
+      case _: SaveExecutorInfo => true
+      case _ => false
+    }.map(_.asInstanceOf[SaveExecutorInfo])
+    assert(listenerOpt.isDefined)
+    val listener = listenerOpt.get
+    val executorInfos = listener.addedExecutorInfos.values
+    assert(executorInfos.nonEmpty)
+    executorInfos.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
     }
   }
@@ -365,3 +387,43 @@ private object YarnClasspathTest {
   }
 
 }
+
+private object YarnExecutorDebugPortTest {
+
+  val WAIT_TIMEOUT_MILLIS = 10000
+
+  def main(args: Array[String]): Unit = {
+    if (args.length != 1) {
+      System.err.println(
+        s"""
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnExecutorDebugPortTest [result file]
+        """.stripMargin)
+      System.exit(1)
+    }
+
+    val resultPath = args(0)
+    val sc = new SparkContext(
+      new SparkConf().set("spark.extraListeners", "org.apache.spark.deploy.yarn.SaveExecutorInfo"))
+    try {
+      sc.parallelize(Seq(1)).collect
+      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    } finally {
+      sc.stop()
+      var result = "failure"
+      val listener = sc.listenerBus.listeners.filter {
+        case _: SaveExecutorInfo => true
+        case _ => false
+      }(0).asInstanceOf[SaveExecutorInfo]
+
+      val executorInfos = listener.addedExecutorInfos.values
+      if (executorInfos.nonEmpty && executorInfos.forall(info => info.debugPortOpt.nonEmpty)) {
+        result = "success"
+      }
+      Files.write(result, new File(resultPath), UTF_8)
+    }
+  }
+
+}
+

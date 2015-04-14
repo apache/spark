@@ -22,7 +22,7 @@ import java.util.{List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
@@ -121,7 +121,13 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    val extraJavaOpts = new ListBuffer[String]
+    extraJavaOpts ++=  conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
+    if (conf.getBoolean("spark.executor.jdwp.enabled", false)) {
+      extraJavaOpts += "-agentlib:jdwp=transport=dt_socket,suspend=n,server=y,address=0"
+    }
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -132,7 +138,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
-        .setValue(extraJavaOpts)
+        .setValue(extraJavaOpts.toString)
         .build())
 
     sc.executorEnvs.foreach { case (key, value) =>
