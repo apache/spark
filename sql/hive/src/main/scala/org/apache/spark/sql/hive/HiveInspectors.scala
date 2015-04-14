@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types
+import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.sql.types._
 
 /* Implicit conversions */
@@ -218,14 +219,14 @@ private[hive] trait HiveInspectors extends Logging {
 
     // list type
     case c: Class[_] if c == classOf[java.util.List[java.lang.Object]] =>
-      logWarning("Failed to catch a correct component type in List<> because of type erasure," +
-        " so you need to handle it correctly by yourself")
+      logWarning("Failed to catch a component type in List<> because of type erasure in JVM," +
+        " so you need to cast it into the correct type by yourself")
       ArrayType(ErasedType)
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
 
-    case c => throw new HiveDataTypeException("Unknown java type: " + c)
+    case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
   /**
@@ -695,6 +696,3 @@ class ErasedType private() extends DataType {
 }
 
 case object ErasedType extends ErasedType
-
-/** The exception thrown from the [[HiveInspectors]]. */
-private[hive] class HiveDataTypeException(message: String) extends Exception(message)
