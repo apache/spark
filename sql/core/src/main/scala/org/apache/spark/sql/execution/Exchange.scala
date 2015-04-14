@@ -34,8 +34,8 @@ import org.apache.spark.util.MutablePair
 @DeveloperApi
 case class Exchange(
     newPartitioning: Partitioning,
-    child: SparkPlan,
-    sort: Boolean = false)
+    sort: Boolean,
+    child: SparkPlan)
   extends UnaryNode {
 
   override def outputPartitioning: Partitioning = newPartitioning
@@ -59,7 +59,7 @@ case class Exchange(
         // we can avoid the defensive copies to improve performance. In the long run, we probably
         // want to include information in shuffle dependencies to indicate whether elements in the
         // source RDD should be copied.
-        val rdd = if (sortBasedShuffleOn && numPartitions > bypassMergeThreshold) {
+        val rdd = if ((sortBasedShuffleOn && numPartitions > bypassMergeThreshold) || sort) {
           child.execute().mapPartitions { iter =>
             val hashExpressions = newMutableProjection(expressions, child.output)()
             iter.map(r => (hashExpressions(r).copy(), r.copy()))
@@ -178,7 +178,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
         val needSort = child.outputOrdering != rowOrdering
         if (child.outputPartitioning != partitioning || needSort) {
           // TODO: if only needSort, we need only sort each partition instead of an Exchange
-          Exchange(partitioning, child, sort = needSort)
+          Exchange(partitioning, sort = needSort, child)
         } else {
           child
         }
@@ -197,7 +197,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
             addExchangeIfNecessary(SinglePartition, child)
           case (ClusteredDistribution(clustering), (child, rowOrdering)) =>
             addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child, rowOrdering)
-          case (OrderedDistribution(ordering), (child, _)) =>
+          case (OrderedDistribution(ordering), (child, None)) =>
             addExchangeIfNecessary(RangePartitioning(ordering, numPartitions), child)
           case (UnspecifiedDistribution, (child, _)) => child
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
