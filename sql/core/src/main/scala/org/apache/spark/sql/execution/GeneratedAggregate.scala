@@ -153,51 +153,6 @@ case class GeneratedAggregate(
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
         
-      case a @ Average(expr) =>
-        val calcType =
-          expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              DecimalType.Unlimited
-            case _ =>
-              expr.dataType
-          }
-
-        val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
-        val currentSum = AttributeReference("currentSum", calcType, nullable = false)()
-        val initialCount = Literal(0L)
-        val initialSum = Cast(Literal(0L), calcType)
-
-        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
-        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
-        val toCount = expr match {
-          case UnscaledValue(e) => e
-          case _ => expr
-        }
-
-        val updateCount = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
-        val updateSum = Coalesce(Add(Cast(expr, calcType), currentSum) :: currentSum :: Nil)
-
-        val result =
-          expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              If(EqualTo(currentCount, Literal(0L)),
-                Literal.create(null, a.dataType),
-                Cast(Divide(
-                  Cast(currentSum, DecimalType.Unlimited),
-                  Cast(currentCount, DecimalType.Unlimited)), a.dataType))
-            case _ =>
-              If(EqualTo(currentCount, Literal(0L)),
-                Literal.create(null, a.dataType),
-                Divide(Cast(currentSum, a.dataType), Cast(currentCount, a.dataType)))
-          }
-
-        AggregateEvaluation(
-          currentCount :: currentSum :: Nil,
-          initialCount :: initialSum :: Nil,
-          updateCount :: updateSum :: Nil,
-          result
-        )
-
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)
