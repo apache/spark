@@ -386,6 +386,43 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def newInstance(): SumFunction = new SumFunction(child, this)
 }
 
+/*
+ * Special Sum class with 0 base value, used in optimized version of count distinct
+ */
+case class SumZero(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      child.dataType
+  }
+
+  override def toString: String = s"SUMZERO($child)"
+
+  override def asPartial: SplitEvaluation = {
+    child.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        val partialSum = Alias(SumZero(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        SplitEvaluation(
+          Cast(CombineSum(partialSum.toAttribute), dataType),
+          partialSum :: Nil)
+
+      case _ =>
+        val partialSum = Alias(SumZero(child), "PartialSum")()
+        SplitEvaluation(
+          CombineSum(partialSum.toAttribute),
+          partialSum :: Nil)
+    }
+  }
+
+  override def newInstance(): SumZeroFunction = new SumZeroFunction(child, this)
+}
+
 /**
  * Sum should satisfy 3 cases:
  * 1) sum of all null values = zero
@@ -631,6 +668,23 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
         Cast(sum, dataType).eval(null)
       case _ => sum.eval(null)
     }
+  }
+}
+
+case class SumZeroFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  private val sum = MutableLiteral(0L, LongType)
+
+  private val addFunction =
+    Coalesce(Seq(Add(Coalesce(Seq(sum)), Cast(expr, LongType)), sum))
+
+  override def update(input: Row): Unit = {
+    sum.update(addFunction, input)
+  }
+
+  override def eval(input: Row): Any = {
+    sum.eval(null)
   }
 }
 

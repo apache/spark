@@ -141,15 +141,41 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              groupingExpressions,
              partialComputation,
              child) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
+        var cdExpression: Seq[NamedExpression] = Nil
+        var i = 0
+        rewrittenAggregateExpressions.map(
+          exp => exp match {
+            case pname@Alias(CombineSetsAndCount(_), _) =>
+              cdExpression = cdExpression :+ Alias(SumZero(pname.toAttribute), "distinctCount")()
+              i += 1
+            case _ => i += 2
+        })
+        
+        if (i == 1) {
           execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
+            partial = false,
+            Nil,
+            cdExpression,
+            execution.Aggregate(
+              partial = false,
+              namedGroupingAttributes,
+              rewrittenAggregateExpressions,
+              execution.Aggregate(
+                partial = true,
+                groupingExpressions,
+                partialComputation,
+                planLater(child)))) :: Nil 
+        } else {
+          execution.Aggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.Aggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))) :: Nil
+        }
 
       case _ => Nil
     }
