@@ -130,6 +130,6 @@ class ParamsSuite extends FunSuite {
     }
 
     solver.clearMaxIter()
-    assert(!solver.isDefined(maxIter))
+    assert(!solver.isSet(maxIter))
   }
 }
