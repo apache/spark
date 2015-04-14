@@ -1455,19 +1455,11 @@
           <failOnWarning>false</failOnWarning>
           <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
-          <configLocation>${project.parent.basedir}/dev/scalastyle-config.xml</configLocation>
+          <configLocation>scalastyle-config.xml</configLocation>
           <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
       <!-- Enable surefire and scalatest in all children, in one place: -->
       <plugin>

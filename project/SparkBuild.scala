@@ -156,8 +156,6 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  (allProjects ++ optionallyEnabledProjects).foreach(enable(Scalastyle.settings))
-
   // TODO: Add Sql to mima checks
   // TODO: remove launcher from this list after 1.3.
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
@@ -420,16 +418,6 @@ object Unidoc {
     // Group similar methods together based on the @group annotation.
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
   )
-}
-
-object Scalastyle {
-
-  import org.scalastyle.sbt.ScalastylePlugin._
-
-  lazy val settings = ScalastylePlugin.projectSettings ++
-    Seq(
-      ScalastylePlugin.scalastyleConfig := file("dev/scalastyle-config.xml")
-    )
 }
 
 object TestSettings {
