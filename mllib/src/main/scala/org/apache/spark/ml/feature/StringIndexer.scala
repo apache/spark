@@ -22,6 +22,8 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -34,8 +36,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    checkInputColumn(schema, map(inputCol), StringType)
+    val map = extractParamMap(paramMap)
+    SchemaUtils.checkColumnType(schema, map(inputCol), StringType)
     val inputFields = schema.fields
     val outputColName = map(outputCol)
     require(inputFields.forall(_.name != outputColName),
@@ -64,7 +66,7 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
   // TODO: handle unseen labels
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): StringIndexerModel = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val counts = dataset.select(map(inputCol)).map(_.getString(0)).countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
     val model = new StringIndexerModel(this, map, labels)
@@ -105,7 +107,7 @@ class StringIndexerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)

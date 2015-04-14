@@ -22,7 +22,8 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{HasInputCols, HasOutputCol, ParamMap}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -44,7 +45,7 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
@@ -61,7 +62,7 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputColNames = map(inputCols)
     val outputColName = map(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
