@@ -1865,10 +1865,14 @@ object SparkContext extends Logging {
    * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
-    if (activeContext.get() == null) {
-      setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+    // Synchronize to ensure that multiple create requests don't trigger an exception
+    // from assertNoOtherContextIsRunning within setActiveContext
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      if (activeContext.get() == null) {
+        setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+      }
+      activeContext.get()
     }
-    activeContext.get()
   }
   
   /**
