@@ -121,7 +121,7 @@ class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double) extends Node {
 
-  override def toString = s"LeafNode(prediction = $prediction, impurity = $impurity)"
+  override def toString: String = s"LeafNode(prediction = $prediction, impurity = $impurity)"
 
   override private[ml] def predict(features: Vector): Double = prediction
 
@@ -159,7 +159,7 @@ class InternalNode private[ml] (
     val rightChild: Node,
     val split: Split) extends Node {
 
-  override def toString = {
+  override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
   }
 
