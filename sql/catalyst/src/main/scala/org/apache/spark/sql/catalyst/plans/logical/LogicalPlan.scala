@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, EliminateSubQueries, Resolver}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.types.{ArrayType, StructType, StructField}
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -196,7 +195,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       }
     }
 
-    def name = nameParts.map(n => s"`$n`").mkString(".")
+    def name = UnresolvedAttribute(nameParts).name
 
     candidates.distinct match {
       // One match, no nested fields, use it.
