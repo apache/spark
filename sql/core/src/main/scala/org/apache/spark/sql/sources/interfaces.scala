@@ -246,7 +246,7 @@ trait CatalystScan {
 
 /**
  * ::Experimental::
- * [[OutputWriter]] is used together with [[FSBasedPrunedFilteredScan]] for persisting rows to the
+ * [[OutputWriter]] is used together with [[FSBasedRelation]] for persisting rows to the
  * underlying file system.  An [[OutputWriter]] instance is created when a new output file is
  * opened.  This instance is used to persist rows to this single output file.
  */
@@ -280,7 +280,7 @@ trait OutputWriter {
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
  */
 @Experimental
-trait FSBasedPrunedFilteredScan extends BaseRelation {
+trait FSBasedRelation extends BaseRelation {
   /**
    * Builds an `RDD[Row]` containing all rows within this relation.
    *
