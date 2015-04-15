@@ -535,6 +535,7 @@ _numpy_type_mappings = {
     numpy.float64: DoubleType,
 }
 
+
 def _infer_type(obj):
     """Infer the DataType from obj
 
@@ -644,11 +645,13 @@ _numpy_value_converters = {
     numpy.float64: float,
 }
 
+
 def mapping_numpy_to_python(obj):
     if type(obj) in _numpy_value_converters:
         return _numpy_value_converters[type(obj)](obj)
     else:
         return obj
+
 
 def _numpy_to_python_converter(dataType):
     """
@@ -682,9 +685,10 @@ def _numpy_to_python_converter(dataType):
         return lambda a: [mapping_numpy_to_python(v) for v in a]
     elif isinstance(dataType, MapType):
         return lambda m: dict([(mapping_numpy_to_python(k), mapping_numpy_to_python(v))
-          for k, v in m.items()])
+                              for k, v in m.items()])
     else:
         raise ValueError("Unexpected type %r" % dataType)
+
 
 def _python_to_sql_converter(dataType):
     """
@@ -994,6 +998,7 @@ _acceptable_types = {
     MapType: (dict,),
     StructType: (tuple, list),
 }
+
 
 def _verify_type(obj, dataType):
     """
