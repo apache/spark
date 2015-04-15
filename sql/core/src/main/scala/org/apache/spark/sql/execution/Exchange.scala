@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
 
 object Exchange {
-  /** Returns true when the ordering expressions are a subset of the key. */
+  /**
+   * Returns true when the ordering expressions are a subset of the key.
+   * if true, ShuffledRDD can use `setKeyOrdering(orderingKey)` to sort within [[Exchange]].
+   */
   def canSortWithShuffle(partitioning: Partitioning, desiredOrdering: Seq[SortOrder]): Boolean = {
     desiredOrdering.map(_.child).toSet.subsetOf(partitioning.keyExpressions.toSet)
   }
@@ -224,7 +227,11 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           }
 
           val withSort = if (needSort) {
-            Sort(rowOrdering, global = false, withShuffle)
+            if (sqlContext.conf.externalSortEnabled) {
+              ExternalSort(rowOrdering, global = false, withShuffle)
+            } else {
+              Sort(rowOrdering, global = false, withShuffle)
+            }
           } else {
             withShuffle
           }
@@ -253,7 +260,11 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            Sort(rowOrdering, global = false, child)
+            if (sqlContext.conf.externalSortEnabled) {
+              ExternalSort(rowOrdering, global = false, child)
+            } else {
+              Sort(rowOrdering, global = false, child)
+            }
 
           case (dist, ordering, _) =>
             sys.error(s"Don't know how to ensure $dist with ordering $ordering")

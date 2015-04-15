@@ -106,8 +106,6 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
   override def execute(): RDD[Row] = {
