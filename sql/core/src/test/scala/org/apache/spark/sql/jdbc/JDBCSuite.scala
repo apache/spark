@@ -22,6 +22,7 @@ import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.apache.spark.sql.test._
+import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
@@ -33,6 +34,14 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   var conn: java.sql.Connection = null
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
+
+  val testDriverQuirks = new DriverQuirks {
+    def canHandle(url: String) = url.startsWith("jdbc:h2")
+    def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
+      StringType
+    }
+    def getJDBCType(dt: org.apache.spark.sql.types.DataType): (String, Option[Int]) = (null, None)
+  }
 
   before {
     Class.forName("org.h2.Driver")
@@ -282,4 +291,29 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         """.stripMargin.replaceAll("\n", " "))
     }
   }
+
+  test("Remap types via DriverQuirks") {
+    DriverQuirks.registerQuirks(testDriverQuirks)
+    val df = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    assert(df.schema.filter(
+      _.dataType != org.apache.spark.sql.types.StringType
+    ).isEmpty)
+    val rows = df.collect()
+    assert(rows(0).get(0).isInstanceOf[String])
+    assert(rows(0).get(1).isInstanceOf[String])
+    DriverQuirks.unregisterQuirks(testDriverQuirks)
+  }
+
+  test("Default quirks registration") {
+    assert(DriverQuirks.get("jdbc:mysql://127.0.0.1/db").isInstanceOf[MySQLQuirks])
+    assert(DriverQuirks.get("jdbc:postgresql://127.0.0.1/db").isInstanceOf[PostgresQuirks])
+    assert(DriverQuirks.get("test.invalid").isInstanceOf[NoQuirks])
+  }
+
+  test("Quirk unregister") {
+    DriverQuirks.registerQuirks(testDriverQuirks)
+    DriverQuirks.unregisterQuirks(testDriverQuirks)
+    assert(DriverQuirks.get(urlWithUserAndPass).isInstanceOf[NoQuirks])
+  }
+
 }
