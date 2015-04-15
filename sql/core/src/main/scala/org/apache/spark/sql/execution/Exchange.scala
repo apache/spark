@@ -50,7 +50,7 @@ case class Exchange(
 
   override def outputPartitioning: Partitioning = newPartitioning
 
-  override def outputOrdering = newOrdering
+  override def outputOrdering: Seq[SortOrder] = newOrdering
 
   override def output: Seq[Attribute] = child.output
 
