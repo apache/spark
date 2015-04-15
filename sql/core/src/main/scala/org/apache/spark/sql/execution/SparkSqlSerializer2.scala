@@ -243,7 +243,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                out.writeInt(row.getInt(i))
+                out.writeInt(row.getAs[Int](i))
               }
 
             case TimestampType =>
