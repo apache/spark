@@ -73,10 +73,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     Seq.fill(children.size)(UnspecifiedDistribution)
 
   /** Specifies how data is ordered in each partition. */
-  def outputOrdering: Option[Ordering[Row]] = None
+  def outputOrdering: Seq[SortOrder] = Nil
 
   /** Specifies sort order for each partition requirements on the input data for this operator. */
-  def requiredChildOrdering: Seq[Option[Ordering[Row]]] = Seq.fill(children.size)(None)
+  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
    * Runs this query returning the result as an RDD.
