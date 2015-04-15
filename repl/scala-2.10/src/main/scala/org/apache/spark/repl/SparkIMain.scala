@@ -981,19 +981,20 @@ import org.apache.spark.annotation.DeveloperApi
     resetAllCreators()
     resetToCheckpoint()
   }
-    /** Save  previous Requests,referenced Names  and defined Names
-      * later these values can be used in reset operation
-      */
+  /**
+   * Save  previous Requests,referenced Names  and defined Names
+   * later these values can be used in reset operation
+   */
     @DeveloperApi
   def saveCheckpoint() {
     prevRequestsCheckpoint      ++= prevRequests.clone()
     referencedNameMapCheckpoint ++= referencedNameMap.clone()
     definedNameMapCheckpoint    ++=definedNameMap.clone()
   }
-
-    /** Reset prevRequests,referencedNameMap and definedNameMap to
-      * checkpointed state, so that it will only retain  spark initialization details
-      */
+  /**
+   * Reset prevRequests,referencedNameMap and definedNameMap to
+   * checkpointed state, so that it will only retain  spark initialization details
+   */
   def resetToCheckpoint() {
     prevRequests.clear()
     referencedNameMap.clear()
@@ -1003,7 +1004,6 @@ import org.apache.spark.annotation.DeveloperApi
     referencedNameMap ++= referencedNameMapCheckpoint
     definedNameMap    ++= definedNameMapCheckpoint
   }
-
   /**
    * Stops the underlying REPL class server and flushes the reporter used
    * for compiler output.
