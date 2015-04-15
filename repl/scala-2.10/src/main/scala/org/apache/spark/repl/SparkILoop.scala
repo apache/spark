@@ -992,7 +992,7 @@ class SparkILoop(
     // printWelcome()
 
     loadFiles(settings)
-
+    intp.saveCheckpoint()
     try loop()
     catch AbstractOrMissingHandler()
     finally closeInterpreter()

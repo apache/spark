@@ -978,13 +978,30 @@ import org.apache.spark.annotation.DeveloperApi
   @DeveloperApi
   def reset() {
     clearExecutionWrapper()
-    resetClassLoader()
     resetAllCreators()
+    resetToCheckpoint()
+  }
+    /** Save  previous Requests,referenced Names  and defined Names
+      * later these values can be used in reset operation
+      */
+    @DeveloperApi
+  def saveCheckpoint() {
+    prevRequestsCheckpoint      ++= prevRequests.clone()
+    referencedNameMapCheckpoint ++= referencedNameMap.clone()
+    definedNameMapCheckpoint    ++=definedNameMap.clone()
+  }
+
+    /** Reset prevRequests,referencedNameMap and definedNameMap to
+      * checkpointed state, so that it will only retain  spark initialization details
+      */
+  def resetToCheckpoint() {
     prevRequests.clear()
     referencedNameMap.clear()
     definedNameMap.clear()
-    virtualDirectory.delete()
-    virtualDirectory.create()
+    // Restore to checkpointed state
+    prevRequests      ++= prevRequestsCheckpoint
+    referencedNameMap ++= referencedNameMapCheckpoint
+    definedNameMap    ++= definedNameMapCheckpoint
   }
 
   /**
@@ -1627,6 +1644,12 @@ import org.apache.spark.annotation.DeveloperApi
   private val referencedNameMap  = mutable.Map[Name, Request]()
   private val definedNameMap     = mutable.Map[Name, Request]()
   private val directlyBoundNames = mutable.Set[Name]()
+
+
+  private val prevRequestsCheckpoint        = mutable.ListBuffer[Request]()
+  private val referencedNameMapCheckpoint   = mutable.Map[Name, Request]()
+  private val definedNameMapCheckpoint      = mutable.Map[Name, Request]()
+
 
   private def allHandlers    = prevRequestList flatMap (_.handlers)
   private def allDefHandlers = allHandlers collect { case x: MemberDefHandler => x }
