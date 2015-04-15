@@ -113,14 +113,17 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     Seq(
       ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
+      ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+        classOf[BroadcastHashJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     try {
       conf.setConf("spark.sql.planner.sortMergeJoin", "true")
       Seq(
         ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
+        ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+          classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+          classOf[BroadcastHashJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
       conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
