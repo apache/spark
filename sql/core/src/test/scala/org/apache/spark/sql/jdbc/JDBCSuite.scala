@@ -126,28 +126,11 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    // SPARK-6800
-    val stmt2 = conn.createStatement()
-    stmt2.execute("CREATE TABLE test.Person (person_id INT NOT NULL GENERATED ALWAYS AS IDENTITY CONSTRAINT person_pk PRIMARY KEY, name VARCHAR(50), age INT)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Armando Carvalho', 50)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Lurdes Pereira', 23)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Ana Rita Costa', 12)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Armando Pereira', 32)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Miguel Costa', 15)")
-    stmt2.execute("INSERT INTO test.Person(name, age) VALUES('Anabela Sintra', 13)")
-
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
   after {
     conn.close()
-  }
-
-  test("SPARK-6800") {
-    val people = jdbc(url = urlWithUserAndPass, table = "test.Person",
-      columnName = "age", lowerBound = 0, upperBound = 40, numPartitions = 10)
-    assert(people.count() == 5)
-    assert(people.filter("AGE > 40").count() == 0)
   }
 
   test("SELECT *") {

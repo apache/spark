@@ -50,9 +50,11 @@ private[sql] object JDBCRelation {
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
    * WHERE clauses for each partition so that each row in the table appears
-   * exactly once.  The parameters minValue and maxValue are advisory in that
+   * exactly once. The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
-   * will fail to be represented.
+   * will fail to be represented. Note: the upper and lower bounds are just
+   * used to decide partition stride, not for filtering. So all the rows in
+   * table will be partitioned.
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
@@ -68,19 +70,9 @@ private[sql] object JDBCRelation {
     var currentValue: Long = partitioning.lowerBound
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lowerBound =
-        if (i != 0) {
-          s"$column >= $currentValue"
-        } else {
-          s"$column >= ${partitioning.lowerBound}"
-        }
+      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
-      val upperBound =
-        if (i != numPartitions - 1) {
-          s"$column < $currentValue"
-        } else {
-          s"$column < ${partitioning.upperBound}"
-        }
+      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
       val whereClause =
         if (upperBound == null) {
           lowerBound
