@@ -431,6 +431,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   }
 
+  test("Allow only a single WITH clause per query") {
+    intercept[RuntimeException] {
+      sql("with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
+    }
+  }
+
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
