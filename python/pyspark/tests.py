@@ -1789,7 +1789,7 @@ class SciPyTests(PySparkTestCase):
     def test_serialize(self):
         from scipy.special import gammaln
         x = range(1, 5)
-        expected = map(gammaln, x)
+        expected = list(map(gammaln, x))
         observed = self.sc.parallelize(x).map(gammaln).collect()
         self.assertEqual(expected, observed)
 
