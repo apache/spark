@@ -398,7 +398,8 @@ class ExternalMerger(Merger):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
             # do not check memory during merging
-            self.mergeCombiners(self.serializer.load_stream(open(p, "rb")), 0)
+            with open(p, "rb") as f:
+                self.mergeCombiners(self.serializer.load_stream(f), 0)
 
             # limit the total partitions
             if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
@@ -426,7 +427,8 @@ class ExternalMerger(Merger):
         for j in range(self.spills):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
-            m.mergeCombiners(self.serializer.load_stream(open(p, 'rb')), 0)
+            with open(p, 'rb') as f:
+                m.mergeCombiners(self.serializer.load_stream(f), 0)
 
             if get_used_memory() > limit:
                 m._spill()
@@ -501,7 +503,14 @@ class ExternalSorter(object):
                 path = self._get_path(len(chunks))
                 with open(path, 'wb') as f:
                     self.serializer.dump_stream(current_chunk, f)
-                chunks.append(list(self.serializer.load_stream(open(path, 'rb'))))
+
+                def load(f):
+                    for v in self.serializer.load_stream(f):
+                        yield v
+                    # close the file explicit once we consume all the items
+                    # to avoid ResourceWarning in Python3
+                    f.close()
+                chunks.append(load(open(path, 'rb')))
                 current_chunk = []
                 gc.collect()
                 limit = self._next_limit()
@@ -555,9 +564,9 @@ class ExternalList(object):
     def __getstate__(self):
         if self._file is not None:
             self._file.flush()
-            f = os.fdopen(os.dup(self._file.fileno()), "rb")
-            f.seek(0)
-            serialized = f.read()
+            with os.fdopen(os.dup(self._file.fileno()), "rb") as f:
+                f.seek(0)
+                serialized = f.read()
         else:
             serialized = b''
         return self.values, self.count, serialized
@@ -598,10 +607,15 @@ class ExternalList(object):
         d = dirs[id(self) % len(dirs)]
         if not os.path.exists(d):
             os.makedirs(d)
-        p = os.path.join(d, str(id))
+        p = os.path.join(d, str(id(self)))
         self._file = open(p, "wb+", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
         os.unlink(p)
+
+    def __del__(self):
+        if self._file:
+            self._file.close()
+            self._file = None
 
     def _spill(self):
         """ dump the values into disk """
@@ -795,7 +809,8 @@ class ExternalGroupBy(ExternalMerger):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
             # do not check memory during merging
-            self.mergeCombiners(self.serializer.load_stream(open(p, "rb")), 0)
+            with open(p, "rb") as f:
+                self.mergeCombiners(self.serializer.load_stream(f), 0)
         return self.data.items()
 
     def _merge_sorted_items(self, index):
@@ -803,7 +818,9 @@ class ExternalGroupBy(ExternalMerger):
         def load_partition(j):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
-            return self.serializer.load_stream(open(p, 'rb', 65536))
+            with open(p, 'rb', 65536) as f:
+                for v in self.serializer.load_stream(f):
+                    yield v
 
         disk_items = [load_partition(j) for j in range(self.spills)]
 

@@ -284,6 +284,7 @@ class SerializationTestCase(unittest.TestCase):
         ser.dump_stream(range(1000), io)
         io.seek(0)
         self.assertEqual(["abc", u"123", range(5)] + list(range(1000)), list(ser.load_stream(io)))
+        io.close()
 
     def test_hash_serializer(self):
         hash(NoOpSerializer())
