@@ -50,8 +50,8 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.force.shutdown</code></td>
   <td>false</td>
   <td>
-    In yarn-cluster mode, the YARN Application Master is not killed when the client is terminated by default.
-    But if spark.yarn.am.force.shutdown is set true, the YARN AM is force shutdown.
+    In yarn-cluster mode, the YARN Application Master is not killed by default even when the client is terminated.
+    But if spark.yarn.am.force.shutdown is set true, the YARN AM is force shutdown when the client exits.
   </td>
 </tr>
 <tr>
