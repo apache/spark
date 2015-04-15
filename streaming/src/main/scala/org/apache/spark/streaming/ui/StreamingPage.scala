@@ -37,20 +37,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content =
+    val content = listener.synchronized {
       generateBasicStats() ++ <br></br> ++
       <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateReceiverStats() ++
-      generateBatchStatsTable()
+      generateBatchStatsTable() ++
+      generateBatchListTables()
+    }
     UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
   }
 
   /** Generate basic stats of the streaming program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime
+    // scalastyle:off
     <ul class ="unstyled">
       <li>
-        <strong>Started at: </strong> {startTime.toString}
+        <strong>Started at: </strong> {UIUtils.formatDate(startTime)}
       </li>
       <li>
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
@@ -62,18 +65,19 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <strong>Batch interval: </strong>{formatDurationVerbose(listener.batchDuration)}
       </li>
       <li>
-        <strong>Processed batches: </strong>{listener.numTotalCompletedBatches}
+        <a href="#completed"><strong>Completed batches: </strong></a>{listener.numTotalCompletedBatches}
       </li>
       <li>
-        <strong>Waiting batches: </strong>{listener.numUnprocessedBatches}
+        <a href="#active"><strong>Active batches: </strong></a>{listener.numUnprocessedBatches}
       </li>
       <li>
-        <strong>Received records: </strong>{listener.numTotalReceivedRecords}
+        <strong>Received events: </strong>{listener.numTotalReceivedRecords}
       </li>
       <li>
-        <strong>Processed records: </strong>{listener.numTotalProcessedRecords}
+        <strong>Processed events: </strong>{listener.numTotalProcessedRecords}
       </li>
     </ul>
+    // scalastyle:on
   }
 
   /** Generate stats of data received by the receivers in the streaming program */
@@ -85,10 +89,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
         "Receiver",
         "Status",
         "Location",
-        "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
-        "Minimum rate\n[records/sec]",
-        "Median rate\n[records/sec]",
-        "Maximum rate\n[records/sec]",
+        "Events in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
+        "Minimum rate\n[events/sec]",
+        "Median rate\n[events/sec]",
+        "Maximum rate\n[events/sec]",
         "Last Error"
       )
       val dataRows = (0 until listener.numReceivers).map { receiverId =>
@@ -188,6 +192,27 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <tr> {data.map(d => <td>{d}</td>)} </tr>
     }
     UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
+  }
+
+  private def generateBatchListTables(): Seq[Node] = {
+    val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
+    val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
+    val completedBatches = listener.retainedCompletedBatches.
+      sortBy(_.batchTime.milliseconds).reverse
+
+    val activeBatchesContent = {
+      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
+        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
+    }
+
+    val completedBatchesContent = {
+      <h4 id="completed">
+        Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
+      </h4> ++
+        new CompletedBatchTable(completedBatches).toNodeSeq
+    }
+
+    activeBatchesContent ++ completedBatchesContent
   }
 }
 

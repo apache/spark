@@ -131,11 +131,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
   test("block generator") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockInterval = 200
-    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString)
+    val blockIntervalMs = 200
+    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 5
-    val waitTime = expectedBlocks * blockInterval + (blockInterval / 2)
+    val waitTime = expectedBlocks * blockIntervalMs + (blockIntervalMs / 2)
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
@@ -157,15 +157,15 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
   test("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockInterval = 100
+    val blockIntervalMs = 100
     val maxRate = 100
-    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
+    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms").
       set("spark.streaming.receiver.maxRate", maxRate.toString)
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 20
-    val waitTime = expectedBlocks * blockInterval
+    val waitTime = expectedBlocks * blockIntervalMs
     val expectedMessages = maxRate * waitTime / 1000
-    val expectedMessagesPerBlock = maxRate * blockInterval / 1000
+    val expectedMessagesPerBlock = maxRate * blockIntervalMs / 1000
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks

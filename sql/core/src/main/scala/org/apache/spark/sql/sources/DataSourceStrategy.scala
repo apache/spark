@@ -56,7 +56,7 @@ private[sql] object DataSourceStrategy extends Strategy {
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
+      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil

@@ -172,6 +172,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     testCodeGen(
       "SELECT max(key) FROM testData3x",
       Row(100) :: Nil)
+    // MIN
+    testCodeGen(
+      "SELECT value, min(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, i)))
+    testCodeGen(
+      "SELECT min(key) FROM testData3x",
+      Row(1) :: Nil)
     // Some combinations.
     testCodeGen(
       """
@@ -179,16 +186,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |  value,
         |  sum(key),
         |  max(key),
+        |  min(key),
         |  avg(key),
         |  count(key),
         |  count(distinct key)
         |FROM testData3x
         |GROUP BY value
       """.stripMargin,
-      (1 to 100).map(i => Row(i.toString, i*3, i, i, 3, 1)))
+      (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
     testCodeGen(
-      "SELECT max(key), avg(key), count(key), count(distinct key) FROM testData3x",
-      Row(100, 50.5, 300, 100) :: Nil)
+      "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
+      Row(100, 1, 50.5, 300, 100) :: Nil)
     // Aggregate with Code generation handling all null values
     testCodeGen(
       "SELECT  sum('a'), avg('a'), count(null) FROM testData",
