@@ -1419,6 +1419,21 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
+   * @group output
+   */
+  @Experimental
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String],
+      partitionColumns: java.util.List[String]): Unit = {
+    ???
+  }
+
+  /**
+   * :: Experimental ::
    * (Scala-specific)
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
@@ -1430,6 +1445,21 @@ class DataFrame private[sql](
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     ResolvedDataSource(sqlContext, source, mode, options, this)
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * [[SaveMode]] specified by mode, and partition columns specified by `partitionColumns`.
+   * @group output
+   */
+  @Experimental
+  def save(
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Unit = {
+    ???
   }
 
   /**
