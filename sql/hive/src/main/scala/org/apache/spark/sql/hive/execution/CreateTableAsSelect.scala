@@ -67,7 +67,7 @@ case class CreateTableAsSelect(
           new org.apache.hadoop.hive.metastore.api.AlreadyExistsException(s"$database.$tableName")
       }
     } else {
-      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
+      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
     }
 
     Seq.empty[Row]

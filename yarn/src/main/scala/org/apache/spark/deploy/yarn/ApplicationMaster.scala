@@ -296,7 +296,7 @@ private[spark] class ApplicationMaster(
 
     // we want to be reasonably responsive without causing too many requests to RM.
     val schedulerInterval =
-      sparkConf.getLong("spark.yarn.scheduler.heartbeat.interval-ms", 5000)
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")
 
     // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
@@ -379,7 +379,8 @@ private[spark] class ApplicationMaster(
         logWarning(
           "spark.yarn.applicationMaster.waitTries is deprecated, use spark.yarn.am.waitTime")
       }
-      val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", waitTries.getOrElse(100000L))
+      val totalWaitTime = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", 
+        s"${waitTries.getOrElse(100000L)}ms")
       val deadline = System.currentTimeMillis() + totalWaitTime
 
       while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
@@ -404,8 +405,8 @@ private[spark] class ApplicationMaster(
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", 100000L)
-    val deadline = System.currentTimeMillis + totalWaitTime
+    val totalWaitTimeMs = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
+    val deadline = System.currentTimeMillis + totalWaitTimeMs
 
     while (!driverUp && !finished && System.currentTimeMillis < deadline) {
       try {
