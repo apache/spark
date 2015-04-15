@@ -569,11 +569,10 @@ class DataFrame(object):
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
-        try:
-            jc = self._jdf.apply(name)
-            return Column(jc)
-        except Exception:
-            raise AttributeError(name)
+        if name not in self.columns:
+            raise AttributeError("No such column: %s" % name)
+        jc = self._jdf.apply(name)
+        return Column(jc)
 
     def select(self, *cols):
         """Projects a set of expressions and returns a new :class:`DataFrame`.

@@ -88,7 +88,7 @@ class DataFrameSuite extends QueryTest {
 
   test("access complex data") {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m").getItem(1) === "1").count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
