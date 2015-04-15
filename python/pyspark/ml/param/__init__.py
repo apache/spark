@@ -74,9 +74,9 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         values = []
         if self.isDefined(param):
-            if self.defaultParamMap.has_key(param):
+            if param in self.defaultParamMap:
                 values.append("default: %s" % self.defaultParamMap[param])
-            if self.paramMap.has_key(param):
+            if param in self.paramMap:
                 values.append("current: %s" % self.paramMap[param])
         else:
             values.append("undefined")
@@ -105,14 +105,14 @@ class Params(Identifiable):
         Checks whether a param is explicitly set by user.
         """
         param = self._resolveParam(param)
-        return self.paramMap.has_key(param)
+        return param in self.paramMap
 
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
         """
         param = self._resolveParam(param)
-        return self.defaultParamMap.has_key(param)
+        return param in self.defaultParamMap
 
     def isDefined(self, param):
         """
@@ -126,7 +126,7 @@ class Params(Identifiable):
         default value. Raises an error if either is set.
         """
         if isinstance(param, Param):
-            if self.paramMap.has_key(param):
+            if param in self.paramMap:
                 return self.paramMap[param]
             else:
                 return self.defaultParamMap[param]

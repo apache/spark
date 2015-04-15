@@ -35,6 +35,7 @@ header = """#
 # Code generator for shared params (shared.py). Run under this folder with:
 # python _shared_params_code_gen.py > shared.py
 
+
 def _gen_param_code(name, doc, defaultValueStr):
     """
     Generates Python code for a shared param class.
