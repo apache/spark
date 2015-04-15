@@ -103,6 +103,7 @@ class HiveStatsCollectionOperator(BaseOperator):
             if not d:
                 d = self.get_default_exprs(col, col_type)
             exprs.update(d)
+        exprs.update(self.extra_exprs)
         exprs = OrderedDict(exprs)
         exprs_str = ",\n        ".join([
             v + " AS " + k[0] + '__' + k[1]
