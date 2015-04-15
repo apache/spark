@@ -39,6 +39,8 @@ private[spark] object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
+  val HIVE_VERIFY_PARTITIONPATH = "spark.sql.hive.verifyPartitionPath"
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
   val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
@@ -118,6 +120,10 @@ private[sql] class SQLConf extends Serializable {
   /** When true uses Parquet implementation based on data source API */
   private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
+
+  /** When true uses verifyPartitionPath to prune the path which is not exists. */
+  private[spark] def verifyPartitionPath =
+    getConf(HIVE_VERIFY_PARTITIONPATH, "true").toBoolean
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean

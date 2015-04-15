@@ -47,7 +47,7 @@ class LocalDirsSuite extends FunSuite with BeforeAndAfter {
     assert(!new File("/NONEXISTENT_DIR").exists())
     // SPARK_LOCAL_DIRS is a valid directory:
     class MySparkConf extends SparkConf(false) {
-      override def getenv(name: String) = {
+      override def getenv(name: String): String = {
         if (name == "SPARK_LOCAL_DIRS") System.getProperty("java.io.tmpdir")
         else super.getenv(name)
       }

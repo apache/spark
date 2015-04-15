@@ -137,7 +137,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       new SparkContext(conf)
     }
 
-    def hasKillLink = find(className("kill-link")).isDefined
+    def hasKillLink: Boolean = find(className("kill-link")).isDefined
     def runSlowJob(sc: SparkContext) {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }

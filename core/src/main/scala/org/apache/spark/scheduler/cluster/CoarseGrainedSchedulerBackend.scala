@@ -52,8 +52,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
-  val maxRegisteredWaitingTime =
-    conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
+  val maxRegisteredWaitingTimeMs =
+    conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
 
   private val executorDataMap = new HashMap[String, ExecutorData]
@@ -77,12 +77,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
-      val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
+      val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "1s")
+ 
       reviveThread.scheduleAtFixedRate(new Runnable {
         override def run(): Unit = Utils.tryLogNonFatalError {
           Option(self).foreach(_.send(ReviveOffers))
         }
-      }, 0, reviveInterval, TimeUnit.MILLISECONDS)
+      }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -301,9 +302,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
-    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
+    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTimeMs) {
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
-        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTime(ms)")
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTimeMs(ms)")
       return true
     }
     false
