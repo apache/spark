@@ -32,15 +32,12 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
-
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{StageStatus, CustomObjectMapper}
-import org.apache.sparktest.TestTags.ActiveTag
-
 
 /**
  * Selenium tests for the Spark Web UI.
