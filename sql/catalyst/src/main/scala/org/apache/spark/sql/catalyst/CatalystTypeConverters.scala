@@ -321,9 +321,9 @@ object CatalystTypeConverters {
       row: Row,
       schema: StructType,
       converters: Array[Any => Any]): Row = {
-    val ar = new Array[Any](converters.size)
+    val ar = new Array[Any](row.size)
     var idx = 0
-    while (idx < converters.size && idx < row.size) {
+    while (idx < row.size) {
       ar(idx) = converters(idx)(row(idx))
       idx += 1
     }
