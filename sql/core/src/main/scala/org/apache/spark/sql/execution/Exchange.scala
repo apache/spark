@@ -78,6 +78,8 @@ case class Exchange(
   }
 
   override def execute(): RDD[Row] = attachTree(this , "execute") {
+    lazy val sparkConf = child.sqlContext.sparkContext.getConf
+
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
@@ -109,7 +111,7 @@ case class Exchange(
           } else {
             new ShuffledRDD[Row, Row, Row](rdd, part)
           }
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
@@ -132,8 +134,7 @@ case class Exchange(
           } else {
             new ShuffledRDD[Row, Null, Null](rdd, part)
           }
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
-
+        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
         shuffled.map(_._1)
 
       case SinglePartition =>
@@ -151,7 +152,7 @@ case class Exchange(
         }
         val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
-        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.setSerializer(new SparkSqlSerializer(sparkConf))
         shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
