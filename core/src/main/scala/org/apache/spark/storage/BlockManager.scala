@@ -875,7 +875,7 @@ private[spark] class BlockManager(
       // disposes the byte buffer that is the *result* of the put).  We might have turned that byte
       // buffer into an iterator of values, in which case the input ByteBuffer should be disposed.
       // It will automatically get disposed when we get to the end of the iterator, but we might
-      // never even try to get to the end, or there might an exception along the way
+      // never even try to get to the end, or there might be an exception along the way
       resourceCleaner.doCleanup()
     }
 
