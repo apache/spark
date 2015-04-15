@@ -49,8 +49,12 @@ case class UnresolvedRelation(
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with trees.LeafNode[Expression] {
-  def name = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+case class UnresolvedAttribute(nameParts: Seq[String])
+  extends Attribute with trees.LeafNode[Expression] {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
@@ -70,8 +74,8 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with tr
 }
 
 object UnresolvedAttribute {
-  def apply(name: String) = new UnresolvedAttribute(name.split("\\."))
-  def quoted(name: String) = new UnresolvedAttribute(Seq(name))
+  def apply(name: String): UnresolvedAttribute = new UnresolvedAttribute(name.split("\\."))
+  def quoted(name: String): UnresolvedAttribute = new UnresolvedAttribute(Seq(name))
 }
 
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
