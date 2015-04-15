@@ -163,7 +163,7 @@ class KafkaUtils(object):
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
             helper = helperClass.newInstance()
             jfromOffsets = MapConverter().convert(
-                {k._jTopicAndPartition(helper): v for (k, v) in fromOffsets.items()},
+                dict([(k._jTopicAndPartition(helper), v) for (k, v) in fromOffsets.items()]),
                 ssc.sparkContext._gateway._gateway_client)
             jstream = helper.createDirectStream(ssc._jssc, jparam, jfromOffsets)
         except Py4JJavaError, e:
@@ -242,7 +242,8 @@ class KafkaUtils(object):
             joffsetRanges = ListConverter().convert([o._jOffsetRange(helper) for o in offsetRanges],
                                                     sc._gateway._gateway_client)
             jleaders = MapConverter().convert(
-                {k._jTopicAndPartition(helper): v._jBroker(helper) for (k, v) in leaders.items()},
+                dict([(k._jTopicAndPartition(helper),
+                       v._jBroker(helper)) for (k, v) in leaders.items()]),
                 sc._gateway._gateway_client)
             jrdd = helper.createRDD(sc._jsc, jparam, joffsetRanges, jleaders)
         except Py4JJavaError, e:
