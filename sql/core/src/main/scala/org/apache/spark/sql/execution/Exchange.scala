@@ -110,7 +110,7 @@ case class Exchange(
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
-        val rdd = if (sortBasedShuffleOn) {
+        val rdd = if (sortBasedShuffleOn || newOrdering.nonEmpty) {
           child.execute().mapPartitions { iter => iter.map(row => (row.copy(), null))}
         } else {
           child.execute().mapPartitions { iter =>
