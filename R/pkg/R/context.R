@@ -216,7 +216,7 @@ broadcast <- function(sc, object) {
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' setCheckpointDir(sc, "~/checkpoints")
+#' setCheckpointDir(sc, "~/checkpoint")
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}

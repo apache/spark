@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedGetField, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, EliminateSubQueries, Resolver}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.types.{ArrayType, StructType, StructField}
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -111,10 +110,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
-      name: String,
+      nameParts: Seq[String],
       resolver: Resolver,
       throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(name, children.flatMap(_.output), resolver, throwErrors)
+    resolve(nameParts, children.flatMap(_.output), resolver, throwErrors)
 
   /**
    * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
@@ -122,10 +121,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolve(
-      name: String,
+      nameParts: Seq[String],
       resolver: Resolver,
       throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(name, output, resolver, throwErrors)
+    resolve(nameParts, output, resolver, throwErrors)
 
   /**
    * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
@@ -135,7 +134,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
    */
   private def resolveAsTableColumn(
-      nameParts: Array[String],
+      nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
@@ -155,7 +154,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
    */
   private def resolveAsColumn(
-      nameParts: Array[String],
+      nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     if (resolver(attribute.name, nameParts.head)) {
@@ -167,12 +166,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   /** Performs attribute resolution given a name and a sequence of possible attributes. */
   protected def resolve(
-      name: String,
+      nameParts: Seq[String],
       input: Seq[Attribute],
       resolver: Resolver,
       throwErrors: Boolean): Option[NamedExpression] = {
-
-    val parts = name.split("\\.")
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -182,9 +179,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     // and the second element will be List("c").
     var candidates: Seq[(Attribute, List[String])] = {
       // If the name has 2 or more parts, try to resolve it as `table.column` first.
-      if (parts.length > 1) {
+      if (nameParts.length > 1) {
         input.flatMap { option =>
-          resolveAsTableColumn(parts, resolver, option)
+          resolveAsTableColumn(nameParts, resolver, option)
         }
       } else {
         Seq.empty
@@ -194,9 +191,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     // If none of attributes match `table.column` pattern, we try to resolve it as a column.
     if (candidates.isEmpty) {
       candidates = input.flatMap { candidate =>
-        resolveAsColumn(parts, resolver, candidate)
+        resolveAsColumn(nameParts, resolver, candidate)
       }
     }
+
+    def name = UnresolvedAttribute(nameParts).name
 
     candidates.distinct match {
       // One match, no nested fields, use it.

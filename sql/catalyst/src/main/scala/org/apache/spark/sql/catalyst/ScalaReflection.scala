@@ -138,6 +138,7 @@ trait ScalaReflection {
     // The data type can be determined without ambiguity.
     case obj: BooleanType.JvmType => BooleanType
     case obj: BinaryType.JvmType => BinaryType
+    case obj: String => StringType
     case obj: StringType.JvmType => StringType
     case obj: ByteType.JvmType => ByteType
     case obj: ShortType.JvmType => ShortType
