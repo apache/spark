@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * :: DeveloperApi ::
@@ -46,6 +46,33 @@ object RDDConversions {
           var i = 0
           while (i < mutableRow.length) {
             mutableRow(i) = converters(i)(r.productElement(i))
+            i += 1
+          }
+
+          mutableRow
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert the objects inside Row into the types Catalyst expected.
+   */
+  def rowToRowRdd(data: RDD[Row], schema: StructType): RDD[Row] = {
+    data.mapPartitions { iterator =>
+      if (iterator.isEmpty) {
+        Iterator.empty
+      } else {
+        val bufferedIterator = iterator.buffered
+        val mutableRow = new GenericMutableRow(bufferedIterator.head.toSeq.toArray)
+        val schemaFields = schema.fields.toArray
+        val converters = schemaFields.map {
+          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
+        }
+        bufferedIterator.map { r =>
+          var i = 0
+          while (i < mutableRow.length) {
+            mutableRow(i) = converters(i)(r(i))
             i += 1
           }
 

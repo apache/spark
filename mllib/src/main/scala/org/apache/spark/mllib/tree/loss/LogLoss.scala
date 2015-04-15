@@ -39,15 +39,12 @@ object LogLoss extends Loss {
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
    * classification
    * The gradient with respect to F(x) is: - 4 y / (1 + exp(2 y F(x)))
-   * @param model Ensemble model
-   * @param point Instance of the training dataset
+   * @param prediction Predicted label.
+   * @param label True label.
    * @return Loss gradient
    */
-  override def gradient(
-      model: TreeEnsembleModel,
-      point: LabeledPoint): Double = {
-    val prediction = model.predict(point.features)
-    - 4.0 * point.label / (1.0 + math.exp(2.0 * point.label * prediction))
+  override def gradient(prediction: Double, label: Double): Double = {
+    - 4.0 * label / (1.0 + math.exp(2.0 * label * prediction))
   }
 
   override def computeError(prediction: Double, label: Double): Double = {

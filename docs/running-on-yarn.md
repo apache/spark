@@ -48,9 +48,9 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.am.waitTime</code></td>
-  <td>100000</td>
+  <td>100s</td>
   <td>
-    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    In yarn-cluster mode, time for the application master to wait for the
     SparkContext to be initialized. In yarn-client mode, time for the application master to wait
     for the driver to connect to it.
   </td>
