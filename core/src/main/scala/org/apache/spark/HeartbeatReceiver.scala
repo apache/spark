@@ -132,6 +132,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
         executorLastSeen.remove(executorId)
       }
     }
+
+    if (!sc.conf.getBoolean("spark.dynamicAllocation.enabled", false) && sc.isInited) {
+      if (executorLastSeen.keySet.size == 0) sc.stop()
+    }
   }
   
   override def onStop(): Unit = {

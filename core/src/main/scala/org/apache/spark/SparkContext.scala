@@ -75,6 +75,8 @@ import org.apache.spark.util._
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
+  var isInited: Boolean = false
+
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
@@ -1786,6 +1788,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
   SparkContext.setActiveContext(this, allowMultipleContexts)
+
+  isInited = true
 }
 
 /**
