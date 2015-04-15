@@ -22,6 +22,7 @@ import warnings
 import json
 import re
 import weakref
+import numpy
 from array import array
 from operator import itemgetter
 
@@ -522,6 +523,17 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
+# Mapping numpy types to Spark SQL DataType
+_numpy_type_mappings = {
+    numpy.bool_: BooleanType,
+    numpy.int8: ByteType,
+    numpy.int16: ShortType,
+    numpy.int32: IntegerType,
+    numpy.int64: LongType,
+    numpy.float_: FloatType,
+    numpy.float32: FloatType,
+    numpy.float64: DoubleType,
+}
 
 def _infer_type(obj):
     """Infer the DataType from obj
@@ -537,6 +549,10 @@ def _infer_type(obj):
         return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
+    if dataType is not None:
+        return dataType()
+
+    dataType = _numpy_type_mappings.get(type(obj))
     if dataType is not None:
         return dataType()
 
@@ -616,6 +632,59 @@ def _need_python_to_sql_conversion(dataType):
     else:
         return False
 
+# converters for numpy value to Python value
+_numpy_value_converters = {
+    numpy.bool_: bool,
+    numpy.int8: int,
+    numpy.int16: int,
+    numpy.int32: int,
+    numpy.int64: long,
+    numpy.float_: float,
+    numpy.float32: float,
+    numpy.float64: float,
+}
+
+def mapping_numpy_to_python(obj):
+    if type(obj) in _numpy_value_converters:
+        return _numpy_value_converters[type(obj)](obj)
+    else:
+        return obj
+
+def _numpy_to_python_converter(dataType):
+    """
+    Returns a converter that converts all numpy value into Python values in a complex type.
+
+    >>> schema = StructType([StructField("label", DoubleType(), False),
+    ...                      StructField("point", IntegerType(), False)])
+    >>> conv = _numpy_to_python_converter(schema)
+    >>> import numpy
+    >>> conv((numpy.float64(1.0), numpy.int32(2)))
+    (1.0, 2)
+    """
+    if isinstance(dataType, StructType):
+        names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
+
+        def converter(obj):
+            if isinstance(obj, dict):
+                return tuple(mapping_numpy_to_python(obj.get(n)) for n in names)
+            elif isinstance(obj, tuple):
+                if hasattr(obj, "_fields") or hasattr(obj, "__fields__"):
+                    return tuple(mapping_numpy_to_python(v) for v in obj)
+                elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
+                    d = dict(obj)
+                    return tuple(mapping_numpy_to_python(d.get(n)) for n in names)
+                else:
+                    return tuple(mapping_numpy_to_python(v) for v in obj)
+            else:
+                raise ValueError("Unexpected tuple %r with type %r" % (obj, dataType))
+        return converter
+    elif isinstance(dataType, ArrayType):
+        return lambda a: [mapping_numpy_to_python(v) for v in a]
+    elif isinstance(dataType, MapType):
+        return lambda m: dict([(mapping_numpy_to_python(k), mapping_numpy_to_python(v))
+          for k, v in m.items()])
+    else:
+        raise ValueError("Unexpected type %r" % dataType)
 
 def _python_to_sql_converter(dataType):
     """
@@ -909,13 +978,13 @@ def _infer_schema_type(obj, dataType):
 
 
 _acceptable_types = {
-    BooleanType: (bool,),
-    ByteType: (int, long),
-    ShortType: (int, long),
-    IntegerType: (int, long),
-    LongType: (int, long),
-    FloatType: (float,),
-    DoubleType: (float,),
+    BooleanType: (bool, numpy.bool_),
+    ByteType: (int, long, numpy.int8, numpy.int16, numpy.int32, numpy.int64),
+    ShortType: (int, long, numpy.int16, numpy.int32, numpy.int64),
+    IntegerType: (int, long, numpy.int32, numpy.int64),
+    LongType: (int, long, numpy.int64),
+    FloatType: (float, numpy.float_, numpy.float32),
+    DoubleType: (float, numpy.float64),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
     BinaryType: (bytearray,),
@@ -925,7 +994,6 @@ _acceptable_types = {
     MapType: (dict,),
     StructType: (tuple, list),
 }
-
 
 def _verify_type(obj, dataType):
     """

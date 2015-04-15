@@ -25,7 +25,8 @@ from py4j.java_collections import MapConverter
 from pyspark.rdd import RDD, _prepare_for_python_RDD
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
+    _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter, \
+    _numpy_to_python_converter
 from pyspark.sql.dataframe import DataFrame
 
 try:
@@ -262,6 +263,21 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
+
+        >>> import numpy
+        >>> from collections import namedtuple
+        >>> MyType = namedtuple('MyType', 'x')
+        >>> intArray = numpy.int64([1, 2, 3, 4, 5])
+        >>> myValues = map(lambda x: MyType(x), intArray)
+        >>> data = sqlContext.createDataFrame(myValues)
+        >>> data.collect()
+        [Row(x=1), Row(x=2), Row(x=3), Row(x=4), Row(x=5)]
+
+        >>> doubleArray = numpy.float64([1.0, 2.0, 3.0, 4.0, 5.0])
+        >>> myValues2 = map(lambda x: MyType(x), doubleArray)
+        >>> data2 = sqlContext.createDataFrame(myValues2)
+        >>> data2.collect()
+        [Row(x=1.0), Row(x=2.0), Row(x=3.0), Row(x=4.0), Row(x=5.0)]
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
@@ -302,6 +318,10 @@ class SQLContext(object):
 
         for row in rows:
             _verify_type(row, schema)
+
+        # convert numpy values to python values
+        converter = _numpy_to_python_converter(schema)
+        rdd = rdd.map(converter)
 
         # convert python objects to sql data
         converter = _python_to_sql_converter(schema)
