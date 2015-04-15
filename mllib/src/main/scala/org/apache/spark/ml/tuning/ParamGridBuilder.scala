@@ -100,8 +100,9 @@ class ParamGridBuilder {
    * Builds and returns all combinations of parameters specified by the param grid.
    */
   def build(): Array[ParamMap] = {
-    if (paramGrid.isEmpty) Array.empty[ParamMap]
-    else {
+    if (paramGrid.isEmpty) {
+      Array.empty[ParamMap]
+    } else {
       var paramMaps = Array(new ParamMap)
       paramGrid.foreach { case (param, values) =>
         val newParamMaps = values.flatMap { v =>
