@@ -399,7 +399,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
     finally {
-      configuration.unset("spark.sql.parquet.output.committer.class")
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "parquet.hadoop.ParquetOutputCommitter")
     }
   }
 }
