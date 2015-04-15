@@ -215,8 +215,8 @@ object Vectors {
       require(prev < i, s"Found duplicate indices: $i.")
       prev = i
     }
-    require(prev < size, s"You may not write an element to index ${prev} because the declared " +
-      s"size of your vector is ${size}")
+    require(prev < size, s"You may not write an element to index $prev because the declared " +
+      s"size of your vector is $size")
 
     new SparseVector(size, indices.toArray, values.toArray)
   }
@@ -292,7 +292,7 @@ object Vectors {
    */
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
-      s"You specified p=${p}.")
+      s"You specified p=$p.")
     val values = vector match {
       case DenseVector(vs) => vs
       case SparseVector(n, ids, vs) => vs
