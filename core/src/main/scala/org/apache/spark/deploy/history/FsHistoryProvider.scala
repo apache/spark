@@ -49,8 +49,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val NOT_STARTED = "<Not Started>"
 
   // Interval between each check for event log updates
-  private val UPDATE_INTERVAL_MS = Utils.timeStringAsSeconds(
-    conf.get("spark.history.fs.update.interval", "10s"))
+  private val UPDATE_INTERVAL_MS = conf.getTimeAsMs("spark.history.fs.update.interval", "10s")
 
   // Interval between each cleaner checks for event logs to delete
   private val CLEAN_INTERVAL_MS = conf.getLong("spark.history.fs.cleaner.interval.seconds",
