@@ -234,7 +234,7 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
 }
 
 object RowOrdering {
-  def getOrderingFromDataTypes(dataTypes: Seq[DataType]): RowOrdering =
+  def forSchema(dataTypes: Seq[DataType]): RowOrdering =
     new RowOrdering(dataTypes.zipWithIndex.map {
       case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     })

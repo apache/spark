@@ -48,18 +48,18 @@ case class SortMergeJoin(
 
   // this is to manually construct an ordering that can be used to compare keys from both sides
   private val keyOrdering: RowOrdering =
-    RowOrdering.getOrderingFromDataTypes(leftKeys.map(_.dataType))
+    RowOrdering.forSchema(leftKeys.map(_.dataType))
 
-  private def requiredOrders(keys: Seq[Expression], side: SparkPlan): Ordering[Row] =
-    newOrdering(keys.map(SortOrder(_, Ascending)), side.output)
+  override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
 
-  override def outputOrdering: Option[Ordering[Row]] = Some(requiredOrders(leftKeys, left))
-
-  override def requiredChildOrdering: Seq[Option[Ordering[Row]]] =
-    Some(requiredOrders(leftKeys, left)) :: Some(requiredOrders(rightKeys, right)) :: Nil
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
+
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
+    keys.map(SortOrder(_, Ascending))
 
   override def execute(): RDD[Row] = {
     val leftResults = left.execute().map(_.copy())

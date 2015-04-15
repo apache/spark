@@ -42,12 +42,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
     iter.map(resuableProjection)
   }
 
-  /**
-   * outputOrdering of Project is not always same with child's outputOrdering if the certain
-   * key is pruned, however, if the key is pruned then we must not require child using this
-   * ordering from upper layer, so it is fine to keep it to avoid some unnecessary sorting.
-   */
-  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -63,7 +58,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
     iter.filter(conditionEvaluator)
   }
 
-  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -111,7 +106,7 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def executeCollect(): Array[Row] = child.executeTake(limit)
 
@@ -158,7 +153,7 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   // TODO: Pick num splits based on |limit|.
   override def execute(): RDD[Row] = sparkContext.makeRDD(collectData(), 1)
 
-  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -185,7 +180,7 @@ case class Sort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
@@ -217,7 +212,7 @@ case class ExternalSort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Option[Ordering[Row]] = Some(new RowOrdering(sortOrder))
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
 /**
