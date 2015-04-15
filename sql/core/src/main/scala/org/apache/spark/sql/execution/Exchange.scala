@@ -188,7 +188,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (required, child) => required.nonEmpty && required != child
         }
 
-
       // True iff outputPartitionings of children are compatible with each other.
       // It is possible that every child satisfies its required data distribution
       // but two children have incompatible outputPartitionings. For example,
