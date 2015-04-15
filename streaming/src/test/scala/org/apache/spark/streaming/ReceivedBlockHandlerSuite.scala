@@ -36,10 +36,10 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
+import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{SimpleResourceCleaner, ManualClock, Utils}
-import WriteAheadLogBasedBlockHandler._
-import WriteAheadLogSuite._
+import org.apache.spark.streaming.util.WriteAheadLogSuite._
+import org.apache.spark.util.{ManualClock, SimpleResourceCleaner, Utils}
 
 class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
 

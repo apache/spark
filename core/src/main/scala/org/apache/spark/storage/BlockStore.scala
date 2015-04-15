@@ -30,10 +30,10 @@ import org.apache.spark.util.ResourceCleaner
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
   def putBytes(
-    blockId: BlockId,
-    bytes: ByteBuffer,
-    level: StorageLevel,
-    resourceCleaner: ResourceCleaner): PutResult
+      blockId: BlockId,
+      bytes: ByteBuffer,
+      level: StorageLevel,
+      resourceCleaner: ResourceCleaner): PutResult
 
   /**
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
@@ -43,16 +43,16 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
    *         returnValues is true (if not, the result's data field can be null)
    */
   def putIterator(
-    blockId: BlockId,
-    values: Iterator[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel,
+      returnValues: Boolean): PutResult
 
   def putArray(
-    blockId: BlockId,
-    values: Array[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult
+      blockId: BlockId,
+      values: Array[Any],
+      level: StorageLevel,
+      returnValues: Boolean): PutResult
 
   /**
    * Return the size of a block in bytes.

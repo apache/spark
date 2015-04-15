@@ -20,7 +20,7 @@ import java.io.EOFException
 
 import scala.reflect.ClassTag
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.{FunSuite, Matchers}
 
 class SerializerSuite extends FunSuite with Matchers {
   test("DeserializationStream closes input at end") {

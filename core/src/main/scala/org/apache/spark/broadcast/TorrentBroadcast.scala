@@ -28,7 +28,7 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{SimpleResourceCleaner, ByteBufferInputStream, Utils}
+import org.apache.spark.util.{ByteBufferInputStream, SimpleResourceCleaner, Utils}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 /**
@@ -131,7 +131,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           block,
           StorageLevel.MEMORY_AND_DISK_SER,
           tellMaster = true)
-          block
+        block
       }
       val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
         throw new SparkException(s"Failed to get $pieceId of $broadcastId"))

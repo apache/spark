@@ -453,7 +453,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       asBlockResult: Boolean,
       resourceCleaner: Option[ResourceCleaner]): Option[Any] = {
-    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a TaskContext if " +
+    require(!asBlockResult || resourceCleaner.isDefined, "Must provide a ResourceCleaner if " +
       "requesting block results")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
@@ -506,7 +506,7 @@ private[spark] class BlockManager(
                 } else {
                   return Some(new BlockResult(
                     dataDeserialize(blockId, bytes, resourceCleaner.get),
-                    DataReadMethod.Memory, info.size))
+                      DataReadMethod.Memory, info.size))
                 }
               case None =>
                 logDebug(s"Block $blockId not found in tachyon")
@@ -869,13 +869,13 @@ private[spark] class BlockManager(
         }
       }
 
-      BlockManager.dispose(bytesAfterPut)
     } finally {
+      BlockManager.dispose(bytesAfterPut)
       // this is to clean up the byte buffer from the *input* (as opposed to the line above, which
       // disposes the byte buffer that is the *result* of the put).  We might have turned that byte
       // buffer into an iterator of values, in which case the input ByteBuffer should be disposed.
-      // It will automatically get disposed when we get to the end of the iterator, but in case
-      // there is some exception before we do, this will take care of it
+      // It will automatically get disposed when we get to the end of the iterator, but we might
+      // never even try to get to the end, or there might an exception along the way
       resourceCleaner.doCleanup()
     }
 
