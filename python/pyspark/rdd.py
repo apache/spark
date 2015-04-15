@@ -1100,7 +1100,7 @@ class RDD(object):
         [91, 92, 93]
         """
         items = []
-        totalParts = self._jrdd.partitions().size()
+        totalParts = self.getNumPartitions()
         partsScanned = 0
 
         while len(items) < num and partsScanned < totalParts:
@@ -2105,12 +2105,9 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
-        self._broadcast = None
 
-    def __del__(self):
-        if self._broadcast:
-            self._broadcast.unpersist()
-            self._broadcast = None
+    def getNumPartitions(self):
+        return self._prev_jrdd.partitions().size()
 
     @property
     def _jrdd(self):
@@ -2126,8 +2123,9 @@ class PipelinedRDD(RDD):
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
         if len(pickled_command) > (1 << 20):  # 1M
-            self._broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(self._broadcast)
+            # The broadcast will have same life cycle as created PythonRDD
+            broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
