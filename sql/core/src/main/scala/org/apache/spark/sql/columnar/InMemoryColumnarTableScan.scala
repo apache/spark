@@ -60,10 +60,11 @@ private[sql] case class InMemoryRelation(
   extends LogicalPlan with MultiInstanceRelation {
 
   private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
-    if (_batchStats == null)
+    if (_batchStats == null) {
       child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
-    else
+    } else {
       _batchStats
+    }
 
   val partitionStatistics = new PartitionStatistics(output)
 
