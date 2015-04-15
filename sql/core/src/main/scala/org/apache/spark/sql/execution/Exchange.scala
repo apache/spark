@@ -255,7 +255,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (ClusteredDistribution(clustering), rowOrdering, child) =>
             addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
           case (OrderedDistribution(ordering), rowOrdering, child) =>
-            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), Nil, child)
+            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 
           case (UnspecifiedDistribution, Seq(), child) =>
             child
