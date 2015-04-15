@@ -435,18 +435,17 @@ private[spark] class Executor(
   }
 
   /**
-   * Starts a thread to report heartbeat and partial metrics for active tasks to driver.
-   * This thread stops running when the executor is stopped.
+   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
     val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
 
     // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = interval + (math.random * interval).asInstanceOf[Int]
+    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
     val heartbeatTask = new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
     }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, interval, TimeUnit.MILLISECONDS)
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }
