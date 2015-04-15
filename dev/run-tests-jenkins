@@ -161,6 +161,10 @@ pr_message=""
 # Ensure we save off the current HEAD to revert to
 current_pr_head="`git rev-parse HEAD`"
 
+echo "HEAD:  `git rev-parse HEAD`"
+echo "GHPRB: $ghprbActualCommit"
+echo "SHA1:  $sha1"
+
 # Run pull request tests
 for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"

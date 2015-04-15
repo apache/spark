@@ -23,6 +23,7 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
@@ -35,7 +36,50 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
+  
+  test("timeConversion") {
+    // Test -1
+    assert(Utils.timeStringAsSeconds("-1") === -1)
+    
+    // Test zero
+    assert(Utils.timeStringAsSeconds("0") === 0)
+    
+    assert(Utils.timeStringAsSeconds("1") === 1)
+    assert(Utils.timeStringAsSeconds("1s") === 1)
+    assert(Utils.timeStringAsSeconds("1000ms") === 1)
+    assert(Utils.timeStringAsSeconds("1000000us") === 1)
+    assert(Utils.timeStringAsSeconds("1m") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1d") === TimeUnit.DAYS.toSeconds(1))
+    
+    assert(Utils.timeStringAsMs("1") === 1)
+    assert(Utils.timeStringAsMs("1ms") === 1)
+    assert(Utils.timeStringAsMs("1000us") === 1)
+    assert(Utils.timeStringAsMs("1s") === TimeUnit.SECONDS.toMillis(1))
+    assert(Utils.timeStringAsMs("1m") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
+    assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
+    
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600s")
+    }
 
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600ds")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("600s This breaks")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+  
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")

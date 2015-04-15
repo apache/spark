@@ -37,14 +37,12 @@ object SquaredError extends Loss {
    * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
    * The gradient with respect to F(x) is: - 2 (y - F(x))
-   * @param model Ensemble model
-   * @param point Instance of the training dataset
+   * @param prediction Predicted label.
+   * @param label True label.
    * @return Loss gradient
    */
-  override def gradient(
-    model: TreeEnsembleModel,
-    point: LabeledPoint): Double = {
-    2.0 * (model.predict(point.features) - point.label)
+  override def gradient(prediction: Double, label: Double): Double = {
+    2.0 * (prediction - label)
   }
 
   override def computeError(prediction: Double, label: Double): Double = {
