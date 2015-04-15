@@ -21,10 +21,10 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.status.api.v1.StageStatus._
+import org.apache.spark.status.api.v1.TaskSorting._
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.StageUIData
-import org.apache.spark.util.SparkEnum
-import org.apache.spark.status.api.v1.StageStatus._
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class OneStageResource(uiRoot: UIRoot) {
@@ -89,7 +89,7 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   ): Seq[TaskData] = {
     withStageAttempt(appId, stageId, attemptId) { stage =>
       val tasks = stage.ui.taskData.values.map{AllStagesResource.convertTaskData}.toIndexedSeq
-        .sorted(sortBy.ordering)
+        .sorted(OneStageResource.ordering(sortBy))
       tasks.slice(offset, offset + length)  
     }
   }
@@ -145,51 +145,15 @@ private[v1] class OneStageResource(uiRoot: UIRoot) {
   }
 }
 
-sealed abstract class TaskSorting extends SparkEnum {
-  def ordering: Ordering[TaskData]
-  def alternateNames: Seq[String] = Seq()
-}
-
-object TaskSorting extends JerseyEnum[TaskSorting] {
-  final val ID = {
-    case object ID extends TaskSorting {
-      def ordering = Ordering.by { td: TaskData => td.taskId }
-    }
-    ID
-  }
-
-  final val IncreasingRuntime = {
-    case object IncreasingRuntime extends TaskSorting {
-      def ordering = Ordering.by { td: TaskData =>
-        td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
+object OneStageResource {
+  def ordering(taskSorting: TaskSorting): Ordering[TaskData] = {
+    val extractor: (TaskData => Long) = td =>
+      taskSorting match {
+        case ID => td.taskId
+        case IncreasingRuntime => td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
+        case DecreasingRuntime => -td.taskMetrics.map{_.executorRunTime}.getOrElse(-1L)
       }
-      override def alternateNames = Seq("runtime", "+runtime")
-    }
-    IncreasingRuntime
-  }
-
-  final val DecreasingRuntime = {
-    case object DecreasingRuntime extends TaskSorting {
-      def ordering = IncreasingRuntime.ordering.reverse
-      override def alternateNames = Seq("-runtime")
-    }
-    DecreasingRuntime
-  }
-
-  val values = Seq(
-    ID,
-    IncreasingRuntime,
-    DecreasingRuntime
-  )
-
-  val alternateNames: Map[String, TaskSorting] =
-    values.flatMap { x => x.alternateNames.map { _ -> x } }.toMap
-
-  override def fromString(s: String): TaskSorting = {
-    alternateNames.find { case (k, v) =>
-      k.toLowerCase() == s.toLowerCase()
-    }.map { _._2 }.getOrElse{
-      super.fromString(s)
-    }
+    Ordering.by(extractor)
   }
 }
+

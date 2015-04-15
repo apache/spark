@@ -19,6 +19,7 @@ package org.apache.spark.status.api.v1
 import javax.ws.rs.{PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -30,7 +31,7 @@ private[v1] class OneJobResource(uiRoot: UIRoot) {
     @PathParam("jobId") jobId: Int
   ): JobData = {
     uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs: Seq[(JobStatus, Seq[JobUIData])] =
+      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)
       val jobOpt = statusToJobs.map {_._2} .flatten.find { jobInfo => jobInfo.jobId == jobId}
       jobOpt.map { job =>

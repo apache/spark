@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package org.apache.spark.status.api.v1;
 
 import org.apache.spark.status.api.EnumUtil;
 
-public enum JobExecutionStatus {
-  RUNNING,
-  SUCCEEDED,
-  FAILED,
-  UNKNOWN;
+public enum ApplicationStatus {
+  COMPLETED,
+  RUNNING;
 
-  public static JobExecutionStatus fromString(String str) {
-    return EnumUtil.parseIgnoreCase(JobExecutionStatus.class, str);
+  public static ApplicationStatus fromString(String str) {
+    return EnumUtil.parseIgnoreCase(ApplicationStatus.class, str);
   }
+
 }

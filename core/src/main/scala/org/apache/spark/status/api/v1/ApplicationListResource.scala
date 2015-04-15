@@ -36,7 +36,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     val allApps = uiRoot.getApplicationInfoList
     val adjStatus = {
       if (status.isEmpty) {
-        Arrays.asList(ApplicationStatus.values: _*)
+        Arrays.asList(ApplicationStatus.values(): _*)
       } else {
         status
       }

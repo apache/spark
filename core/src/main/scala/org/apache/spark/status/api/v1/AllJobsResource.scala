@@ -21,6 +21,7 @@ import java.util.Date
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.JobUIData
@@ -31,14 +32,14 @@ private[v1] class AllJobsResource(uiRoot: UIRoot) {
   @GET
   def jobsList(
     @PathParam("appId") appId: String,
-    @QueryParam("status") statuses: java.util.List[JobStatus]
+    @QueryParam("status") statuses: java.util.List[JobExecutionStatus]
   ): Seq[JobData] = {
     uiRoot.withSparkUI(appId) { ui =>
-      val statusToJobs: Seq[(JobStatus, Seq[JobUIData])] =
+      val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)
-      val adjStatuses: util.List[JobStatus] = {
+      val adjStatuses: util.List[JobExecutionStatus] = {
         if (statuses.isEmpty) {
-          java.util.Arrays.asList(JobStatus.values: _*)
+          java.util.Arrays.asList(JobExecutionStatus.values(): _*)
         }
         else {
           statuses
@@ -58,12 +59,12 @@ private[v1] class AllJobsResource(uiRoot: UIRoot) {
 
 private[v1] object AllJobsResource {
 
-  def getStatusToJobs(ui: SparkUI): Seq[(JobStatus, Seq[JobUIData])] = {
+  def getStatusToJobs(ui: SparkUI): Seq[(JobExecutionStatus, Seq[JobUIData])] = {
     val statusToJobs = ui.jobProgressListener.synchronized {
       Seq(
-        JobStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
-        JobStatus.SUCCEEDED -> ui.jobProgressListener.completedJobs.toSeq,
-        JobStatus.FAILED -> ui.jobProgressListener.failedJobs.reverse.toSeq
+        JobExecutionStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
+        JobExecutionStatus.SUCCEEDED -> ui.jobProgressListener.completedJobs.toSeq,
+        JobExecutionStatus.FAILED -> ui.jobProgressListener.failedJobs.reverse.toSeq
       )
     }
     statusToJobs
@@ -90,7 +91,7 @@ private[v1] object AllJobsResource {
         completionTime = job.completionTime.map{new Date(_)},
         stageIds = job.stageIds,
         jobGroup = job.jobGroup,
-        status = JobStatus.fromInternalStatus(job.status),
+        status = job.status,
         numTasks = job.numTasks,
         numActiveTasks = job.numActiveTasks,
         numCompletedTasks = job.numCompletedTasks,

@@ -1,4 +1,4 @@
-/*
+package org.apache.spark.status.api.v1;/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,17 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
-
 import org.apache.spark.status.api.EnumUtil;
 
-public enum JobExecutionStatus {
-  RUNNING,
-  SUCCEEDED,
-  FAILED,
-  UNKNOWN;
+import java.util.HashSet;
+import java.util.Set;
 
-  public static JobExecutionStatus fromString(String str) {
-    return EnumUtil.parseIgnoreCase(JobExecutionStatus.class, str);
+public enum TaskSorting {
+  ID,
+  IncreasingRuntime("runtime"),
+  DecreasingRuntime("-runtime");
+
+  final Set<String> alternateNames;
+  TaskSorting(String... names) {
+    alternateNames = new HashSet<String>();
+    for (String n: names) {
+      alternateNames.add(n);
+    }
   }
+
+  public static TaskSorting fromString(String str) {
+    for (TaskSorting t: values()) {
+      if (t.alternateNames.contains(str.toLowerCase())) {
+        return t;
+      }
+    }
+    return EnumUtil.parseIgnoreCase(TaskSorting.class, str);
+  }
+
 }
