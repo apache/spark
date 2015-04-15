@@ -50,9 +50,11 @@ private[sql] object JDBCRelation {
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
    * WHERE clauses for each partition so that each row in the table appears
-   * exactly once.  The parameters minValue and maxValue are advisory in that
+   * exactly once. The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
-   * will fail to be represented.
+   * will fail to be represented. Note: the upper and lower bounds are just
+   * used to decide partition stride, not for filtering. So all the rows in
+   * table will be partitioned.
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
