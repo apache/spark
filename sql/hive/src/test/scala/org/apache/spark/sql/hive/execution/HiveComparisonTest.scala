@@ -80,17 +80,9 @@ abstract class HiveComparisonTest
       .flatMap(_.split(","))
       .map(name => new File(targetDir, s"$suiteName.$name"))
 
-  // In idea test run, the answercache file may not exist, it should be create with absolutely path
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-    new File(System.getProperty("user.dir") + File.separator + "src" + File.separator + "test" +
-      File.separator + "resources" + File.separator)
-  } else {
-    new File(System.getProperty("user.dir") + File.separator + "sql" + File.separator + "hive" +
-      File.separator + "src" + File.separator + "test" + File.separator + "resources")
-  }
-
   /** The local directory with cached golden answer will be stored. */
-  protected val answerCache = new File(inRepoTests + File.separator + "golden")
+  protected val answerCache = new File("src" + File.separator + "test" +
+    File.separator + "resources" + File.separator + "golden")
   if (!answerCache.exists) {
     answerCache.mkdir()
   }
@@ -325,9 +317,6 @@ abstract class HiveComparisonTest
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
                   // from Seq("").
-                  if (!cachedAnswerFile.exists()) {
-                    cachedAnswerFile.createNewFile()
-                  }
                   stringToFile(
                     cachedAnswerFile, answer.mkString("\n") + (if (answer.nonEmpty) "\n" else ""))
                   answer
