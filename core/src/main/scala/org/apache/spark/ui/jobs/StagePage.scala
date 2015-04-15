@@ -454,12 +454,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val showVisualization =
         <div>
-          <strong>Data Visualization</strong>
-          <div id="chartContainer" class="container">
-            <script type="text/javascript">
-              {Unparsed(s"renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})")}
-            </script>
-          </div>
+          <span class="expand-visualization" onclick="render();">
+            <span class="expand-visualization-arrow arrow-closed"></span>
+            <strong>Show Visualization</strong>
+          </span>
+          <div id="chartContainer" class="container"></div>
+          <script type="text/javascript">
+            {Unparsed(s"function render() {renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})}")}
+          </script>
         </div>
 
       val content =

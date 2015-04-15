@@ -1,4 +1,10 @@
 function renderJobsGraphs(data) {
+	$(".expand-visualization-arrow").toggleClass('arrow-closed');
+	$(".expand-visualization-arrow").toggleClass('arrow-open');
+	if ($(".expand-visualization-arrow").hasClass("arrow-closed")) {
+		$("#chartContainer").empty();
+		return;
+	}
 	var tableData = [];
 	for (var k in data) {
 		var arr = (data[k]).split(",");
@@ -7,7 +13,6 @@ function renderJobsGraphs(data) {
 	var startTime = getMin(data["Launch Time"]);
 	var numTasks = data[k].length;
 	var maxTime = 0;
-	console.log(numTasks);
 	data["Launch Time"] = data["Launch Time"].map(function (launchTime) {return launchTime-startTime;});
 	for (i = 0; i < data[k].length; i++) {
 		var time = 0;
@@ -21,7 +26,7 @@ function renderJobsGraphs(data) {
 		}
 		maxTime = Math.max(time, maxTime);
 	}
-	console.log(maxTime);
+	console.log(JSON.stringify(tableData));
 	var height = Math.min(numTasks * 100, 2000);
 	var width = Math.min(maxTime * 2.5, 2000);
 	var svg = dimple.newSvg("#chartContainer", "100%", height);
