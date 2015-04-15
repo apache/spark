@@ -1075,7 +1075,6 @@ class Column(object):
     # container operators
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
-    __getattr__ = _bin_op("getField")
 
     def getItem(self, key):
         """An expression that gets an item at position `ordinal` out of a list,
@@ -1103,7 +1102,12 @@ class Column(object):
         r.a
         1
         """
-        return getattr(self, name)
+        return Column(self._jc.getField(name))
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self.getField(item)
 
     # string methods
     rlike = _bin_op("rlike")
