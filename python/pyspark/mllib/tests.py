@@ -749,7 +749,7 @@ class Word2VecTests(MLlibTestCase):
         self.assertEquals(len(model.getVectors()), 3)
 
 
-class StandardScalerTests(PySparkTestCase):
+class StandardScalerTests(MLlibTestCase):
     def test_model_setters(self):
         data = [
             [1.0, 2.0, 3.0],
