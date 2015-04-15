@@ -185,7 +185,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // True iff any of the children are incorrectly sorted.
       def needsAnySort: Boolean =
         operator.requiredChildOrdering.zip(operator.children).exists {
-          case (required, child) => required.nonEmpty && required != child
+          case (required, child) => required.nonEmpty && required != child.outputOrdering
         }
 
       // True iff outputPartitionings of children are compatible with each other.
@@ -233,7 +233,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         }
       }
 
-      if (meetsRequirements && compatible  && !needsAnySort) {
+      if (meetsRequirements && compatible && !needsAnySort) {
         operator
       } else {
         // At least one child does not satisfies its required data distribution or

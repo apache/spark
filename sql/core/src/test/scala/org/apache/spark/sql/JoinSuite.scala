@@ -51,7 +51,6 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
-      case j: ShuffledHashJoin => j
       case j: SortMergeJoin => j
     }
 
@@ -110,11 +109,22 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
+    val SORTMERGEJOIN_ENABLED: Boolean = conf.sortMergeJoinEnabled
     Seq(
       ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    try {
+      conf.setConf("spark.sql.planner.sortMergeJoin", "true")
+      Seq(
+        ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    } finally {
+      conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+    }
 
     sql("UNCACHE TABLE testData")
   }
