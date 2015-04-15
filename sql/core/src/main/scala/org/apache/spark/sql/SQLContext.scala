@@ -1081,7 +1081,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) :: Nil
+      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
   }
 
   protected[sql] def openSession(): SQLSession = {
