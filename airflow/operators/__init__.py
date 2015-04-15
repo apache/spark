@@ -29,6 +29,7 @@ _operators = {
         'TimeSensor',
     ],
     'subdag_operator': ['SubDagOperator'],
-    }
+    'hive_stats_operator': ['HiveStatsCollectionOperator'],
+}
 
 _import_module_attrs(globals(), _operators)

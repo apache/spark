@@ -411,7 +411,6 @@ class Airflow(BaseView):
                     'type': 'datetime' if chart.x_is_date else None,
                 },
                 'yAxis': {
-                    'min': 0,
                     'title': {'text': yaxis_label},
                 },
                 'colorAxis': colorAxis,

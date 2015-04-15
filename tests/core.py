@@ -96,6 +96,14 @@ class HivePrestoTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_hive_stats(self):
+        t = operators.HiveStatsCollectionOperator(
+            task_id='hive_stats_check',
+            table="airflow.static_babynames_partitioned",
+            partition={'ds': '2015-01-01'},
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_hive_partition_sensor(self):
         t = operators.HivePartitionSensor(
             task_id='hive_partition_check',

@@ -180,7 +180,7 @@ class HiveMetastoreHook(BaseHook):
         else:
             return False
 
-    def get_table(self, db, table_name):
+    def get_table(self, table_name, db='default'):
         '''
         Get a metastore table object
 
@@ -192,6 +192,8 @@ class HiveMetastoreHook(BaseHook):
         ['state', 'year', 'name', 'gender', 'num']
         '''
         self.metastore._oprot.trans.open()
+        if db == 'default' and '.' in table_name:
+            db, table_name = table_name.split('.')[:2]
         table = self.metastore.get_table(dbname=db, tbl_name=table_name)
         self.metastore._oprot.trans.close()
         return table
