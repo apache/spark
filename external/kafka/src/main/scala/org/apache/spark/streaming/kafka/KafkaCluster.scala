@@ -218,8 +218,14 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   /** Requires Kafka >= 0.8.1.1 */
   def getConsumerOffsets(
       groupId: String,
+      topicAndPartitions: Set[TopicAndPartition]
+    ): Either[Err, Map[TopicAndPartition, Long]] =
+    getConsumerOffsets(groupId, topicAndPartitions, defaultConsumerApiVersion)
+
+  def getConsumerOffsets(
+      groupId: String,
       topicAndPartitions: Set[TopicAndPartition],
-      versionId: Short = defaultConsumerApiVersion
+      versionId: Short
     ): Either[Err, Map[TopicAndPartition, Long]] = {
     getConsumerOffsetMetadata(groupId, topicAndPartitions, versionId).right.map { r =>
       r.map { kv =>
@@ -231,8 +237,14 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   /** Requires Kafka >= 0.8.1.1 */
   def getConsumerOffsetMetadata(
       groupId: String,
+      topicAndPartitions: Set[TopicAndPartition]
+    ): Either[Err, Map[TopicAndPartition, OffsetMetadataAndError]] =
+    getConsumerOffsetMetadata(groupId, topicAndPartitions, defaultConsumerApiVersion)
+
+  def getConsumerOffsetMetadata(
+      groupId: String,
       topicAndPartitions: Set[TopicAndPartition],
-      versionId: Short = defaultConsumerApiVersion
+      versionId: Short
     ): Either[Err, Map[TopicAndPartition, OffsetMetadataAndError]] = {
     var result = Map[TopicAndPartition, OffsetMetadataAndError]()
     val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq, versionId)
@@ -262,8 +274,14 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   /** Requires Kafka >= 0.8.1.1 */
   def setConsumerOffsets(
       groupId: String,
+      offsets: Map[TopicAndPartition, Long]
+    ): Either[Err, Map[TopicAndPartition, Short]] =
+    setConsumerOffsets(groupId, offsets, defaultConsumerApiVersion)
+
+  def setConsumerOffsets(
+      groupId: String,
       offsets: Map[TopicAndPartition, Long],
-      versionId: Short = defaultConsumerApiVersion
+      versionId: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
     val meta = offsets.map { kv =>
       kv._1 -> OffsetAndMetadata(kv._2)
@@ -274,8 +292,14 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   /** Requires Kafka >= 0.8.1.1 */
   def setConsumerOffsetMetadata(
       groupId: String,
+      metadata: Map[TopicAndPartition, OffsetAndMetadata]
+    ): Either[Err, Map[TopicAndPartition, Short]] =
+    setConsumerOffsetMetadata(groupId, metadata, defaultConsumerApiVersion)
+
+  def setConsumerOffsetMetadata(
+      groupId: String,
       metadata: Map[TopicAndPartition, OffsetAndMetadata],
-      versionId: Short = defaultConsumerApiVersion
+      versionId: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
     var result = Map[TopicAndPartition, Short]()
     val req = OffsetCommitRequest(groupId, metadata, versionId)
