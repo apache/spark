@@ -55,7 +55,7 @@ private[spark] class ApplicationMaster(
     .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
 
-  // Default to numExecutors * 2, with minimum of 3
+  // Default to numExecutors * 2, with maximum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures", math.max(args.numExecutors * 2, 3)))
 
