@@ -453,12 +453,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
       val showVisualization =
-        <div id="chartContainer">
+        <div>
           <strong>Data Visualization</strong>
-          <script type="text/javascript">
-            {Unparsed(s"renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})")}
-          </script>
-          <p></p>
+          <div id="chartContainer" class="container">
+            <script type="text/javascript">
+              {Unparsed(s"renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})")}
+            </script>
+          </div>
         </div>
 
       val content =
@@ -468,8 +469,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4>Tasks</h4> ++ taskTable ++
-        showVisualization
+        showVisualization ++
+        <h4>Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
