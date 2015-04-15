@@ -115,6 +115,7 @@ object UnionPushdown extends Rule[LogicalPlan] {
  *   - Aggregate
  *   - Project <- Join
  *   - LeftSemiJoin
+ *   - Generate
  *  - Collapse adjacent projections, performing alias substitution.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
@@ -171,26 +172,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
-    case gen@Generate(_: Explode, _, _, _, c) =>
-      val allReferences = gen.references ++ gen.parentReferences
-      if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
-        gen.copy(child = Project(allReferences.filter(c.outputSet.contains).toSeq, c))
-      } else {
-        gen
-      }
+    // add a project which is blocked by Generate
+    case p @ pushBelowGenerate(newChild) =>
+      p.copy(child = newChild)
 
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
-
-    case plan =>
-      plan.children.foreach { c =>
-        c match {
-          case gen@Generate(generator: Explode, isJoin, isOuter, alias, child) =>
-            gen.parentReferences = plan.references;
-          case _ => // nothing
-        }
-      }
-      plan
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
@@ -200,6 +187,31 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+
+  object pushBelowGenerate {
+    // because generate block project operate, it need to insert a project below generate with all
+    // references
+    def collectRefersUntilGen(refers: AttributeSet, plan: LogicalPlan): LogicalPlan = {
+      val collectRefers = refers ++ plan.references
+      plan match {
+        case filter @ Filter(_, c) =>
+          val newChild = collectRefersUntilGen(collectRefers, c)
+          if (newChild != null) filter.copy(child = newChild) else filter
+        case gen @ Generate(_, _, _, _, c) =>
+          if ((c.outputSet -- collectRefers.filter(c.outputSet.contains)).nonEmpty) {
+            gen.copy(child = Project(collectRefers.filter(c.outputSet.contains).toSeq, c))
+          } else {
+            gen
+          }
+        case _ => null
+      }
+    }
+
+    def unapply(plan: Project): Option[LogicalPlan] = {
+      val newChild = collectRefersUntilGen(plan.references, plan.child)
+      if (newChild != null) Some(newChild) else None
+    }
+  }
 }
 
 /**
