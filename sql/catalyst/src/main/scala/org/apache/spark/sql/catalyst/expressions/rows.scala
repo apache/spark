@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{StructType, NativeType}
+import org.apache.spark.sql.types.{UTF8String, StructType, NativeType}
 
 
 /**
@@ -37,6 +37,7 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  // TODO(davies): add setDate() and setDecimal()
 }
 
 /**
@@ -114,8 +115,14 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    values(i).asInstanceOf[String]
+    values(i) match {
+      case null => null
+      case s: String => s
+      case utf8: UTF8String => utf8.toString
+    }
   }
+
+  // TODO(davies): add getDate and getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -189,8 +196,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
-
+  override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }

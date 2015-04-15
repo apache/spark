@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -312,26 +312,28 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     row.getString(ordinal).getBytes("utf-8").length + 4
   }
 
-  override def append(v: String, buffer: ByteBuffer): Unit = {
-    val stringBytes = v.getBytes("utf-8")
+  override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
+    val stringBytes = v.getBytes
     buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
   }
 
-  override def extract(buffer: ByteBuffer): String = {
+  override def extract(buffer: ByteBuffer): UTF8String = {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    new String(stringBytes, "utf-8")
+    UTF8String(stringBytes)
   }
 
-  override def setField(row: MutableRow, ordinal: Int, value: String): Unit = {
-    row.setString(ordinal, value)
+  override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {
+    row.update(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int): String = row.getString(ordinal)
+  override def getField(row: Row, ordinal: Int): UTF8String = {
+    row(ordinal).asInstanceOf[UTF8String]
+  }
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to.setString(toOrdinal, from.getString(fromOrdinal))
+    to.update(toOrdinal, from(fromOrdinal))
   }
 }
 

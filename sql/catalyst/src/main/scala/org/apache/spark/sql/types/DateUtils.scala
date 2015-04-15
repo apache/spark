@@ -40,6 +40,7 @@ object DateUtils {
     millisToDays(d.getTime)
   }
 
+  // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisLocal: Long): Int = {
     ((millisLocal + LOCAL_TIMEZONE.get().getOffset(millisLocal)) / MILLIS_PER_DAY).toInt
   }
