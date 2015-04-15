@@ -64,7 +64,7 @@ case class UnresolvedAttribute(nameParts: Seq[String])
   override def newInstance(): UnresolvedAttribute = this
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
   override def withQualifiers(newQualifiers: Seq[String]): UnresolvedAttribute = this
-  override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute(nameParts)
+  override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
   override def eval(input: Row = null): EvaluatedType =
