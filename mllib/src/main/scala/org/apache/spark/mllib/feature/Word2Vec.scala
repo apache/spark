@@ -429,15 +429,20 @@ class Word2Vec extends Serializable with Logging {
  */
 @Experimental
 class Word2VecModel private[mllib] (
-    private val model: Map[String, Array[Float]]) extends Serializable with Saveable {
+    model: Map[String, Array[Float]]) extends Serializable with Saveable {
 
-  private val numDim = model.head._2.size
-  private val numWords = model.size
-  private val flatVec = model.toSeq.flatMap { case(w, v) =>
-    v.map(_.toDouble)}.toArray
-  private val wordVecMat = new DenseMatrix(numWords, numDim, flatVec, isTransposed=true)
-  private val wordVecNorms = model.map { case (word, vec) =>
-    blas.snrm2(numDim, vec, 1)}.toArray
+  val indexedModel = model.keys.zip(0 until model.size).toMap
+
+  private val (wordVectors, wordVecNorms) = {
+    val numDim = model.head._2.size
+    val numWords = indexedModel.size
+    val flatVec = model.toSeq.flatMap { case(w, v) =>
+      v.map(_.toDouble)}.toArray
+    val wordVectors = new DenseMatrix(numWords, numDim, flatVec, isTransposed=true)
+    val wordVecNorms = model.map { case (word, vec) =>
+      blas.snrm2(numDim, vec, 1)}.toArray
+    (wordVectors, wordVecNorms)
+  }
 
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
@@ -451,7 +456,7 @@ class Word2VecModel private[mllib] (
   override protected def formatVersion = "1.0"
 
   def save(sc: SparkContext, path: String): Unit = {
-    Word2VecModel.SaveLoadV1_0.save(sc, path, model)
+    Word2VecModel.SaveLoadV1_0.save(sc, path, getVectors)
   }
 
   /**
@@ -488,16 +493,15 @@ class Word2VecModel private[mllib] (
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
 
-    val fVector = vector.toArray
-
-    val cosineVec = new DenseVector(Array.fill[Double](numWords)(0))
-    BLAS.gemv(1.0, wordVecMat, vector.asInstanceOf[DenseVector], 0.0, cosineVec)
+    val numWords = wordVectors.numRows
+    val cosineVec = Vectors.zeros(numWords).asInstanceOf[DenseVector]
+    BLAS.gemv(1.0, wordVectors, vector.asInstanceOf[DenseVector], 0.0, cosineVec)
 
     // Need not divide with the norm of the given vector since it is constant.
-    val updatedCosines = model.zipWithIndex.map { case (vec, ind) =>
+    val updatedCosines = indexedModel.map { case (_, ind) =>
       cosineVec(ind) / wordVecNorms(ind) }
 
-    model.keys.zip(updatedCosines)
+    indexedModel.keys.zip(updatedCosines)
       .toSeq
       .sortBy(- _._2)
       .take(num + 1)
@@ -509,7 +513,11 @@ class Word2VecModel private[mllib] (
    * Returns a map of words to their vector representations.
    */
   def getVectors: Map[String, Array[Float]] = {
-    model
+    val numDim = wordVectors.numCols
+    indexedModel.map { case (word, ind) =>
+      val startInd = numDim * ind
+      val endInd = startInd + numDim
+      (word, wordVectors.values.slice(startInd, endInd).map(_.toFloat)) }
   }
 }
 
