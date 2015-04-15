@@ -233,7 +233,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         // because someone could change the error message and cause this test to pass by accident.
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
-          val link = row.underlying.findElement(By.xpath(".//a"))
+          val link = row.underlying.findElement(By.xpath("./td/div/a"))
           link.getAttribute("href") should include ("stage")
         }
       }
