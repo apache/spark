@@ -688,7 +688,7 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
     sql("DROP TABLE alwaysNullable")
   }
 
-  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
+  ignore("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
     val tempDir = Utils.createTempDir()
     val filePath = new File(tempDir, "testParquet").getCanonicalPath
     val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
