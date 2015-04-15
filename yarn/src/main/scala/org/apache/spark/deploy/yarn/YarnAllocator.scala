@@ -99,12 +99,11 @@ private[yarn] class YarnAllocator(
   protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
 
-  // Make the maximum executor failure check to be relative with respect to duration
-  private val relativeMaxExecutorFailureCheck = 
-                sparkConf.getBoolean("spark.yarn.max.executor.failures.relative", false)
-  // window duration in sec ( default = 600 sec ) for checking maximum  number of executor failures
-  private val relativeMaxExecutorFailureCheckWindow = 
-               sparkConf.getInt("spark.yarn.max.executor.failures.relative.window", 600)
+  // Maximum number of executor failures per minute 
+  private val relativeMaxExecutorFailurePerMinute = 
+               sparkConf.getInt("spark.yarn.max.executor.failuresPerMinute", -1)
+  private val relativeMaxExecutorFailureEnabled = 
+              if (relativeMaxExecutorFailurePerMinute == -1) true else false
 
   // Number of cores per executor.
   protected val executorCores = args.executorCores
@@ -132,7 +131,7 @@ private[yarn] class YarnAllocator(
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
   def getNumExecutorsFailed: Int = {
-    if(relativeMaxExecutorFailureCheck){
+    if (relativeMaxExecutorFailureEnabled) {
       getRelevantNumExecutorsFailed
     } else {
       numExecutorsFailed.intValue
@@ -140,12 +139,12 @@ private[yarn] class YarnAllocator(
   }
 
   /**
-   *  Returns the the relative number of executor failures within the specifid window duration.
+   *  Returns the the relative number of executor failures within the specified window duration.
    */
 
   def getRelevantNumExecutorsFailed : Int = {
-    var currentTime = System.currentTimeMillis / 1000
-    var relevantWindowStartTime = currentTime - relativeMaxExecutorFailureCheckWindow
+    val currentTime = System.currentTimeMillis / 1000 
+    val relevantWindowStartTime = currentTime - 60
     while(relevantWindowStartTime > oldestRelativeExecutorFailure && 
           executorFailureTimeStamps.size > 0){
       oldestRelativeExecutorFailure = executorFailureTimeStamps.pop
@@ -418,7 +417,7 @@ private[yarn] class YarnAllocator(
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
-          if(relativeMaxExecutorFailureCheck) {
+          if (relativeMaxExecutorFailureEnabled) {
              executorFailureTimeStamps.push(System.currentTimeMillis / 1000)
           }
         }
