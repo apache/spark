@@ -71,11 +71,11 @@ trait AggregateFunction2 {
   // Initialize (reinitialize) the aggregation buffer
   def reset(buf: MutableRow): Unit
 
-  // Expect the aggregate function fills the aggregation buffer when
-  // fed with each value in the group
-  def update(arguments: Any, buf: MutableRow): Unit
+  // Get the children value from the input row, and then
+  // merge it with the given aggregate buffer
+  def update(input: Row, buf: MutableRow): Unit
 
-  // Merge 2 aggregation buffer, and write back to the later one
+  // Merge 2 aggregation buffers, and write back to the later one
   def merge(value: Row, buf: MutableRow): Unit
 
   // Semantically we probably don't need this, however, we need it when
@@ -143,7 +143,8 @@ case class Min(
     buf(aggr) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       arg.value = argument
       buffer.value = buf(aggr)
@@ -218,7 +219,8 @@ case class Average(child: Expression, distinct: Boolean = false)
     buf(sum) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       arg.value = argument
       buf(count) = buf.getLong(count) + 1
@@ -272,7 +274,8 @@ case class Max(child: Expression)
     buf(aggr) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       arg.value = argument
       buffer.value = buf(aggr)
@@ -314,7 +317,8 @@ case class Count(child: Expression)
     buf(aggr) = 0L
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       if (buf.isNullAt(aggr)) {
         buf(aggr) = 1L
@@ -355,8 +359,9 @@ case class CountDistinct(children: Seq[Expression])
     buf(aggr) = 0L
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
-    if (!argument.asInstanceOf[Seq[_]].exists(_ == null)) {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val arguments = children.map(_.eval(input))
+    if (!arguments.exists(_ == null)) {
       // CountDistinct supports multiple expression, and ONLY IF
       // none of its expressions value equals null
       if (buf.isNullAt(aggr)) {
@@ -426,7 +431,8 @@ case class Sum(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       if (buf.isNullAt(aggr)) {
         buf(aggr) = argument
@@ -473,7 +479,8 @@ case class First(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (buf.isNullAt(aggr)) {
       if (argument != null) {
         buf(aggr) = argument
@@ -510,7 +517,8 @@ case class Last(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(argument: Any, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val argument = child.eval(input)
     if (argument != null) {
       buf(aggr) = argument
     }

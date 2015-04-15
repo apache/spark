@@ -245,7 +245,7 @@ case class AggregatePreShuffle(
           var idx = 0
           while (idx < aggregates.length) {
             val ae = aggregates(idx)
-            ae.update(ae.eval(currentRow), buffer)
+            ae.update(currentRow, buffer)
             idx += 1
           }
         }
@@ -263,12 +263,8 @@ case class AggregatePreShuffle(
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
-                val value = ae.eval(currentRow)
-                // TODO distinctLike? We need to store the "seen" for
-                // AggregationExpression that distinctLike=true
-                // This is a trade off between memory & computing
                 ae.reset(buffer)
-                ae.update(value, buffer)
+                ae.update(currentRow, buffer)
                 idx += 1
               }
 
@@ -278,7 +274,7 @@ case class AggregatePreShuffle(
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
-                ae.update(ae.eval(currentRow), inputbuffer.buffer)
+                ae.update(currentRow, inputbuffer.buffer)
                 idx += 1
               }
 
@@ -407,15 +403,17 @@ case class DistinctAggregate(
           var idx = 0
           while (idx < aggregateFunctionBinds.length) {
             val ae = aggregates(idx)
-            val value = ae.eval(currentRow)
 
             if (ae.distinct) {
+              val value = ae.eval(currentRow)
               if (value != null && !seens(idx).contains(value)) {
-                ae.update(value, buffer)
+                // TODO how to avoid the children expression evaluation
+                // within Aggregate Expression?
+                ae.update(currentRow, buffer)
                 seens(idx).add(value)
               }
             } else {
-              ae.update(value, buffer)
+              ae.update(currentRow, buffer)
             }
             idx += 1
           }
@@ -438,11 +436,12 @@ case class DistinctAggregate(
               var idx = 0
               while (idx < aggregateFunctionBinds.length) {
                 val ae = aggregates(idx)
-                val value = ae.eval(currentRow)
+
                 ae.reset(buffer)
-                ae.update(value, buffer)
+                ae.update(currentRow, buffer)
 
                 if (ae.distinct) {
+                  val value = ae.eval(currentRow)
                   val seen = new OpenHashSet[Any]()
                   if (value != null) {
                     seen.add(value)
@@ -462,11 +461,11 @@ case class DistinctAggregate(
 
                 if (ae.distinct) {
                   if (value != null && !inputBufferSeens.seens(idx).contains(value)) {
-                    ae.update(value, inputBufferSeens.buffer)
+                    ae.update(currentRow, inputBufferSeens.buffer)
                     inputBufferSeens.seens(idx).add(value)
                   }
                 } else {
-                  ae.update(value, inputBufferSeens.buffer)
+                  ae.update(currentRow, inputBufferSeens.buffer)
                 }
                 idx += 1
               }

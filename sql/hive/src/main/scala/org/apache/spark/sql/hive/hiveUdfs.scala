@@ -545,8 +545,9 @@ private[hive] case class HiveGenericUdaf2(
 
   // Expect the aggregate function fills the aggregation buffer when fed with each value
   // in the group
-  override def update(arguments: Any, buf: MutableRow): Unit = {
-    val args = arguments.asInstanceOf[Seq[AnyRef]].zip(inspectors).map {
+  override def update(input: Row, buf: MutableRow): Unit = {
+    val arguments = children.map(_.eval(input))
+    val args = arguments.zip(inspectors).map {
       case (value, oi) => wrap(value, oi)
     }.toArray
 
