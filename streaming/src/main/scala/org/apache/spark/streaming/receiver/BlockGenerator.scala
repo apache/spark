@@ -86,7 +86,7 @@ private[streaming] class BlockGenerator(
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  @volatile private var currentBuffer = new ArrayBuffer[Any]
+  private var currentBuffer = new ArrayBuffer[Any]   // protected by synchronized
   @volatile private var stopped = false
 
   /** Start block generating and pushing threads. */
