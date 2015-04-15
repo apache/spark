@@ -21,6 +21,7 @@ import java.io.{IOException, BufferedInputStream, FileNotFoundException, InputSt
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -81,6 +82,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
+  // List of applications to be deleted by event log cleaner.
+  private var appsToClean: ListBuffer[FsApplicationHistoryInfo] = _
+
   // Constants used to parse Spark 1.0.0 log directories.
   private[history] val LOG_PREFIX = "EVENT_LOG_"
   private[history] val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
@@ -134,6 +138,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         TimeUnit.MILLISECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
+        appsToClean = new ListBuffer[FsApplicationHistoryInfo]
         // A task that periodically cleans event logs on disk.
         pool.scheduleAtFixedRate(getRunner(cleanLogs), 0, CLEAN_INTERVAL_MS,
           TimeUnit.MILLISECONDS)
@@ -278,7 +283,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-      val appsToClean = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
@@ -286,19 +290,21 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         if (now - info.lastUpdated <= maxAge || !info.completed) {
           appsToRetain += (info.id -> info)
         } else {
-          appsToClean += (info.id -> info)
+          appsToClean += info
         }
       }
 
       applications = appsToRetain
 
-      appsToClean.values.foreach { info =>
+      appsToClean.foreach { info =>
         try {
-          fs.delete(new Path(logDir + "/" + info.logPath), true)
+          val path = new Path(logDir + "/" + info.logPath)
+          if (fs.exists(path) && fs.delete(path, true)) {
+            appsToClean -= info
+          }
         } catch {
           case t: IOException =>
             logError(s"IOException in cleaning logs of ${info.logPath}", t)
-            applications += (info.id -> info)
         }
       }
     } catch {
