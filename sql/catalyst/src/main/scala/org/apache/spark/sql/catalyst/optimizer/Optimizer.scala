@@ -196,12 +196,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       plan match {
         case filter @ Filter(_, c) =>
           val newChild = collectRefersUntilGen(collectRefers, c)
-          if (newChild != null) filter.copy(child = newChild) else filter
+          // null indicate child is not changed
+          if (newChild != null) filter.copy(child = newChild) else null
         case gen @ Generate(_, _, _, _, c) =>
           if ((c.outputSet -- collectRefers.filter(c.outputSet.contains)).nonEmpty) {
             gen.copy(child = Project(collectRefers.filter(c.outputSet.contains).toSeq, c))
           } else {
-            gen
+            null
           }
         case _ => null
       }
