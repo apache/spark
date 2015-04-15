@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
 
 /**
- * :: DeveloperApi ::
+ * Shuffle data according to a new partition rule, and sort inside each partition if necessary.
+ * @param newPartitioning The new partitioning way that required by parent
+ * @param sort            Whether we will sort inside each partition
+ * @param child           Child operator
  */
 @DeveloperApi
 case class Exchange(

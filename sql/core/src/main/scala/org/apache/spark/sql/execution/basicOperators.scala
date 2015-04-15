@@ -45,11 +45,9 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   /**
    * outputOrdering of Project is not always same with child's outputOrdering if the certain
    * key is pruned, however, if the key is pruned then we must not require child using this
-   * ordering from upper layer, only if the ordering would not be changed by a negative, there
-   * would be a way to keep the ordering.
-   * TODO: we may utilize this feature later to avoid some unnecessary sorting.
+   * ordering from upper layer, so it is fine to keep it to avoid some unnecessary sorting.
    */
-  override def outputOrdering: Option[Ordering[Row]] = None
+  override def outputOrdering: Option[Ordering[Row]] = child.outputOrdering
 }
 
 /**
