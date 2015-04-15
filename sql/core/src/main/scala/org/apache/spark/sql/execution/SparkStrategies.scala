@@ -90,6 +90,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
+      // If the sort merge join option is set, we want to use sort merge join prior to hashjoin
+      // for now let's support inner join first, then add outer join
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.conf.sortMergeJoinEnabled =>
+        val mergeJoin =
+          joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
@@ -309,7 +317,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.OneRowRelation =>
         execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
-        execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
+        execution.Exchange(
+          HashPartitioning(expressions, numPartitions), Nil, planLater(child)) :: Nil
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
