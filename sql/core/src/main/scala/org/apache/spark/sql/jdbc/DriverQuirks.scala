@@ -49,11 +49,11 @@ object DriverQuirks {
 
   private var quirks = List[DriverQuirks]()
 
-  def registerQuirks(quirk: DriverQuirks) {
+  def registerQuirks(quirk: DriverQuirks) : Unit = {
     quirks = quirk :: quirks
   }
 
-  def unregisterQuirks(quirk : DriverQuirks) {
+  def unregisterQuirks(quirk : DriverQuirks) : Unit = {
     quirks = quirks.filterNot(_ == quirk)
   }
 
@@ -74,24 +74,22 @@ object DriverQuirks {
 }
 
 class AggregatedQuirks(quirks: List[DriverQuirks]) extends DriverQuirks {
+
+  require(!quirks.isEmpty)
+
   def canHandle(url : String): Boolean =
-    quirks.foldLeft(true)((l,r) => l && r.canHandle(url))
-  def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder) : DataType =
-    quirks.foldLeft(null.asInstanceOf[DataType])((l,r) =>
-      if (l != null) {
-        l
-      } else {
-        r.getCatalystType(sqlType, typeName, size, md)
-      }
-    )
+    quirks.map(_.canHandle(url)).reduce(_ && _)
+
+  def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType =
+    quirks.map(_.getCatalystType(sqlType, typeName, size, md)).collectFirst {
+      case dataType if dataType != null => dataType
+    }.orNull
+
   def getJDBCType(dt: DataType): (String, Option[Int]) =
-    quirks.foldLeft(null.asInstanceOf[(String, Option[Int])])((l,r) =>
-      if (l != null) {
-        l
-      } else {
-        r.getJDBCType(dt)
-      }
-    )
+    quirks.map(_.getJDBCType(dt)).collectFirst {
+      case t @ (typeName,sqlType) if typeName != null || sqlType.isDefined => t
+    }.getOrElse((null, None))
+
 }
 
 class NoQuirks extends DriverQuirks {
