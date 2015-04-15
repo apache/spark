@@ -29,11 +29,10 @@ private[spark] class ShuffleMapStage(
     id: Int,
     rdd: RDD[_],
     numTasks: Int,
-    parents: List[Stage],
     jobId: Int,
     callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _])
-  extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
+  extends Stage(id, rdd, numTasks, jobId, callSite) {
 
   override def toString: String = "ShuffleMapStage " + id
 

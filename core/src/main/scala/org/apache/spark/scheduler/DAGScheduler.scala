@@ -246,8 +246,7 @@ class DAGScheduler(
       jobId: Int,
       callSite: CallSite): ShuffleMapStage = {
     val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
-    val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, parentStages,
-      jobId, callSite, shuffleDep)
+    val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, jobId, callSite, shuffleDep)
 
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)

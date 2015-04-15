@@ -50,7 +50,6 @@ private[spark] abstract class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
-    val parents: List[Stage],
     val jobId: Int,
     val callSite: CallSite)
   extends Logging {
