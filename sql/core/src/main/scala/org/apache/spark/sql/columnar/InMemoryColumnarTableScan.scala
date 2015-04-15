@@ -43,29 +43,6 @@ private[sql] object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String]): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
-
-  private val accumulators = HashMap[String, ArrayBuffer[Accumulable[_, _]]]()
-
-  private[sql] def addAccumulator(relation: InMemoryRelation, acc: Accumulable[_, _]): Unit = {
-    val index = relation.tableName.map { n =>
-      s"In-memory table $n"
-    }.getOrElse(relation.child.toString)
-
-    if (!accumulators.contains(index)) {
-      accumulators.put(index, ArrayBuffer[Accumulable[_, _]]())
-    }
-    accumulators.get(index).get += acc  
-  }
-
-  private[sql] def removeAccumulators(relation: InMemoryRelation): Unit = {
-    val index = relation.tableName.map { n =>
-      s"In-memory table $n"
-    }.getOrElse(relation.child.toString)
-
-    if (accumulators.contains(index)) {
-      accumulators.get(index).get.foreach(acc => Accumulators.remove(acc.id))
-    }
-  }
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
@@ -78,24 +55,15 @@ private[sql] case class InMemoryRelation(
     child: SparkPlan,
     tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    private var _statistics: Statistics = null)
+    private var _statistics: Statistics = null,
+    private var _batchStats: Accumulable[ArrayBuffer[Row], Row] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  private val batchStats =
-    child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
-
-  InMemoryRelation.addAccumulator(this, batchStats)
-
-  private[sql] def applyScanAccumulators(sc: SparkContext): (Accumulator[Int], Accumulator[Int]) = {
-    val accs = (sc.accumulator(0), sc.accumulator(0))
-    InMemoryRelation.addAccumulator(this, accs._1)
-    InMemoryRelation.addAccumulator(this, accs._2)
-    accs 
-  }
-
-  private[sql] def removeAccumulators(): Unit = {
-    InMemoryRelation.removeAccumulators(this)
-  }
+  private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
+    if (_batchStats == null)
+      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+    else
+      _batchStats
 
   val partitionStatistics = new PartitionStatistics(output)
 
@@ -199,7 +167,7 @@ private[sql] case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-      _cachedColumnBuffers, statisticsToBePropagated)
+      _cachedColumnBuffers, statisticsToBePropagated, batchStats)
   }
 
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -213,13 +181,20 @@ private[sql] case class InMemoryRelation(
       child,
       tableName)(
       _cachedColumnBuffers,
-      statisticsToBePropagated).asInstanceOf[this.type]
+      statisticsToBePropagated,
+      batchStats).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, statisticsToBePropagated)
+    Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
+
+  private[sql] def uncache(blocking: Boolean): Unit = {
+    Accumulators.remove(batchStats.id)
+    cachedColumnBuffers.unpersist(blocking)
+    _cachedColumnBuffers = null
+  }
 }
 
 private[sql] case class InMemoryColumnarTableScan(
@@ -286,12 +261,8 @@ private[sql] case class InMemoryColumnarTableScan(
     sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   // Accumulators used for testing purposes
-  lazy val (readPartitions, readBatches) =
-    if (enableAccumulators) {
-      relation.applyScanAccumulators(sparkContext)
-    } else {
-      (null, null)
-    }
+  lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
+  lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
