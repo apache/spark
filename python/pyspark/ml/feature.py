@@ -52,22 +52,22 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     _java_class = "org.apache.spark.ml.feature.Tokenizer"
 
     @keyword_only
-    def __init__(self, inputCol="input", outputCol="output"):
+    def __init__(self, inputCol=None, outputCol=None):
         """
-        __init__(self, inputCol="input", outputCol="output")
+        __init__(self, inputCol=None, outputCol=None)
         """
         super(Tokenizer, self).__init__()
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol="input", outputCol="output"):
+    def setParams(self, inputCol=None, outputCol=None):
         """
         setParams(self, inputCol="input", outputCol="output")
         Sets params for this Tokenizer.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
 
 @inherit_doc
@@ -91,22 +91,23 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     _java_class = "org.apache.spark.ml.feature.HashingTF"
 
     @keyword_only
-    def __init__(self, numFeatures=1 << 18, inputCol="input", outputCol="output"):
+    def __init__(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
         """
-        __init__(self, numFeatures=1 << 18, inputCol="input", outputCol="output")
+        __init__(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
         """
         super(HashingTF, self).__init__()
+        self._setDefault(numFeatures=1 << 18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, numFeatures=1 << 18, inputCol="input", outputCol="output"):
+    def setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
         """
-        setParams(self, numFeatures=1 << 18, inputCol="input", outputCol="output")
+        setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
         Sets params for this HashingTF.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
 
 if __name__ == "__main__":
