@@ -398,7 +398,8 @@ private[sql] case class ParquetRelation2(
 
   def isPartitioned: Boolean = partitionColumns.nonEmpty
 
-  private def partitionKeysIncludedInDataSchema = metadataCache.partitionKeysIncludedInParquetSchema
+  def partitionKeysIncludedInDataSchema: Boolean =
+    metadataCache.partitionKeysIncludedInParquetSchema
 
   private def parquetSchema = metadataCache.parquetSchema
 
