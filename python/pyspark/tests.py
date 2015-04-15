@@ -521,10 +521,8 @@ class RDDTests(ReusedPySparkTestCase):
         data = [float(i) for i in xrange(N)]
         rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
         self.assertEquals(N, rdd.first())
-        self.assertTrue(rdd._broadcast is not None)
-        rdd = self.sc.parallelize(range(1), 1).map(lambda x: 1)
-        self.assertEqual(1, rdd.first())
-        self.assertTrue(rdd._broadcast is None)
+        # regression test for SPARK-6886
+        self.assertEqual(1, rdd.map(lambda x: (x, 1)).groupByKey().count())
 
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
