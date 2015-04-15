@@ -859,8 +859,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * passed to this function.
    *
    * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` to retrieve
-   * @param upperBound the maximum value of `columnName` to retrieve
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    *
