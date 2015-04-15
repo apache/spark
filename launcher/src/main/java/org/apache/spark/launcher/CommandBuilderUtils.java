@@ -30,6 +30,7 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "512m";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
+  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
