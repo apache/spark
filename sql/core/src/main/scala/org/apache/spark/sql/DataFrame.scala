@@ -1326,6 +1326,28 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
+   * partition columns.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   * @group output
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String],
+      partitionColumns: java.util.List[String]): Unit = {
+    ???
+  }
+
+  /**
+   * :: Experimental ::
    * (Scala-specific)
    * Creates a table from the the contents of this DataFrame based on a given data source,
    * [[SaveMode]] specified by mode, and a set of options.
@@ -1355,6 +1377,28 @@ class DataFrame private[sql](
         logicalPlan)
 
     sqlContext.executePlan(cmd).toRdd
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, a set of options, and a list of
+   * partition columns.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   * @group output
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Unit = {
+    ???
   }
 
   /**
