@@ -105,6 +105,9 @@ class KafkaUtils(object):
         """
         if not isinstance(topics, list):
             raise TypeError("topics should be list")
+        if not isinstance(kafkaParams, dict):
+            raise TypeError("kafkaParams should be dict")
+
         jtopics = SetConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
         jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
 
@@ -123,12 +126,12 @@ class KafkaUtils(object):
         return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
 
     @staticmethod
-    def createDirectStream(ssc, kafkaParams, fromOffsets,
-                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+    def createDirectStreamFromOffset(ssc, kafkaParams, fromOffsets,
+                                     keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         .. note:: Experimental
 
-        Create an input stream that directly pulls messages from a Kafka Broker.
+        Create an input stream that directly pulls messages from a Kafka Broker and specific offset.
 
         This is not a receiver based Kafka input stream, it directly pulls the message from Kafka
         in each batch duration and processed without storing.
@@ -150,8 +153,12 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
         :return: A DStream object
         """
-        jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
+        if not isinstance(kafkaParams, dict):
+            raise TypeError("kafkaParams should be dict")
+        if not isinstance(fromOffsets, dict):
+            raise TypeError("fromOffsets should be dict")
 
+        jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
         try:
             helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
@@ -183,10 +190,12 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A RDD object
         """
+        if not isinstance(kafkaParams, dict):
+            raise TypeError("kafkaParams should be a dict")
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
-        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
 
+        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
         try:
             helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
@@ -204,8 +213,8 @@ class KafkaUtils(object):
         return rdd.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
 
     @staticmethod
-    def createRDD(sc, kafkaParams, offsetRanges, leaders,
-                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+    def createRDDWithLeaders(sc, kafkaParams, offsetRanges, leaders,
+                             keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         .. note:: Experimental
 
@@ -219,10 +228,14 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A RDD object
         """
+        if not isinstance(kafkaParams, dict):
+            raise TypeError("kafkaParams should be dict")
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
-        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
+        if not isinstance(leaders, dict):
+            raise TypeError("leader should be dict")
 
+        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
         try:
             helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
@@ -230,7 +243,7 @@ class KafkaUtils(object):
             joffsetRanges = ListConverter().convert([o._jOffsetRange(helper) for o in offsetRanges],
                                                     sc._gateway._gateway_client)
             jleaders = MapConverter().convert(
-                {k._jTopicAndPartition: v._jBroker for (k,v) in leaders.items()},
+                {k._jTopicAndPartition(helper): v._jBroker(helper) for (k, v) in leaders.items()},
                 sc._gateway._gateway_client)
             jrdd = helper.createRDD(sc._jsc, jparam, joffsetRanges, jleaders)
         except Py4JJavaError, e:
@@ -322,4 +335,3 @@ class Broker(object):
 
     def _jBroker(self, helper):
         return helper.createBroker(self._host, self._port)
-

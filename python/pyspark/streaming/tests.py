@@ -21,6 +21,7 @@ from itertools import chain
 import time
 import operator
 import tempfile
+import random
 import struct
 from functools import reduce
 
@@ -35,7 +36,7 @@ else:
 
 from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
-from pyspark.streaming.kafka import KafkaUtils
+from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -590,9 +591,27 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         super(KafkaStreamTests, self).tearDown()
 
+    def _randomTopic(self):
+        return "topic-%d" % random.randint(0, 10000)
+
+    def _validateStreamResult(self, sendData, stream):
+        result = {}
+        for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
+                                                   sum(sendData.values()))):
+            result[i] = result.get(i, 0) + 1
+
+        self.assertEqual(sendData, result)
+
+    def _validateRddResult(self, sendData, rdd):
+        result = {}
+        for i in rdd.map(lambda x: x[1]).collect():
+            result[i] = result.get(i, 0) + 1
+
+        self.assertEqual(sendData, result)
+
     def test_kafka_stream(self):
         """Test the Python Kafka stream API."""
-        topic = "topic1"
+        topic = self._randomTopic()
         sendData = {"a": 3, "b": 5, "c": 10}
 
         self._kafkaTestUtils.createTopic(topic)
@@ -601,13 +620,69 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
                                          {"auto.offset.reset": "smallest"})
+        self._validateStreamResult(sendData, stream)
 
-        result = {}
-        for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
-                                                   sum(sendData.values()))):
-            result[i] = result.get(i, 0) + 1
+    def test_kafka_direct_stream(self):
+        """Test the Python direct Kafka stream API."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        jSendData = MapConverter().convert(sendData,
+                                           self.ssc.sparkContext._gateway._gateway_client)
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
 
-        self.assertEqual(sendData, result)
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, jSendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+        self._validateStreamResult(sendData, stream)
+
+    def test_kafka_direct_stream_from_offset(self):
+        """Test the Python direct Kafka stream API with start offset specified."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        jSendData = MapConverter().convert(sendData,
+                                           self.ssc.sparkContext._gateway._gateway_client)
+        fromOffsets = {TopicAndPartition(topic, 0): 0L}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, jSendData)
+
+        stream = KafkaUtils.createDirectStreamFromOffset(self.ssc, kafkaParams, fromOffsets)
+        self._validateStreamResult(sendData, stream)
+
+    def test_kafka_rdd(self):
+        """Test the Python direct Kafka RDD API."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2}
+        jSendData = MapConverter().convert(sendData,
+                                           self.ssc.sparkContext._gateway._gateway_client)
+        offsetRanges = [OffsetRange(topic, 0, 0L, sum(sendData.values()))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, jSendData)
+
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
+        self._validateRddResult(sendData, rdd)
+
+    def test_kafka_rdd_with_leaders(self):
+        """Test the Python direct Kafka RDD API with leaders."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        jSendData = MapConverter().convert(sendData,
+                                           self.ssc.sparkContext._gateway._gateway_client)
+        offsetRanges = [OffsetRange(topic, 0, 0L, sum(sendData.values()))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+        address = self._kafkaTestUtils.brokerAddress().split(":")
+        leaders = {TopicAndPartition(topic, 0): Broker(address[0], int(address[1]))}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, jSendData)
+
+        rdd = KafkaUtils.createRDDWithLeaders(self.sc, kafkaParams, offsetRanges, leaders)
+        self._validateRddResult(sendData, rdd)
 
 if __name__ == "__main__":
     unittest.main()

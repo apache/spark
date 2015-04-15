@@ -578,7 +578,7 @@ private class KafkaUtilsPythonHelper {
   def createRDD(
       jsc: JavaSparkContext,
       kafkaParams: JMap[String, String],
-      offsetRages: JList[OffsetRange],
+      offsetRanges: JList[OffsetRange],
       leaders: JMap[TopicAndPartition, Broker]): JavaPairRDD[Array[Byte], Array[Byte]] = {
     val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
       (Array[Byte], Array[Byte])] {
@@ -599,7 +599,7 @@ private class KafkaUtilsPythonHelper {
         classOf[DefaultDecoder],
         classOf[(Array[Byte], Array[Byte])],
         kafkaParams,
-        offsetRages.toArray(new Array[OffsetRange](offsetRages.size())),
+        offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())),
         leaders,
         messageHandler
       )
