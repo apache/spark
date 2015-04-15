@@ -155,7 +155,13 @@ private[sql] class DDLParser(
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
-  protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
+  protected lazy val keyword: Parser[String] =
+    elem("keyword", _.isInstanceOf[lexical.Keyword]) ^^ (_.chars)
+
+  protected lazy val optionName: Parser[String] = (ident | keyword)
+
+  protected lazy val pair: Parser[(String, String)] =
+    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
