@@ -35,13 +35,15 @@ class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
    * number of features
    * @group param
    */
-  val numFeatures = new IntParam(this, "numFeatures", "number of features", Some(1 << 18))
+  val numFeatures = new IntParam(this, "numFeatures", "number of features")
 
   /** @group getParam */
-  def getNumFeatures: Int = get(numFeatures)
+  def getNumFeatures: Int = getOrDefault(numFeatures)
 
   /** @group setParam */
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
+
+  setDefault(numFeatures -> (1 << 18))
 
   override protected def createTransformFunc(paramMap: ParamMap): Iterable[_] => Vector = {
     val hashingTF = new feature.HashingTF(paramMap(numFeatures))

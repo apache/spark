@@ -813,6 +813,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TABLE alter1")
   }
 
+  test("ADD JAR command 2") {
+    // this is a test case from mapjoin_addjar.q
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    if (HiveShim.version == "0.13.1") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """CREATE TABLE t1(a string, b string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+      sql("select * from src join t1 on src.key = t1.a")
+      sql("DROP TABLE t1")
+    }
+  }
+
   test("ADD FILE command") {
     val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
     sql(s"ADD FILE $testFile")

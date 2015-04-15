@@ -18,7 +18,8 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
+import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.sql.DataFrame
@@ -41,8 +42,7 @@ private[regression] trait LinearRegressionParams extends RegressorParams
 class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams {
 
-  setRegParam(0.1)
-  setMaxIter(100)
+  setDefault(regParam -> 0.1, maxIter -> 100)
 
   /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
@@ -93,7 +93,7 @@ class LinearRegressionModel private[ml] (
 
   override protected def copy(): LinearRegressionModel = {
     val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(extractParamMap(), this, m)
     m
   }
 }

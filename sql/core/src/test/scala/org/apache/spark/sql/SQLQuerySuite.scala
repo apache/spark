@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.GeneratedAggregate
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+import org.apache.spark.sql.types._
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -172,6 +168,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     testCodeGen(
       "SELECT max(key) FROM testData3x",
       Row(100) :: Nil)
+    // MIN
+    testCodeGen(
+      "SELECT value, min(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, i)))
+    testCodeGen(
+      "SELECT min(key) FROM testData3x",
+      Row(1) :: Nil)
     // Some combinations.
     testCodeGen(
       """
@@ -179,16 +182,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |  value,
         |  sum(key),
         |  max(key),
+        |  min(key),
         |  avg(key),
         |  count(key),
         |  count(distinct key)
         |FROM testData3x
         |GROUP BY value
       """.stripMargin,
-      (1 to 100).map(i => Row(i.toString, i*3, i, i, 3, 1)))
+      (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
     testCodeGen(
-      "SELECT max(key), avg(key), count(key), count(distinct key) FROM testData3x",
-      Row(100, 50.5, 300, 100) :: Nil)
+      "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
+      Row(100, 1, 50.5, 300, 100) :: Nil)
     // Aggregate with Code generation handling all null values
     testCodeGen(
       "SELECT  sum('a'), avg('a'), count(null) FROM testData",
@@ -421,6 +425,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+  }
+
+  test("Allow only a single WITH clause per query") {
+    intercept[RuntimeException] {
+      sql("with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
+    }
   }
 
   test("date row") {

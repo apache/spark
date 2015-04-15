@@ -18,10 +18,12 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{BinaryAttribute, NumericAttribute, NominalAttribute,
   Attribute, AttributeGroup}
-import org.apache.spark.ml.param.{HasInputCol, HasOutputCol, IntParam, ParamMap, Params}
+import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions.callUDF
@@ -40,11 +42,12 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
    */
   val maxCategories = new IntParam(this, "maxCategories",
     "Threshold for the number of values a categorical feature can take." +
-      " If a feature is found to have > maxCategories values, then it is declared continuous.",
-    Some(20))
+      " If a feature is found to have > maxCategories values, then it is declared continuous.")
 
   /** @group getParam */
-  def getMaxCategories: Int = get(maxCategories)
+  def getMaxCategories: Int = getOrDefault(maxCategories)
+
+  setDefault(maxCategories -> 20)
 }
 
 /**
@@ -101,7 +104,7 @@ class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerPara
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): VectorIndexerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val firstRow = dataset.select(map(inputCol)).take(1)
     require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
     val numFeatures = firstRow(0).getAs[Vector](0).size
@@ -120,12 +123,12 @@ class VectorIndexer extends Estimator[VectorIndexerModel] with VectorIndexerPara
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val dataType = new VectorUDT
     require(map.contains(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
     require(map.contains(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
-    checkInputColumn(schema, map(inputCol), dataType)
-    addOutputColumn(schema, map(outputCol), dataType)
+    SchemaUtils.checkColumnType(schema, map(inputCol), dataType)
+    SchemaUtils.appendColumn(schema, map(outputCol), dataType)
   }
 }
 
@@ -320,7 +323,7 @@ class VectorIndexerModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val newField = prepOutputField(dataset.schema, map)
     val newCol = callUDF(transformFunc, new VectorUDT, dataset(map(inputCol)))
     // For now, just check the first row of inputCol for vector length.
@@ -334,13 +337,13 @@ class VectorIndexerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val dataType = new VectorUDT
     require(map.contains(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
     require(map.contains(outputCol),
       s"VectorIndexerModel requires output column parameter: $outputCol")
-    checkInputColumn(schema, map(inputCol), dataType)
+    SchemaUtils.checkColumnType(schema, map(inputCol), dataType)
 
     val origAttrGroup = AttributeGroup.fromStructField(schema(map(inputCol)))
     val origNumFeatures: Option[Int] = if (origAttrGroup.attributes.nonEmpty) {
