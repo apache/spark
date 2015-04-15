@@ -37,7 +37,7 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
 
       // We are inserting into an InsertableRelation.
       case i @ InsertIntoTable(
-      l @ LogicalRelation(r: InsertableRelation), partition, child, overwrite) => {
+      l @ LogicalRelation(r: InsertableRelation), partition, child, overwrite, ifNotExists) => {
         // First, make sure the data to be inserted have the same number of fields with the
         // schema of the relation.
         if (l.output.size != child.output.size) {
@@ -84,7 +84,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
-        l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
+        l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite, ifNotExists) =>
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
           failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
@@ -102,7 +102,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
       case i @ logical.InsertIntoTable(
-        l: LogicalRelation, partition, query, overwrite) if !l.isInstanceOf[InsertableRelation] =>
+        l: LogicalRelation, partition, query, overwrite, ifNotExists)
+          if !l.isInstanceOf[InsertableRelation] =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 

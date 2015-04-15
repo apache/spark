@@ -194,7 +194,7 @@ case class ExternalSort(
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[Row, Null, Row](ordering = Some(ordering))
-      sorter.insertAll(iterator.map(r => (r, null)))
+      sorter.insertAll(iterator.map(r => (r.copy, null)))
       val baseIterator = sorter.iterator.map(_._1)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[Row, Iterator[Row]](baseIterator, sorter.stop())

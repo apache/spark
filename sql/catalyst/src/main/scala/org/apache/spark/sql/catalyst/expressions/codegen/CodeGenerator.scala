@@ -464,7 +464,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val itemEval = expressionEvaluator(item)
         val setEval = expressionEvaluator(set)
 
-        val ArrayType(elementType, _) = set.dataType
+        val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
 
         itemEval.code ++ setEval.code ++
         q"""
@@ -482,7 +482,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val leftEval = expressionEvaluator(left)
         val rightEval = expressionEvaluator(right)
 
-        val ArrayType(elementType, _) = left.dataType
+        val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
 
         leftEval.code ++ rightEval.code ++
         q"""
@@ -517,6 +517,30 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             $primitiveTerm = ${eval1.primitiveTerm}
           } else {
             if (${eval1.primitiveTerm} > ${eval2.primitiveTerm}) {
+              $primitiveTerm = ${eval1.primitiveTerm}
+            } else {
+              $primitiveTerm = ${eval2.primitiveTerm}
+            }
+          }
+        """.children
+
+      case MinOf(e1, e2) =>
+        val eval1 = expressionEvaluator(e1)
+        val eval2 = expressionEvaluator(e2)
+
+        eval1.code ++ eval2.code ++
+        q"""
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(e1.dataType)} = ${defaultPrimitive(e1.dataType)}
+
+          if (${eval1.nullTerm}) {
+            $nullTerm = ${eval2.nullTerm}
+            $primitiveTerm = ${eval2.primitiveTerm}
+          } else if (${eval2.nullTerm}) {
+            $nullTerm = ${eval1.nullTerm}
+            $primitiveTerm = ${eval1.primitiveTerm}
+          } else {
+            if (${eval1.primitiveTerm} < ${eval2.primitiveTerm}) {
               $primitiveTerm = ${eval1.primitiveTerm}
             } else {
               $primitiveTerm = ${eval2.primitiveTerm}

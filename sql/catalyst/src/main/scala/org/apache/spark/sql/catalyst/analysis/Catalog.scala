@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
- * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
+ * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
  * as an AnalysisException with the correct position information.
  */
 class NoSuchTableException extends Exception
@@ -201,7 +201,7 @@ trait OverrideCatalog extends Catalog {
 
 /**
  * A trivial catalog that returns an error when a relation is requested.  Used for testing when all
- * relations are already filled in and the analyser needs only to resolve attribute references.
+ * relations are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyCatalog extends Catalog {
 
