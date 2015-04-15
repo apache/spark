@@ -387,7 +387,6 @@ private[sql] object SparkSqlSerializer2 {
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
-                // TODO: reuse the byte array in the UTF8String.
                 val length = in.readInt()
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
