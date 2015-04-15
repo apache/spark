@@ -935,6 +935,10 @@ class Airflow(BaseView):
 
         return self.render(
             'airflow/tree.html',
+            operators=sorted(
+                list(set([op.__class__ for op in dag.tasks])),
+                key=lambda x: x.__name__
+            ),
             dag=dag, data=data, blur=blur)
 
     @expose('/graph')
@@ -1008,6 +1012,10 @@ class Airflow(BaseView):
             form=form,
             execution_date=dttm.isoformat(),
             arrange=arrange,
+            operators=sorted(
+                list(set([op.__class__ for op in dag.tasks])),
+                key=lambda x: x.__name__
+            ),
             blur=blur,
             task_instances=json.dumps(task_instances, indent=2),
             tasks=json.dumps(tasks, indent=2),

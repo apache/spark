@@ -14,26 +14,41 @@
 {% endblock %}
 
 {% block body %}
-    {{ super() }}
-    <form method="get">
-	<div class="form-inline">
-		Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
-		{{ form.execution_date(class_="form-control") | safe }}
-		Layout:
-		{{ form.arrange(class_="form-control") | safe }}
-		<input type="submit" value="Go" class="btn btn-default"
-		action="" method="get">
-	</div>
-    </form>
-    <div id="svg_container">
-      <svg height=800 width="100%">
-          <g id='dig' transform="translate(20,20)"/>
-          <filter id="blur-effect-1">
-            <feGaussianBlur stdDeviation="3" />
-          </filter>
-      </svg>
+{{ super() }}
+<form method="get">
+    <div class="form-inline">
+        Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
+        {{ form.execution_date(class_="form-control") | safe }}
+        Layout:
+        {{ form.arrange(class_="form-control") | safe }}
+        <input type="submit" value="Go" class="btn btn-default"
+        action="" method="get">
     </div>
-    <hr>
+</form>
+<hr/>
+<div>
+    {% for op in operators %}
+    <div class="legend_item" style="border-width:1px;float:left;background:{{ op.ui_color }};">
+        {{ op.__name__ }}
+    </div>
+    {% endfor %}
+
+    <div class="legend_item" style="border-color:grey;">no status</div>
+    <div class="legend_item" style="border-color:red;">error</div>
+    <div class="legend_item" style="border-color:lime;">running</div>
+    <div class="legend_item" style="border-color:green;">success</div>
+    <div style="clear:both;"></div>
+</div>
+<hr style="margin-bottom: 0px;"/>
+<div id="svg_container">
+  <svg height=800 width="100%">
+      <g id='dig' transform="translate(20,20)"/>
+      <filter id="blur-effect-1">
+        <feGaussianBlur stdDeviation="3" />
+      </filter>
+  </svg>
+</div>
+<hr>
 {% endblock %}
 
 {% block tail %}

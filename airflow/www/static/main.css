@@ -113,6 +113,25 @@ body div.panel {
 .blur { 
     filter:url(#blur-effect-1); 
 }
+div.legend_item {
+    -moz-border-radius: 5px/5px;
+    -webkit-border-radius: 5px 5px;
+    border-radius: 5px/5px;
+    float:right;
+    margin: 0px 10px 0px 0px; 
+    padding:0px 5px;
+    border:solid 2px grey;
+    font-size: 12px;
+}
+div.legend_circle{
+    -moz-border-radius: 10px/10px;
+    -webkit-border-radius: 10px 10px;
+    border-radius: 10px/10px;
+    width:15px;
+    height:15px;
+    border:1px solid grey;
+    float:left;
+}
 
 .hll { background-color: #ffffcc }
 .c { color: #408080; font-style: italic } /* Comment */
