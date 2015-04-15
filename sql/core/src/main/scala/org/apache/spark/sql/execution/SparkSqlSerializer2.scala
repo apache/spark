@@ -263,8 +263,9 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                // TODO: Update it once the string improvement is in.
-                out.writeUTF(row.getString(i))
+                val bytes = row.getAs[UTF8String](i).getBytes
+                out.writeInt(bytes.length)
+                out.write(bytes)
               }
 
             case BinaryType =>
@@ -386,8 +387,11 @@ private[sql] object SparkSqlSerializer2 {
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
-                // TODO: Update it once the string improvement is in.
-                mutableRow.setString(i, in.readUTF())
+                // TODO: reuse the byte array in the UTF8String.
+                val length = in.readInt()
+                val bytes = new Array[Byte](length)
+                in.readFully(bytes)
+                mutableRow.update(i, UTF8String(bytes))
               }
 
             case BinaryType =>

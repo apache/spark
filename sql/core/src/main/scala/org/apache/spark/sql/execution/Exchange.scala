@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
+import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.{SQLContext, Row}
@@ -79,7 +79,7 @@ case class Exchange(
     }
   }
 
-  private lazy val sparkConf = child.sqlContext.sparkContext.getConf
+  @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
   def serializer(
       keySchema: Array[DataType],
@@ -92,10 +92,10 @@ case class Exchange(
         SparkSqlSerializer2.support(valueSchema)
 
     val serializer = if (useSqlSerializer2) {
-      logInfo("Use ShuffleSerializer")
+      logInfo("Use SparkSqlSerializer2.")
       new SparkSqlSerializer2(keySchema, valueSchema)
     } else {
-      logInfo("Use SparkSqlSerializer")
+      logInfo("Use SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
     }
 
