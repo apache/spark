@@ -47,6 +47,7 @@ private[spark] object SQLConf {
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+  val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -127,6 +128,13 @@ private[sql] class SQLConf extends Serializable {
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
+
+  /**
+   * Sort merge join would sort the two side of join first, and then iterate both sides together
+   * only once to get all matches. Using sort merge join can save a lot of memory usage compared
+   * to HashJoin.
+   */
+  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode

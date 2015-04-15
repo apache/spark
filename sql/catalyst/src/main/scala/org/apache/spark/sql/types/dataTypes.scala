@@ -350,7 +350,7 @@ class StringType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = String
+  private[sql] type JvmType = UTF8String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 
@@ -1196,8 +1196,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /**
    * Convert the user type to a SQL datum
    *
-   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
-   *       where we need to convert Any to UserType.
+   * TODO: Can we make this take obj: UserType?  The issue is in
+   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
   def serialize(obj: Any): Any
 
