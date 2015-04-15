@@ -88,8 +88,8 @@ class UISeleniumSuite
         statisticText should contain("Batch interval:")
 
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
-        h4Text should contain("Active Batches (0)")
-        h4Text should contain("Completed Batches (last 0 out of 0)")
+        h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
+        h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Status")
@@ -98,7 +98,32 @@ class UISeleniumSuite
           List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Total Delay")
         }
 
-        // TODO add tests once SPARK-6796 is merged
+        val batchLinks =
+          findAll(cssSelector("""#completed-batches-table a""")).flatMap(_.attribute("href")).toSeq
+        batchLinks.size should be >= 1
+
+        // Check a normal batch page
+        go to (batchLinks.last) // Last should be the first batch, so it will have some jobs
+        val summaryText = findAll(cssSelector("li strong")).map(_.text).toSeq
+        summaryText should contain ("Batch Duration:")
+        summaryText should contain ("Input data size:")
+        summaryText should contain ("Scheduling delay:")
+        summaryText should contain ("Processing time:")
+        summaryText should contain ("Total delay:")
+
+        findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
+          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
+            "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
+        }
+        val jobLinks =
+          findAll(cssSelector("""#batch-job-table a""")).flatMap(_.attribute("href")).toSeq
+        jobLinks.size should be >= (1)
+
+        // Check the job link in the batch page is right
+        go to (jobLinks(0))
+        val jobDetails = findAll(cssSelector("li strong")).map(_.text).toSeq
+        jobDetails should contain("Status:")
+        jobDetails should contain("Completed Stages:")
 
         // Check a batch page without id
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/")

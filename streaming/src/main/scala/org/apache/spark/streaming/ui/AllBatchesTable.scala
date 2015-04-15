@@ -42,7 +42,11 @@ private[ui] abstract class BatchTableBase(tableId: String) {
     val processingTime = batch.processingDelay
     val formattedProcessingTime = processingTime.map(UIUtils.formatDuration).getOrElse("-")
 
-    <td sorttable_customkey={batchTime.toString}>{formattedBatchTime}</td>
+    <td sorttable_customkey={batchTime.toString}>
+      <a href={s"batch?id=$batchTime"}>
+        {formattedBatchTime}
+      </a>
+    </td>
       <td sorttable_customkey={eventCount.toString}>{eventCount.toString} events</td>
       <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
         {formattedSchedulingDelay}
