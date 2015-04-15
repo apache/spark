@@ -100,8 +100,11 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq("name", "data"),
     Seq.empty)
 
-  createQueryTest(s"Column pruning - select all without explode optimze - query test",
-    "SELECT * FROM person LATERAL VIEW OUTER explode(data) outd AS d WHERE 20 < age")
+  createPruningTest(s"Column pruning - select all without explode optimze - query test",
+    "SELECT * FROM person LATERAL VIEW OUTER explode(data) outd AS d WHERE 20 < age",
+    Seq("name", "age", "data", "d"),
+    Seq("name", "age", "data"),
+    Seq.empty)
 
 
 
