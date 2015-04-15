@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from struct import unpack
 from py4j.java_collections import ListConverter, MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
@@ -24,7 +23,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
 
-__all__ = ['KafkaUtils', 'OffsetRange', 'utf8_decoder']
+__all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
