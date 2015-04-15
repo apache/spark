@@ -91,7 +91,6 @@ follows:
     <td>
       The period at which information displayed by this history server is updated.
       Each update checks for any changes made to the event logs in persisted storage.
-      The default unit is seconds.
     </td>
   </tr>
   <tr>

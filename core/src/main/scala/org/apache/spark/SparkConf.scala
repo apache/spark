@@ -135,8 +135,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set multiple parameters together */
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
-    settings.foreach { case (k, v) => logDeprecationWarning(k) }
-    this.settings.putAll(settings.toMap.asJava)
+    settings.foreach { case (k, v) => set(k, v) }
     this
   }
 
@@ -190,7 +189,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /**
    * Get a time parameter as seconds, falling back to a default if not set. If no
    * suffix is provided then seconds are assumed.
-   *
    */
   def getTimeAsSeconds(key: String, defaultValue: String): Long = {
     Utils.timeStringAsSeconds(get(key, defaultValue))
@@ -403,10 +401,12 @@ private[spark] object SparkConf extends Logging {
    * The extra information is logged as a warning when the config is present in the user's
    * configuration.
    */
-  private val deprecatedConfigs = Map[String, DeprecatedConfig](
-    "spark.yarn.user.classpath.first" ->
-      DeprecatedConfig("1.3", "Please use spark.{driver,executor}.userClassPathFirst instead.")
-    )
+  private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
+    val configs = Seq(
+      DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
+        "Please use spark.{driver,executor}.userClassPathFirst instead."))
+    Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
+  }
 
   /**
    * Maps a current config key to alternate keys that were used in previous version of Spark.
@@ -426,6 +426,8 @@ private[spark] object SparkConf extends Logging {
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
    * config keys.
+   *
+   * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
    */
   private val allAlternatives: Map[String, (String, AlternateConfig)] = {
     configsWithAlternatives.keys.flatMap { key =>
@@ -465,12 +467,12 @@ private[spark] object SparkConf extends Logging {
    * value available.
    */
   def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
-    configsWithAlternatives.get(key).flatMap(
-      _.collectFirst {
-        case x if conf.contains(x.key) =>
-          val value = conf.get(x.key)
-          x.translation.map(_(value)).getOrElse(value)
-      })
+    configsWithAlternatives.get(key).flatMap { alts =>
+      alts.collectFirst { case alt if conf.contains(alt.key) =>
+        val value = conf.get(alt.key)
+        alt.translation.map(_(value)).getOrElse(value)
+      }
+    }
   }
 
   /**
@@ -493,12 +495,14 @@ private[spark] object SparkConf extends Logging {
   /**
    * Holds information about keys that have been deprecated and do not have a replacement.
    *
+   * @param key The deprecated key.
    * @param version Version of Spark where key was deprecated.
    * @param deprecationMessage Message to include in the deprecation warning.
    */
   private case class DeprecatedConfig(
+      key: String,
       version: String,
-      deprecationMessage: String = null)
+      deprecationMessage: String)
 
   /**
    * Information about an alternate configuration key that has been deprecated.
