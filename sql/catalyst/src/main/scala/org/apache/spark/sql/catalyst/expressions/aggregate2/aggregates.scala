@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate2
 
+import java.util.{Set => JSet}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -72,8 +73,11 @@ trait AggregateFunction2 {
   def reset(buf: MutableRow): Unit
 
   // Get the children value from the input row, and then
-  // merge it with the given aggregate buffer
-  def update(input: Row, buf: MutableRow): Unit
+  // merge it with the given aggregate buffer,
+  // `seen` is the set that the value showed up, that's will
+  // be useful for distinct aggregate. And it probably be
+  // null for non-distinct aggregate
+  def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit
 
   // Merge 2 aggregation buffers, and write back to the later one
   def merge(value: Row, buf: MutableRow): Unit
@@ -101,8 +105,6 @@ trait AggregateExpression2 extends Expression with AggregateFunction2 {
   def bufferDataType: Seq[DataType] = Nil
   // Is it a distinct aggregate expression?
   def distinct: Boolean
-  // Is it a distinct like aggregate expression (e.g. Min/Max is distinctLike, while avg is not)
-  def distinctLike: Boolean = false
 
   def nullable = true
 
@@ -120,7 +122,6 @@ case class Min(
   extends UnaryAggregateExpression {
 
   override def distinct: Boolean = false
-  override def distinctLike: Boolean = true
   override def dataType = child.dataType
   override def bufferDataType: Seq[DataType] = dataType :: Nil
   override def toString = s"MIN($child)"
@@ -143,7 +144,8 @@ case class Min(
     buf(aggr) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
+    // we don't care about if the argument has existed or not in the seen
     val argument = child.eval(input)
     if (argument != null) {
       arg.value = argument
@@ -219,15 +221,18 @@ case class Average(child: Expression, distinct: Boolean = false)
     buf(sum) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
     val argument = child.eval(input)
     if (argument != null) {
-      arg.value = argument
-      buf(count) = buf.getLong(count) + 1
-      if (buf.isNullAt(sum)) {
-        buf(sum) = cast.eval()
-      } else {
-        buf(sum) = add.eval(buf)
+      if (!distinct || !seen.contains(argument)) {
+        arg.value = argument
+        buf(count) = buf.getLong(count) + 1
+        if (buf.isNullAt(sum)) {
+          buf(sum) = cast.eval()
+        } else {
+          buf(sum) = add.eval(buf)
+        }
+        if (distinct) seen.add(argument)
       }
     }
   }
@@ -250,7 +255,6 @@ case class Average(child: Expression, distinct: Boolean = false)
 case class Max(child: Expression)
   extends UnaryAggregateExpression {
   override def distinct: Boolean = false
-  override def distinctLike: Boolean = true
 
   override def nullable = true
   override def dataType = child.dataType
@@ -274,7 +278,8 @@ case class Max(child: Expression)
     buf(aggr) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
+    // we don't care about if the argument has existed or not in the seen
     val argument = child.eval(input)
     if (argument != null) {
       arg.value = argument
@@ -317,7 +322,9 @@ case class Count(child: Expression)
     buf(aggr) = 0L
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
+    // we don't care about if the argument has existed or not in the seen
+    // we here only handle the non distinct case
     val argument = child.eval(input)
     if (argument != null) {
       if (buf.isNullAt(aggr)) {
@@ -359,15 +366,18 @@ case class CountDistinct(children: Seq[Expression])
     buf(aggr) = 0L
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
     val arguments = children.map(_.eval(input))
     if (!arguments.exists(_ == null)) {
       // CountDistinct supports multiple expression, and ONLY IF
       // none of its expressions value equals null
-      if (buf.isNullAt(aggr)) {
-        buf(aggr) = 1L
-      } else {
-        buf(aggr) = buf.getLong(aggr) + 1L
+      if (!seen.contains(arguments)) {
+        if (buf.isNullAt(aggr)) {
+          buf(aggr) = 1L
+        } else {
+          buf(aggr) = buf.getLong(aggr) + 1L
+        }
+        seen.add(arguments)
       }
     }
   }
@@ -431,19 +441,22 @@ case class Sum(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
     val argument = child.eval(input)
-    if (argument != null) {
-      if (buf.isNullAt(aggr)) {
-        buf(aggr) = argument
+    if (!distinct || !seen.contains(argument)) {
+      if (argument != null) {
+        if (buf.isNullAt(aggr)) {
+          buf(aggr) = argument
+        } else {
+          arg.value = argument
+          buf(aggr) = sum.eval(buf)
+        }
       } else {
-        arg.value = argument
-        buf(aggr) = sum.eval(buf)
+        if (buf.isNullAt(aggr)) {
+          buf(aggr) = DEFAULT_VALUE
+        }
       }
-    } else {
-      if (buf.isNullAt(aggr)) {
-        buf(aggr) = DEFAULT_VALUE
-      }
+      if (distinct) seen.add(argument)
     }
   }
 
@@ -479,7 +492,8 @@ case class First(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
+    // we don't care about if the argument has existed or not in the seen
     val argument = child.eval(input)
     if (buf.isNullAt(aggr)) {
       if (argument != null) {
@@ -517,7 +531,8 @@ case class Last(child: Expression, distinct: Boolean = false)
     buf(aggr) = null
   }
 
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
+    // we don't care about if the argument has existed or not in the seen
     val argument = child.eval(input)
     if (argument != null) {
       buf(aggr) = argument

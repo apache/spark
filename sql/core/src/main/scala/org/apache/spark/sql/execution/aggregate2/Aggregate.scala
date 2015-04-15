@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate2
 
+import java.util.{HashSet=>JHashSet, Set=>JSet}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate2._
@@ -41,7 +43,7 @@ sealed case class AggregateFunctionBind(
 sealed class InputBufferSeens(
     var input: Row, //
     var buffer: MutableRow,
-    var seens: Array[OpenHashSet[Any]] = null) {
+    var seens: Array[JSet[Any]] = null) {
   def this() {
     this(new GenericMutableRow(0), null)
   }
@@ -56,7 +58,7 @@ sealed class InputBufferSeens(
     this
   }
 
-  def withSeens(seens: Array[OpenHashSet[Any]]): InputBufferSeens = {
+  def withSeens(seens: Array[JSet[Any]]): InputBufferSeens = {
     this.seens = seens
     this
   }
@@ -245,7 +247,7 @@ case class AggregatePreShuffle(
           var idx = 0
           while (idx < aggregates.length) {
             val ae = aggregates(idx)
-            ae.update(currentRow, buffer)
+            ae.update(currentRow, buffer, null)
             idx += 1
           }
         }
@@ -264,7 +266,7 @@ case class AggregatePreShuffle(
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
                 ae.reset(buffer)
-                ae.update(currentRow, buffer)
+                ae.update(currentRow, buffer, null)
                 idx += 1
               }
 
@@ -274,7 +276,7 @@ case class AggregatePreShuffle(
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
-                ae.update(currentRow, inputbuffer.buffer)
+                ae.update(currentRow, inputbuffer.buffer, null)
                 idx += 1
               }
 
@@ -382,7 +384,7 @@ case class DistinctAggregate(
       if (groupingExpressions.isEmpty) {
         val buffer = new GenericMutableRow(bufferSchema.length)
         // TODO save the memory only for those DISTINCT aggregate expressions
-        val seens = new Array[OpenHashSet[Any]](aggregateFunctionBinds.length)
+        val seens = new Array[JSet[Any]](aggregateFunctionBinds.length)
 
         var idx = 0
         while (idx < aggregateFunctionBinds.length) {
@@ -390,7 +392,7 @@ case class DistinctAggregate(
           ae.reset(buffer)
 
           if (ae.distinct) {
-            seens(idx) = new OpenHashSet[Any]()
+            seens(idx) = new JHashSet[Any]()
           }
 
           idx += 1
@@ -403,18 +405,8 @@ case class DistinctAggregate(
           var idx = 0
           while (idx < aggregateFunctionBinds.length) {
             val ae = aggregates(idx)
+            ae.update(currentRow, buffer, seens(idx))
 
-            if (ae.distinct) {
-              val value = ae.eval(currentRow)
-              if (value != null && !seens(idx).contains(value)) {
-                // TODO how to avoid the children expression evaluation
-                // within Aggregate Expression?
-                ae.update(currentRow, buffer)
-                seens(idx).add(value)
-              }
-            } else {
-              ae.update(currentRow, buffer)
-            }
             idx += 1
           }
         }
@@ -430,25 +422,19 @@ case class DistinctAggregate(
           results(keys) match {
             case null =>
               val buffer = new GenericMutableRow(bufferSchema.length)
-              // TODO save the memory only for those DISTINCT aggregate expressions
-              val seens = new Array[OpenHashSet[Any]](aggregateFunctionBinds.length)
+              val seens = new Array[JSet[Any]](aggregateFunctionBinds.length)
 
               var idx = 0
               while (idx < aggregateFunctionBinds.length) {
                 val ae = aggregates(idx)
-
                 ae.reset(buffer)
-                ae.update(currentRow, buffer)
 
                 if (ae.distinct) {
-                  val value = ae.eval(currentRow)
-                  val seen = new OpenHashSet[Any]()
-                  if (value != null) {
-                    seen.add(value)
-                  }
-                  seens.update(idx, seen)
+                  val seen = new JHashSet[Any]()
+                  seens(idx) = seen
                 }
 
+                ae.update(currentRow, buffer, seens(idx))
                 idx += 1
               }
               results(keys.copy()) = new InputBufferSeens(currentRow.copy(), buffer, seens)
@@ -459,14 +445,8 @@ case class DistinctAggregate(
                 val ae = aggregates(idx)
                 val value = ae.eval(currentRow)
 
-                if (ae.distinct) {
-                  if (value != null && !inputBufferSeens.seens(idx).contains(value)) {
-                    ae.update(currentRow, inputBufferSeens.buffer)
-                    inputBufferSeens.seens(idx).add(value)
-                  }
-                } else {
-                  ae.update(currentRow, inputBufferSeens.buffer)
-                }
+                ae.update(currentRow, inputBufferSeens.buffer, inputBufferSeens.seens(idx))
+
                 idx += 1
               }
           }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.{Set=>JSet}
+
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.spark.sql.AnalysisException
@@ -506,8 +508,7 @@ private[hive] case class HiveGenericUdaf2(
   @transient
   lazy val inspectors = children.map(toInspector).toArray
 
-  @transient
-  override val distinctLike: Boolean = {
+  private val distinctLike: Boolean = {
     val annotation = evaluator.getClass().getAnnotation(classOf[HiveUDFType])
     if (annotation == null || !annotation.distinctLike()) false else true
   }
@@ -545,15 +546,17 @@ private[hive] case class HiveGenericUdaf2(
 
   // Expect the aggregate function fills the aggregation buffer when fed with each value
   // in the group
-  override def update(input: Row, buf: MutableRow): Unit = {
+  override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
     val arguments = children.map(_.eval(input))
-    val args = arguments.zip(inspectors).map {
-      case (value, oi) => wrap(value, oi)
-    }.toArray
+    if (distinctLike || !distinct || !seen.contains(arguments)) {
+      val args = arguments.zip(inspectors).map {
+        case (value, oi) => wrap(value, oi)
+      }.toArray
 
-    evaluator.iterate(
-      buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal),
-      args)
+      evaluator.iterate(
+        buf.getAs[GenericUDAFEvaluator.AggregationBuffer](bound.ordinal), args)
+      if (distinct && !distinctLike) seen.add(arguments)
+    }
   }
 
   // Merge 2 aggregation buffer, and write back to the later one
