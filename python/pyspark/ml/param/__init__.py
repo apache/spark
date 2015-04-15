@@ -75,12 +75,12 @@ class Params(Identifiable):
         values = []
         if self.isDefined(param):
             if self.defaultParamMap.has_key(param):
-                values += "default: %s" % self.defaultParamMap[param]
+                values.append("default: %s" % self.defaultParamMap[param])
             if self.paramMap.has_key(param):
-                values += "current: %s" % self.paramMap[param]
+                values.append("current: %s" % self.paramMap[param])
         else:
-            values += "undefined"
-        valueStr = "(" + ",".join(values) + ")"
+            values.append("undefined")
+        valueStr = "(" + ", ".join(values) + ")"
         return "%s: %s %s" % (param.name, param.doc, valueStr)
 
     def explainParams(self):

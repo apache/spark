@@ -153,6 +153,10 @@ class ParamTests(PySparkTestCase):
         with self.assertRaises(KeyError):
             testParams.getInputCol()
 
+        self.assertEquals(testParams.explainParams(),
+            "\n".join(["inputCol: input column name (undefined)",
+                       "maxIter: max number of iterations (default: 10, current: 100)"]))
+
 
 if __name__ == "__main__":
     unittest.main()
