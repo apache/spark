@@ -1209,7 +1209,7 @@ class DataFrame private[sql](
   @Experimental
   def insertInto(tableName: String, overwrite: Boolean): Unit = {
     sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, logicalPlan, overwrite)).toRdd
+      Map.empty, logicalPlan, overwrite, ifNotExists = false)).toRdd
   }
 
   /**
