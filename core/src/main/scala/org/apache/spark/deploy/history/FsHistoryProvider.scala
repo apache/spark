@@ -299,9 +299,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       appsToClean.foreach { info =>
         try {
           val path = new Path(logDir + "/" + info.logPath)
-          if (fs.exists(path) && fs.delete(path, true)) {
-            appsToClean -= info
+          if (fs.exists(path)) {
+            fs.delete(path, true)
           }
+          appsToClean -= info
         } catch {
           case t: IOException =>
             logError(s"IOException in cleaning logs of ${info.logPath}", t)
