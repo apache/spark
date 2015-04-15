@@ -167,8 +167,20 @@ object DecisionTreeExample {
       fracTest: Double): (DataFrame, DataFrame) = {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
+
     // Load training data
     val origExamples: RDD[LabeledPoint] = loadData(sc, input, dataFormat)
+
+    // Load or create test set
+    val splits: Array[RDD[LabeledPoint]] = if (testInput != "") {
+      // Load testInput.
+      val numFeatures = origExamples.take(1)(0).features.size
+      val origTestExamples: RDD[LabeledPoint] = loadData(sc, input, dataFormat, Some(numFeatures))
+      Array(origExamples, origTestExamples)
+    } else {
+      // Split input into training, test.
+      origExamples.randomSplit(Array(1.0 - fracTest, fracTest))
+    }
 
     // For classification, convert labels to Strings since we will index them later with
     // StringIndexer.
@@ -184,23 +196,12 @@ object DecisionTreeExample {
           throw new IllegalArgumentException("Algo ${params.algo} not supported.")
       }
     }
-
-    // Load or create test set
-    val splits: Array[RDD[LabeledPoint]] = if (testInput != "") {
-      // Load testInput.
-      val numFeatures = origExamples.take(1)(0).features.size
-      val origTestExamples: RDD[LabeledPoint] = loadData(sc, input, dataFormat, Some(numFeatures))
-      Array(origExamples, origTestExamples)
-    } else {
-      // Split input into training, test.
-      origExamples.randomSplit(Array(1.0 - fracTest, fracTest))
-    }
     val dataframes = splits.map(_.toDF()).map(labelsToStrings).map(_.cache())
+
     (dataframes(0), dataframes(1))
   }
 
   def run(params: Params) {
-
     val conf = new SparkConf().setAppName(s"DecisionTreeExample with $params")
     val sc = new SparkContext(conf)
     params.checkpointDir.foreach(sc.setCheckpointDir)
@@ -221,7 +222,7 @@ object DecisionTreeExample {
 
     // Set up Pipeline
     val stages = new mutable.ArrayBuffer[PipelineStage]()
-    // (1) For classification, re-index classes if needed.
+    // (1) For classification, re-index classes.
     if (algo == "classification") {
       val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol("label")
       stages += labelIndexer
@@ -260,6 +261,7 @@ object DecisionTreeExample {
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
+    // Get the trained Decision Tree from the fitted PipelineModel
     val treeModel: DecisionTreeModel = algo match {
       case "classification" =>
         pipelineModel.getModel[DecisionTreeClassificationModel](
@@ -274,11 +276,12 @@ object DecisionTreeExample {
       println(treeModel) // Print model summary.
     }
 
-    // Predict on training, test data
+    // Predict on training
     val trainingFullPredictions = pipelineModel.transform(training).cache()
     val trainingPredictions = trainingFullPredictions.select("prediction")
       .map(_.getDouble(0))
     val trainingLabels = trainingFullPredictions.select("label").map(_.getDouble(0))
+    // Predict on test data
     val testFullPredictions = pipelineModel.transform(test).cache()
     val testPredictions = testFullPredictions.select("prediction")
       .map(_.getDouble(0))
