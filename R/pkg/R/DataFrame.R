@@ -17,7 +17,7 @@
 
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R group.R
+#' @include generics.R jobj.R SQLTypes.R RDD.R pairRDD.R column.R group.R
 NULL
 
 setOldClass("jobj")
