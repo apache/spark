@@ -63,8 +63,8 @@ class Params(Identifiable):
         uses :py:func:`dir` to get all attributes of type
         :py:class:`Param`.
         """
-        return filter(lambda attr: isinstance(attr, Param),
-                      [getattr(self, x) for x in dir(self) if x != "params"])
+        return list(filter(lambda attr: isinstance(attr, Param),
+                           [getattr(self, x) for x in dir(self) if x != "params"]))
 
     def _explain(self, param):
         """
@@ -185,7 +185,7 @@ class Params(Identifiable):
         """
         Sets user-supplied params.
         """
-        for param, value in kwargs.iteritems():
+        for param, value in kwargs.items():
             self.paramMap[getattr(self, param)] = value
         return self
 
@@ -193,6 +193,6 @@ class Params(Identifiable):
         """
         Sets default params.
         """
-        for param, value in kwargs.iteritems():
+        for param, value in kwargs.items():
             self.defaultParamMap[getattr(self, param)] = value
         return self

@@ -17,7 +17,7 @@
 
 # Column Class
 
-#' @include generics.R jobj.R
+#' @include generics.R jobj.R SQLTypes.R
 NULL
 
 setOldClass("jobj")
