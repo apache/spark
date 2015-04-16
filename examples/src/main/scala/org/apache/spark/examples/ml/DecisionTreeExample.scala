@@ -219,8 +219,9 @@ object DecisionTreeExample {
     // Set up Pipeline
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
+    val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
-      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol("indexedLabel")
+      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol(labelColName)
       stages += labelIndexer
     }
     // (2) Identify categorical features using VectorIndexer.
@@ -232,7 +233,7 @@ object DecisionTreeExample {
     val dt = algo match {
       case "classification" =>
         new DecisionTreeClassifier().setFeaturesCol("indexedFeatures")
-          .setLabelCol("indexedLabel")
+          .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
           .setMinInstancesPerNode(params.minInstancesPerNode)
@@ -241,7 +242,7 @@ object DecisionTreeExample {
           .setCheckpointInterval(params.checkpointInterval)
       case "regression" =>
         new DecisionTreeRegressor().setFeaturesCol("indexedFeatures")
-          .setLabelCol("indexedLabel")
+          .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
           .setMinInstancesPerNode(params.minInstancesPerNode)
@@ -278,17 +279,17 @@ object DecisionTreeExample {
     val trainingFullPredictions = pipelineModel.transform(training).cache()
     val trainingPredictions = trainingFullPredictions.select("prediction")
       .map(_.getDouble(0))
-    val trainingLabels = trainingFullPredictions.select("indexedLabel").map(_.getDouble(0))
+    val trainingLabels = trainingFullPredictions.select(labelColName).map(_.getDouble(0))
     // Predict on test data
     val testFullPredictions = pipelineModel.transform(test).cache()
     val testPredictions = testFullPredictions.select("prediction")
       .map(_.getDouble(0))
-    val testLabels = testFullPredictions.select("indexedLabel").map(_.getDouble(0))
+    val testLabels = testFullPredictions.select(labelColName).map(_.getDouble(0))
 
     // For classification, print number of classes for reference.
     if (algo == "classification") {
       val numClasses =
-        MetadataUtils.getNumClasses(trainingFullPredictions.schema("indexedLabel")) match {
+        MetadataUtils.getNumClasses(trainingFullPredictions.schema(labelColName)) match {
           case Some(n) => n
           case None => throw new RuntimeException(
             "DecisionTreeExample had unknown failure when indexing labels for classification.")

@@ -42,31 +42,28 @@ import org.apache.spark.sql.DataFrame
 @AlphaComponent
 final class DecisionTreeRegressor
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams[DecisionTreeRegressor]
-  with TreeRegressorParams[DecisionTreeRegressor] {
+  with DecisionTreeParams
+  with TreeRegressorParams {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
-  override def setMaxDepth(maxDepth: Int): DecisionTreeRegressor = super.setMaxDepth(maxDepth)
+  override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
-  override def setMaxBins(maxBins: Int): DecisionTreeRegressor = super.setMaxBins(maxBins)
+  override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
-  override def setMinInstancesPerNode(minInstancesPerNode: Int): DecisionTreeRegressor =
-    super.setMinInstancesPerNode(minInstancesPerNode)
+  override def setMinInstancesPerNode(value: Int): this.type =
+    super.setMinInstancesPerNode(value)
 
-  override def setMinInfoGain(minInfoGain: Double): DecisionTreeRegressor =
-    super.setMinInfoGain(minInfoGain)
+  override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
-  override def setMaxMemoryInMB(maxMemoryInMB: Int): DecisionTreeRegressor =
-    super.setMaxMemoryInMB(maxMemoryInMB)
+  override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
-  override def setCacheNodeIds(cacheNodeIds: Boolean): DecisionTreeRegressor =
-    super.setCacheNodeIds(cacheNodeIds)
+  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(checkpointInterval: Int): DecisionTreeRegressor =
-    super.setCheckpointInterval(checkpointInterval)
+  override def setCheckpointInterval(value: Int): this.type =
+    super.setCheckpointInterval(value)
 
-  override def setImpurity(impurity: String): DecisionTreeRegressor = super.setImpurity(impurity)
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   override protected def train(
       dataset: DataFrame,
@@ -79,7 +76,7 @@ final class DecisionTreeRegressor
     DecisionTreeRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 
-  /** Create a Strategy instance to use with the old API. */
+  /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
     strategy.algo = OldAlgo.Regression
@@ -131,10 +128,10 @@ final class DecisionTreeRegressionModel private[ml] (
   }
 }
 
-object DecisionTreeRegressionModel {
+private[ml] object DecisionTreeRegressionModel {
 
-  /** Convert a model from the old API */
-  private[ml] def fromOld(
+  /** (private[ml]) Convert a model from the old API */
+  def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeRegressor,
       fittingParamMap: ParamMap,

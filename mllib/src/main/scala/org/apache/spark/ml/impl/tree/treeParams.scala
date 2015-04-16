@@ -28,10 +28,11 @@ import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntr
 /**
  * :: DeveloperApi ::
  * Parameters for Decision Tree-based algorithms.
- * @tparam M  Concrete class implementing this parameter trait
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
 @DeveloperApi
-private[ml] trait DecisionTreeParams[M] extends PredictorParams {
+private[ml] trait DecisionTreeParams extends PredictorParams {
 
   /**
    * Maximum depth of the tree.
@@ -113,68 +114,68 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
-  def setMaxDepth(value: Int): M = {
+  def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this.asInstanceOf[M]
+    this.asInstanceOf[this.type]
   }
 
   /** @group getParam */
   def getMaxDepth: Int = getOrDefault(maxDepth)
 
   /** @group setParam */
-  def setMaxBins(value: Int): M = {
+  def setMaxBins(value: Int): this.type = {
     require(value >= 2, s"maxBins parameter must be >= 2.  Given bad value: $value")
     set(maxBins, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group getParam */
   def getMaxBins: Int = getOrDefault(maxBins)
 
   /** @group setParam */
-  def setMinInstancesPerNode(value: Int): M = {
+  def setMinInstancesPerNode(value: Int): this.type = {
     require(value >= 1, s"minInstancesPerNode parameter must be >= 1.  Given bad value: $value")
     set(minInstancesPerNode, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group getParam */
   def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
 
   /** @group setParam */
-  def setMinInfoGain(value: Double): M = {
+  def setMinInfoGain(value: Double): this.type = {
     set(minInfoGain, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group getParam */
   def getMinInfoGain: Double = getOrDefault(minInfoGain)
 
   /** @group expertSetParam */
-  def setMaxMemoryInMB(value: Int): M = {
+  def setMaxMemoryInMB(value: Int): this.type = {
     require(value > 0, s"maxMemoryInMB parameter must be > 0.  Given bad value: $value")
     set(maxMemoryInMB, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group expertGetParam */
   def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
 
   /** @group expertSetParam */
-  def setCacheNodeIds(value: Boolean): M = {
+  def setCacheNodeIds(value: Boolean): this.type = {
     set(cacheNodeIds, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group expertGetParam */
   def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
 
   /** @group expertSetParam */
-  def setCheckpointInterval(value: Int): M = {
+  def setCheckpointInterval(value: Int): this.type = {
     require(value >= 1, s"checkpointInterval parameter must be >= 1.  Given bad value: $value")
     set(checkpointInterval, value)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group expertGetParam */
@@ -205,9 +206,8 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
 
 /**
  * (private trait) Parameters for Decision Tree-based classification algorithms.
- * @tparam M  Concrete class implementing this parameter trait
  */
-private[ml] trait TreeClassifierParams[M] extends Params {
+private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -222,13 +222,13 @@ private[ml] trait TreeClassifierParams[M] extends Params {
   setDefault(impurity -> "gini")
 
   /** @group setParam */
-  def setImpurity(value: String): M = {
+  def setImpurity(value: String): this.type = {
     val impurityStr = value.toLowerCase
     require(TreeClassifierParams.supportedImpurities.contains(impurityStr),
       s"Tree-based classifier was given unrecognized impurity: $value." +
       s"  Supported options: ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group getParam */
@@ -254,9 +254,8 @@ private[ml] object TreeClassifierParams {
 
 /**
  * (private trait) Parameters for Decision Tree-based regression algorithms.
- * @tparam M  Concrete class implementing this parameter trait
  */
-private[ml] trait TreeRegressorParams[M] extends Params {
+private[ml] trait TreeRegressorParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -271,13 +270,13 @@ private[ml] trait TreeRegressorParams[M] extends Params {
   setDefault(impurity -> "variance")
 
   /** @group setParam */
-  def setImpurity(value: String): M = {
+  def setImpurity(value: String): this.type = {
     val impurityStr = value.toLowerCase
     require(TreeRegressorParams.supportedImpurities.contains(impurityStr),
       s"Tree-based regressor was given unrecognized impurity: $value." +
         s"  Supported options: ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this.asInstanceOf[M]
+    this
   }
 
   /** @group getParam */

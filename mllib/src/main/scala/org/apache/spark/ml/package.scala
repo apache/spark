@@ -32,16 +32,16 @@ package org.apache.spark
  * @groupname getParam Parameter getters
  * @groupprio getParam 6
  *
- * @groupname expertParam Parameters
+ * @groupname expertParam (expert-only) Parameters
  * @groupdesc expertParam A list of advanced, expert-only (hyper-)parameter keys this algorithm can
  *            take. Users can set and get the parameter values through setters and getters,
  *            respectively.
  * @groupprio expertParam 7
  *
- * @groupname expertSetParam Parameter setters for expert-only parameters
+ * @groupname expertSetParam (expert-only) Parameter setters
  * @groupprio expertSetParam 8
  *
- * @groupname expertGetParam Parameter getters for expert-only parameters
+ * @groupname expertGetParam (expert-only) Parameter getters
  * @groupprio expertGetParam 9
  *
  * @groupname Ungrouped Members
