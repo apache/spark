@@ -135,21 +135,19 @@ private[spark] class TachyonBlockManager(
 
   private def addShutdownHook() {
     tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
-    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark tachyon dirs") {
-      override def run(): Unit = Utils.logUncaughtExceptions {
-        logDebug("Shutdown hook called")
-        tachyonDirs.foreach { tachyonDir =>
-          try {
-            if (!Utils.hasRootAsShutdownDeleteDir(tachyonDir)) {
-              Utils.deleteRecursively(tachyonDir, client)
-            }
-          } catch {
-            case e: Exception =>
-              logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
+    Utils.addShutdownHook { () =>
+      logDebug("Shutdown hook called")
+      tachyonDirs.foreach { tachyonDir =>
+        try {
+          if (!Utils.hasRootAsShutdownDeleteDir(tachyonDir)) {
+            Utils.deleteRecursively(tachyonDir, client)
           }
+        } catch {
+          case e: Exception =>
+            logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
         }
-        client.close()
       }
-    })
+      client.close()
+    }
   }
 }

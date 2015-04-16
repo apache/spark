@@ -17,14 +17,16 @@
 
 package org.apache.spark.util
 
-import scala.util.Random
-
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
 import java.util.concurrent.TimeUnit
 import java.util.Locale
+import java.util.PriorityQueue
+
+import scala.collection.mutable.ListBuffer
+import scala.util.Random
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -36,14 +38,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
-  
+
   test("timeConversion") {
     // Test -1
     assert(Utils.timeStringAsSeconds("-1") === -1)
-    
+
     // Test zero
     assert(Utils.timeStringAsSeconds("0") === 0)
-    
+
     assert(Utils.timeStringAsSeconds("1") === 1)
     assert(Utils.timeStringAsSeconds("1s") === 1)
     assert(Utils.timeStringAsSeconds("1000ms") === 1)
@@ -52,7 +54,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.timeStringAsSeconds("1min") === TimeUnit.MINUTES.toSeconds(1))
     assert(Utils.timeStringAsSeconds("1h") === TimeUnit.HOURS.toSeconds(1))
     assert(Utils.timeStringAsSeconds("1d") === TimeUnit.DAYS.toSeconds(1))
-    
+
     assert(Utils.timeStringAsMs("1") === 1)
     assert(Utils.timeStringAsMs("1ms") === 1)
     assert(Utils.timeStringAsMs("1000us") === 1)
@@ -61,7 +63,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
     assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
     assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
-    
+
     // Test invalid strings
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("This breaks 600s")
@@ -79,7 +81,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       Utils.timeStringAsMs("This 123s breaks")
     }
   }
-  
+
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
@@ -465,5 +467,19 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
                         conf, false, Some(testFileName))
     val newFileName = new File(testFileDir, testFileName)
     assert(newFileName.isFile())
+  }
+
+  test("shutdown hook manager") {
+    val manager = new SparkShutdownHookManager()
+    val output = new ListBuffer[Int]()
+
+    val hook1 = manager.add(1, () => output += 1)
+    manager.add(3, () => output += 3)
+    manager.add(2, () => output += 2)
+    manager.add(4, () => output += 4)
+    manager.remove(hook1)
+
+    manager.runAll()
+    assert(output.toList === List(4, 3, 2))
   }
 }
