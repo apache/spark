@@ -476,7 +476,7 @@ private[hive] case class HiveGenericUdaf2(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
     distinct: Boolean,
-    isUDAF: Boolean) extends AggregateExpression2 with HiveInspectors {
+    isSimpleUDAF: Boolean) extends AggregateExpression2 with HiveInspectors {
   type UDFType = AbstractGenericUDAFResolver
 
   protected def createEvaluator = resolver.getEvaluator(
@@ -487,8 +487,8 @@ private[hive] case class HiveGenericUdaf2(
   lazy val evaluator = createEvaluator
 
   @transient
-  protected lazy val resolver: AbstractGenericUDAFResolver = if (isUDAF) {
-    // if it's UDAF, we need the UDAF bridge
+  protected lazy val resolver: AbstractGenericUDAFResolver = if (isSimpleUDAF) {
+    // if it's the Simple UDAF, we need the UDAF bridge
     new GenericUDAFBridge(funcWrapper.createFunction())
   } else {
     funcWrapper.createFunction()
@@ -548,6 +548,9 @@ private[hive] case class HiveGenericUdaf2(
   // in the group
   override def update(input: Row, buf: MutableRow, seen: JSet[Any]): Unit = {
     val arguments = children.map(_.eval(input))
+    // We assume the memory is much more critical than computation,
+    // so we prefer computation other than put the into a in-memory Set
+    // when the UDAF is distinct-Like
     if (distinctLike || !distinct || !seen.contains(arguments)) {
       val args = arguments.zip(inspectors).map {
         case (value, oi) => wrap(value, oi)
@@ -701,11 +704,11 @@ private[hive] case class HiveUdafFunction(
 
 private[hive] object HiveAggregateExpressionSubsitution extends AggregateExpressionSubsitution {
   override def subsitute(aggr: AggregateExpression): AggregateExpression2 = aggr match {
-    // TODO: we don't support distinct for Hive UDAF(Generic) yet from the user interface
+    // TODO: we don't support distinct for Hive UDAF(Generic) yet from the HiveQL Parser yet
     case HiveGenericUdaf(funcWrapper, children) =>
-      HiveGenericUdaf2(funcWrapper, children, distinct = false, isUDAF = false)
+      HiveGenericUdaf2(funcWrapper, children, distinct = false, isSimpleUDAF = false)
     case HiveUdaf(funcWrapper, children) =>
-      HiveGenericUdaf2(funcWrapper, children, distinct = false, isUDAF = true)
+      HiveGenericUdaf2(funcWrapper, children, distinct = false, isSimpleUDAF = true)
     case _ => super.subsitute(aggr)
   }
 }

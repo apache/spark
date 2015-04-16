@@ -82,8 +82,8 @@ sealed trait Aggregate {
 sealed trait PostShuffle extends Aggregate {
   self: Product =>
 
-  def computedAggregates(aggregateExpressions: Seq[NamedExpression]): Seq[AggregateExpression2] = {
-    aggregateExpressions.flatMap { expr =>
+  def computedAggregates(projectionList: Seq[NamedExpression]): Seq[AggregateExpression2] = {
+    projectionList.flatMap { expr =>
       expr.collect {
         case ae: AggregateExpression2 => ae
       }
@@ -97,17 +97,17 @@ sealed trait PostShuffle extends Aggregate {
  * group.
  *
  * @param groupingExpressions the attributes represent the output of the groupby expressions
- * @param unboundAggregateExpressions Unbound Aggregate Function List.
+ * @param originalProjection Unbound Aggregate Function List.
  * @param child the input data source.
  */
 @DeveloperApi
 case class AggregatePreShuffle(
     groupingExpressions: Seq[NamedExpression],
-    unboundAggregateExpressions: Seq[AggregateExpression2],
+    originalProjection: Seq[AggregateExpression2],
     child: SparkPlan)
   extends UnaryNode with Aggregate {
 
-  val aggregateExpressions: Seq[AggregateExpression2] = unboundAggregateExpressions.map {
+  val aggregateExpressions: Seq[AggregateExpression2] = originalProjection.map {
     BindReferences.bindReference(_, childOutput)
   }
 
@@ -181,10 +181,10 @@ case class AggregatePreShuffle(
 
 case class AggregatePostShuffle(
     groupingExpressions: Seq[Attribute],
-    aggregateExpressions: Seq[NamedExpression],
+    rewrittenProjection: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with PostShuffle {
 
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output = rewrittenProjection.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = if (groupingExpressions == Nil) {
     AllTuples :: Nil
@@ -194,9 +194,9 @@ case class AggregatePostShuffle(
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(aggregateExpressions))
+      val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
 
-      val finalProjection = new InterpretedMutableProjection(aggregateExpressions, childOutput)
+      val finalProjection = new InterpretedMutableProjection(rewrittenProjection, childOutput)
 
       val results = new OpenHashMap[Row, BufferSeens]()
       val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
@@ -230,11 +230,11 @@ case class AggregatePostShuffle(
 // for Aggregation Function like CountDistinct etc.
 case class DistinctAggregate(
     groupingExpressions: Seq[NamedExpression],
-    unboundAggregateExpressions: Seq[NamedExpression],
-    rewrittenAggregateExpressions: Seq[NamedExpression],
+    originalProjection: Seq[NamedExpression],
+    rewrittenProjection: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with PostShuffle {
 
-  override def output = rewrittenAggregateExpressions.map(_.toAttribute)
+  override def output = rewrittenProjection.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = if (groupingExpressions == Nil) {
     AllTuples :: Nil
@@ -242,7 +242,7 @@ case class DistinctAggregate(
     ClusteredDistribution(groupingExpressions) :: Nil
   }
 
-  val aggregateExpressions: Seq[NamedExpression] = unboundAggregateExpressions.map {
+  val aggregateExpressions: Seq[NamedExpression] = originalProjection.map {
     BindReferences.bindReference(_, childOutput)
   }
 
@@ -252,8 +252,8 @@ case class DistinctAggregate(
 
       val outputSchema: Seq[Attribute] = bufferSchema(aggregates) ++ groupingExpressions.map(_.toAttribute)
 
-      initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenAggregateExpressions))
-      val finalProjection = new InterpretedMutableProjection(rewrittenAggregateExpressions, outputSchema)
+      initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
+      val finalProjection = new InterpretedMutableProjection(rewrittenProjection, outputSchema)
 
       val results = new OpenHashMap[Row, BufferSeens]()
       val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)

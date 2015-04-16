@@ -130,24 +130,23 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         aggr.copy(aggregateExpressions = subusitutedAggrExpression) match {
           // Aggregations that can be performed in two phases, before and after the shuffle.
           case PartialAggregation2(
-            groupingAttributes,
-            groupingExpressions,
+            namedGroupingExpressions,
             aggregates,
-            rewrittenAggregateExpressions,
-            aggregateExpressions,
+            rewrittenProjection,
+            originalProjection,
             child) =>
               if (aggregates.exists(_.distinct)) {
                 aggregate2.DistinctAggregate(
-                  groupingExpressions,
-                  aggregateExpressions,
-                  rewrittenAggregateExpressions,
+                  namedGroupingExpressions,
+                  originalProjection,
+                  rewrittenProjection,
                   planLater(child)) :: Nil
               } else {
                 aggregate2.AggregatePostShuffle(
-                  groupingAttributes,
-                  rewrittenAggregateExpressions,
+                  namedGroupingExpressions.map(_.toAttribute),
+                  rewrittenProjection,
                   aggregate2.AggregatePreShuffle(
-                    groupingExpressions,
+                    namedGroupingExpressions,
                     aggregates,
                     planLater(child))) :: Nil
               }

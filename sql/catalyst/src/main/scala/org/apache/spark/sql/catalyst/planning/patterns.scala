@@ -142,21 +142,21 @@ object AggregateExpressionSubsitution extends AggregateExpressionSubsitution
  * return the rewritten aggregation expressions for both phases.
  *
  * The returned values for this match are as follows:
- *  - Grouping attributes for the final aggregation.
- *  - Aggregates for the final aggregation.
- *  - Grouping expressions for the partial aggregation.
- *  - Partial aggregate expressions.
- *  - Input to the aggregation.
+ *  - Grouping expression (transformed to NamedExpression) list .
+ *  - Aggregate Expressions extract from the projection.
+ *  - Rewritten Projection for post shuffled.
+ *  - Original Projection.
+ *  - Child logical plan.
  */
 object PartialAggregation2 {
   type ReturnType =
-  (Seq[Attribute], Seq[NamedExpression], Seq[aggregate2.AggregateExpression2], Seq[NamedExpression], Seq[NamedExpression], LogicalPlan)
+  (Seq[NamedExpression], Seq[aggregate2.AggregateExpression2], Seq[NamedExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(plan: LogicalPlan)
   : Option[ReturnType] = plan match {
-    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+    case logical.Aggregate(groupingExpressions, projection, child) =>
       // Collect all aggregate expressions that can be computed partially.
-      val allAggregates = aggregateExpressions.flatMap(_ collect {
+      val allAggregates = projection.flatMap(_ collect {
         case a: aggregate2.AggregateExpression2 => a
       })
 
@@ -171,13 +171,14 @@ object PartialAggregation2 {
 
       // Replace aggregations with a new expression that computes the result from the already
       // computed partial evaluations and grouping values.
-      val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+      val rewrittenProjection = projection.map(_.transformUp {
         case e: Expression if substitutions.contains(e) =>
           substitutions(e).toAttribute
         case e: AggregateExpression2 => e.transformChildrenDown {
           // replace the child expression of the aggregate expression, with
           // Literal, as in PostShuffle, we don't need children expression any
-          // more(Only aggregate buffer required).
+          // more(Only aggregate buffer required), otherwise, it will
+          // cause the attribute not binding exceptions.
           case expr => MutableLiteral(null, expr.dataType, expr.nullable)
         }
         case e: Expression =>
@@ -190,14 +191,11 @@ object PartialAggregation2 {
             .getOrElse(e)
       }).asInstanceOf[Seq[NamedExpression]]
 
-      val groupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-
       Some(
-        (groupingAttributes,
-         namedGroupingExpressions.map(_._2),
+        (namedGroupingExpressions.map(_._2),
          allAggregates,
-         rewrittenAggregateExpressions,
-         aggregateExpressions,
+         rewrittenProjection,
+         projection,
          child))
     case _ => None
   }
