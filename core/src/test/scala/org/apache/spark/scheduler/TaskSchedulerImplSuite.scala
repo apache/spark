@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Properties
-
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -27,7 +25,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
   def stop() {}
   def reviveOffers() {}
-  def defaultParallelism() = 1
+  def defaultParallelism(): Int = 1
 }
 
 class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
@@ -115,7 +113,8 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     }
     val numFreeCores = 1
     taskScheduler.setDAGScheduler(dagScheduler)
-    var taskSet = new TaskSet(Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+    val taskSet = new TaskSet(
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
     val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -123,7 +122,8 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     assert(0 === taskDescriptions.length)
 
     // Now check that we can still submit tasks
-    // Even if one of the tasks has not-serializable tasks, the other task set should still be processed without error
+    // Even if one of the tasks has not-serializable tasks, the other task set should
+    // still be processed without error
     taskScheduler.submitTasks(taskSet)
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten

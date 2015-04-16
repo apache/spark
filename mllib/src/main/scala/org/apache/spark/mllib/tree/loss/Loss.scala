@@ -31,13 +31,11 @@ trait Loss extends Serializable {
 
   /**
    * Method to calculate the gradients for the gradient boosting calculation.
-   * @param model Model of the weak learner.
-   * @param point Instance of the training dataset.
+   * @param prediction Predicted feature
+   * @param label true label.
    * @return Loss gradient.
    */
-  def gradient(
-      model: TreeEnsembleModel,
-      point: LabeledPoint): Double
+  def gradient(prediction: Double, label: Double): Double
 
   /**
    * Method to calculate error of the base learner for the gradient boosting calculation.

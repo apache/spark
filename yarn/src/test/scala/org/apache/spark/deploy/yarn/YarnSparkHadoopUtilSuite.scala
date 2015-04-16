@@ -48,7 +48,7 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     logWarning("Cannot execute bash, skipping bash tests.")
   }
 
-  def bashTest(name: String)(fn: => Unit) =
+  def bashTest(name: String)(fn: => Unit): Unit =
     if (hasBash) test(name)(fn) else ignore(name)(fn)
 
   bashTest("shell script escaping") {

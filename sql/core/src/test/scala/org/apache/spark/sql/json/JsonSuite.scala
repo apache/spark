@@ -895,8 +895,7 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  test("SPARK-4228 DataFrame to JSON")
-  {
+  test("SPARK-4228 DataFrame to JSON") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
       StructField("f2", StringType, false) ::
