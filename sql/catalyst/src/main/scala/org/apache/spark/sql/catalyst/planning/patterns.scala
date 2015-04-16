@@ -150,7 +150,7 @@ object AggregateExpressionSubsitution extends AggregateExpressionSubsitution
  */
 object PartialAggregation2 {
   type ReturnType =
-  (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+  (Seq[Attribute], Seq[NamedExpression], Seq[aggregate2.AggregateExpression2], Seq[NamedExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(plan: LogicalPlan)
   : Option[ReturnType] = plan match {
@@ -160,43 +160,45 @@ object PartialAggregation2 {
         case a: aggregate2.AggregateExpression2 => a
       })
 
-      // Only do partial aggregation if supported by all aggregate expressions.
-      if (!allAggregates.exists(_.distinct)) {
-        // We need to pass all grouping expressions though so the grouping can happen a second
-        // time. However some of them might be unnamed so we alias them allowing them to be
-        // referenced in the second aggregation.
-        val namedGroupingExpressions = groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
-          case n: NamedExpression => (n, n)
-          case other => (other, Alias(other, "PartialGroup")())
-        }
-        val substitutions = namedGroupingExpressions.toMap
-
-        // Replace aggregations with a new expression that computes the result from the already
-        // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
-          case e: Expression if substitutions.contains(e) =>
-            substitutions(e).toAttribute
-          case e: Expression =>
-            // Should trim aliases around `GetField`s. These aliases are introduced while
-            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-            // (Should we just turn `GetField` into a `NamedExpression`?)
-            substitutions
-              .get(e.transform { case Alias(g: GetField, _) => g })
-              .map(_.toAttribute)
-              .getOrElse(e)
-        }).asInstanceOf[Seq[NamedExpression]]
-
-        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-
-        Some(
-          (namedGroupingAttributes,
-            rewrittenAggregateExpressions,
-            groupingExpressions,
-            aggregateExpressions,
-            child))
-      } else {
-        None
+      // We need to pass all grouping expressions though so the grouping can happen a second
+      // time. However some of them might be unnamed so we alias them allowing them to be
+      // referenced in the second aggregation.
+      val namedGroupingExpressions = groupingExpressions.map {
+        case n: NamedExpression => (n, n)
+        case other => (other, Alias(other, "PartialGroup")())
       }
+      val substitutions = namedGroupingExpressions.toMap
+
+      // Replace aggregations with a new expression that computes the result from the already
+      // computed partial evaluations and grouping values.
+      val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+        case e: Expression if substitutions.contains(e) =>
+          substitutions(e).toAttribute
+        case e: AggregateExpression2 => e.transformChildrenDown {
+          // replace the child expression of the aggregate expression, with
+          // Literal, as in PostShuffle, we don't need children expression any
+          // more(Only aggregate buffer required).
+          case expr => MutableLiteral(null, expr.dataType, expr.nullable)
+        }
+        case e: Expression =>
+          // Should trim aliases around `GetField`s. These aliases are introduced while
+          // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+          // (Should we just turn `GetField` into a `NamedExpression`?)
+          substitutions
+            .get(e.transform { case Alias(g: GetField, _) => g })
+            .map(_.toAttribute)
+            .getOrElse(e)
+      }).asInstanceOf[Seq[NamedExpression]]
+
+      val groupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
+
+      Some(
+        (groupingAttributes,
+         namedGroupingExpressions.map(_._2),
+         allAggregates,
+         rewrittenAggregateExpressions,
+         aggregateExpressions,
+         child))
     case _ => None
   }
 }

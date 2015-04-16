@@ -88,7 +88,7 @@ trait AggregateFunction2 {
   def terminatePartial(buf: MutableRow): Unit = {}
 
   // Output the final result by feeding the aggregation buffer
-  def terminate(input: Row): Any
+  def terminate(buffer: Row): Any
 }
 
 trait AggregateExpression2 extends Expression with AggregateFunction2 {
@@ -108,13 +108,11 @@ trait AggregateExpression2 extends Expression with AggregateFunction2 {
 
   def nullable = true
 
-  override def eval(input: Row): EvaluatedType = children.map(_.eval(input))
+  final override def eval(aggrBuffer: Row): EvaluatedType = terminate(aggrBuffer)
 }
 
 abstract class UnaryAggregateExpression extends UnaryExpression with AggregateExpression2 {
   self: Product =>
-
-  override def eval(input: Row): EvaluatedType = child.eval(input)
 }
 
 case class Min(
