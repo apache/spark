@@ -89,9 +89,6 @@ sealed trait PostShuffle extends Aggregate {
       }
     }
   }
-
-  def createIterator(projection: Projection, aggregates: Array[AggregateExpression2], iterator: Iterator[BufferSeens]) =
-    iterator.map(it => projection(it.buffer))
 }
 
 /**
@@ -105,9 +102,9 @@ sealed trait PostShuffle extends Aggregate {
  */
 @DeveloperApi
 case class AggregatePreShuffle(
-                                groupingExpressions: Seq[NamedExpression],
-                                unboundAggregateExpressions: Seq[AggregateExpression2],
-                                child: SparkPlan)
+    groupingExpressions: Seq[NamedExpression],
+    unboundAggregateExpressions: Seq[AggregateExpression2],
+    child: SparkPlan)
   extends UnaryNode with Aggregate {
 
   val aggregateExpressions: Seq[AggregateExpression2] = unboundAggregateExpressions.map {
@@ -143,72 +140,49 @@ case class AggregatePreShuffle(
     child.execute().mapPartitions { iter =>
       val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
 
-      if (groupingExpressions.isEmpty) {
-        // without group by keys
-        val buffer = new GenericMutableRow(output.length)
-        var idx = 0
-        while (idx < aggregates.length) {
-          val ae = aggregates(idx)
-          ae.reset(buffer)
-          idx += 1
+      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+      val results = new OpenHashMap[Row, BufferSeens]()
+      while (iter.hasNext) {
+        val currentRow = iter.next()
+
+        val keys = groupByProjection(currentRow)
+        results(keys) match {
+          case null =>
+            val buffer = new GenericMutableRow(output.length)
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.reset(buffer)
+              ae.update(currentRow, buffer, null)
+              idx += 1
+            }
+            var idx2 = 0
+            while (idx2 < keys.length) {
+              buffer(idx) = keys(idx2)
+              idx2 += 1
+              idx += 1
+            }
+
+            results(keys.copy()) = new BufferSeens(buffer, null)
+          case inputbuffer =>
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.update(currentRow, inputbuffer.buffer, null)
+              idx += 1
+            }
         }
-
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-          var idx = 0
-          while (idx < aggregates.length) {
-            val ae = aggregates(idx)
-            ae.update(currentRow, buffer, null)
-            idx += 1
-          }
-        }
-
-        createIterator(aggregates, Iterator(new BufferSeens().withBuffer(buffer)))
-      } else {
-        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
-        val results = new OpenHashMap[Row, BufferSeens]()
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-
-          val keys = groupByProjection(currentRow)
-          results(keys) match {
-            case null =>
-              val buffer = new GenericMutableRow(output.length)
-              var idx = 0
-              while (idx < aggregates.length) {
-                val ae = aggregates(idx)
-                ae.reset(buffer)
-                ae.update(currentRow, buffer, null)
-                idx += 1
-              }
-              var idx2 = 0
-              while (idx2 < keys.length) {
-                buffer(idx) = keys(idx2)
-                idx2 += 1
-                idx += 1
-              }
-
-              results(keys.copy()) = new BufferSeens(buffer, null)
-            case inputbuffer =>
-              var idx = 0
-              while (idx < aggregates.length) {
-                val ae = aggregates(idx)
-                ae.update(currentRow, inputbuffer.buffer, null)
-                idx += 1
-              }
-          }
-        }
-
-        createIterator(aggregates, results.iterator.map(_._2))
       }
+
+      createIterator(aggregates, results.iterator.map(_._2))
     }
   }
 }
 
 case class AggregatePostShuffle(
-                                 groupingExpressions: Seq[Attribute],
-                                 aggregateExpressions: Seq[NamedExpression],
-                                 child: SparkPlan) extends UnaryNode with PostShuffle {
+    groupingExpressions: Seq[Attribute],
+    aggregateExpressions: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with PostShuffle {
 
   override def output = aggregateExpressions.map(_.toAttribute)
 
@@ -218,58 +192,34 @@ case class AggregatePostShuffle(
     ClusteredDistribution(groupingExpressions) :: Nil
   }
 
-
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(aggregateExpressions))
 
       val finalProjection = new InterpretedMutableProjection(aggregateExpressions, childOutput)
 
-      if (groupingExpressions.isEmpty) {
-        val buffer = new GenericMutableRow(output.length)
-        var idx = 0
-        while (idx < aggregates.length) {
-          val ae = aggregates(idx)
-          ae.reset(buffer)
-          idx += 1
+      val results = new OpenHashMap[Row, BufferSeens]()
+      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+
+      while (iter.hasNext) {
+        val currentRow = iter.next()
+        val keys = groupByProjection(currentRow)
+        results(keys) match {
+          case null =>
+            // TODO currentRow seems most likely a MutableRow
+            val buffer = currentRow.makeMutable()
+            results(keys.copy()) = new BufferSeens(buffer, null)
+          case pair =>
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.merge(currentRow, pair.buffer)
+              idx += 1
+            }
         }
-
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-
-          var idx = 0
-          while (idx < aggregates.length) {
-            val ae = aggregates(idx)
-            ae.merge(currentRow, buffer)
-            idx += 1
-          }
-        }
-
-        createIterator(finalProjection, aggregates, Iterator(new BufferSeens().withBuffer(buffer)))
-      } else {
-        val results = new OpenHashMap[Row, BufferSeens]()
-        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
-
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-          val keys = groupByProjection(currentRow)
-          results(keys) match {
-            case null =>
-              // TODO currentRow seems most likely a MutableRow
-              val buffer = currentRow.makeMutable()
-              results(keys.copy()) = new BufferSeens(buffer, null)
-            case pair =>
-              var idx = 0
-              while (idx < aggregates.length) {
-                val ae = aggregates(idx)
-                ae.merge(currentRow, pair.buffer)
-                idx += 1
-              }
-          }
-        }
-
-        createIterator(finalProjection, aggregates, results.iterator.map(_._2))
       }
+
+      results.iterator.map(it => finalProjection(it._2.buffer))
     }
   }
 }
@@ -279,10 +229,10 @@ case class AggregatePostShuffle(
 // to the reduce side and do aggregation directly, this probably causes the performance regression
 // for Aggregation Function like CountDistinct etc.
 case class DistinctAggregate(
-                              groupingExpressions: Seq[NamedExpression],
-                              unboundAggregateExpressions: Seq[NamedExpression],
-                              rewrittenAggregateExpressions: Seq[NamedExpression],
-                              child: SparkPlan) extends UnaryNode with PostShuffle {
+    groupingExpressions: Seq[NamedExpression],
+    unboundAggregateExpressions: Seq[NamedExpression],
+    rewrittenAggregateExpressions: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with PostShuffle {
 
   override def output = rewrittenAggregateExpressions.map(_.toAttribute)
 
@@ -300,94 +250,56 @@ case class DistinctAggregate(
     child.execute().mapPartitions { iter =>
       val aggregates = initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
 
-      val outputSchema: Seq[Attribute] =
-        aggregates.zipWithIndex.flatMap { case (ca, idx) =>
-          ca.bufferDataType.zipWithIndex.map { case (dt, i) =>
-            AttributeReference(s"aggr.${idx}_$i", dt)()
-          }
-        } ++ groupingExpressions.map(_.toAttribute)
+      val outputSchema: Seq[Attribute] = bufferSchema(aggregates) ++ groupingExpressions.map(_.toAttribute)
 
       initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenAggregateExpressions))
-      val finalProjection = new InterpretedMutableProjection(
-        rewrittenAggregateExpressions, outputSchema)
+      val finalProjection = new InterpretedMutableProjection(rewrittenAggregateExpressions, outputSchema)
 
-      if (groupingExpressions.isEmpty) {
-        val buffer = new GenericMutableRow(output.length)
-        val seens = new Array[JSet[Any]](aggregates.length)
+      val results = new OpenHashMap[Row, BufferSeens]()
+      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
 
-        var idx = 0
-        while (idx < aggregates.length) {
-          val ae = aggregates(idx)
-          ae.reset(buffer)
+      while (iter.hasNext) {
+        val currentRow = iter.next()
 
-          if (ae.distinct) {
-            seens(idx) = new JHashSet[Any]()
-          }
+        val keys = groupByProjection(currentRow)
+        results(keys) match {
+          case null =>
+            val buffer = new GenericMutableRow(aggregates.length + keys.length)
+            val seens = new Array[JSet[Any]](aggregates.length)
 
-          idx += 1
-        }
-        val ibs = new BufferSeens().withBuffer(buffer).withSeens(seens)
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.reset(buffer)
 
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-
-          var idx = 0
-          while (idx < aggregates.length) {
-            val ae = aggregates(idx)
-            ae.update(currentRow, buffer, seens(idx))
-
-            idx += 1
-          }
-        }
-
-        createIterator(finalProjection, aggregates, Iterator(ibs))
-      } else {
-        val results = new OpenHashMap[Row, BufferSeens]()
-        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
-
-        while (iter.hasNext) {
-          val currentRow = iter.next()
-
-          val keys = groupByProjection(currentRow)
-          results(keys) match {
-            case null =>
-              val buffer = new GenericMutableRow(aggregates.length + keys.length)
-              val seens = new Array[JSet[Any]](aggregates.length)
-
-              var idx = 0
-              while (idx < aggregates.length) {
-                val ae = aggregates(idx)
-                ae.reset(buffer)
-
-                if (ae.distinct) {
-                  val seen = new JHashSet[Any]()
-                  seens(idx) = seen
-                }
-
-                ae.update(currentRow, buffer, seens(idx))
-                idx += 1
+              if (ae.distinct) {
+                val seen = new JHashSet[Any]()
+                seens(idx) = seen
               }
-              var idx2 = 0
-              while (idx2 < keys.length) {
-                buffer(idx) = keys(idx2)
-                idx2 += 1
-                idx += 1
-              }
-              results(keys.copy()) = new BufferSeens(buffer, seens)
 
-            case bufferSeens =>
-              var idx = 0
-              while (idx < aggregates.length) {
-                val ae = aggregates(idx)
-                ae.update(currentRow, bufferSeens.buffer, bufferSeens.seens(idx))
+              ae.update(currentRow, buffer, seens(idx))
+              idx += 1
+            }
+            var idx2 = 0
+            while (idx2 < keys.length) {
+              buffer(idx) = keys(idx2)
+              idx2 += 1
+              idx += 1
+            }
+            results(keys.copy()) = new BufferSeens(buffer, seens)
 
-                idx += 1
-              }
-          }
+          case bufferSeens =>
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.update(currentRow, bufferSeens.buffer, bufferSeens.seens(idx))
+
+              idx += 1
+            }
         }
-
-        createIterator(finalProjection, aggregates, results.iterator.map(_._2))
       }
+
+      results.iterator.map(it => finalProjection(it._2.buffer))
     }
   }
 }

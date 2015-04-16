@@ -93,6 +93,8 @@ trait AggregateFunction2 {
 
 trait AggregateExpression2 extends Expression with AggregateFunction2 {
   self: Product =>
+  implicit def boundReferenceToIndex(br: BoundReference): Int = br.ordinal
+
   type EvaluatedType = Any
 
   var mode: Mode = COMPLETE
