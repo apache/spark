@@ -2119,7 +2119,7 @@ private[spark] object Utils extends Logging {
 
   /** Return true if the response message is sent from a backup Master on standby. */
   def responseFromBackup(msg: String): Boolean = {
-    message.startsWith(BACKUP_STANDALONE_MASTER_PREFIX)
+    msg.startsWith(BACKUP_STANDALONE_MASTER_PREFIX)
   }
 }
 
