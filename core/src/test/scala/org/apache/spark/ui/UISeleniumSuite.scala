@@ -363,7 +363,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
-        val url = new URL(sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+        val url = new URL(
+          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
         getResponseCode(url, "GET") should be (405)
         getResponseCode(url, "POST") should be (200)
       }
