@@ -59,6 +59,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  maxIter=100, regParam=0.1)
         """
         super(LogisticRegression, self).__init__()
+        self._setDefault(maxIter=100, regParam=0.1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -71,7 +72,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Sets params for logistic regression.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
