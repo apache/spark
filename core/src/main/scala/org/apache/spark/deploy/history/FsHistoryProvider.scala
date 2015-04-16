@@ -21,7 +21,6 @@ import java.io.{IOException, BufferedInputStream, FileNotFoundException, InputSt
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -35,7 +34,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -83,7 +81,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     = new mutable.LinkedHashMap()
 
   // List of applications to be deleted by event log cleaner.
-  private var appsToClean: ListBuffer[FsApplicationHistoryInfo] = _
+  private var appsToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
 
   // Constants used to parse Spark 1.0.0 log directories.
   private[history] val LOG_PREFIX = "EVENT_LOG_"
@@ -138,7 +136,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         TimeUnit.MILLISECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
-        appsToClean = new ListBuffer[FsApplicationHistoryInfo]
         // A task that periodically cleans event logs on disk.
         pool.scheduleAtFixedRate(getRunner(cleanLogs), 0, CLEAN_INTERVAL_MS,
           TimeUnit.MILLISECONDS)
@@ -296,18 +293,21 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
       applications = appsToRetain
 
+      val leftToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
       appsToClean.foreach { info =>
         try {
-          val path = new Path(logDir + "/" + info.logPath)
+          val path = new Path(logDir, info.logPath)
           if (fs.exists(path)) {
             fs.delete(path, true)
           }
-          appsToClean -= info
         } catch {
           case t: IOException =>
             logError(s"IOException in cleaning logs of ${info.logPath}", t)
+            leftToClean += info
         }
       }
+
+      appsToClean = leftToClean
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
