@@ -474,7 +474,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param kwargs: named arguments: ascending=True
+        :param ascending: sort by ascending order or not (default: True)
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
@@ -487,7 +487,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.orderBy(desc("age"), "name").collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
-        >>> df.orderBy(["age", "name"], ascending=False).collect()
+        >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
@@ -496,8 +496,15 @@ class DataFrame(object):
             cols = cols[0]
         jcols = [_to_java_column(c) for c in cols]
         ascending = kwargs.get('ascending', True)
-        if not ascending:
-            jcols = [jc.desc() for jc in jcols]
+        if isinstance(ascending, bool):
+            if not ascending:
+                jcols = [jc.desc() for jc in jcols]
+        elif isinstance(ascending, list):
+            jcols = [jc if asc else jc.desc()
+                     for asc, jc in zip(ascending, jcols)]
+        else:
+            raise TypeError("ascending can only be bool or list, but got %s" % type(ascending))
+
         jdf = self._jdf.sort(self._jseq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
