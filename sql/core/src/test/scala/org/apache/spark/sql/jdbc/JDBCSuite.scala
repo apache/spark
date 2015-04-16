@@ -35,12 +35,11 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
-  val testDriverQuirks = new DriverQuirks {
+  val testH2Dialect = new JdbcDialect {
     def canHandle(url: String) = url.startsWith("jdbc:h2")
-    def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
+    override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
       StringType
     }
-    def getJDBCType(dt: org.apache.spark.sql.types.DataType): (String, Option[Int]) = (null, None)
   }
 
   before {
@@ -292,8 +291,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     }
   }
 
-  test("Remap types via DriverQuirks") {
-    DriverQuirks.registerQuirks(testDriverQuirks)
+  test("Remap types via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2Dialect)
     val df = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
     assert(df.schema.filter(
       _.dataType != org.apache.spark.sql.types.StringType
@@ -301,19 +300,37 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
-    DriverQuirks.unregisterQuirks(testDriverQuirks)
+    JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
-  test("Default quirks registration") {
-    assert(DriverQuirks.get("jdbc:mysql://127.0.0.1/db").isInstanceOf[MySQLQuirks])
-    assert(DriverQuirks.get("jdbc:postgresql://127.0.0.1/db").isInstanceOf[PostgresQuirks])
-    assert(DriverQuirks.get("test.invalid").isInstanceOf[NoQuirks])
+  test("Default jdbc dialect registration") {
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
-  test("Quirk unregister") {
-    DriverQuirks.registerQuirks(testDriverQuirks)
-    DriverQuirks.unregisterQuirks(testDriverQuirks)
-    assert(DriverQuirks.get(urlWithUserAndPass).isInstanceOf[NoQuirks])
+  test("Dialect unregister") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    JdbcDialects.unregisterDialect(testH2Dialect)
+    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+  }
+
+  test("Aggregated dialects") {
+    val agg = new AggregatedDialect(List(new JdbcDialect {
+      def canHandle(url: String) = url.startsWith("jdbc:h2:")
+      override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
+        if (sqlType % 2 == 0) {
+          LongType
+        } else {
+          null
+        }
+      }
+    }, testH2Dialect))
+    assert(agg.canHandle("jdbc:h2:xxx"))
+    assert(!agg.canHandle("jdbc:h2"))
+    assert(agg.getCatalystType(0,"",1,null) == LongType)
+    assert(agg.getCatalystType(1,"",1,null) == StringType)
   }
 
 }
+
