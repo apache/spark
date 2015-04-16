@@ -20,10 +20,8 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.ql.exec.Description
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
+import org.apache.spark.sql.hive.HiveShim
 
 // deterministic in the query range
 @Description(name = "current_database",
@@ -31,13 +29,12 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 class sqlUDFCurrentDB extends GenericUDF {
 
   override def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
-    val database = SessionState.get.getCurrentDatabase
-    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.stringTypeInfo, new Text(database))
+    val database = SessionState.get.getCurrentDatabase;
+    HiveShim.getStringWritableConstantObjectInspector(database);
   }
 
   override def evaluate(arguments: Array[GenericUDF.DeferredObject]): Object = {
-     SessionState.get.getCurrentDatabase
+    SessionState.get.getCurrentDatabase
   }
 
   override def getDisplayString(children: Array[String]): String = {
