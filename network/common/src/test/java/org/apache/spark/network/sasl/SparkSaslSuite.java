@@ -127,7 +127,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    final String blockSizeConf = "spark.network.sasl.max_encrypted_block_size_kb";
+    final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSizeKb";
     System.setProperty(blockSizeConf, "1");
 
     final AtomicReference<ManagedBuffer> response = new AtomicReference();
@@ -191,7 +191,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testServerAlwaysEncrypt() throws Exception {
-    final String alwaysEncryptConfName = "spark.network.sasl.server_always_encrypt";
+    final String alwaysEncryptConfName = "spark.network.sasl.serverAlwaysEncrypt";
     System.setProperty(alwaysEncryptConfName, "true");
 
     SaslTestCtx ctx = null;

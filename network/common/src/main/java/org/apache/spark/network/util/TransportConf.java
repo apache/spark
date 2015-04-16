@@ -110,14 +110,14 @@ public class TransportConf {
    * Maximum number of bytes to be encrypted at a time when SASL encryption is enabled.
    */
   public int maxSaslEncryptedBlockSize() {
-    return conf.getInt("spark.network.sasl.max_encrypted_block_size_kb", 64) * 1024;
+    return conf.getInt("spark.network.sasl.maxEncryptedBlockSizeKb", 64) * 1024;
   }
 
   /**
    * Whether the server should enforce encryption on SASL-authenticated connections.
    */
   public boolean saslServerAlwaysEncrypt() {
-    return conf.getBoolean("spark.network.sasl.server_always_encrypt", false);
+    return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
   }
 
 }

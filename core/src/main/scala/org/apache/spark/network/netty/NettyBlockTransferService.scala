@@ -50,15 +50,12 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
 
   override def init(blockDataManager: BlockDataManager): Unit = {
     val rpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)
-    val (serverBootstrap: Option[TransportServerBootstrap],
-        clientBootstrap: Option[TransportClientBootstrap]) = {
-      if (authEnabled) {
-        (Some(new SaslServerBootstrap(transportConf, securityManager)),
-          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
-            securityManager.isSaslEncryptionEnabled())))
-      } else {
-        (None, None)
-      }
+    var serverBootstrap: Option[TransportServerBootstrap] = None
+    var clientBootstrap: Option[TransportClientBootstrap] = None
+    if (authEnabled) {
+      serverBootstrap = Some(new SaslServerBootstrap(transportConf, securityManager))
+      clientBootstrap = Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
+        securityManager.isSaslEncryptionEnabled()))
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
     clientFactory = transportContext.createClientFactory(clientBootstrap.toList)
