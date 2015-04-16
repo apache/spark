@@ -328,6 +328,10 @@ object SparkSubmit {
       }
     }
 
+    if (args.isPython && System.getenv("PYSPARK_ARCHIVES_PATH") != null) {
+      args.files = mergeFileLists(args.files, System.getenv("PYSPARK_ARCHIVES_PATH"))
+    }
+
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {

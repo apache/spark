@@ -326,6 +326,12 @@ private[spark] class Client(
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
+    if (System.getenv("PYSPARK_ARCHIVES_PATH") != null) {
+      val pythonPath = System.getenv("PYSPARK_ARCHIVES_PATH").split(",").map(
+        p => (new Path(p)).getName).mkString(":")
+      env("PYTHONPATH") = pythonPath
+    }
+
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
     sparkConf.getAll
