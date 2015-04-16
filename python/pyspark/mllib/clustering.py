@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
+import sys
 import array as pyarray
+
+if sys.version > '3':
+    xrange = range
 
 from numpy import array
 
@@ -84,7 +88,7 @@ class KMeansModel(Saveable, Loader):
         best = 0
         best_distance = float("inf")
         x = _convert_to_vector(x)
-        for i in range(len(self.centers)):
+        for i in xrange(len(self.centers)):
             distance = x.squared_distance(self.centers[i])
             if distance < best_distance:
                 best = i

@@ -209,9 +209,9 @@ class HashingTF(object):
     Note: the terms must be hashable (can not be dict/set/list...).
 
     >>> htf = HashingTF(100)
-    >>> doc = u"a a b b c d".split(u" ")
+    >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
-    SparseVector(100, {55: 1.0, 59: 2.0, 81: 2.0, 88: 1.0})
+    SparseVector(100, {...})
     """
     def __init__(self, numFeatures=1 << 20):
         """
@@ -221,10 +221,7 @@ class HashingTF(object):
 
     def indexOf(self, term):
         """ Returns the index of the input term. """
-        # hash of string is not portable in Python 3
-        if isinstance(term, unicode):
-            term = term.encode('utf-8')
-        return (binascii.crc32(term) & 0x7FFFFFFF) % self.numFeatures
+        return hash(term) % self.numFeatures
 
     def transform(self, document):
         """

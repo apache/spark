@@ -60,16 +60,19 @@ __all__ = ["RDD"]
 
 def portable_hash(x):
     """
-    This function returns consistant hash code for builtin types, especially
+    This function returns consistent hash code for builtin types, especially
     for None and tuple with None.
 
-    The algrithm is similar to that one used by CPython 2.7
+    The algorithm is similar to that one used by CPython 2.7
 
     >>> portable_hash(None)
     0
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
+    if sys.version >= '3.3' and os.environ.get('PYTHONHASHSEED') is None:
+        raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
+
     if x is None:
         return 0
     if isinstance(x, tuple):
@@ -130,7 +133,13 @@ def _load_from_socket(port, serializer):
 
 
 def ignore_unicode_prefix(f):
+    """
+    Ignore the 'u' prefix of string in doc tests, to make it works
+    in both python 2 and 3
+    """
     if sys.version >= '3':
+        # the representation of unicode string in Python 3 does not have prefix 'u',
+        # so remove the prefix 'u' for doc tests
         literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
         f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
     return f
@@ -367,7 +376,7 @@ class RDD(object):
         :param seed: seed for the random number generator
 
         >>> rdd = sc.parallelize(range(100), 4)
-        >>> 9 <= rdd.sample(False, 0.1, 81).count() <= 11
+        >>> 6 <= rdd.sample(False, 0.1, 81).count() <= 14
         True
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
@@ -385,9 +394,9 @@ class RDD(object):
         >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 17)
         >>> len(rdd1.collect() + rdd2.collect())
         500
-        >>> 180 < rdd1.count() < 220
+        >>> 150 < rdd1.count() < 250
         True
-        >>> 280 < rdd2.count() < 320
+        >>> 250 < rdd2.count() < 350
         True
         """
         s = float(sum(weights))
@@ -1443,7 +1452,7 @@ class RDD(object):
         """
         def func(split, iterator):
             for x in iterator:
-                if not isinstance(x, (basestring, bytes)):
+                if not isinstance(x, (unicode, bytes)):
                     x = unicode(x)
                 if isinstance(x, unicode):
                     x = x.encode("utf-8")
@@ -1915,9 +1924,9 @@ class RDD(object):
         >>> sorted(x.subtractByKey(y).collect())
         [('b', 4), ('b', 5)]
         """
-        def filter_func(xxx_todo_changeme):
-            (key, vals) = xxx_todo_changeme
-            return vals[0] and not vals[1]
+        def filter_func(pair):
+            key, (val1, val2) = pair
+            return val1 and not val2
         return self.cogroup(other, numPartitions).filter(filter_func).flatMapValues(lambda x: x[0])
 
     def subtract(self, other, numPartitions=None):

@@ -61,9 +61,11 @@ import itertools
 if sys.version < '3':
     import cPickle as pickle
     protocol = 2
+    from itertools import izip as zip
 else:
     import pickle
     protocol = 3
+    xrange = range
 
 from pyspark import cloudpickle
 
@@ -194,7 +196,7 @@ class BatchedSerializer(Serializer):
             yield list(iterator)
         elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
             n = len(iterator)
-            for i in range(0, n, self.batchSize):
+            for i in xrange(0, n, self.batchSize):
                 yield iterator[i: i + self.batchSize]
         else:
             items = []

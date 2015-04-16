@@ -15,10 +15,14 @@
 # limitations under the License.
 #
 
+import sys
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper, inherit_doc
+if sys.version > '3':
+    xrange = range
+
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
 
@@ -40,7 +44,7 @@ class MLUtils(object):
         nnz = len(items) - 1
         indices = np.zeros(nnz, dtype=np.int32)
         values = np.zeros(nnz)
-        for i in range(nnz):
+        for i in xrange(nnz):
             index, value = items[1 + i].split(":")
             indices[i] = int(index) - 1
             values[i] = float(value)
@@ -55,10 +59,10 @@ class MLUtils(object):
         v = _convert_to_vector(p.features)
         if isinstance(v, SparseVector):
             nnz = len(v.indices)
-            for i in range(nnz):
+            for i in xrange(nnz):
                 items.append(str(v.indices[i] + 1) + ":" + str(v.values[i]))
         else:
-            for i in range(len(v)):
+            for i in xrange(len(v)):
                 items.append(str(i + 1) + ":" + str(v[i]))
         return " ".join(items)
 
