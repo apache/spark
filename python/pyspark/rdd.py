@@ -16,21 +16,21 @@
 #
 
 import copy
-from collections import defaultdict
-from itertools import chain
 import sys
+import os
 import re
 import operator
-import sys
 import shlex
-from subprocess import Popen, PIPE
-from tempfile import NamedTemporaryFile
-from threading import Thread
 import warnings
 import heapq
 import bisect
 import random
 import socket
+from subprocess import Popen, PIPE
+from tempfile import NamedTemporaryFile
+from threading import Thread
+from collections import defaultdict
+from itertools import chain
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
 
@@ -70,7 +70,7 @@ def portable_hash(x):
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
-    if sys.version >= '3.3' and os.environ.get('PYTHONHASHSEED') is None:
+    if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
@@ -2231,10 +2231,10 @@ class RDD(object):
                            It must be greater than 0.000017.
 
         >>> n = sc.parallelize(range(1000)).map(str).countApproxDistinct()
-        >>> 950 < n < 1050
+        >>> 900 < n < 1100
         True
         >>> n = sc.parallelize([i % 20 for i in range(1000)]).countApproxDistinct()
-        >>> 18 < n < 22
+        >>> 16 < n < 24
         True
         """
         if relativeSD < 0.000017:
