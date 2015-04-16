@@ -75,7 +75,12 @@ class ExecutorRunnable(
 
     val localResources = prepareLocalResources
     ctx.setLocalResources(localResources)
-
+    // From SPARK-1920 and SPARK-1520 we know PySpark on Yarn can not work when the assembly jar are
+    // package by JDK 1.7+, so we ship PySpark archives to executors by Yarn with --py-files, and
+    // add this path to PYTHONPATH.
+    for ((k, v) <- localResources if k.contains("spark-pyspark")) {
+      env("PYSPARK_ARCHIVES_PATH") = k
+    }
     ctx.setEnvironment(env)
 
     val credentials = UserGroupInformation.getCurrentUser().getCredentials()
@@ -299,12 +304,6 @@ class ExecutorRunnable(
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
-
-    sys.env.get("PYTHONPATH") match {
-      case Some(pythonPath) => env("PYTHONPATH") = pythonPath
-      case None => // do nothing
-    }
-
     env
   }
 }
