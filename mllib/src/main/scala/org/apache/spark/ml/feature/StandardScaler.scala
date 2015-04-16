@@ -30,14 +30,18 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
-  val withMean: BooleanParam = new BooleanParam(this, 
-    "withMean", 
-    "Center data with mean before scaling"
-  )
-  val withStd: BooleanParam = new BooleanParam(this,
-    "withStd", 
-    "Scale to unit standard deviation"
-  )
+  
+  /**
+   * Whether to center the data before scaling
+   * @group param
+   */
+  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean before scaling")
+  
+  /**
+   * Whether to scale the data to have unit standard deviation
+   * @group param
+   */
+  val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
 }
 
 
@@ -76,7 +80,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${map(inputCol)} must be a vector column")
