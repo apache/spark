@@ -21,13 +21,11 @@ A collections of builtin functions
 
 from itertools import imap
 
-from py4j.java_collections import ListConverter
-
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
@@ -85,8 +83,7 @@ def countDistinct(col, *cols):
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
-    jcols = ListConverter().convert([_to_java_column(c) for c in cols], sc._gateway._gateway_client)
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), sc._jvm.PythonUtils.toSeq(jcols))
+    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -136,9 +133,7 @@ class UserDefinedFunction(object):
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jc)
 
 

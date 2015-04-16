@@ -470,12 +470,15 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
         return DataFrame(jdf, self.sql_ctx)
 
-    def sort(self, *cols):
+    def sort(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
-        :param cols: list of :class:`Column` to sort by.
+        :param cols: list of :class:`Column` or column names to sort by.
+        :param kwargs: named arguments: ascending=True
 
         >>> df.sort(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.sort("age", ascending=False).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         >>> df.orderBy(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
@@ -484,15 +487,29 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.orderBy(desc("age"), "name").collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.orderBy(["age", "name"], ascending=False).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
             raise ValueError("should sort by at least one column")
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        jcols = [_to_java_column(c) for c in cols]
+        ascending = kwargs.get('ascending', True)
+        if not ascending:
+            jcols = [jc.desc() for jc in jcols]
+        jdf = self._jdf.sort(self._jseq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
     orderBy = sort
+
+    def _jseq(self, cols, converter=None):
+        return _to_seq(self.sql_ctx._sc, cols, converter)
+
+    def _jcols(self, *cols):
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        return self._jseq(cols, _to_java_column)
 
     def describe(self, *cols):
         """Computes statistics for numeric columns.
@@ -508,9 +525,7 @@ class DataFrame(object):
         min     2
         max     5
         """
-        cols = ListConverter().convert(cols,
-                                       self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     def head(self, n=None):
@@ -581,9 +596,7 @@ class DataFrame(object):
         >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.select(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sql_ctx)
 
     def selectExpr(self, *expr):
@@ -594,8 +607,9 @@ class DataFrame(object):
         >>> df.selectExpr("age * 2", "abs(age)").collect()
         [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
         """
-        jexpr = ListConverter().convert(expr, self._sc._gateway._gateway_client)
-        jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]
+        jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sql_ctx)
 
     def filter(self, condition):
@@ -631,6 +645,8 @@ class DataFrame(object):
         so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
 
+        :func:`groupby` is an alias for :func:`groupBy`.
+
         :param cols: list of columns to group by.
             Each element should be a column name (string) or an expression (:class:`Column`).
 
@@ -640,11 +656,13 @@ class DataFrame(object):
         [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
         >>> df.groupBy(df.name).avg().collect()
         [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        >>> df.groupBy(['name', df.age]).count().collect()
+        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.groupBy(self._jcols(*cols))
         return GroupedData(jdf, self.sql_ctx)
+
+    groupby = groupBy
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
@@ -716,9 +734,7 @@ class DataFrame(object):
         if thresh is None:
             thresh = len(subset) if how == 'any' else 1
 
-        cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
-        cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
-        return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
+        return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sql_ctx)
 
     def fillna(self, value, subset=None):
         """Replace null values, alias for ``na.fill()``.
@@ -771,9 +787,7 @@ class DataFrame(object):
             elif not isinstance(subset, (list, tuple)):
                 raise ValueError("subset should be a list or tuple of column names")
 
-            cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
-            cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
-            return DataFrame(self._jdf.na().fill(value, cols), self.sql_ctx)
+            return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
     def withColumn(self, colName, col):
         """Returns a new :class:`DataFrame` by adding a column.
@@ -832,10 +846,8 @@ def dfapi(f):
 
 def df_varargs_api(f):
     def _api(self, *args):
-        jargs = ListConverter().convert(args,
-                                        self.sql_ctx._sc._gateway._gateway_client)
         name = f.__name__
-        jdf = getattr(self._jdf, name)(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jargs))
+        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -881,9 +893,8 @@ class GroupedData(object):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jcols = ListConverter().convert([c._jc for c in exprs[1:]],
-                                            self.sql_ctx._sc._gateway._gateway_client)
-            jdf = self._jdf.agg(exprs[0]._jc, self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+            jdf = self._jdf.agg(exprs[0]._jc,
+                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
@@ -973,6 +984,13 @@ def _to_java_column(col):
     else:
         jcol = _create_column_from_name(col)
     return jcol
+
+
+def _to_seq(sc, cols, converter=None):
+    if converter:
+        cols = [converter(c) for c in cols]
+    jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+    return sc._jvm.PythonUtils.toSeq(jcols)
 
 
 def _unary_op(name, doc="unary operator"):
@@ -1110,8 +1128,7 @@ class Column(object):
             cols = cols[0]
         cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
-        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
         return Column(jc)
 
     # order
