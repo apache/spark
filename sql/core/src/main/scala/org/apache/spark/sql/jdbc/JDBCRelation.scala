@@ -20,6 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -99,7 +101,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Class.forName(driver)
+    if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
