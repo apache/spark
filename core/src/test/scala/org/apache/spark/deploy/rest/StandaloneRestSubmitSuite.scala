@@ -24,11 +24,11 @@ import javax.servlet.http.HttpServletResponse
 import scala.collection.mutable
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import com.fasterxml.jackson.core.JsonParseException
 import com.google.common.base.Charsets
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
-import com.fasterxml.jackson.core.JsonParseException
 
 import org.apache.spark._
 import org.apache.spark.util.{AkkaUtils, Utils}

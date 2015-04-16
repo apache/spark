@@ -79,13 +79,13 @@ private[deploy] class ClientArguments(args: Array[String]) {
       }
 
       jarUrl = _jarUrl
-      masters = Utils.splitMasterAdress(_master)
+      masters = Utils.parseStandaloneMasterUrls(_master)
       mainClass = _mainClass
       _driverOptions ++= tail
 
     case "kill" :: _master :: _driverId :: tail =>
       cmd = "kill"
-      masters = Utils.splitMasterAdress(_master)
+      masters = Utils.parseStandaloneMasterUrls(_master)
       driverId = _driverId
 
     case _ =>

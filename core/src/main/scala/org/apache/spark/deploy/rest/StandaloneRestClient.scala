@@ -53,15 +53,14 @@ import org.apache.spark.util.Utils
  * is a mismatch, the server will respond with the highest protocol version it supports. A future
  * implementation of this client can use that information to retry using the version specified
  * by the server.
- *
- * Now we don't support retry in case submission failed. In HA mode, client will submit request to
- * all masters and see which one could handle it.
  */
 private[deploy] class StandaloneRestClient(master: String) extends Logging {
   import StandaloneRestClient._
 
-  private val masters: Array[String] = Utils.splitMasterAdress(master)
+  private val masters: Array[String] = Utils.parseStandaloneMasterUrls(master)
 
+  // Set of masters that lost contact with us, used to keep track of
+  // whether there are masters still alive for us to communicate with
   private val lostMasters = new mutable.HashSet[String]
 
   /**
@@ -73,9 +72,9 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   private[rest] def createSubmission(
       request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch an application in $master.")
-    var suc: Boolean = false
+    var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
-    for (m <- masters if !suc) {
+    for (m <- masters if !handled) {
       validateMaster(m)
       val url = getSubmitUrl(m)
       try {
@@ -85,21 +84,16 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             if (s.success) {
               reportSubmissionStatus(s)
               handleRestResponse(s)
-              suc = true
+              handled = true
             }
           case unexpected =>
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
         case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
-          if(handleConnectionException(m)) {
+          if (handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
               s"Unable to connect to server", unreachable)
-          }
-        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
-          if(handleConnectionException(m)) {
-            throw new SubmitRestProtocolException(
-              "Malformed response received from server", malformed)
           }
       }
     }
@@ -109,32 +103,27 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   /** Request that the server kill the specified submission. */
   def killSubmission(submissionId: String): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to kill submission $submissionId in $master.")
-    var suc: Boolean = false
+    var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
-    for (m <- masters if !suc) {
+    for (m <- masters if !handled) {
       validateMaster(m)
       val url = getKillUrl(m, submissionId)
       try {
         response = post(url)
         response match {
           case k: KillSubmissionResponse =>
-            if (!k.message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
+            if (!Utils.responseFromBackup(k.message)) {
               handleRestResponse(k)
-              suc = true
+              handled = true
             }
           case unexpected =>
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
         case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
-          if(handleConnectionException(m)) {
+          if (handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
               s"Unable to connect to server", unreachable)
-          }
-        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
-          if(handleConnectionException(m)) {
-            throw new SubmitRestProtocolException(
-              "Malformed response received from server", malformed)
           }
       }
     }
@@ -146,9 +135,9 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
-    var suc: Boolean = false
+    var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
-    for (m <- masters) {
+    for (m <- masters if !handled) {
       validateMaster(m)
       val url = getStatusUrl(m, submissionId)
       try {
@@ -158,20 +147,15 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             if (!quiet) {
               handleRestResponse(s)
             }
-            suc = true
+            handled = true
           case unexpected =>
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
         case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
-          if(handleConnectionException(m)) {
+          if (handleConnectionException(m)) {
             throw new SubmitRestConnectionException(
               s"Unable to connect to server", unreachable)
-          }
-        case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
-          if(handleConnectionException(m)) {
-            throw new SubmitRestProtocolException(
-              "Malformed response received from server", malformed)
           }
       }
     }
@@ -235,30 +219,35 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
    * Exposed for testing.
    */
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
-    val dataStream =
-      if (connection.getResponseCode == HttpServletResponse.SC_OK) {
-        connection.getInputStream
-      } else {
-        connection.getErrorStream
+    try {
+      val dataStream =
+        if (connection.getResponseCode == HttpServletResponse.SC_OK) {
+          connection.getInputStream
+        } else {
+          connection.getErrorStream
+        }
+      // If the server threw an exception while writing a response, it will not have a body
+      if (dataStream == null) {
+        throw new SubmitRestProtocolException("Server returned empty body")
       }
-    // If the server threw an exception while writing a response, it will not have a body
-    if (dataStream == null) {
-      throw new SubmitRestProtocolException("Server returned empty body")
-    }
-    val responseJson = Source.fromInputStream(dataStream).mkString
-    logDebug(s"Response from the server:\n$responseJson")
-    val response = SubmitRestProtocolMessage.fromJson(responseJson)
-    response.validate()
-    response match {
-      // If the response is an error, log the message
-      case error: ErrorResponse =>
-        logError(s"Server responded with error:\n${error.message}")
-        error
-      // Otherwise, simply return the response
-      case response: SubmitRestProtocolResponse => response
-      case unexpected =>
-        throw new SubmitRestProtocolException(
-          s"Message received from server was not a response:\n${unexpected.toJson}")
+      val responseJson = Source.fromInputStream(dataStream).mkString
+      logDebug(s"Response from the server:\n$responseJson")
+      val response = SubmitRestProtocolMessage.fromJson(responseJson)
+      response.validate()
+      response match {
+        // If the response is an error, log the message
+        case error: ErrorResponse =>
+          logError(s"Server responded with error:\n${error.message}")
+          error
+        // Otherwise, simply return the response
+        case response: SubmitRestProtocolResponse => response
+        case unexpected =>
+          throw new SubmitRestProtocolException(
+            s"Message received from server was not a response:\n${unexpected.toJson}")
+      }
+    } catch {
+      case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
+        throw new SubmitRestProtocolException("Malformed response received from server", malformed)
     }
   }
 
@@ -357,7 +346,11 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
   }
 
   /**
-   * When a connection exception was caught, we see whether all masters are lost.
+   * When a connection exception is caught, return true if all masters are lost.
+   * Note that the heuristic used here does not take into account that masters
+   * can recover during the lifetime of this client. This assumption should be
+   * harmless because this client currently does not support retrying submission
+   * on failure yet (SPARK-6443).
    */
   private def handleConnectionException(masterUrl: String): Boolean = {
     if (!lostMasters.contains(masterUrl)) {

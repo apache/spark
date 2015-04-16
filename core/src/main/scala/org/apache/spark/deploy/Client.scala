@@ -33,7 +33,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 /**
  * Proxy that relays messages to the driver.
  *
- * Now we don't support retry in case submission failed. In HA mode, client will submit request to
+ * We currently don't support retry if submission fails. In HA mode, client will submit request to
  * all masters and see which one could handle it.
  */
 private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
@@ -107,10 +107,8 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
     val statusResponse = Await.result(statusFuture, timeout)
     statusResponse.found match {
       case false =>
-        statusResponse.exception.getOrElse {
-          println(s"ERROR: Cluster master did not recognize $driverId")
-          System.exit(-1)
-        }
+        println(s"ERROR: Cluster master did not recognize $driverId")
+        System.exit(-1)
       case true =>
         println(s"State of $driverId is ${statusResponse.state.get}")
         // Worker node, if present
@@ -136,7 +134,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (success) {
         activeMasterActor = context.actorSelection(sender.path)
         pollAndReportStatus(driverId.get)
-      } else if (!message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
+      } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
       }
 
@@ -146,7 +144,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (success) {
         activeMasterActor = context.actorSelection(sender.path)
         pollAndReportStatus(driverId)
-      } else if (!message.startsWith(Utils.MASTER_NOT_ALIVE_STRING)) {
+      } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
       }
 
@@ -154,6 +152,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       if (!lostMasters.contains(remoteAddress)) {
         println(s"Error connecting to master $remoteAddress.")
         lostMasters += remoteAddress
+        // Note that this heuristic does not account for the fact that a Master can recover within
+        // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
+        // is not currently a concern, however, because this client does not retry submissions.
         if (lostMasters.size >= masterActors.size) {
           println("No master is available, exiting.")
           System.exit(-1)

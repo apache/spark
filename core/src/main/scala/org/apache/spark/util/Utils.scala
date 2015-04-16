@@ -2106,11 +2106,21 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
-  def splitMasterAdress(masterAddr: String): Array[String] = {
-    masterAddr.stripPrefix("spark://").split(",").map("spark://" + _)
+  /**
+   * Split the comma delimited string of master URLs into a list.
+   * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
+   */
+  def parseStandaloneMasterUrls(masterUrls: String): Array[String] = {
+    masterUrls.stripPrefix("spark://").split(",").map("spark://" + _)
   }
 
-  val MASTER_NOT_ALIVE_STRING = "Current state is not alive: "
+  /** An identifier that backup masters use in their responses. */
+  val BACKUP_STANDALONE_MASTER_PREFIX = "Current state is not alive"
+
+  /** Return true if the response message is sent from a backup Master on standby. */
+  def responseFromBackup(msg: String): Boolean = {
+    message.startsWith(BACKUP_STANDALONE_MASTER_PREFIX)
+  }
 }
 
 /**
