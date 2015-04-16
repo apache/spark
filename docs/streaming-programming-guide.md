@@ -704,7 +704,7 @@ create a DStream using data from Twitter's stream of tweets, you have to do the 
 {% highlight scala %}
 import org.apache.spark.streaming.twitter._
 
-TwitterUtils.createStream(ssc)
+TwitterUtils.createStream(ssc, None)
 {% endhighlight %}
 </div>
 <div data-lang="java">

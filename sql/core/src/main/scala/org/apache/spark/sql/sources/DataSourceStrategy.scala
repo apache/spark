@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.{UTF8String, StringType}
 import org.apache.spark.sql.{Row, Strategy, execution, sources}
 
 /**
@@ -52,10 +54,10 @@ private[sql] object DataSourceStrategy extends Strategy {
         (a, _) => t.buildScan(a)) :: Nil
 
     case l @ LogicalRelation(t: TableScan) =>
-      execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
+      createPhysicalRDD(l.relation, l.output, t.buildScan()) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
+      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
@@ -101,18 +103,28 @@ private[sql] object DataSourceStrategy extends Strategy {
         projectList.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
 
-      val scan =
-        execution.PhysicalRDD(
-          projectList.map(_.toAttribute),
+      val scan = createPhysicalRDD(relation.relation, projectList.map(_.toAttribute),
           scanBuilder(requestedColumns, pushedFilters))
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
 
-      val scan =
-        execution.PhysicalRDD(requestedColumns, scanBuilder(requestedColumns, pushedFilters))
+      val scan = createPhysicalRDD(relation.relation, requestedColumns,
+        scanBuilder(requestedColumns, pushedFilters))
       execution.Project(projectList, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
+  }
+
+  private[this] def createPhysicalRDD(
+      relation: BaseRelation,
+      output: Seq[Attribute],
+      rdd: RDD[Row]): SparkPlan = {
+    val converted = if (relation.needConversion) {
+      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+    } else {
+      rdd
+    }
+    execution.PhysicalRDD(output, converted)
   }
 
   /**
@@ -165,6 +177,15 @@ private[sql] object DataSourceStrategy extends Strategy {
 
       case expressions.Not(child) =>
         translate(child).map(sources.Not)
+
+      case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
+        Some(sources.StringStartsWith(a.name, v.toString))
+
+      case expressions.EndsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
+        Some(sources.StringEndsWith(a.name, v.toString))
+
+      case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
+        Some(sources.StringContains(a.name, v.toString))
 
       case _ => None
     }

@@ -130,6 +130,8 @@ private[sql] case class JDBCRelation(
   extends BaseRelation
   with PrunedFilteredScan {
 
+  override val needConversion: Boolean = false
+
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {

@@ -34,15 +34,122 @@ case class Nested3(f3: Int)
 case class NestedArray2(b: Seq[Int])
 case class NestedArray1(a: NestedArray2)
 
+case class Order(
+    id: Int,
+    make: String,
+    `type`: String,
+    price: Int,
+    pdate: String,
+    customer: String,
+    city: String,
+    state: String,
+    month: Int)
+
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-6835: udtf in lateral view") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+    val query = sql("SELECT c1, v FROM table1 LATERAL VIEW stack(3, 1, c1 + 1, c1 + 2) d AS v")
+    checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-6851: Self-joined converted parquet tables") {
+    val orders = Seq(
+      Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+      Order(3, "Swift", "MTB", 285, "2015-01-17", "John S", "Redwood City", "CA", 20151),
+      Order(4, "Atlas", "Hybrid", 303, "2015-01-23", "Jones S", "San Mateo", "CA", 20151),
+      Order(7, "Next", "MTB", 356, "2015-01-04", "Jane D", "Daly City", "CA", 20151),
+      Order(10, "Next", "YFlikr", 187, "2015-01-09", "John D", "Fremont", "CA", 20151),
+      Order(11, "Swift", "YFlikr", 187, "2015-01-23", "John D", "Hayward", "CA", 20151),
+      Order(2, "Next", "Hybrid", 324, "2015-02-03", "Jane D", "Daly City", "CA", 20152),
+      Order(5, "Next", "Street", 187, "2015-02-08", "John D", "Fremont", "CA", 20152),
+      Order(6, "Atlas", "Street", 154, "2015-02-09", "John D", "Pacifica", "CA", 20152),
+      Order(8, "Swift", "Hybrid", 485, "2015-02-19", "John S", "Redwood City", "CA", 20152),
+      Order(9, "Atlas", "Split", 303, "2015-02-28", "Jones S", "San Mateo", "CA", 20152))
+
+    val orderUpdates = Seq(
+      Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+      Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
+
+    orders.toDF.registerTempTable("orders1")
+    orderUpdates.toDF.registerTempTable("orderupdates1")
+
+    sql(
+      """CREATE TABLE orders(
+        |  id INT,
+        |  make String,
+        |  type String,
+        |  price INT,
+        |  pdate String,
+        |  customer String,
+        |  city String)
+        |PARTITIONED BY (state STRING, month INT)
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    sql(
+      """CREATE TABLE orderupdates(
+        |  id INT,
+        |  make String,
+        |  type String,
+        |  price INT,
+        |  pdate String,
+        |  customer String,
+        |  city String)
+        |PARTITIONED BY (state STRING, month INT)
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+    sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
+
+    checkAnswer(
+      sql(
+        """
+          |select orders.state, orders.month
+          |from orders
+          |join (
+          |  select distinct orders.state,orders.month
+          |  from orders
+          |  join orderupdates
+          |    on orderupdates.id = orders.id) ao
+          |  on ao.state = orders.state and ao.month = orders.month
+        """.stripMargin),
+      (1 to 6).map(_ => Row("CA", 20151)))
+  }
+
+  test("SPARK-5371: union with null and sum") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+
+    val query = sql(
+      """
+        |SELECT
+        |  MIN(c1),
+        |  MIN(c2)
+        |FROM (
+        |  SELECT
+        |    SUM(c1) c1,
+        |    NULL c2
+        |  FROM table1
+        |  UNION ALL
+        |  SELECT
+        |    NULL c1,
+        |    SUM(c2) c2
+        |  FROM table1
+        |) a
+      """.stripMargin)
+    checkAnswer(query, Row(1, 1) :: Nil)
+  }
 
   test("explode nested Field") {
-    Seq(NestedArray1(NestedArray2(Seq(1,2,3)))).toDF.registerTempTable("nestedArray")
+    Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -398,7 +505,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("resolve udtf with single alias") {
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
@@ -411,7 +518,7 @@ class SQLQuerySuite extends QueryTest {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     jsonRDD(rdd).registerTempTable("data")
     val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
     setConf("spark.sql.hive.convertCTAS", "false")
@@ -432,5 +539,26 @@ class SQLQuerySuite extends QueryTest {
     sql("DROP TABLE explodeTest")
     dropTempTable("data")
     setConf("spark.sql.hive.convertCTAS", originalConf)
+  }
+
+  test("sanity test for SPARK-6618") {
+    (1 to 100).par.map { i =>
+      val tableName = s"SPARK_6618_table_$i"
+      sql(s"CREATE TABLE $tableName (col1 string)")
+      catalog.lookupRelation(Seq(tableName))
+      table(tableName)
+      tables()
+      sql(s"DROP TABLE $tableName")
+    }
+  }
+  
+  test("SPARK-5203 union with different decimal precision") {
+    Seq.empty[(Decimal, Decimal)]
+      .toDF("d1", "d2")
+      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .registerTempTable("dn")
+
+    sql("select d from dn union all select d * 2 from dn")
+      .queryExecution.analyzed
   }
 }

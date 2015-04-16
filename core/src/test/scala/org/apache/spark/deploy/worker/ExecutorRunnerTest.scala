@@ -35,7 +35,8 @@ class ExecutorRunnerTest extends FunSuite {
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", 123,
       "publicAddr", new File(sparkHome), new File("ooga"), "blah", new SparkConf, Seq("localDir"),
       ExecutorState.RUNNING)
-    val builder = CommandUtils.buildProcessBuilder(appDesc.command, 512, sparkHome, er.substituteVariables)
+    val builder = CommandUtils.buildProcessBuilder(
+      appDesc.command, 512, sparkHome, er.substituteVariables)
     assert(builder.command().last === appId)
   }
 }
