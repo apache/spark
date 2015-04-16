@@ -35,7 +35,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
    * Whether to center the data before scaling
    * @group param
    */
-  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean before scaling")
+  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
   
   /**
    * Whether to scale the data to have unit standard deviation
