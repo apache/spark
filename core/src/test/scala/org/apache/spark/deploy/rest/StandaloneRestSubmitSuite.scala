@@ -24,7 +24,6 @@ import javax.servlet.http.HttpServletResponse
 import scala.collection.mutable
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import com.fasterxml.jackson.core.JsonParseException
 import com.google.common.base.Charsets
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
 import org.json4s.JsonAST._
@@ -353,7 +352,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     // server returns malformed response unwittingly
     // client should throw an appropriate exception to indicate server failure
     val conn1 = sendHttpRequest(submitRequestPath, "POST", json)
-    intercept[JsonParseException] { client.readResponse(conn1) }
+    intercept[SubmitRestProtocolException] { client.readResponse(conn1) }
     // server attempts to send invalid response, but fails internally on validation
     // client should receive an error response as server is able to recover
     val conn2 = sendHttpRequest(killRequestPath, "POST")
@@ -363,7 +362,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     // server explodes internally beyond recovery
     // client should throw an appropriate exception to indicate server failure
     val conn3 = sendHttpRequest(statusRequestPath, "GET")
-    intercept[JsonParseException] { client.readResponse(conn3) } // empty response
+    intercept[SubmitRestProtocolException] { client.readResponse(conn3) } // empty response
     assert(conn3.getResponseCode === HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
   }
 

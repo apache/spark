@@ -90,10 +90,9 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+        case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException(
-              s"Unable to connect to server", unreachable)
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
           }
       }
     }
@@ -120,10 +119,9 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+        case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException(
-              s"Unable to connect to server", unreachable)
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
           }
       }
     }
@@ -135,6 +133,7 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
+
     var handled: Boolean = false
     var response: SubmitRestProtocolResponse = null
     for (m <- masters if !handled) {
@@ -152,10 +151,9 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             handleUnexpectedRestResponse(unexpected)
         }
       } catch {
-        case unreachable @ (_: FileNotFoundException | _: SocketException | _: ConnectException) =>
+        case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException(
-              s"Unable to connect to server", unreachable)
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
           }
       }
     }
@@ -204,11 +202,16 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
     conn.setRequestProperty("Content-Type", "application/json")
     conn.setRequestProperty("charset", "utf-8")
     conn.setDoOutput(true)
-    val out = new DataOutputStream(conn.getOutputStream)
-    Utils.tryWithSafeFinally {
-      out.write(json.getBytes(Charsets.UTF_8))
-    } {
-      out.close()
+    try {
+      val out = new DataOutputStream(conn.getOutputStream)
+      Utils.tryWithSafeFinally {
+        out.write(json.getBytes(Charsets.UTF_8))
+      } {
+        out.close()
+      }
+    } catch {
+      case e: ConnectException =>
+        throw new SubmitRestConnectionException("Connect Exception when connect to server", e)
     }
     readResponse(conn)
   }
@@ -246,6 +249,8 @@ private[deploy] class StandaloneRestClient(master: String) extends Logging {
             s"Message received from server was not a response:\n${unexpected.toJson}")
       }
     } catch {
+      case unreachable @ (_: FileNotFoundException | _: SocketException) =>
+        throw new SubmitRestConnectionException("Unable to connect to server", unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
         throw new SubmitRestProtocolException("Malformed response received from server", malformed)
     }
