@@ -59,8 +59,8 @@ class Params(Identifiable):
     @property
     def params(self):
         """
-        Returns all params. The default implementation uses
-        :py:func:`dir` to get all attributes of type
+        Returns all params ordered by name. The default implementation
+        uses :py:func:`dir` to get all attributes of type
         :py:class:`Param`.
         """
         return filter(lambda attr: isinstance(attr, Param),
@@ -139,8 +139,8 @@ class Params(Identifiable):
         """
         Extracts the embedded default param values and user-supplied
         values, and then merges them with extra values from input into
-        a flat param map, where the latter values is used if there
-        exist conflicts, i.e., with ordering: default param values <
+        a flat param map, where the latter value is used if there exist
+        conflicts, i.e., with ordering: default param values <
         user-supplied values < extraParamMap.
         :param extraParamMap: extra param values
         :return: merged param map
@@ -161,7 +161,7 @@ class Params(Identifiable):
         """
         Resolves a param and validates the ownership.
         :param param: param name or the param instance, which must
-                      belongs to this Params instance
+                      belong to this Params instance
         :return: resolved param instance
         """
         if isinstance(param, Param):
