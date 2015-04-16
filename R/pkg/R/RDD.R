@@ -85,7 +85,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 
   if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
     # This transformation is the first in its stage:
-    .Object@func <- func
+    .Object@func <- cleanClosure(func)
     .Object@prev_jrdd <- getJRDD(prev)
     .Object@env$prev_serializedMode <- prev@env$serializedMode
     # NOTE: We use prev_serializedMode to track the serialization mode of prev_JRDD
@@ -94,7 +94,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     pipelinedFunc <- function(split, iterator) {
       func(split, prev@func(split, iterator))
     }
-    .Object@func <- pipelinedFunc
+    .Object@func <- cleanClosure(pipelinedFunc)
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
     # Get the serialization mode of the parent RDD
     .Object@env$prev_serializedMode <- prev@env$prev_serializedMode
@@ -144,17 +144,13 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
               return(rdd@env$jrdd_val)
             }
 
-            computeFunc <- function(split, part) {
-              rdd@func(split, part)
-            }
-
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL)
 
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
 
-            serializedFuncArr <- serialize(computeFunc, connection = NULL)
+            serializedFuncArr <- serialize(rdd@func, connection = NULL)
 
             prev_jrdd <- rdd@prev_jrdd
 
@@ -551,11 +547,7 @@ setMethod("mapPartitions",
 setMethod("lapplyPartitionsWithIndex",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            FUN <- cleanClosure(FUN)
-            closureCapturingFunc <- function(split, part) {
-              FUN(split, part)
-            }
-            PipelinedRDD(X, closureCapturingFunc)
+            PipelinedRDD(X, FUN)
           })
 
 #' @rdname lapplyPartitionsWithIndex

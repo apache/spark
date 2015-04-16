@@ -1371,7 +1371,10 @@ the Data Sources API.  The following options are supported:
     <td>
       These options must all be specified if any of them is specified.  They describe how to
       partition the table when reading in parallel from multiple workers.
-      <code>partitionColumn</code> must be a numeric column from the table in question.
+      <code>partitionColumn</code> must be a numeric column from the table in question. Notice
+      that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
+      partition stride, not for filtering the rows in table. So all rows in the table will be
+      partitioned and returned.
     </td>
   </tr>
 </table>

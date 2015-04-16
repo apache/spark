@@ -406,6 +406,8 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
 
       // Other options
+      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
