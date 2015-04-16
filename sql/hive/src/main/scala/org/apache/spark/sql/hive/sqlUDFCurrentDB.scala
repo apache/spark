@@ -30,17 +30,17 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
     value = "_FUNC_() - returns currently using database name")
 class sqlUDFCurrentDB extends GenericUDF {
 
-  def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
     val database = SessionState.get.getCurrentDatabase
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.stringTypeInfo, new Text(database))
   }
 
-  def evaluate(arguments: Array[GenericUDF.DeferredObject]): Object = {
+  override def evaluate(arguments: Array[GenericUDF.DeferredObject]): Object = {
      SessionState.get.getCurrentDatabase
   }
 
-  def getDisplayString(children: Array[String]): String = {
+  override def getDisplayString(children: Array[String]): String = {
     return "current_database()"
   }
 }
