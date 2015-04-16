@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.attribute.{NominalAttribute, Attribute}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
+import org.apache.spark.sql.{DataFrame, SQLContext}
+
 import org.scalatest.FunSuite
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.ml.attribute.{NominalAttribute, Attribute}
 
 class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
   private var sqlContext: SQLContext = _
@@ -31,7 +33,7 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     sqlContext = new SQLContext(sc)
   }
 
-  test("OneHotEncoder") {
+  def stringIndexed(): (DataFrame, NominalAttribute) = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
     val indexer = new StringIndexer()
@@ -41,18 +43,43 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("a", "c", "b"))
+    (transformed, attr)
+  }
 
-    val encoder = new OneHotEncoder(attr.values.get)
+  test("OneHotEncoder includeFirst = true") {
+    val (transformed, attr) = stringIndexed()
+    val encoder = new OneHotEncoder()
+      .setLabelNames(attr.values.get)
       .setInputCol("labelIndex")
+      .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
 
-    val output = encoded.select("id", "labelIndex_a", "labelIndex_c", "labelIndex_b").map { r =>
-      (r.getInt(0), r.getDouble(1), r.getDouble(2), r.getDouble(3))
+    val output = encoded.select("id", "labelVec").map { r =>
+      val vec = r.get(1).asInstanceOf[Vector]
+      (r.getInt(0), vec(0), vec(1), vec(2))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
     val expected = Set((0, 1.0, 0.0, 0.0), (1, 0.0, 0.0, 1.0), (2, 0.0, 1.0, 0.0),
       (3, 1.0, 0.0, 0.0), (4, 1.0, 0.0, 0.0), (5, 0.0, 1.0, 0.0))
+    assert(output === expected)
+  }
+
+  test("OneHotEncoder includeFirst = false") {
+    val (transformed, attr) = stringIndexed()
+    val encoder = new OneHotEncoder()
+      .setIncludeFirst(false)
+      .setLabelNames(attr.values.get)
+      .setInputCol("labelIndex")
+      .setOutputCol("labelVec")
+    val encoded = encoder.transform(transformed)
+
+    val output = encoded.select("id", "labelVec").map { r =>
+      val vec = r.get(1).asInstanceOf[Vector]
+      (r.getInt(0), vec(0), vec(1))
+    }.collect().toSet
+    // a -> 0, b -> 2, c -> 1
+    val expected = Set((0, 0.0, 0.0), (1, 0.0, 1.0), (2, 1.0, 0.0),
+      (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0))
     assert(output === expected)
   }
 
