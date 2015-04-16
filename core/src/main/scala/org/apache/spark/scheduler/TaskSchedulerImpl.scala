@@ -394,7 +394,7 @@ private[spark] class TaskSchedulerImpl(
 
   def error(message: String) {
     synchronized {
-      if (activeTaskSets.size > 0) {
+      if (activeTaskSets.nonEmpty) {
         // Have each task set throw a SparkException with the error
         for ((taskSetId, manager) <- activeTaskSets) {
           try {
@@ -407,8 +407,7 @@ private[spark] class TaskSchedulerImpl(
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        logError("Exiting due to error from cluster scheduler: " + message)
-        System.exit(1)
+        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
       }
     }
   }

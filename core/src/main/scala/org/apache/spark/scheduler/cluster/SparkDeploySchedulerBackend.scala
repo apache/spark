@@ -118,9 +118,12 @@ private[spark] class SparkDeploySchedulerBackend(
     notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
-      scheduler.error(reason)
-      // Ensure the application terminates, as we can no longer run jobs.
-      sc.stop()
+      try {
+        scheduler.error(reason)
+      } finally {
+        // Ensure the application terminates, as we can no longer run jobs.
+        sc.stop()
+      }
     }
   }
 
