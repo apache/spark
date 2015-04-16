@@ -284,7 +284,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
   private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
-  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
+  private[this] val defaultAskTimeout = conf.getLong("spark.akka.askTimeout", 30) seconds
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -304,7 +304,8 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    *
    * This method only sends the message once and never retries.
    */
-  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
+  def sendWithReply[T: ClassTag](message: Any): Future[T] =
+    sendWithReply(message, defaultAskTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
@@ -327,7 +328,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
+  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultAskTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a

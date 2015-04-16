@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.GeneratedAggregate
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
-
+import org.apache.spark.sql.types._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -429,6 +424,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+  }
+
+  test("Allow only a single WITH clause per query") {
+    intercept[RuntimeException] {
+      sql("with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
+    }
   }
 
   test("date row") {
@@ -1123,7 +1124,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
-    sql("SELECT `key?number1` FROM records")
+    sql("SELECT `key?number1`, `key.number2` FROM records")
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
@@ -1222,5 +1223,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
+  }
+
+  test("SPARK-6898: complete support for special chars in column names") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
+      .registerTempTable("t")
+
+    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 }

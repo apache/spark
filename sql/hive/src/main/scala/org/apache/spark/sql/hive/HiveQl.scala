@@ -1101,7 +1101,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(".", qualifier :: Token(attr, Nil) :: Nil) =>
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
-          UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
+          UnresolvedAttribute(qualifierName :+ cleanIdentifier(attr))
         case other => UnresolvedGetField(other, attr)
       }
 

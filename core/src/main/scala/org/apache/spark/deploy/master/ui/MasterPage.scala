@@ -208,8 +208,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         {app.coresGranted}
       </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
+      <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
+        {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>

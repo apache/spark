@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.language.existentials
+import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
@@ -155,7 +156,19 @@ private[sql] class DDLParser(
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
-  protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
+  override implicit def regexToParser(regex: Regex): Parser[String] = acceptMatch(
+    s"identifier matching regex ${regex}", {
+      case lexical.Identifier(str) if regex.unapplySeq(str).isDefined => str
+      case lexical.Keyword(str) if regex.unapplySeq(str).isDefined => str
+    }
+  )
+
+  protected lazy val optionName: Parser[String] = "[_a-zA-Z][a-zA-Z0-9]*".r ^^ {
+    case name => name
+  }
+
+  protected lazy val pair: Parser[(String, String)] =
+    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>

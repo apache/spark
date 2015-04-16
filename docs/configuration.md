@@ -724,6 +724,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.cores</code></td>
+  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
+  <td>
+    The number of cores to use on each executor. For YARN and standalone mode only.
+    
+    In standalone mode, setting this parameter allows an application to run multiple executors on 
+    the same worker, provided that there are enough cores on that worker. Otherwise, only one 
+    executor per application will run on each worker.
+  </td>
+</tr>
+<tr>
   <td><code>spark.default.parallelism</code></td>
   <td>
     For distributed shuffle operations like <code>reduceByKey</code> and <code>join</code>, the

@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -75,6 +75,12 @@ case class DropTable(
 
 private[hive]
 case class AddJar(path: String) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("result", IntegerType, false) :: Nil)
+    schema.toAttributes
+  }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
