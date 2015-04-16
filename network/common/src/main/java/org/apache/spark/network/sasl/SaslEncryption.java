@@ -85,9 +85,12 @@ class SaslEncryption {
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-      backend.dispose();
-      ctx.close(promise);
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+      try {
+        backend.dispose();
+      } finally {
+        super.handlerRemoved(ctx);
+      }
     }
 
   }

@@ -37,6 +37,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.logging.LoggingHandler;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -153,8 +154,7 @@ public class SparkSaslSuite {
       new Random().nextBytes(data);
       Files.write(data, file);
 
-      ctx = new SaslTestCtx(rpcHandler, true, Arrays.asList(new EncryptionCheckerBootstrap()),
-        null);
+      ctx = new SaslTestCtx(rpcHandler, true, false);
 
       final Object lock = new Object();
 
@@ -200,7 +200,7 @@ public class SparkSaslSuite {
 
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), false, null, null);
+      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false);
       fail("Should have failed to connect without encryption.");
     } catch (Exception e) {
       assertTrue(e.getCause() instanceof SaslException);
@@ -219,8 +219,7 @@ public class SparkSaslSuite {
     // able to understand RPCs sent to it and thus close the connection.
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), true, null,
-        Arrays.asList(new EncryptionDisablerBootstrap()));
+      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
       ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
     } catch (Exception e) {
@@ -247,8 +246,7 @@ public class SparkSaslSuite {
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
 
-    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt,
-        Arrays.asList(new EncryptionCheckerBootstrap()), null);
+    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
       byte[] response = ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
       assertEquals("Pong", new String(response, UTF_8));
@@ -263,12 +261,13 @@ public class SparkSaslSuite {
     final TransportServer server;
 
     private final boolean encrypt;
+    private final boolean disableClientEncryption;
+    private final EncryptionCheckerBootstrap checker;
 
     SaslTestCtx(
         RpcHandler rpcHandler,
         boolean encrypt,
-        List<? extends TransportServerBootstrap> serverBootstraps,
-        List<? extends TransportClientBootstrap> clientBootstraps)
+        boolean disableClientEncryption)
       throws Exception {
 
       TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
@@ -279,37 +278,32 @@ public class SparkSaslSuite {
 
       TransportContext ctx = new TransportContext(conf, rpcHandler);
 
-      List<TransportServerBootstrap> allServerBootstraps = Lists.newArrayList();
-      TransportServerBootstrap saslServerBootstrap = spy(new SaslServerBootstrap(conf, keyHolder));
-      allServerBootstraps.add(saslServerBootstrap);
-      if (serverBootstraps != null) {
-        allServerBootstraps.addAll(serverBootstraps);
-      }
-      this.server = ctx.createServer(allServerBootstraps);
+      this.checker = new EncryptionCheckerBootstrap();
+      this.server = ctx.createServer(Arrays.asList(new SaslServerBootstrap(conf, keyHolder),
+        checker));
 
-      TransportClient client = null;
       try {
-        List<TransportClientBootstrap> allClientBootstraps = Lists.newArrayList();
-        allClientBootstraps.add(new SaslClientBootstrap(conf, "user", keyHolder, encrypt));
-        if (clientBootstraps != null) {
-          allClientBootstraps.addAll(clientBootstraps);
+        List<TransportClientBootstrap> clientBootstraps = Lists.newArrayList();
+        clientBootstraps.add(new SaslClientBootstrap(conf, "user", keyHolder, encrypt));
+        if (disableClientEncryption) {
+          clientBootstraps.add(new EncryptionDisablerBootstrap());
         }
 
-        this.client = ctx.createClientFactory(allClientBootstraps)
+        this.client = ctx.createClientFactory(clientBootstraps)
           .createClient(TestUtils.getLocalHost(), server.getPort());
-
-        verify(saslServerBootstrap, times(1))
-          .doBootstrap(any(Channel.class), any(RpcHandler.class));
       } catch (Exception e) {
         close();
         throw e;
       }
 
       this.encrypt = encrypt;
-
+      this.disableClientEncryption = disableClientEncryption;
     }
 
     void close() {
+      if (!disableClientEncryption) {
+        assertEquals(encrypt, checker.foundEncryptionHandler);
+      }
       if (client != null) {
         client.close();
       }
@@ -336,9 +330,8 @@ public class SparkSaslSuite {
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-      ctx.close(promise);
-      assertTrue(foundEncryptionHandler);
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+      super.handlerRemoved(ctx);
     }
 
     @Override
