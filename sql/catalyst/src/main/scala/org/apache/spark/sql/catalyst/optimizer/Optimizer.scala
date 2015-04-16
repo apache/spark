@@ -115,6 +115,7 @@ object UnionPushdown extends Rule[LogicalPlan] {
  *   - Aggregate
  *   - Project <- Join
  *   - LeftSemiJoin
+ *   - Generate
  *  - Collapse adjacent projections, performing alias substitution.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
@@ -171,6 +172,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(substitutedProjection, child)
 
+    // add a project which is blocked by Generate
+    case p @ pushBelowGenerate(newChild) =>
+      p.copy(child = newChild)
+
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
   }
@@ -182,6 +187,32 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+
+  object pushBelowGenerate {
+    // because generate block project operate, it need to insert a project below generate with all
+    // references
+    def collectRefersUntilGen(refers: AttributeSet, plan: LogicalPlan): LogicalPlan = {
+      val collectRefers = refers ++ plan.references
+      plan match {
+        case filter @ Filter(_, c) =>
+          val newChild = collectRefersUntilGen(collectRefers, c)
+          // null indicate child is not changed
+          if (newChild != null) filter.copy(child = newChild) else null
+        case gen @ Generate(_, _, _, _, c) =>
+          if ((c.outputSet -- collectRefers.filter(c.outputSet.contains)).nonEmpty) {
+            gen.copy(child = Project(collectRefers.filter(c.outputSet.contains).toSeq, c))
+          } else {
+            null
+          }
+        case _ => null
+      }
+    }
+
+    def unapply(plan: Project): Option[LogicalPlan] = {
+      val newChild = collectRefersUntilGen(plan.references, plan.child)
+      if (newChild != null) Some(newChild) else None
+    }
+  }
 }
 
 /**

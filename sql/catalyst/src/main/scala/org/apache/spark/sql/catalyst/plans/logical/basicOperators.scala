@@ -55,6 +55,7 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+
   protected def generatorOutput: Seq[Attribute] = {
     val output = alias
       .map(a => generator.output.map(_.withQualifiers(a :: Nil)))

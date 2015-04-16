@@ -503,7 +503,11 @@ class FilterPushdownSuite extends PlanTest {
         .where(('c > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize(originalQuery)
-
-    comparePlans(optimized, originalQuery)
+    val correctAnswer = {
+      testRelationWithArrayType
+        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .where(('c > 6) || ('b > 5)).analyze
+    }
+    comparePlans(optimized, correctAnswer)
   }
 }

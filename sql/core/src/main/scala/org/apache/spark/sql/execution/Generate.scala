@@ -56,7 +56,8 @@ case class Generate(
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   override def execute(): RDD[Row] = {
-    if (join) {
+    // #SPARK-6489 do not join when the child has no output
+    if (join && child.output.nonEmpty) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
         // Used to produce rows with no matches when outer = true.
