@@ -31,7 +31,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
-class CliSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll with Logging {
+class CliSuite extends FunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
 
@@ -47,9 +47,8 @@ class CliSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll with 
 
   def runCliWithin(
       timeout: FiniteDuration,
-      extraArgs: Seq[String] = Seq.empty
-      )(
-      queriesAndExpectedAnswers: (String, String)*) {
+      extraArgs: Seq[String] = Seq.empty)(
+      queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
@@ -145,6 +144,7 @@ class CliSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll with 
       "SHOW TABLES;"
         -> "Time taken: "
     )
+
     runCliWithin(1.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
       ""
         -> "OK",
