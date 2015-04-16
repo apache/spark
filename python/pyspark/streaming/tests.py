@@ -573,6 +573,8 @@ class CheckpointTests(unittest.TestCase):
 
 
 class KafkaStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
 
     def setUp(self):
         super(KafkaStreamTests, self).setUp()
