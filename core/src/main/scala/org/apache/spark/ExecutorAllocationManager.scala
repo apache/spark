@@ -315,7 +315,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def updateNumExecutorsPending(newTotalExecutors: Int): Int = {
     val newNumExecutorsPending =
-      newTotalExecutors - executorIds.size + executorsPendingToRemove.size
+      math.max(0, newTotalExecutors - executorIds.size + executorsPendingToRemove.size)
     val delta = newNumExecutorsPending - numExecutorsPending
     numExecutorsPending = newNumExecutorsPending
     delta
