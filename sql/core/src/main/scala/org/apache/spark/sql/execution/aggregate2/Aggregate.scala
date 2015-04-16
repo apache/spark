@@ -82,7 +82,7 @@ sealed trait Aggregate {
 
   // The schema of the aggregate buffers, as we lines those buffers
   // in a single row.
-  def bufferSchema(aggregates: Seq[AggregateExpression2]): Seq[Attribute] =
+  def bufferSchemaFromAggregate(aggregates: Seq[AggregateExpression2]): Seq[Attribute] =
     aggregates.zipWithIndex.flatMap { case (ca, idx) =>
       ca.bufferDataType.zipWithIndex.map { case (dt, i) =>
         // the attribute names is useless here, as we bind the attribute
@@ -95,7 +95,7 @@ sealed trait PostShuffle extends Aggregate {
   self: Product =>
 
   // extract the aggregate function from the projection
-  def computedAggregates(projectionList: Seq[NamedExpression]): Seq[AggregateExpression2] = {
+  def computedAggregates(projectionList: Seq[Expression]): Seq[AggregateExpression2] = {
     projectionList.flatMap { expr =>
       expr.collect {
         case ae: AggregateExpression2 => ae
@@ -120,13 +120,13 @@ case class AggregatePreShuffle(
     child: SparkPlan)
   extends UnaryNode with Aggregate {
 
-  val aggregateExpressions: Seq[AggregateExpression2] = originalProjection.map {
+  private val aggregateExpressions: Seq[AggregateExpression2] = originalProjection.map {
     BindReferences.bindReference(_, childOutput)
   }
 
+  private val buffersSchema = bufferSchemaFromAggregate(aggregateExpressions)
   override def requiredChildDistribution: Seq[Distribution] = UnspecifiedDistribution :: Nil
-  override def output: Seq[Attribute] =
-    bufferSchema(aggregateExpressions) ++ groupingExpressions.map(_.toAttribute)
+  override val output: Seq[Attribute] = buffersSchema ++ groupingExpressions.map(_.toAttribute)
 
   /**
    * Create Iterator for the in-memory hash map.
@@ -154,48 +154,78 @@ case class AggregatePreShuffle(
   }
 
   override def execute(): RDD[Row] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
-      // the input is every single row
-      val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
-
-      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
-      val results = new OpenHashMap[Row, BufferSeens]()
-      while (iter.hasNext) {
-        val currentRow = iter.next()
-
-        val keys = groupByProjection(currentRow)
-        results(keys) match {
-          case null =>
-            val buffer = new GenericMutableRow(output.length)
-            // handle the aggregate buffers
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.reset(buffer)
-              ae.update(currentRow, buffer, null)
-              idx += 1
-            }
-            // handle the grouping expressions
-            var idx2 = 0
-            while (idx2 < keys.length) {
-              buffer(idx) = keys(idx2)
-              idx2 += 1
-              idx += 1
-            }
-
-            results(keys.copy()) = new BufferSeens(buffer, null)
-          case inputbuffer =>
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.update(currentRow, inputbuffer.buffer, null)
-              idx += 1
-            }
+    if (groupingExpressions.length == 0) {
+      child.execute().mapPartitions { iter =>
+        // the input is every single row
+        val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
+        // without group by keys
+        val buffer = new GenericMutableRow(output.length)
+        var idx = 0
+        while (idx < aggregates.length) {
+          val ae = aggregates(idx)
+          ae.reset(buffer)
+          idx += 1
         }
-      }
 
-      // The output is the (Aggregate Buffers + Grouping Expression Values)
-      createIterator(aggregates, results.iterator.map(_._2))
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+          var idx = 0
+          while (idx < aggregates.length) {
+            val ae = aggregates(idx)
+            ae.update(currentRow, buffer, null)
+            idx += 1
+          }
+        }
+
+        createIterator(aggregates, Iterator(new BufferSeens().withBuffer(buffer)))
+      }
+    } else {
+      child.execute().mapPartitions { iter =>
+        // the input is every single row
+        val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
+
+        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+
+        val results = new OpenHashMap[Row, BufferSeens]()
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+
+          val keys = groupByProjection(currentRow)
+          results(keys) match {
+            case null =>
+              val buffer = new GenericMutableRow(output.length)
+              // fill the aggregate buffers
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.reset(buffer)
+                ae.update(currentRow, buffer, null)
+                idx += 1
+              }
+
+              // fill the grouping expression values into the new row
+              idx = buffersSchema.length
+              var idx2 = 0
+              while (idx < output.length) {
+                buffer(idx) = keys(idx2)
+                idx2 += 1
+                idx += 1
+              }
+
+              results(keys.copy()) = new BufferSeens(buffer, null)
+            case inputbuffer =>
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.update(currentRow, inputbuffer.buffer, null)
+                idx += 1
+              }
+          }
+        }
+
+        // The output is the (Aggregate Buffers + Grouping Expression Values)
+        createIterator(aggregates, results.iterator.map(_._2))
+      }
     }
   }
 }
@@ -214,48 +244,78 @@ case class AggregatePostShuffle(
   }
 
   override def execute(): RDD[Row] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
-      // The input Row in the format of (AggregateBuffers + GroupingExpression Values)
-      val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
+    if (groupingExpressions.length == 0) {
+      child.execute().mapPartitions { iter =>
+        // The input Row in the format of (AggregateBuffers)
+        val aggregates =
+          initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
+        val finalProjection = new InterpretedMutableProjection(rewrittenProjection, childOutput)
 
-      val finalProjection = new InterpretedMutableProjection(rewrittenProjection, childOutput)
-
-      val results = new OpenHashMap[Row, BufferSeens]()
-      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
-
-      while (iter.hasNext) {
-        val currentRow = iter.next()
-        val keys = groupByProjection(currentRow)
-        results(keys) match {
-          case null =>
-            // TODO actually what we need to copy is the grouping expression values
-            // as the aggregate buffer will be reset.
-            val buffer = currentRow.makeMutable()
-            // The reason why need to reset it first and merge with the input row is,
-            // in Hive UDAF, we need to provide an opportunity that the buffer can be the
-            // custom type, Otherwise, HIVE UDAF will wrap/unwrap in every merge() method
-            // calls, which is every expensive
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.reset(buffer)
-              ae.merge(currentRow, buffer)
-              idx += 1
-            }
-            results(keys.copy()) = new BufferSeens(buffer, null)
-          case pair =>
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.merge(currentRow, pair.buffer)
-              idx += 1
-            }
+        val buffer = new GenericMutableRow(childOutput.length)
+        var idx = 0
+        while (idx < aggregates.length) {
+          val ae = aggregates(idx)
+          ae.reset(buffer)
+          idx += 1
         }
-      }
 
-      // final Project is simple a rewrite version of output expression list
-      // which will project as the final output
-      results.iterator.map { it => finalProjection(it._2.buffer) }
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+
+          var idx = 0
+          while (idx < aggregates.length) {
+            val ae = aggregates(idx)
+            ae.merge(currentRow, buffer)
+            idx += 1
+          }
+        }
+
+        Iterator(finalProjection(buffer))
+      }
+    } else {
+      child.execute().mapPartitions { iter =>
+        // The input Row in the format of (AggregateBuffers + GroupingExpression Values)
+        val aggregates =
+          initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
+        val finalProjection = new InterpretedMutableProjection(rewrittenProjection, childOutput)
+
+        val results = new OpenHashMap[Row, BufferSeens]()
+        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+          val keys = groupByProjection(currentRow)
+          results(keys) match {
+            case null =>
+              // TODO actually what we need to copy is the grouping expression values
+              // as the aggregate buffer will be reset.
+              val buffer = currentRow.makeMutable()
+              // The reason why need to reset it first and merge with the input row is,
+              // in Hive UDAF, we need to provide an opportunity that the buffer can be the
+              // custom type, Otherwise, HIVE UDAF will wrap/unwrap in every merge() method
+              // calls, which is every expensive
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.reset(buffer)
+                ae.merge(currentRow, buffer)
+                idx += 1
+              }
+              results(keys.copy()) = new BufferSeens(buffer, null)
+            case pair =>
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.merge(currentRow, pair.buffer)
+                idx += 1
+              }
+          }
+        }
+
+        // final Project is simple a rewrite version of output expression list
+        // which will project as the final output
+        results.iterator.map { it => finalProjection(it._2.buffer)}
+      }
     }
   }
 }
@@ -279,72 +339,122 @@ case class DistinctAggregate(
   }
 
   // binding the expression, which takes the child's output as input
-  val aggregateExpressions: Seq[NamedExpression] = originalProjection.map {
-    BindReferences.bindReference(_, childOutput)
+  private val aggregateExpressions: Seq[Expression] = originalProjection.map {
+    BindReferences.bindReference(_: Expression, childOutput)
   }
 
   override def execute(): RDD[Row] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
-      // initialize the aggregate functions for input rows (update/terminatePartial will be called)
-      val aggregates =
-        initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
+    if (groupingExpressions.length == 0) {
+      child.execute().mapPartitions { iter =>
+        // initialize the aggregate functions for input rows
+        // (update/terminatePartial will be called)
+        val aggregates =
+          initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
 
-      val outputSchema = bufferSchema(aggregates) ++ groupingExpressions.map(_.toAttribute)
+        val buffersSchema = bufferSchemaFromAggregate(aggregates)
 
-      // initialize the aggregate functions for the final output (merge/terminate will be called)
-      initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
-      // binding the output projection, which takes the aggregate buffer and grouping keys
-      // as the input row.
-      val finalProjection = new InterpretedMutableProjection(rewrittenProjection, outputSchema)
+        // initialize the aggregate functions for the final output (merge/terminate will be called)
+        initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
+        // binding the output projection, which takes the aggregate buffer and grouping keys
+        // as the input row.
+        val finalProjection = new InterpretedMutableProjection(rewrittenProjection, buffersSchema)
 
-      val results = new OpenHashMap[Row, BufferSeens]()
-      val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+        val buffer = new GenericMutableRow(buffersSchema.length)
+        val seens = new Array[JSet[Any]](aggregates.length)
 
-      while (iter.hasNext) {
-        val currentRow = iter.next()
+        var idx = 0
+        while (idx < aggregates.length) {
+          val ae = aggregates(idx)
+          ae.reset(buffer)
 
-        val keys = groupByProjection(currentRow)
-        results(keys) match {
-          case null =>
-            val buffer = new GenericMutableRow(aggregates.length + keys.length)
-            val seens = new Array[JSet[Any]](aggregates.length)
+          if (ae.distinct) {
+            seens(idx) = new JHashSet[Any]()
+          }
 
-            // handle the aggregate buffers
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.reset(buffer)
+          idx += 1
+        }
+        val ibs = new BufferSeens().withBuffer(buffer).withSeens(seens)
 
-              if (ae.distinct) {
-                val seen = new JHashSet[Any]()
-                seens(idx) = seen
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+
+          var idx = 0
+          while (idx < aggregates.length) {
+            val ae = aggregates(idx)
+            ae.update(currentRow, buffer, seens(idx))
+
+            idx += 1
+          }
+        }
+
+        Iterator(finalProjection(ibs.buffer))
+      }
+    } else {
+      child.execute().mapPartitions { iter =>
+        // initialize the aggregate functions for input rows
+        // (update/terminatePartial will be called)
+        val aggregates =
+          initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
+
+        val buffersSchema = bufferSchemaFromAggregate(aggregates)
+        val outputSchema = buffersSchema ++ groupingExpressions.map(_.toAttribute)
+
+        // initialize the aggregate functions for the final output (merge/terminate will be called)
+        initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
+        // binding the output projection, which takes the aggregate buffer and grouping keys
+        // as the input row.
+        val finalProjection = new InterpretedMutableProjection(rewrittenProjection, outputSchema)
+
+        val results = new OpenHashMap[Row, BufferSeens]()
+        val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+
+          val keys = groupByProjection(currentRow)
+          results(keys) match {
+            case null =>
+              val buffer = new GenericMutableRow(aggregates.length + keys.length)
+              val seens = new Array[JSet[Any]](aggregates.length)
+
+              // handle the aggregate buffers
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.reset(buffer)
+
+                if (ae.distinct) {
+                  val seen = new JHashSet[Any]()
+                  seens(idx) = seen
+                }
+
+                ae.update(currentRow, buffer, seens(idx))
+                idx += 1
               }
 
-              ae.update(currentRow, buffer, seens(idx))
-              idx += 1
-            }
+              // fill the grouping expression values into the new row
+              idx = buffersSchema.length
+              var idx2 = 0
+              while (idx < output.length) {
+                buffer(idx) = keys(idx2)
+                idx2 += 1
+                idx += 1
+              }
+              results(keys.copy()) = new BufferSeens(buffer, seens)
 
-            // handle the grouping expression value
-            var idx2 = 0
-            while (idx2 < keys.length) {
-              buffer(idx) = keys(idx2)
-              idx2 += 1
-              idx += 1
-            }
-            results(keys.copy()) = new BufferSeens(buffer, seens)
+            case bufferSeens =>
+              var idx = 0
+              while (idx < aggregates.length) {
+                val ae = aggregates(idx)
+                ae.update(currentRow, bufferSeens.buffer, bufferSeens.seens(idx))
 
-          case bufferSeens =>
-            var idx = 0
-            while (idx < aggregates.length) {
-              val ae = aggregates(idx)
-              ae.update(currentRow, bufferSeens.buffer, bufferSeens.seens(idx))
-
-              idx += 1
-            }
+                idx += 1
+              }
+          }
         }
-      }
 
-      results.iterator.map(it => finalProjection(it._2.buffer))
+        results.iterator.map(it => finalProjection(it._2.buffer))
+      }
     }
   }
 }

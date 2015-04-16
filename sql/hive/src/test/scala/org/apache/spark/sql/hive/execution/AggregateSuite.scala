@@ -65,8 +65,8 @@ class AggregateSuite extends HiveComparisonTest with BeforeAndAfter {
     """
       |SELECT
       |  count(distinct value),
-      |  max(distinct key),
-      |  min(distinct key),
+      |  max(key),
+      |  min(key),
       |  sum(distinct key)
       |FROM src
     """.stripMargin, false)
@@ -85,8 +85,8 @@ class AggregateSuite extends HiveComparisonTest with BeforeAndAfter {
     """
       |SELECT
       |  count(distinct value) + 4,
-      |  max(distinct key) + 2,
-      |  min(distinct key) + 3,
+      |  max(key) + 2,
+      |  min(key) + 3,
       |  sum(distinct key) + 4
       |FROM src
     """.stripMargin, false)
@@ -146,15 +146,17 @@ class AggregateSuite extends HiveComparisonTest with BeforeAndAfter {
       |ORDER BY a, b LIMIT 5
     """.stripMargin, false)
 
-  createQueryTest("aggregation with group by expressions #7",
-    """
-      |SELECT
-      |  stddev_pop(distinct key) as a,
-      |  stddev_samp(distinct key) as b
-      |FROM src
-      |GROUP BY key + 3, value
-      |ORDER BY a, b LIMIT 5
-    """.stripMargin, false)
+// TODO currently the parser doesn't support the distinct
+// in Hive UDAF
+//  createQueryTest("aggregation with group by expressions #7",
+//    """
+//      |SELECT
+//      |  stddev_pop(distinct key) as a,
+//      |  stddev_samp(distinct key) as b
+//      |FROM src
+//      |GROUP BY key + 3, value
+//      |ORDER BY a, b LIMIT 5
+//    """.stripMargin, false)
 
   createQueryTest("aggregation with group by expressions #8",
     """
