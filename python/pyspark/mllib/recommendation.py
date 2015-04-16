@@ -70,7 +70,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
 
     >>> model.productFeatures().collect()
-    [(1, DenseVector([...])), (2, DenseVector([...]))]
+    [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
