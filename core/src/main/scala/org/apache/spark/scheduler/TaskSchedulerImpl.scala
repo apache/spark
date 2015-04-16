@@ -142,11 +142,10 @@ private[spark] class TaskSchedulerImpl(
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
-      import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL_MS milliseconds,
             SPECULATION_INTERVAL_MS milliseconds) {
         Utils.tryOrStopSparkContext(sc) { checkSpeculatableTasks() }
-      }
+      }(sc.env.actorSystem.dispatcher)
     }
   }
 
