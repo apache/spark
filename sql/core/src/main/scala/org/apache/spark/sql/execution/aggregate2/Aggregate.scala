@@ -29,6 +29,7 @@ import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.plans.physical._
 
+// A class of the Aggregate buffer & Seen Set pair
 sealed class BufferSeens(var buffer: MutableRow, var seens: Array[JSet[Any]] = null) {
   def this() {
     this(new GenericMutableRow(0), null)
@@ -51,14 +52,20 @@ sealed trait Aggregate {
   // out child's output attributes statically here.
   val childOutput = child.output
 
-  def initializedAndGetAggregates(mode: Mode, aggregates: Seq[AggregateExpression2]): Array[AggregateExpression2] = {
+  // initialize the aggregate functions, this will be called in the beginning of every partition
+  // data processing
+  def initializedAndGetAggregates(
+      mode: Mode,
+      aggregates: Seq[AggregateExpression2])
+  : Array[AggregateExpression2] = {
     var pos = 0
 
     aggregates.map { ae =>
       ae.initial(mode)
 
-      // we connect all of the aggregation buffers in a single Row,
-      // and "BIND" the attribute references in a Hack way.
+      // We connect all of the aggregation buffers in a single Row,
+      // and "BIND" the attribute references in a Hack way, as we believe
+      // the Pre/Post Shuffle Aggregate are actually tightly coupled
       val bufferDataTypes = ae.bufferDataType
       ae.initialize(for (i <- 0 until bufferDataTypes.length) yield {
         BoundReference(pos + i, bufferDataTypes(i), true)
@@ -72,9 +79,13 @@ sealed trait Aggregate {
   // This is provided by SparkPlan
   def child: SparkPlan
 
+  // The schema of the aggregate buffers, as we lines those buffers
+  // in a single row.
   def bufferSchema(aggregates: Seq[AggregateExpression2]): Seq[Attribute] =
     aggregates.zipWithIndex.flatMap { case (ca, idx) =>
       ca.bufferDataType.zipWithIndex.map { case (dt, i) =>
+        // the attribute names is useless here, as we bind the attribute
+        // in a hack way, see [[initializedAndGetAggregates]]
         AttributeReference(s"aggr.${idx}_$i", dt)().toAttribute }
     }
 }
@@ -82,6 +93,7 @@ sealed trait Aggregate {
 sealed trait PostShuffle extends Aggregate {
   self: Product =>
 
+  // extract the aggregate function from the projection
   def computedAggregates(projectionList: Seq[NamedExpression]): Seq[AggregateExpression2] = {
     projectionList.flatMap { expr =>
       expr.collect {
@@ -96,7 +108,7 @@ sealed trait PostShuffle extends Aggregate {
  * Groups input data by `groupingExpressions` and computes the `projection` for each
  * group.
  *
- * @param groupingExpressions the attributes represent the output of the groupby expressions
+ * @param groupingExpressions the attributes represent the output of the grouping expressions
  * @param originalProjection Unbound Aggregate Function List.
  * @param child the input data source.
  */
@@ -118,26 +130,30 @@ case class AggregatePreShuffle(
    * Create Iterator for the in-memory hash map.
    */
   private[this] def createIterator(
-                                    functions: Array[AggregateExpression2],
-                                    iterator: Iterator[BufferSeens]) = {
+      functions: Array[AggregateExpression2],
+      iterator: Iterator[BufferSeens]) = {
     new Iterator[Row] {
       override final def hasNext: Boolean = iterator.hasNext
 
       override final def next(): Row = {
-        val keybuffer = iterator.next()
+        val keyBuffer = iterator.next()
         var idx = 0
         while (idx < functions.length) {
-          functions(idx).terminatePartial(keybuffer.buffer)
+          // terminatedPartial is for Hive UDAF, we
+          // provide an opportunity to transform its internal aggregate buffer into
+          // the catalyst data.
+          functions(idx).terminatePartial(keyBuffer.buffer)
           idx += 1
         }
 
-        keybuffer.buffer
+        keyBuffer.buffer
       }
     }
   }
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
+      // the input is every single row
       val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
 
       val groupByProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
@@ -149,6 +165,7 @@ case class AggregatePreShuffle(
         results(keys) match {
           case null =>
             val buffer = new GenericMutableRow(output.length)
+            // handle the aggregate buffers
             var idx = 0
             while (idx < aggregates.length) {
               val ae = aggregates(idx)
@@ -156,6 +173,7 @@ case class AggregatePreShuffle(
               ae.update(currentRow, buffer, null)
               idx += 1
             }
+            // handle the grouping expressions
             var idx2 = 0
             while (idx2 < keys.length) {
               buffer(idx) = keys(idx2)
@@ -174,6 +192,7 @@ case class AggregatePreShuffle(
         }
       }
 
+      // The output is the (Aggregate Buffers + Grouping Expression Values)
       createIterator(aggregates, results.iterator.map(_._2))
     }
   }
@@ -194,6 +213,7 @@ case class AggregatePostShuffle(
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
+      // The input Row in the format of (AggregateBuffers + GroupingExpression Values)
       val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
 
       val finalProjection = new InterpretedMutableProjection(rewrittenProjection, childOutput)
@@ -206,8 +226,20 @@ case class AggregatePostShuffle(
         val keys = groupByProjection(currentRow)
         results(keys) match {
           case null =>
-            // TODO currentRow seems most likely a MutableRow
+            // TODO actually what we need to copy is the grouping expression values
+            // as the aggregate buffer will be reset.
             val buffer = currentRow.makeMutable()
+            // The reason why need to reset it first and merge with the input row is,
+            // in Hive UDAF, we need to provide an opportunity that the buffer can be the
+            // custom type, Otherwise, HIVE UDAF will wrap/unwrap in every merge() method
+            // calls, which is every expensive
+            var idx = 0
+            while (idx < aggregates.length) {
+              val ae = aggregates(idx)
+              ae.reset(buffer)
+              ae.merge(currentRow, buffer)
+              idx += 1
+            }
             results(keys.copy()) = new BufferSeens(buffer, null)
           case pair =>
             var idx = 0
@@ -219,7 +251,9 @@ case class AggregatePostShuffle(
         }
       }
 
-      results.iterator.map(it => finalProjection(it._2.buffer))
+      // final Project is simple a rewrite version of output expression list
+      // which will project as the final output
+      results.iterator.map { it => finalProjection(it._2.buffer) }
     }
   }
 }
@@ -242,17 +276,23 @@ case class DistinctAggregate(
     ClusteredDistribution(groupingExpressions) :: Nil
   }
 
+  // binding the expression, which takes the child's output as input
   val aggregateExpressions: Seq[NamedExpression] = originalProjection.map {
     BindReferences.bindReference(_, childOutput)
   }
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      val aggregates = initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
+      // initialize the aggregate functions for input rows (update/terminatePartial will be called)
+      val aggregates =
+        initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
 
-      val outputSchema: Seq[Attribute] = bufferSchema(aggregates) ++ groupingExpressions.map(_.toAttribute)
+      val outputSchema = bufferSchema(aggregates) ++ groupingExpressions.map(_.toAttribute)
 
+      // initialize the aggregate functions for the final output (merge/terminate will be called)
       initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
+      // binding the output projection, which takes the aggregate buffer and grouping keys
+      // as the input row.
       val finalProjection = new InterpretedMutableProjection(rewrittenProjection, outputSchema)
 
       val results = new OpenHashMap[Row, BufferSeens]()
@@ -267,6 +307,7 @@ case class DistinctAggregate(
             val buffer = new GenericMutableRow(aggregates.length + keys.length)
             val seens = new Array[JSet[Any]](aggregates.length)
 
+            // handle the aggregate buffers
             var idx = 0
             while (idx < aggregates.length) {
               val ae = aggregates(idx)
@@ -280,6 +321,8 @@ case class DistinctAggregate(
               ae.update(currentRow, buffer, seens(idx))
               idx += 1
             }
+
+            // handle the grouping expression value
             var idx2 = 0
             while (idx2 < keys.length) {
               buffer(idx) = keys(idx2)

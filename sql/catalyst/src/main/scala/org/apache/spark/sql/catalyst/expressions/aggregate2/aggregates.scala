@@ -97,7 +97,7 @@ trait AggregateExpression2 extends Expression with AggregateFunction2 {
 
   type EvaluatedType = Any
 
-  var mode: Mode = COMPLETE
+  var mode: Mode = COMPLETE // will only be used by Hive UDAF
 
   def initial(m: Mode): Unit = {
     this.mode = m
@@ -108,7 +108,7 @@ trait AggregateExpression2 extends Expression with AggregateFunction2 {
   // Is it a distinct aggregate expression?
   def distinct: Boolean
 
-  def nullable = true
+  def nullable: Boolean = true
 
   final override def eval(aggrBuffer: Row): EvaluatedType = terminate(aggrBuffer)
 }
@@ -117,14 +117,12 @@ abstract class UnaryAggregateExpression extends UnaryExpression with AggregateEx
   self: Product =>
 }
 
-case class Min(
-    child: Expression)
-  extends UnaryAggregateExpression {
+case class Min(child: Expression) extends UnaryAggregateExpression {
 
   override def distinct: Boolean = false
-  override def dataType = child.dataType
+  override def dataType: DataType = child.dataType
   override def bufferDataType: Seq[DataType] = dataType :: Nil
-  override def toString = s"MIN($child)"
+  override def toString: String = s"MIN($child)"
 
   /* The below code will be called in executors, be sure to make the instance transientable */
   @transient var arg: MutableLiteral = _
@@ -171,9 +169,9 @@ case class Min(
 
 case class Average(child: Expression, distinct: Boolean = false)
   extends UnaryAggregateExpression {
-  override def nullable = false
+  override def nullable: Boolean = false
 
-  override def dataType = child.dataType match {
+  override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
     case DecimalType.Unlimited =>
@@ -183,7 +181,7 @@ case class Average(child: Expression, distinct: Boolean = false)
   }
 
   override def bufferDataType: Seq[DataType] = LongType :: dataType :: Nil
-  override def toString = s"AVG($child)"
+  override def toString: String = s"AVG($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var count: BoundReference = _
@@ -252,14 +250,13 @@ case class Average(child: Expression, distinct: Boolean = false)
   override def terminate(row: Row): Any = if (count.eval(row) == 0) null else divide.eval(row)
 }
 
-case class Max(child: Expression)
-  extends UnaryAggregateExpression {
+case class Max(child: Expression) extends UnaryAggregateExpression {
   override def distinct: Boolean = false
 
-  override def nullable = true
-  override def dataType = child.dataType
+  override def nullable: Boolean = true
+  override def dataType: DataType = child.dataType
   override def bufferDataType: Seq[DataType] = dataType :: Nil
-  override def toString = s"MAX($child)"
+  override def toString: String = s"MAX($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
@@ -267,7 +264,7 @@ case class Max(child: Expression)
   @transient var buffer: MutableLiteral = _
   @transient var cmp: GreaterThan = _
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
     buffer = MutableLiteral(null, dataType)
@@ -306,15 +303,15 @@ case class Max(child: Expression)
 case class Count(child: Expression)
   extends UnaryAggregateExpression {
   def distinct: Boolean = false
-  override def nullable = false
-  override def dataType = LongType
+  override def nullable: Boolean = false
+  override def dataType: DataType = LongType
   override def bufferDataType: Seq[DataType] = LongType :: Nil
-  override def toString = s"COUNT($child)"
+  override def toString: String = s"COUNT($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
   }
 
@@ -351,14 +348,14 @@ case class Count(child: Expression)
 case class CountDistinct(children: Seq[Expression])
   extends AggregateExpression2 {
   def distinct: Boolean = true
-  override def nullable = false
-  override def dataType = LongType
-  override def toString = s"COUNT($children)"
+  override def nullable: Boolean = false
+  override def dataType: DataType = LongType
+  override def toString: String = s"COUNT($children)"
   override def bufferDataType: Seq[DataType] = LongType :: Nil
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
   }
 
@@ -411,8 +408,8 @@ case class CountDistinct(children: Seq[Expression])
    */
 case class Sum(child: Expression, distinct: Boolean = false)
   extends UnaryAggregateExpression {
-  override def nullable = true
-  override def dataType = child.dataType match {
+  override def nullable: Boolean = true
+  override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
     case DecimalType.Unlimited =>
@@ -422,7 +419,7 @@ case class Sum(child: Expression, distinct: Boolean = false)
   }
 
   override def bufferDataType: Seq[DataType] = dataType :: Nil
-  override def toString = s"SUM($child)"
+  override def toString: String = s"SUM($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
@@ -431,7 +428,7 @@ case class Sum(child: Expression, distinct: Boolean = false)
 
   lazy val DEFAULT_VALUE = Cast(Literal.create(0, IntegerType), dataType).eval()
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
     arg = MutableLiteral(null, dataType)
     sum = Add(arg, aggr)
@@ -476,15 +473,15 @@ case class Sum(child: Expression, distinct: Boolean = false)
 
 case class First(child: Expression, distinct: Boolean = false)
   extends UnaryAggregateExpression {
-  override def nullable = true
-  override def dataType = child.dataType
+  override def nullable: Boolean = true
+  override def dataType: DataType = child.dataType
   override def bufferDataType: Seq[DataType] = dataType :: Nil
-  override def toString = s"FIRST($child)"
+  override def toString: String = s"FIRST($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
   }
 
@@ -523,7 +520,7 @@ case class Last(child: Expression, distinct: Boolean = false)
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     aggr = buffers(0)
   }
 
