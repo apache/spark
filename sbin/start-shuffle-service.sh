@@ -30,4 +30,4 @@ sbin="`cd "$sbin"; pwd`"
 . "$sbin/spark-config.sh"
 . "$SPARK_PREFIX/bin/load-spark-env.sh"
 
-exec "$sbin"/spark-daemon.sh start org.apache.spark.shuffle.ExternalShuffleService 1
+exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.ExternalShuffleService 1
