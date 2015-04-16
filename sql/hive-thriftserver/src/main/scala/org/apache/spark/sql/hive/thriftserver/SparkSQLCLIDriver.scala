@@ -145,6 +145,9 @@ private[hive] object SparkSQLCLIDriver {
       case e: UnsupportedEncodingException => System.exit(3)
     }
 
+    // use the specified database if specified
+    cli.processSelectDatabase(sessionState);
+
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
