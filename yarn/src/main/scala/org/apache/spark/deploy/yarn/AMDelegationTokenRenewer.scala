@@ -16,16 +16,14 @@
  */
 package org.apache.spark.deploy.yarn
 
-import java.io.{DataOutputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayOutputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{Executors, TimeUnit}
 
-import akka.actor.ActorSelection
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.NewTokens
 import org.apache.spark.{Logging, SparkConf}
@@ -50,18 +48,20 @@ import org.apache.spark.util.{SerializableBuffer, Utils}
  * appeared, it will read the credentials and update the currently running UGI with it. This
  * process happens again once 80% of the validity of this has expired.
  */
-class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
+private[yarn] class AMDelegationTokenRenewer(
+    sparkConf: SparkConf,
+    hadoopConf: Configuration) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 
-  private lazy val delegationTokenRenewer =
+  private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   private var loggedInViaKeytab = false
   var driverEndPoint: RpcEndpointRef = null
 
-  private lazy val hadoopUtil = YarnSparkHadoopUtil.get
+  private val hadoopUtil = YarnSparkHadoopUtil.get
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -70,62 +70,51 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
    * to do the login. This method is a no-op in non-YARN mode.
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
-    sparkConf.getOption("spark.yarn.principal").foreach { principal =>
-      val keytab = sparkConf.get("spark.yarn.keytab")
+    val principal = sparkConf.get("spark.yarn.principal")
+    val keytab = sparkConf.get("spark.yarn.keytab")
 
-      def getRenewalInterval: Long = {
-        import scala.concurrent.duration._
-        val credentials = UserGroupInformation.getCurrentUser.getCredentials
-        val interval = (0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
-          System.currentTimeMillis())).toLong
-        // If only 6 hours left, then force a renewal immediately. This is to avoid tokens with
-        // very less validity being used on AM restart.
-        if ((interval millis).toHours <= 6) {
-          0L
-        } else {
-          interval
-        }
+    def getRenewalInterval: Long = {
+      import scala.concurrent.duration._
+      val credentials = UserGroupInformation.getCurrentUser.getCredentials
+      val interval = (0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
+        System.currentTimeMillis())).toLong
+      // If only 6 hours left, then force a renewal immediately. This is to avoid tokens with
+      // very less validity being used on AM restart.
+      if ((interval millis).toHours <= 6) {
+        0L
+      } else {
+        interval
       }
-
-      def scheduleRenewal(runnable: Runnable): Unit = {
-        val renewalInterval = getRenewalInterval
-        logInfo(s"Scheduling login from keytab in $renewalInterval millis.")
-        delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
-      }
-
-      // This thread periodically runs on the driver to update the delegation tokens on HDFS.
-      val driverTokenRenewerRunnable =
-        new Runnable {
-          override def run(): Unit = {
-            var wroteNewFiles = false
-            try {
-              writeNewTokensToHDFS(principal, keytab)
-              wroteNewFiles = true
-              cleanupOldFiles()
-            } catch {
-              case e: Exception =>
-                // If the exception was due to some issue deleting files, don't worry about it -
-                // just try to clean up next time. Else, reschedule for an hour later so new
-                // tokens get written out.
-                if (!wroteNewFiles) {
-                  logWarning("Failed to write out new credentials to HDFS, will try again in an " +
-                    "hour! If this happens too often tasks will fail.", e)
-                  delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
-                  return
-                } else {
-                  logWarning("Error while attempting to clean up old delegation token files. " +
-                    "Cleanup will be reattempted the next time new tokens are being written.")
-                }
-            }
-            scheduleRenewal(this)
-          }
-        }
-      // Schedule update of credentials. This handles the case of updating the tokens right now
-      // as well, since the renenwal interval will be 0, and the thread will get scheduled
-      // immediately.
-      scheduleRenewal(driverTokenRenewerRunnable)
-
     }
+
+    def scheduleRenewal(runnable: Runnable): Unit = {
+      val renewalInterval = getRenewalInterval
+      logInfo(s"Scheduling login from keytab in $renewalInterval millis.")
+      delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
+    }
+
+    // This thread periodically runs on the driver to update the delegation tokens on HDFS.
+    val driverTokenRenewerRunnable =
+      new Runnable {
+        override def run(): Unit = {
+          try {
+            writeNewTokensToHDFS(principal, keytab)
+            cleanupOldFiles()
+          } catch {
+            case e: Exception =>
+              // Log the error and try to write new tokens back in an hour
+              logWarning("Failed to write out new credentials to HDFS, will try again in an " +
+                "hour! If this happens too often tasks will fail.", e)
+              delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
+              return
+          }
+          scheduleRenewal(this)
+        }
+      }
+    // Schedule update of credentials. This handles the case of updating the tokens right now
+    // as well, since the renenwal interval will be 0, and the thread will get scheduled
+    // immediately.
+    scheduleRenewal(driverTokenRenewerRunnable)
   }
 
   // Keeps only files that are newer than 30 days, and deletes everything else. At least 5 files
@@ -135,9 +124,11 @@ class AMDelegationTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration) 
     try {
       val remoteFs = FileSystem.get(hadoopConf)
       val credentialsPath = new Path(sparkConf.get("spark.yarn.credentials.file"))
+      val thresholdTime = System.currentTimeMillis() - (30 days).toMillis
       hadoopUtil.listFilesSorted(
-        remoteFs, credentialsPath.getParent, credentialsPath.getName, ".tmp").dropRight(5)
-        .takeWhile(_.getModificationTime < System.currentTimeMillis() - (30 days).toMillis)
+        remoteFs, credentialsPath.getParent, credentialsPath.getName, ".tmp")
+        .dropRight(5)
+        .takeWhile(_.getModificationTime < thresholdTime)
         .foreach(x => remoteFs.delete(x.getPath, true))
     } catch {
       // Such errors are not fatal, so don't throw. Make sure they are logged though

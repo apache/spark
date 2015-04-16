@@ -17,15 +17,13 @@
 package org.apache.spark.deploy
 
 import java.util.concurrent.{Executors, TimeUnit}
-import java.util.{Comparator, Arrays}
 
-import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, Path, FileSystem}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
 private[spark] class ExecutorDelegationTokenUpdater(
     sparkConf: SparkConf,
@@ -33,46 +31,47 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   @volatile private var lastCredentialsFileSuffix = 0
 
-  private lazy val delegationTokenRenewer =
+  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+
+  private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
 
   // On the executor, this thread wakes up and picks up new tokens from HDFS, if any.
-  private lazy val executorUpdaterRunnable =
+  private val executorUpdaterRunnable =
     new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
     }
 
   def updateCredentialsIfRequired(): Unit = {
     try {
-      sparkConf.getOption("spark.yarn.credentials.file").foreach { credentialsFile =>
-        val credentials = UserGroupInformation.getCurrentUser.getCredentials
-        val credentialsFilePath = new Path(credentialsFile)
-        val remoteFs = FileSystem.get(hadoopConf)
-        SparkHadoopUtil.get.listFilesSorted(
-          remoteFs, credentialsFilePath.getParent, credentialsFilePath.getName, ".tmp")
-          .lastOption.foreach { credentialsStatus =>
-          val suffix = getSuffixForCredentialsPath(credentialsStatus)
-          if (suffix > lastCredentialsFileSuffix) {
-            logInfo("Reading new delegation tokens from " + credentialsStatus.getPath)
-            val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
-            lastCredentialsFileSuffix = suffix
-            UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
-            val totalValidity = SparkHadoopUtil.get.getLatestTokenValidity(credentials) -
-              credentialsStatus.getModificationTime
-            val timeToRunRenewal =
-              credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
-            val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
-            logInfo("Updated delegation tokens, will check for new tokens in " +
-              timeFromNowToRenewal + " millis")
-            delegationTokenRenewer.schedule(
-              executorUpdaterRunnable, timeFromNowToRenewal, TimeUnit.MILLISECONDS)
-          } else {
-            // Check every hour to see if new credentials arrived.
-            logInfo("Updated delegation tokens were expected, but the driver has not updated the " +
-              "tokens yet, will check again in an hour.")
-            delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
-          }
+      val credentials = UserGroupInformation.getCurrentUser.getCredentials
+      val credentialsFilePath = new Path(credentialsFile)
+      val remoteFs = FileSystem.get(hadoopConf)
+      SparkHadoopUtil.get.listFilesSorted(
+        remoteFs, credentialsFilePath.getParent, credentialsFilePath.getName, ".tmp")
+        .lastOption
+        .foreach { credentialsStatus =>
+        val suffix = getSuffixForCredentialsPath(credentialsStatus)
+        if (suffix > lastCredentialsFileSuffix) {
+          logInfo("Reading new delegation tokens from " + credentialsStatus.getPath)
+          val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
+          lastCredentialsFileSuffix = suffix
+          UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+          val totalValidity = SparkHadoopUtil.get.getLatestTokenValidity(credentials) -
+            credentialsStatus.getModificationTime
+          val timeToRunRenewal =
+            credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
+          val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
+          logInfo("Updated delegation tokens, will check for new tokens in " +
+            timeFromNowToRenewal + " millis")
+          delegationTokenRenewer.schedule(
+            executorUpdaterRunnable, timeFromNowToRenewal, TimeUnit.MILLISECONDS)
+        } else {
+          // Check every hour to see if new credentials arrived.
+          logInfo("Updated delegation tokens were expected, but the driver has not updated the " +
+            "tokens yet, will check again in an hour.")
+          delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
         }
       }
     } catch {

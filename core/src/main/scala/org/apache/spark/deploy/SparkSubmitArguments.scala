@@ -501,7 +501,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
         |                              secure HDFS.
         |  --keytab KEYTAB             The full path to the file that contains the keytab for the
-        |                              principal specified above.
+        |                              principal specified above. This keytab will be copied to
+        |                              the node running the Application Master via the Secure
+        |                              Distributed Cache, for renewing the login tickets and the
+        |                              delegation tokens periodically.
       """.stripMargin
     )
     SparkSubmit.exitFn()

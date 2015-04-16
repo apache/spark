@@ -174,9 +174,14 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
-      // Periodically update the credentials for this user to ensure HDFS tokens get updated.
-      val tokenUpdater = new ExecutorDelegationTokenUpdater(driverConf, SparkHadoopUtil.get.conf)
-      tokenUpdater.updateCredentialsIfRequired()
+      var tokenUpdaterOption: Option[ExecutorDelegationTokenUpdater] = None
+      if(driverConf.contains("spark.yarn.credentials.file")) {
+        // Periodically update the credentials for this user to ensure HDFS tokens get updated.
+        tokenUpdaterOption =
+          Some(new ExecutorDelegationTokenUpdater(driverConf, SparkHadoopUtil.get.conf))
+        tokenUpdaterOption.get.updateCredentialsIfRequired()
+      }
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -192,7 +197,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.actorSystem.awaitTermination()
-      tokenUpdater.stop()
+      tokenUpdaterOption.foreach(_.stop())
       env.rpcEnv.awaitTermination()
     }
   }

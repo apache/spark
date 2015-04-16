@@ -20,11 +20,11 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
-import java.util.{Comparator, Arrays}
+import java.util.{Arrays, Comparator}
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
@@ -44,7 +44,7 @@ import scala.collection.JavaConversions._
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  val sparkConf = new SparkConf()
+  private val sparkConf = new SparkConf()
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
@@ -209,12 +209,12 @@ class SparkHadoopUtil extends Logging {
 
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
-   * given suffix.
+   * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
+   * the respective files.
    * @param remoteFs
    * @param prefix
    * @return
    */
-
   def listFilesSorted(
       remoteFs: FileSystem,
       dir: Path,

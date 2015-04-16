@@ -76,7 +76,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private lazy val delegationTokenRenewer = new AMDelegationTokenRenewer(sparkConf, yarnConf)
+  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
 
   final def run(): Int = {
     try {
@@ -139,6 +139,12 @@ private[spark] class ApplicationMaster(
       // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
+
+      // If the credentials file config is present, we must periodically renew tokens. So create
+      // a new AMDelegationTokenRenewer
+      if(sparkConf.contains("spark.yarn.credentials.file")) {
+        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
+      }
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -204,7 +210,7 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown) delegationTokenRenewer.stop()
+        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
       }
     }
   }
@@ -254,7 +260,7 @@ private[spark] class ApplicationMaster(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
-    delegationTokenRenewer.driverEndPoint = driverEndpoint
+    delegationTokenRenewerOption.foreach(_.driverEndPoint = driverEndpoint)
     amEndpoint =
       rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
   }
@@ -281,7 +287,7 @@ private[spark] class ApplicationMaster(
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       // If a principal and keytab have been set, use that to create new credentials for executors
       // periodically
-      delegationTokenRenewer.scheduleLoginFromKeytab()
+      delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
       userClassThread.join()
     }
   }
@@ -292,7 +298,7 @@ private[spark] class ApplicationMaster(
     addAmIpFilter()
     // If a principal and keytab have been set, use that to create new credentials for executors
     // periodically
-    delegationTokenRenewer.scheduleLoginFromKeytab()
+    delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
