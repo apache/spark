@@ -1104,9 +1104,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val smallList = List.fill(40)(new Array[Byte](100))
     val midList = List.fill(60)(new Array[Byte](100))
     val bigList = List.fill(400)(new Array[Byte](100))
-    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
-    def midIterator = midList.iterator.asInstanceOf[Iterator[Any]]
-    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def midIterator: Iterator[Any] = midList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemory === 0)
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
@@ -1164,9 +1164,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val smallList = List.fill(40)(new Array[Byte](100))
     val midList = List.fill(60)(new Array[Byte](100))
     val bigList = List.fill(400)(new Array[Byte](100))
-    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
-    def midIterator = midList.iterator.asInstanceOf[Iterator[Any]]
-    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def midIterator: Iterator[Any] = midList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemory === 0)
 
     store.putIterator("b1", smallIterator, memAndDisk)
