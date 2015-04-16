@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -30,6 +28,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
