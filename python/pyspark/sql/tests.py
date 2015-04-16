@@ -542,6 +542,30 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
 
+    def test_numpy(self):
+        has_numpy = False
+        try:
+            import numpy
+            has_numpy = True
+        except ImportError:
+            pass
+
+        if has_numpy:
+            from collections import namedtuple
+
+            MyType = namedtuple('MyType', 'x')
+            intArray = numpy.int64([1, 2, 3, 4, 5])
+            myValues = map(lambda x: MyType(x), intArray)
+            data = self.sqlCtx.createDataFrame(myValues)
+            result = data.collect()
+            self.assertEqual(result, [Row(x=1), Row(x=2), Row(x=3), Row(x=4), Row(x=5)])
+
+            doubleArray = numpy.float64([1.0, 2.0, 3.0, 4.0, 5.0])
+            myValues2 = map(lambda x: MyType(x), doubleArray)
+            data2 = self.sqlCtx.createDataFrame(myValues2)
+            result2 = data2.collect()
+            self.assertEqual(result2, [Row(x=1.0), Row(x=2.0), Row(x=3.0), Row(x=4.0), Row(x=5.0)])
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
