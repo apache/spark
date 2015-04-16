@@ -566,6 +566,14 @@ class SQLTests(ReusedPySparkTestCase):
             result2 = data2.collect()
             self.assertEqual(result2, [Row(x=1.0), Row(x=2.0), Row(x=3.0), Row(x=4.0), Row(x=5.0)])
 
+            MyType2 = namedtuple('MyType2', ['x', 'y'])
+            myValues3 = map(lambda x, y: MyType2(x, y), intArray, doubleArray)
+            data4 = self.sqlCtx.createDataFrame(myValues3)
+            result4 = data4.collect()
+            self.assertEqual(result4,
+                             [Row(x=1, y=1.0), Row(x=2, y=2.0), Row(x=3, y=3.0), Row(x=4, y=4.0),
+                              Row(x=5, y=5.0)])
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
