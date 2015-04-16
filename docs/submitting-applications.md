@@ -23,7 +23,7 @@ files to be distributed with your application. If you depend on multiple Python 
 packaging them into a `.zip` or `.egg`.
 
 As Python can not read files from assembly jar which packaged by JDK1.7+, so packaging pyspark into a
-`.zip`(the name contains "spark-pyspark") and use `--py-files` argument of `spark-submit` to distribute it.
+`.zip`(the name contains "pyspark") and use `--py-files` argument of `spark-submit` to distribute it.
 
 # Launching Applications with spark-submit
 
