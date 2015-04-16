@@ -22,15 +22,14 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.DecisionTreeModel
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
-import org.apache.spark.ml.attribute.{Attribute, BinaryAttribute, NominalAttribute}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.feature.{VectorIndexer, StringIndexer}
-import org.apache.spark.ml.impl.tree.DecisionTreeModel
+import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, MulticlassMetrics}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -38,11 +37,10 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{SQLContext, DataFrame}
-import org.apache.spark.sql.functions.callUDF
 
 
 /**
- * An example runner for decision trees and random forests. Run with
+ * An example runner for decision trees. Run with
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
  * }}}
@@ -179,7 +177,7 @@ object DecisionTreeExample {
       Array(origExamples, origTestExamples)
     } else {
       // Split input into training, test.
-      origExamples.randomSplit(Array(1.0 - fracTest, fracTest))
+      origExamples.randomSplit(Array(1.0 - fracTest, fracTest), seed = 12345)
     }
 
     // For classification, convert labels to Strings since we will index them later with
@@ -187,9 +185,7 @@ object DecisionTreeExample {
     def labelsToStrings(data: DataFrame): DataFrame = {
       algo.toLowerCase match {
         case "classification" =>
-          val convertToString: Double => String = (label: Double) => label.toString
-          data.select(
-            callUDF(convertToString, StringType, data("label")).as("labelString"), data("features"))
+          data.withColumn("labelString", data("label").cast(StringType))
         case "regression" =>
           data
         case _ =>
@@ -224,7 +220,7 @@ object DecisionTreeExample {
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
     if (algo == "classification") {
-      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol("label")
+      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol("indexedLabel")
       stages += labelIndexer
     }
     // (2) Identify categorical features using VectorIndexer.
@@ -236,6 +232,7 @@ object DecisionTreeExample {
     val dt = algo match {
       case "classification" =>
         new DecisionTreeClassifier().setFeaturesCol("indexedFeatures")
+          .setLabelCol("indexedLabel")
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
           .setMinInstancesPerNode(params.minInstancesPerNode)
@@ -244,6 +241,7 @@ object DecisionTreeExample {
           .setCheckpointInterval(params.checkpointInterval)
       case "regression" =>
         new DecisionTreeRegressor().setFeaturesCol("indexedFeatures")
+          .setLabelCol("indexedLabel")
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
           .setMinInstancesPerNode(params.minInstancesPerNode)
@@ -280,20 +278,21 @@ object DecisionTreeExample {
     val trainingFullPredictions = pipelineModel.transform(training).cache()
     val trainingPredictions = trainingFullPredictions.select("prediction")
       .map(_.getDouble(0))
-    val trainingLabels = trainingFullPredictions.select("label").map(_.getDouble(0))
+    val trainingLabels = trainingFullPredictions.select("indexedLabel").map(_.getDouble(0))
     // Predict on test data
     val testFullPredictions = pipelineModel.transform(test).cache()
     val testPredictions = testFullPredictions.select("prediction")
       .map(_.getDouble(0))
-    val testLabels = testFullPredictions.select("label").map(_.getDouble(0))
+    val testLabels = testFullPredictions.select("indexedLabel").map(_.getDouble(0))
 
     // For classification, print number of classes for reference.
     if (algo == "classification") {
-      val numClasses = MetadataUtils.getNumClasses(trainingFullPredictions.schema("label")) match {
-        case Some(n) => n
-        case None => throw new RuntimeException(
-          "DecisionTreeExample had unknown failure when indexing labels for classification.")
-      }
+      val numClasses =
+        MetadataUtils.getNumClasses(trainingFullPredictions.schema("indexedLabel")) match {
+          case Some(n) => n
+          case None => throw new RuntimeException(
+            "DecisionTreeExample had unknown failure when indexing labels for classification.")
+        }
       println(s"numClasses = $numClasses.")
     }
 

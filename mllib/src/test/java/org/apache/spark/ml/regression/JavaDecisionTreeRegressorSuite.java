@@ -61,6 +61,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
+    // This tests setters. Training with various options is tested in Scala.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()
         .setMaxDepth(2)
         .setMaxBins(10)

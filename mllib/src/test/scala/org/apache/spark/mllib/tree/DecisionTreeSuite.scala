@@ -259,11 +259,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Avoid aggregation on the last level") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
     val input = sc.parallelize(arr)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
@@ -302,11 +302,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Avoid aggregation if impurity is 0.0") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
     val input = sc.parallelize(arr)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
@@ -621,11 +621,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0))
-    arr(2) = new LabeledPoint(1.0, Vectors.dense(2.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(3.0)))
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClasses = 2)
@@ -637,11 +637,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 2 continuous features") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0)))))
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
@@ -761,11 +761,10 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min instances per node requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
-
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
       maxDepth = 2, numClasses = 2, minInstancesPerNode = 2)
@@ -788,11 +787,11 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   test("do not choose split that does not satisfy min instance per node requirements") {
     // if a split does not satisfy min instances per node requirements,
     // this split is invalid, even though the information gain of split is large.
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0, 1.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
-    arr(3) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)))
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
@@ -808,10 +807,10 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min info gain requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
 
     val input = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,

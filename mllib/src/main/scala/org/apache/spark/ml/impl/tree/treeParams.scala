@@ -39,7 +39,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = 5)
    * @group param
    */
-  val maxDepth: IntParam =
+  final val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree." +
       " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
 
@@ -50,20 +50,21 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = 32)
    * @group param
    */
-  val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for discretizing" +
-    " continuous features.  Must be >=2 and >= number of categories for any categorical feature.")
+  final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
+    " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
+    " categorical feature.")
 
   /**
    * Minimum number of instances each child must have after split.
-   * If a split cause left or right child to have less than minInstancesPerNode,
-   * this split will not be considered as a valid split.
+   * If a split causes the left or right child to have fewer than minInstancesPerNode,
+   * the split will be discarded as invalid.
    * Should be >= 1.
    * (default = 1)
    * @group param
    */
-  val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum number" +
-    " of instances each child must have after split.  If a split cause left or right child to" +
-    " have less than minInstancesPerNode, this split will not be considered as a valid split." +
+  final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
+    " number of instances each child must have after split.  If a split causes the left or right" +
+    " child to have fewer than minInstancesPerNode, the split will be discarded as invalid." +
     " Should be >= 1.")
 
   /**
@@ -71,7 +72,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = 0.0)
    * @group param
    */
-  val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
+  final val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
     "Minimum information gain for a split to be considered at a tree node.")
 
   /**
@@ -79,7 +80,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = 256 MB)
    * @group expertParam
    */
-  val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
+  final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
     "Maximum memory in MB allocated to histogram aggregation.")
 
   /**
@@ -89,7 +90,7 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = false)
    * @group expertParam
    */
-  val cacheNodeIds: BooleanParam = new BooleanParam(this, "cacheNodeIds", "If false, the" +
+  final val cacheNodeIds: BooleanParam = new BooleanParam(this, "cacheNodeIds", "If false, the" +
     " algorithm will pass trees to executors to match instances with nodes. If true, the" +
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
@@ -103,8 +104,8 @@ private[ml] trait DecisionTreeParams[M] extends PredictorParams {
    * (default = 10)
    * @group expertParam
    */
-  val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies how" +
-    " often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies" +
+    " how often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
     " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
     " checkpoint directory is set in the SparkContext. Must be >= 1.")
 
@@ -234,7 +235,7 @@ private[ml] trait TreeClassifierParams[M] extends Params {
   def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
-  protected def getOldImpurity: OldImpurity = {
+  private[ml] def getOldImpurity: OldImpurity = {
     getImpurity match {
       case "entropy" => OldEntropy
       case "gini" => OldGini

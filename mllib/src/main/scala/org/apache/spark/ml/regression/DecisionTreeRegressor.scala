@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
 import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -40,7 +40,7 @@ import org.apache.spark.sql.DataFrame
  * It supports both continuous and categorical features.
  */
 @AlphaComponent
-class DecisionTreeRegressor
+final class DecisionTreeRegressor
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeParams[DecisionTreeRegressor]
   with TreeRegressorParams[DecisionTreeRegressor] {
@@ -76,7 +76,7 @@ class DecisionTreeRegressor
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy = getOldStrategy(categoricalFeatures)
     val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeRegressionModel.fromOld(oldModel, this, paramMap)
+    DecisionTreeRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 
   /** Create a Strategy instance to use with the old API. */
@@ -101,7 +101,7 @@ object DecisionTreeRegressor {
  * @param rootNode  Root of the decision tree
  */
 @AlphaComponent
-class DecisionTreeRegressionModel private[ml] (
+final class DecisionTreeRegressionModel private[ml] (
     override val parent: DecisionTreeRegressor,
     override val fittingParamMap: ParamMap,
     override val rootNode: Node)
@@ -137,11 +137,12 @@ object DecisionTreeRegressionModel {
   private[ml] def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeRegressor,
-      fittingParamMap: ParamMap): DecisionTreeRegressionModel = {
+      fittingParamMap: ParamMap,
+      categoricalFeatures: Map[Int, Int]): DecisionTreeRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     new DecisionTreeRegressionModel(parent, fittingParamMap, rootNode)
   }
 }

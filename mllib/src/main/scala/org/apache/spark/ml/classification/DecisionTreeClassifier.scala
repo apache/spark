@@ -21,6 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{Predictor, PredictionModel}
 import org.apache.spark.ml.impl.tree._
 import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -40,7 +41,7 @@ import org.apache.spark.sql.DataFrame
  * features.
  */
 @AlphaComponent
-class DecisionTreeClassifier
+final class DecisionTreeClassifier
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams[DecisionTreeClassifier]
   with TreeClassifierParams[DecisionTreeClassifier] {
@@ -82,7 +83,7 @@ class DecisionTreeClassifier
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeClassificationModel.fromOld(oldModel, this, paramMap)
+    DecisionTreeClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 
   /** Create a Strategy instance to use with the old API. */
@@ -109,7 +110,7 @@ object DecisionTreeClassifier {
  * features.
  */
 @AlphaComponent
-class DecisionTreeClassificationModel private[ml] (
+final class DecisionTreeClassificationModel private[ml] (
     override val parent: DecisionTreeClassifier,
     override val fittingParamMap: ParamMap,
     override val rootNode: Node)
@@ -145,11 +146,12 @@ object DecisionTreeClassificationModel {
   private[ml] def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
-      fittingParamMap: ParamMap): DecisionTreeClassificationModel = {
+      fittingParamMap: ParamMap,
+      categoricalFeatures: Map[Int, Int]): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     new DecisionTreeClassificationModel(parent, fittingParamMap, rootNode)
   }
 }

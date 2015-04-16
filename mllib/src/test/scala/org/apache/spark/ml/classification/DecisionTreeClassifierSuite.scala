@@ -94,11 +94,11 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0))
-    arr(2) = new LabeledPoint(1.0, Vectors.dense(2.0))
-    arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(3.0)))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -108,11 +108,11 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification stump with 2 continuous features") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0)))))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -179,10 +179,10 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min instances per node requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -195,11 +195,11 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("do not choose split that does not satisfy min instance per node requirements") {
     // if a split does not satisfy min instances per node requirements,
     // this split is invalid, even though the information gain of split is large.
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0, 1.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0, 1.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
-    arr(3) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)))
     val rdd = sc.parallelize(arr)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -212,10 +212,10 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("split must satisfy min info gain requirements") {
-    val arr = new Array[LabeledPoint](3)
-    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
-    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
-    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
     val rdd = sc.parallelize(arr)
 
     val dt = new DecisionTreeClassifier()
@@ -267,8 +267,8 @@ private[ml] object DecisionTreeClassifierSuite extends FunSuite {
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
-    val oldTreeAsNew =
-      DecisionTreeClassificationModel.fromOld(oldTree, newTree.parent, newTree.fittingParamMap)
+    val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(oldTree, newTree.parent,
+      newTree.fittingParamMap, categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl.tree
+package org.apache.spark.ml.tree
 
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
@@ -25,7 +25,7 @@ import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformation
 /**
  * Decision tree node interface.
  */
-sealed trait Node extends Serializable {
+sealed abstract class Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
   //       code into the new API and deprecate the old API.
@@ -69,7 +69,7 @@ private[ml] object Node {
   /**
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
    */
-  def fromOld(oldNode: OldNode): Node = {
+  def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
@@ -81,33 +81,9 @@ private[ml] object Node {
         0.0
       }
       new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
-        gain = gain, leftChild = fromOld(oldNode.leftNode.get),
-        rightChild = fromOld(oldNode.rightNode.get), split = Split.fromOld(oldNode.split.get))
-    }
-  }
-
-  /**
-   * Helper method for [[Node.subtreeToString()]].
-   * @param split  Split to print
-   * @param left  Indicates whether this is the part of the split going to the left,
-   *              or that going to the right.
-   */
-  private[tree] def splitToString(split: Split, left: Boolean): String = {
-    val featureStr = s"feature ${split.feature}"
-    split match {
-      case contSplit: ContinuousSplit =>
-        if (left) {
-          s"$featureStr <= ${contSplit.threshold}"
-        } else {
-          s"$featureStr > ${contSplit.threshold}"
-        }
-      case catSplit: CategoricalSplit =>
-        val categoriesStr = catSplit.categories.toSeq.sorted.mkString("{", ",", "}")
-        if (left) {
-          s"$featureStr in $categoriesStr"
-        } else {
-          s"$featureStr not in $categoriesStr"
-        }
+        gain = gain, leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures),
+        rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures),
+        split = Split.fromOld(oldNode.split.get, categoricalFeatures))
     }
   }
 }
@@ -117,7 +93,7 @@ private[ml] object Node {
  * @param prediction  Prediction this node makes
  * @param impurity  Impurity measure at this node (for training data)
  */
-class LeafNode private[ml] (
+final class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double) extends Node {
 
@@ -151,7 +127,7 @@ class LeafNode private[ml] (
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
-class InternalNode private[ml] (
+final class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     val gain: Double,
@@ -164,7 +140,7 @@ class InternalNode private[ml] (
   }
 
   override private[ml] def predict(features: Vector): Double = {
-    if (split.goLeft(features)) {
+    if (split.shouldGoLeft(features)) {
       leftChild.predict(features)
     } else {
       rightChild.predict(features)
@@ -177,9 +153,9 @@ class InternalNode private[ml] (
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
     val prefix: String = " " * indentFactor
-    prefix + s"If (${Node.splitToString(split, left=true)})\n" +
+    prefix + s"If (${InternalNode.splitToString(split, left=true)})\n" +
       leftChild.subtreeToString(indentFactor + 1) +
-      prefix + s"Else (${Node.splitToString(split, left=false)})\n" +
+      prefix + s"Else (${InternalNode.splitToString(split, left=false)})\n" +
       rightChild.subtreeToString(indentFactor + 1)
   }
 
@@ -197,5 +173,33 @@ class InternalNode private[ml] (
       Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
         new OldPredict(leftChild.prediction, prob = 0.0),
         new OldPredict(rightChild.prediction, prob = 0.0))))
+  }
+}
+
+private object InternalNode {
+
+  /**
+   * Helper method for [[Node.subtreeToString()]].
+   * @param split  Split to print
+   * @param left  Indicates whether this is the part of the split going to the left,
+   *              or that going to the right.
+   */
+  private def splitToString(split: Split, left: Boolean): String = {
+    val featureStr = s"feature ${split.featureIndex}"
+    split match {
+      case contSplit: ContinuousSplit =>
+        if (left) {
+          s"$featureStr <= ${contSplit.threshold}"
+        } else {
+          s"$featureStr > ${contSplit.threshold}"
+        }
+      case catSplit: CategoricalSplit =>
+        val categoriesStr = catSplit.getLeftCategories.mkString("{", ",", "}")
+        if (left) {
+          s"$featureStr in $categoriesStr"
+        } else {
+          s"$featureStr not in $categoriesStr"
+        }
+    }
   }
 }
