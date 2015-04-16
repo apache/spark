@@ -52,7 +52,7 @@ class OptimizeInSuite extends PlanTest {
     val optimized = Optimize(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), HashSet[Any]()+1+2))
+        .where(InSet(UnresolvedAttribute("a"), HashSet[Any]() + 1 + 2))
         .analyze
 
     comparePlans(optimized, correctAnswer)

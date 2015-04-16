@@ -63,7 +63,7 @@ class TimeStampedHashMapSuite extends FunSuite {
     assert(map1.getTimestamp("k1").get < threshTime1)
     assert(map1.getTimestamp("k2").isDefined)
     assert(map1.getTimestamp("k2").get >= threshTime1)
-    map1.clearOldValues(threshTime1) //should only clear k1
+    map1.clearOldValues(threshTime1) // should only clear k1
     assert(map1.get("k1") === None)
     assert(map1.get("k2").isDefined)
   }
@@ -93,7 +93,7 @@ class TimeStampedHashMapSuite extends FunSuite {
     assert(map1.getTimestamp("k1").get < threshTime1)
     assert(map1.getTimestamp("k2").isDefined)
     assert(map1.getTimestamp("k2").get >= threshTime1)
-    map1.clearOldValues(threshTime1) //should only clear k1
+    map1.clearOldValues(threshTime1) // should only clear k1
     assert(map1.get("k1") === None)
     assert(map1.get("k2").isDefined)
   }

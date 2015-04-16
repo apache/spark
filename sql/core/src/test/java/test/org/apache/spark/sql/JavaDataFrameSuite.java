@@ -20,6 +20,8 @@ package test.org.apache.spark.sql;
 import java.io.Serializable;
 import java.util.Arrays;
 
+import scala.collection.Seq;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -127,6 +129,12 @@ public class JavaDataFrameSuite {
       schema.apply("b"));
     Row first = df.select("a", "b").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
-    Assert.assertArrayEquals(bean.getB(), first.<Integer[]>getAs(1));
+    // Now Java lists and maps are converetd to Scala Seq's and Map's. Once we get a Seq below,
+    // verify that it has the expected length, and contains expected elements.
+    Seq<Integer> result = first.getAs(1);
+    Assert.assertEquals(bean.getB().length, result.length());
+    for (int i = 0; i < result.length(); i++) {
+      Assert.assertEquals(bean.getB()[i], result.apply(i));
+    }
   }
 }

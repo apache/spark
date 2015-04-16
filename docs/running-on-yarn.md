@@ -48,9 +48,9 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.am.waitTime</code></td>
-  <td>100000</td>
+  <td>100s</td>
   <td>
-    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    In yarn-cluster mode, time for the application master to wait for the
     SparkContext to be initialized. In yarn-client mode, time for the application master to wait
     for the driver to connect to it.
   </td>
@@ -87,7 +87,8 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.historyServer.address</code></td>
   <td>(none)</td>
   <td>
-    The address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
+    The address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI. 
+    For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For eg, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to `${hadoopconf-yarn.resourcemanager.hostname}:18080`. 
   </td>
 </tr>
 <tr>
@@ -194,6 +195,15 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>
   The maximum number of attempts that will be made to submit the application.
   It should be no larger than the global number of max attempts in the YARN configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.submit.waitAppCompletion</code></td>
+  <td>true</td>
+  <td>
+  In YARN cluster mode, controls whether the client waits to exit until the application completes.
+  If set to true, the client process will stay alive reporting the application's status.
+  Otherwise, the client process will exit after submission.
   </td>
 </tr>
 </table>

@@ -268,7 +268,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
 object EventLoggingListenerSuite {
 
   /** Get a SparkConf with event logging enabled. */
-  def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None) = {
+  def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
@@ -280,5 +280,5 @@ object EventLoggingListenerSuite {
     conf
   }
 
-  def getUniqueApplicationId = "test-" + System.currentTimeMillis
+  def getUniqueApplicationId: String = "test-" + System.currentTimeMillis
 }

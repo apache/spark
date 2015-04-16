@@ -32,7 +32,8 @@ import org.apache.spark._
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+class UISeleniumSuite
+  extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 
@@ -74,6 +75,17 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
         statisticText should contain("Network receivers:")
         statisticText should contain("Batch interval:")
+
+        val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
+        h4Text should contain("Active Batches (0)")
+        h4Text should contain("Completed Batches (last 0 out of 0)")
+
+        findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
+          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Status")
+        }
+        findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
+          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Total Delay")
+        }
       }
 
       ssc.stop(false)
