@@ -24,7 +24,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.scheduler.{RateLimiter, ReceivedBlockInfo}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -41,6 +41,9 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   /** This is an unique identifier for the receiver input stream. */
   val id = ssc.getNewReceiverStreamId()
+
+  protected val receiverRateLimiter = RateLimiter.createReceiverRateLimiter(
+    ssc.conf, isDriver = true, id, ssc_)
 
   /**
    * Gets the receiver object that will be sent to the worker nodes

@@ -90,6 +90,8 @@ private[streaming] class ReceiverSupervisorImpl(
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
+        case UpdatedDynamicRate(rate) =>
+          blockGenerator.receiverRateLimiter.remoteUpdateDynamicRate(rate)
       }
 
       def ref: ActorRef = self
