@@ -49,10 +49,20 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize =
-    (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
+  private val bufferSizeMb = conf.getDouble("spark.kryoserializer.buffer.mb", 0.064)
+  if (bufferSizeMb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.mb must be less than " +
+      s"2048 mb, got: + $bufferSizeMb mb.")
+  }
+  private val bufferSize = (bufferSizeMb * 1024 * 1024).toInt
 
-  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
+  val maxBufferSizeMb = conf.getInt("spark.kryoserializer.buffer.max.mb", 64)
+  if (maxBufferSizeMb >= 2048) {
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.max.mb must be less than " +
+      s"2048 mb, got: + $maxBufferSizeMb mb.")
+  }
+  private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
+
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val userRegistrator = conf.getOption("spark.kryo.registrator")

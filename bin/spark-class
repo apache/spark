@@ -82,13 +82,22 @@ if [ $(command -v "$JAR_CMD") ] ; then
   fi
 fi
 
+LAUNCH_CLASSPATH="$SPARK_ASSEMBLY_JAR"
+
+# Add the launcher build dir to the classpath if requested.
+if [ -n "$SPARK_PREPEND_CLASSES" ]; then
+  LAUNCH_CLASSPATH="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
+fi
+
+export _SPARK_ASSEMBLY="$SPARK_ASSEMBLY_JAR"
+
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$SPARK_ASSEMBLY_JAR" org.apache.spark.launcher.Main "$@")
+done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
 
 if [ "${CMD[0]}" = "usage" ]; then
   "${CMD[@]}"

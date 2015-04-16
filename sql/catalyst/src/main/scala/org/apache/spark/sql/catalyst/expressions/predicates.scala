@@ -179,8 +179,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
       val r = right.eval(input)
       if (r == null) null
       else if (left.dataType != BinaryType) l == r
-      else BinaryType.ordering.compare(
-        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 }

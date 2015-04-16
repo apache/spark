@@ -18,11 +18,8 @@
 package org.apache.spark.sql
 
 import java.sql.{Connection, DriverManager, PreparedStatement}
-import org.apache.spark.{Logging, Partition}
-import org.apache.spark.sql._
-import org.apache.spark.sql.sources.LogicalRelation
 
-import org.apache.spark.sql.jdbc.{JDBCPartitioningInfo, JDBCRelation, JDBCPartition}
+import org.apache.spark.Logging
 import org.apache.spark.sql.types._
 
 package object jdbc {
