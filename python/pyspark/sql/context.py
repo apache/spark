@@ -34,6 +34,12 @@ try:
 except ImportError:
     has_pandas = False
 
+try:
+    from pyspark.sql.types import _numpy_to_python_converter
+    has_numpy = True
+except ImportError:
+    has_numpy = False
+
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 
 
@@ -302,6 +308,11 @@ class SQLContext(object):
 
         for row in rows:
             _verify_type(row, schema)
+
+        if has_numpy:
+            # convert numpy values to python values
+            converter = _numpy_to_python_converter(schema)
+            rdd = rdd.map(converter)
 
         # convert python objects to sql data
         converter = _python_to_sql_converter(schema)
