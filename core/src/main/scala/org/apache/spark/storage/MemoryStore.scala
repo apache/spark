@@ -399,6 +399,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Try to put in a set of values, if we can free up enough space. The value should either be
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
    * must also be passed by the caller.
+   * 
+   * `value` will be lazily created. If it cannot be put into MemoryStore or disk, `value` won't be
+   * created to avoid OOM since it may be a big ByteBuffer.
    *
    * The tryToPut operation is processed in parallel like Unroll process. In most case, the free
    * memory are ready for tryToPut after Unroll.
@@ -408,7 +411,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   private def tryToPut(
       blockId: BlockId,
-      value: Any,
+      value: () => Any,
       size: Long,
       deserialized: Boolean): ResultWithDroppedBlocks = {
 
@@ -441,7 +444,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         cleanToDropBlocksMapForThisThread()
       }
       
-      val entry = new MemoryEntry(value, size, deserialized)
+      val entry = new MemoryEntry(value(), size, deserialized)
       entries.synchronized {
         entries.put(blockId, entry)
         decreaseTryToPutMemoryForThisThread(size)
@@ -461,12 +464,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       cleanToDropBlocksMapForThisThread()
       // Tell the block manager that we couldn't put it in memory so that it can drop it to
       // disk if the block allows disk storage.
-      val data = if (deserialized) {
-        Left(value.asInstanceOf[Array[Any]])
+      lazy val data = if (deserialized) {
+        Left(value().asInstanceOf[Array[Any]])
       } else {
-        Right(value.asInstanceOf[ByteBuffer].duplicate())
+        Right(value().asInstanceOf[ByteBuffer].duplicate())
       }
-      val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
+      val droppedBlockStatus = blockManager.dropFromMemory(blockId, () => data)
       droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
     }
     ResultWithDroppedBlocks(putSuccess, droppedBlocks)
@@ -657,7 +660,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * the memory.
    */
   def currentUnrollMemory: Long = accountingLock.synchronized {
-    unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
+    unrollMemoryMap.values.sum
   }
 
   /**
