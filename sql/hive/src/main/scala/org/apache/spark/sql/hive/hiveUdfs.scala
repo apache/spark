@@ -512,7 +512,8 @@ private[hive] case class HiveGenericUdaf2(
     val annotation = evaluator.getClass().getAnnotation(classOf[HiveUDFType])
     if (annotation == null || !annotation.distinctLike()) false else true
   }
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String =
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 
   // Aggregation Buffer Data Type, We assume only 1 element for the Hive Aggregation Buffer
   // It will be StructType if more than 1 element (Actually will be StructSettableObjectInspector)
@@ -526,7 +527,7 @@ private[hive] case class HiveGenericUdaf2(
   ///////////////////////////////////////////////////////////////////////////////////////////////
   @transient var bound: BoundReference = _
 
-  override def initialize(buffers: Seq[BoundReference]) = {
+  override def initialize(buffers: Seq[BoundReference]): Unit = {
     bound = buffers(0)
     mode match {
       case FINAL => evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(bufferObjectInspector))

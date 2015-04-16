@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.aggregate2
 import java.util.{HashSet=>JHashSet, Set=>JSet}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate2._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
@@ -123,8 +124,9 @@ case class AggregatePreShuffle(
     BindReferences.bindReference(_, childOutput)
   }
 
-  override def requiredChildDistribution = UnspecifiedDistribution :: Nil
-  override def output = bufferSchema(aggregateExpressions) ++ groupingExpressions.map(_.toAttribute)
+  override def requiredChildDistribution: Seq[Distribution] = UnspecifiedDistribution :: Nil
+  override def output: Seq[Attribute] =
+    bufferSchema(aggregateExpressions) ++ groupingExpressions.map(_.toAttribute)
 
   /**
    * Create Iterator for the in-memory hash map.
@@ -151,7 +153,7 @@ case class AggregatePreShuffle(
     }
   }
 
-  override def execute() = attachTree(this, "execute") {
+  override def execute(): RDD[Row] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // the input is every single row
       val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
@@ -203,7 +205,7 @@ case class AggregatePostShuffle(
     rewrittenProjection: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with PostShuffle {
 
-  override def output = rewrittenProjection.map(_.toAttribute)
+  override def output: Seq[Attribute] = rewrittenProjection.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = if (groupingExpressions == Nil) {
     AllTuples :: Nil
@@ -211,7 +213,7 @@ case class AggregatePostShuffle(
     ClusteredDistribution(groupingExpressions) :: Nil
   }
 
-  override def execute() = attachTree(this, "execute") {
+  override def execute(): RDD[Row] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // The input Row in the format of (AggregateBuffers + GroupingExpression Values)
       val aggregates = initializedAndGetAggregates(FINAL, computedAggregates(rewrittenProjection))
@@ -268,7 +270,7 @@ case class DistinctAggregate(
     rewrittenProjection: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with PostShuffle {
 
-  override def output = rewrittenProjection.map(_.toAttribute)
+  override def output: Seq[Attribute] = rewrittenProjection.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = if (groupingExpressions == Nil) {
     AllTuples :: Nil
@@ -281,7 +283,7 @@ case class DistinctAggregate(
     BindReferences.bindReference(_, childOutput)
   }
 
-  override def execute() = attachTree(this, "execute") {
+  override def execute(): RDD[Row] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // initialize the aggregate functions for input rows (update/terminatePartial will be called)
       val aggregates =

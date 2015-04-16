@@ -150,7 +150,11 @@ object AggregateExpressionSubsitution extends AggregateExpressionSubsitution
  */
 object PartialAggregation2 {
   type ReturnType =
-  (Seq[NamedExpression], Seq[aggregate2.AggregateExpression2], Seq[NamedExpression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression],
+     Seq[aggregate2.AggregateExpression2],
+     Seq[NamedExpression],
+     Seq[NamedExpression],
+     LogicalPlan)
 
   def unapply(plan: LogicalPlan)
   : Option[ReturnType] = plan match {

@@ -512,10 +512,10 @@ case class First(child: Expression, distinct: Boolean = false)
 
 case class Last(child: Expression, distinct: Boolean = false)
   extends UnaryAggregateExpression {
-  override def nullable = true
-  override def dataType = child.dataType
+  override def nullable: Boolean = true
+  override def dataType: DataType = child.dataType
   override def bufferDataType: Seq[DataType] = dataType :: Nil
-  override def toString = s"LAST($child)"
+  override def toString: String = s"LAST($child)"
 
   /* The below code will be called in executors, be sure to mark the instance as transient */
   @transient var aggr: BoundReference = _
