@@ -32,6 +32,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
@@ -108,6 +110,16 @@ sealed trait Vector extends Serializable {
    *          with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Double) => Unit)
+
+  /**
+   * Applies a function `f` to all the active elements of dense and sparse vector and returns a Vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   * @return Vector of the same length with each active element transformed using f.
+   */
+  private[spark] def mapActive(f: (Int, Double) => (Int, Double)):Vector
 }
 
 /**
@@ -501,6 +513,19 @@ class DenseVector(val values: Array[Double]) extends Vector {
       i += 1
     }
   }
+
+  private[spark] def mapActive(f: (Int, Double) => (Int, Double)):Vector = {
+    var i = 0
+    val localValuesSize = values.size
+    val localValues = values
+    val outValues = new Array[Double](localValuesSize)
+
+    while (i < localValuesSize) {
+      outValues(i) = f(i, localValues(i))._2
+      i += 1
+    }
+    new DenseVector(outValues)
+  }
 }
 
 object DenseVector {
@@ -555,6 +580,25 @@ class SparseVector(
       f(localIndices(i), localValues(i))
       i += 1
     }
+  }
+
+  private[spark] def mapActive(f: (Int, Double) => (Int, Double)):Vector = {
+    var i = 0
+    val localValuesSize = values.size
+    val localIndices = indices
+    val localValues = values
+    var outIndices = new ArrayBuffer[Int]()
+    var outValues = new ArrayBuffer[Double]()
+
+    while (i < localValuesSize) {
+      val result = f(localIndices(i), localValues(i))
+      if(result._2 != 0.0) {
+        outIndices += result._1
+        outValues += result._2
+      }
+      i += 1
+    }
+    new SparseVector(size = size, outIndices.toArray, outValues.toArray)
   }
 }
 

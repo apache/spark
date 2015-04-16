@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, SVMWithSGD}
+import org.apache.spark.mllib.classification.{DropoutLogisticRegressionWithSGD, LogisticRegressionWithLBFGS, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
@@ -38,7 +38,7 @@ object BinaryClassification {
 
   object Algorithm extends Enumeration {
     type Algorithm = Value
-    val SVM, LR = Value
+    val SVM, LR, LRDropout = Value
   }
 
   object RegType extends Enumeration {
@@ -53,6 +53,7 @@ object BinaryClassification {
       input: String = null,
       numIterations: Int = 100,
       stepSize: Double = 1.0,
+      dropoutRate: Double = 0.5,
       algorithm: Algorithm = LR,
       regType: RegType = L2,
       regParam: Double = 0.01) extends AbstractParams[Params]
@@ -69,6 +70,9 @@ object BinaryClassification {
         .text("initial step size (ignored by logistic regression), " +
           s"default: ${defaultParams.stepSize}")
         .action((x, c) => c.copy(stepSize = x))
+      opt[Double]("dropoutRate")
+        .text("dropout probability (only used in logistic regression with dropout), ")
+        .action((x, c) => c.copy(dropoutRate = x))
       opt[String]("algorithm")
         .text(s"algorithm (${Algorithm.values.mkString(",")}), " +
         s"default: ${defaultParams.algorithm}")
@@ -130,6 +134,14 @@ object BinaryClassification {
         algorithm.optimizer
           .setNumIterations(params.numIterations)
           .setUpdater(updater)
+          .setRegParam(params.regParam)
+        algorithm.run(training).clearThreshold()
+      case LRDropout =>
+        val algorithm = new DropoutLogisticRegressionWithSGD()
+        algorithm.optimizer
+          .setNumIterations(params.numIterations)
+          .setUpdater(updater)
+          .setDropoutRate(params.dropoutRate)
           .setRegParam(params.regParam)
         algorithm.run(training).clearThreshold()
       case SVM =>

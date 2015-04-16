@@ -228,6 +228,60 @@ class LogisticRegressionWithSGD private[mllib] (
 }
 
 /**
+ * Train a classification model for Binary Logistic Regression
+ * using Stochastic Gradient Descent with drop-out logistic regression. By default L2 regularization is used,
+ * which can be changed via [[LogisticRegressionWithSGD.optimizer]].
+ * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
+ * for k classes multi-label classification problem.
+ * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
+ */
+class DropoutLogisticRegressionWithSGD private[mllib] (
+    private var stepSize: Double,
+    private var dropoutRate: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
+  extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
+
+  private val gradient = new DropoutLogisticGradient(dropoutRate)
+  private val updater = new SquaredL2Updater()
+  override val optimizer =
+    new GradientDescent(gradient, updater){
+      // Override optimize to scale the weights of the output with dropout probability.
+      override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
+        val weights = super.optimize(data, initialWeights)
+        weights.mapActive((idx:Int,value:Double) => (idx,value * dropoutRate))
+      }
+
+      private var dropoutRate: Double = 0.5
+
+      /**
+       * Set the dropout rate. Default 0.5.
+       */
+      def setDropoutRate(p: Double): this.type = {
+        this.dropoutRate = p
+        this
+      }
+    }
+    .setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setRegParam(regParam)
+    .setMiniBatchFraction(miniBatchFraction)
+  override protected val validators = List(DataValidators.binaryLabelValidator)
+
+
+  /**
+   * Construct a LogisticRegression object with default parameters: {stepSize: 1.0,
+   * dropoutRate: 0.5, numIterations: 100, regParm: 0.01, miniBatchFraction: 1.0}.
+   */
+  def this() = this(1.0, 0.5, 100, 0.01, 1.0)
+
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
+    new LogisticRegressionModel(weights, intercept)
+  }
+}
+
+/**
  * Top-level methods for calling Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
@@ -261,6 +315,32 @@ object LogisticRegressionWithSGD {
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size and dropout rate. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
+   * gradient descent are initialized using the initial weights provided.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param dropoutRate Dropout probability of the Bernoulli distribution used to drop features randomly.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   */
+  def trainWithDropout(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      dropoutRate: Double,
+      miniBatchFraction: Double,
+      initialWeights: Vector): LogisticRegressionModel = {
+    new DropoutLogisticRegressionWithSGD(stepSize, dropoutRate, numIterations, 0.0, miniBatchFraction)
+      .run(input, initialWeights)
+  }
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    * NOTE: Labels used in Logistic Regression should be {0, 1}
@@ -277,6 +357,28 @@ object LogisticRegressionWithSGD {
       stepSize: Double,
       miniBatchFraction: Double): LogisticRegressionModel = {
     new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
+      .run(input)
+  }
+
+  /**
+   * Train a logistic regression model with dropout given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size and dropout rate. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param dropoutRate Dropout probability of the Bernoulli distribution used to drop features randomly.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   */
+  def trainWithDropout(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      dropoutRate: Double,
+      miniBatchFraction: Double): LogisticRegressionModel = {
+    new DropoutLogisticRegressionWithSGD(stepSize, dropoutRate, numIterations, 0.0, miniBatchFraction)
       .run(input)
   }
 
@@ -301,6 +403,27 @@ object LogisticRegressionWithSGD {
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size and dropout rate. We use the entire data
+   * set to update the gradient in each iteration.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param stepSize Step size to be used for each iteration of Gradient Descent.
+   * @param dropoutRate Dropout probability of the Bernoulli distribution used to drop features randomly.
+
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a LogisticRegressionModel which has the weights and offset from training.
+   */
+  def trainWithDropout(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      dropoutRate: Double): LogisticRegressionModel = {
+    trainWithDropout(input, numIterations, stepSize, dropoutRate, 1.0)
+  }
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using a step size of 1.0. We use the entire data set
    * to update the gradient in each iteration.
    * NOTE: Labels used in Logistic Regression should be {0, 1}
@@ -314,6 +437,23 @@ object LogisticRegressionWithSGD {
       numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
   }
+
+  /**
+   * Train a logistic regression model with dropout given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using a step size of 1.0 and dropout rate 0.5. We use the entire data set
+   * to update the gradient in each iteration.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a LogisticRegressionModel which has the weights and offset from training.
+   */
+  def trainWithDropout(
+      input: RDD[LabeledPoint],
+      numIterations: Int): LogisticRegressionModel = {
+    trainWithDropout(input, numIterations, 1.0, 0.5, 1.0)
+  }
+
 }
 
 /**
