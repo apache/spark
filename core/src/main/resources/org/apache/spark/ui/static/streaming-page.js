@@ -15,106 +15,180 @@
  * limitations under the License.
  */
 
-function drawTimeline(id, data, unit) {
-    var margin = {top: 20, right: 20, bottom: 70, left: 50};
+
+// An invisible div to show details of a point in the graph
+var graphTooltip = d3.select("body").append("div")
+    .style("position", "absolute")
+    .style("z-index", "10")
+    .style("visibility", "hidden")
+    .text("a simple tooltip");
+
+// Show "text" at location (x, y)
+function showGraphTooltip(text, x, y) {
+    graphTooltip.style("visibility", "visible")
+        .style("top", x + "px")
+        .style("left", y + "px")
+        .text(text);
+}
+
+// Hide "graphTooltip"
+function hideGraphTooltip() {
+    graphTooltip.style("visibility", "hidden");
+}
+
+/**
+ * @param id the `id` used in the html `div` tag
+ * @param data the data for the timeline graph
+ * @param minY the min value of Y axis
+ * @param maxY the max value of Y axis
+ * @param unitY the unit of Y axis
+ */
+function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
+    var margin = {top: 20, right: 30, bottom: 30, left: 50};
     var width = 500 - margin.left - margin.right;
-    var height = 250 - margin.top - margin.bottom;
+    var height = 150 - margin.top - margin.bottom;
 
-    var x = d3.time.scale().range([0, width]);
-    var y = d3.scale.linear().range([height, 0]);
+    var x = d3.time.scale().domain([minX, maxX]).range([0, width]);
+    var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(d3.time.format("%H:%M:%S"));
-    var yAxis = d3.svg.axis().scale(y).orient("left");
+    var timeFormat = d3.time.format("%H:%M:%S")
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(timeFormat);
+    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
 
     var line = d3.svg.line()
         .x(function(d) { return x(new Date(d.x)); })
         .y(function(d) { return y(d.y); });
 
     var svg = d3.select(id).append("svg")
-                .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-                .append("g")
-                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    x.domain(d3.extent(data, function(d) { return d.x; }));
-    y.domain(d3.extent(data, function(d) { return d.y; }));
-
-    svg.append("g")
-      .attr("class", "x axis")
-      .attr("transform", "translate(0," + height + ")")
-      .call(xAxis)
-      .selectAll("text")
-        .style("text-anchor", "end")
-        .attr("dx", "-.8em")
-        .attr("dy", ".15em")
-        .attr("transform", "rotate(-65)");
+    // Only show the first and last time in the graph
+    xAxis.tickValues(x.domain());
 
     svg.append("g")
-      .attr("class", "y axis")
-      .call(yAxis)
-    .append("text")
-      .attr("x", 25)
-      .attr("y", -5)
-      .attr("dy", ".71em")
-      .style("text-anchor", "end")
-      .text(unit);
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(xAxis)
+
+    svg.append("g")
+        .attr("class", "y axis")
+        .call(yAxis)
+        .append("text")
+            .text(unitY);
 
     svg.append("path")
-      .datum(data)
-      .attr("class", "line")
-      .attr("d", line);
+        .datum(data)
+        .attr("class", "line")
+        .attr("d", line);
+
+    // Add points to the line. However, we make it invisible at first. But when the user moves mouse
+    // over a point, it will be displayed with its detail.
+    svg.selectAll(".point")
+        .data(data)
+        .enter().append("circle")
+                    .attr("stroke", "white") // white and opacity = 0 make it invisible
+                    .attr("fill", "white")
+                    .attr("opacity", "0")
+                    .attr("cx", function(d) { return x(d.x); })
+                    .attr("cy", function(d) { return y(d.y); })
+                    .attr("r", function(d) { return 3; })
+                    .on('mouseover', function(d) {
+                        var tip = d.y + " " + unitY + " at " + timeFormat(new Date(d.x));
+                        showGraphTooltip(tip, event.pageY-25, event.pageX);
+                        // show the point
+                        d3.select(this)
+                            .attr("stroke", "steelblue")
+                            .attr("fill", "steelblue")
+                            .attr("opacity", "1");
+                    })
+                    .on('mouseout',  function() {
+                        hideGraphTooltip();
+                        // hide the point
+                        d3.select(this)
+                            .attr("stroke", "white")
+                            .attr("fill", "white")
+                            .attr("opacity", "0");
+                    });
 }
 
-function drawDistribution(id, values, unit) {
-    var margin = {top: 10, right: 30, bottom: 30, left: 50};
-    var width = 500 - margin.left - margin.right;
-    var height = 250 - margin.top - margin.bottom;
+/**
+ * @param id the `id` used in the html `div` tag
+ * @param data the data for the distribution graph
+ * @param minY the min value of Y axis
+ * @param maxY the max value of Y axis
+ * @param unitY the unit of Y axis
+ */
+function drawDistribution(id, values, minY, maxY, unitY) {
+    var margin = {top: 20, right: 30, bottom: 30, left: 50};
+    var width = 300 - margin.left - margin.right;
+    var height = 150 - margin.top - margin.bottom;
 
-    var y = d3.scale.linear()
-        .domain(d3.extent(values, function(d) { return d; }))
-        .range([height, 0]);
-    var data = d3.layout.histogram().bins(y.ticks(10))(values);
-    console.log(values)
-    console.log(data)
-    var barHeight = height / data.length
+    var binCount = values.length > 100 ? 100 : values.length;
+    var formatBinValue = d3.format(",.2f");
+
+    var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
+    var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
 
     var x = d3.scale.linear()
         .domain([0, d3.max(data, function(d) { return d.y; })])
         .range([0, width]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom");
-    var yAxis = d3.svg.axis().scale(y).orient("left");
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(5);
+    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
+
+    var line = d3.svg.line()
+        .x(function(d) { return x(d.y); })
+        .y(function(d) { return y(d.x); });
 
     var svg = d3.select(id).append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
-    var bar = svg.selectAll(".bar")
-        .data(data)
-      .enter().append("g")
-        .attr("class", "bar")
-
-    bar.append("rect")
-        .attr("x", 1)
-        .attr("y", function(d) { return y(d.x) - margin.bottom + margin.top; })
-        .attr("width", function(d) { return x(d.y); })
-        .attr("height", function(d) { return (height - margin.bottom) / data.length; });
-
-    bar.append("text")
-        .attr("dy", ".75em")
-        .attr("x", function(d) { return x(d.y) + 10; })
-        .attr("y", function(d) { return y(d.x) + 16 - margin.bottom; })
-        .attr("text-anchor", "middle")
-        .text(function(d) { return d.y; });
+        .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
     svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0," + height + ")")
-        .call(xAxis);
+        .call(xAxis)
 
     svg.append("g")
         .attr("class", "y axis")
-        .call(yAxis);
+        .call(yAxis)
+        .append("text")
+            .text(unitY);
+
+    svg.append("path")
+        .datum(data)
+        .attr("class", "line")
+        .attr("d", line);
+
+    // Add points to the line. However, we make it invisible at first. But when the user moves mouse
+    // over a point, it will be displayed with its detail.
+    svg.selectAll(".point")
+        .data(data)
+        .enter().append("circle")
+                    .attr("stroke", "white")  // white and opacity = 0 make it invisible
+                    .attr("fill", "white")
+                    .attr("opacity", "0")
+                    .attr("cx", function(d) { return x(d.y); })
+                    .attr("cy", function(d) { return y(d.x); })
+                    .attr("r", function(d) { return 3; })
+                    .on('mouseover', function(d) {
+                        var tip = "[" + formatBinValue(d.x) + ", " + formatBinValue(d.x + d.dx) + "): " + d.y;
+                        showGraphTooltip(tip, event.pageY, event.pageX + 10);
+                        d3.select(this)
+                            .attr("stroke", "steelblue")
+                            .attr("fill", "steelblue")
+                            .attr("opacity", "1");
+                    })
+                    .on('mouseout',  function() {
+                        hideGraphTooltip();
+                        d3.select(this)
+                            .attr("stroke", "white")
+                            .attr("fill", "white")
+                            .attr("opacity", "0");
+                    });
 }

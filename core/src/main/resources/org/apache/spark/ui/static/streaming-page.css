@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 .graph {
   font: 10px sans-serif;
 }
@@ -25,17 +26,12 @@
   shape-rendering: crispEdges;
 }
 
+.axis text {
+  fill: gray;
+}
+
 .line {
   fill: none;
   stroke: steelblue;
   stroke-width: 1.5px;
-}
-
-.bar rect {
-  fill: steelblue;
-  shape-rendering: crispEdges;
-}
-
-.bar text {
-  fill: #000;
 }

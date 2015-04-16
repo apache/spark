@@ -34,7 +34,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
   private val completedBatchInfos = new Queue[BatchInfo]
-  private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
+  private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
@@ -170,7 +170,11 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
 
-  def allReceivedRecordsWithBatchTime: Seq[(Long, Double)] = synchronized {
+  /**
+   * Return event rate for all receivers together in each batch time. These are pairs of
+   * an event rate with a batch time.
+   */
+  def eventRateForAllReceivers: Seq[(Long, Double)] = synchronized {
     retainedBatches.take(batchInfoLimit).map { batchInfo =>
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords.toDouble * 1000 / batchDuration)
     }
@@ -203,7 +207,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     retainedBatches.lastOption
   }
 
-  private def retainedBatches: Seq[BatchInfo] = {
+  def retainedBatches: Seq[BatchInfo] = {
     (waitingBatchInfos.values.toSeq ++
       runningBatchInfos.values.toSeq ++ completedBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }

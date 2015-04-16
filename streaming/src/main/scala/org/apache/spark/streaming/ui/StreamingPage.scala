@@ -17,17 +17,67 @@
 
 package org.apache.spark.streaming.ui
 
-import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.Time
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.util.Distribution
+
+/**
+ * @param divId the `id` used in the html `div` tag
+ * @param data the data for the timeline graph
+ * @param minY the min value of Y axis
+ * @param maxY the max value of Y axis
+ * @param unitY the unit of Y axis
+ */
+private[ui] case class TimelineUIData(divId: String, data: Seq[(Long, _)], minX: Long, maxX: Long,
+    minY: Long, maxY: Long, unitY: String) {
+
+  def toHtmlAndJs: (Seq[Node], String) = {
+    val jsForData = data.map { case (x, y) =>
+      s"""{"x": $x, "y": $y}"""
+    }.mkString("[", ",", "]")
+
+    (<div id={divId}></div>,
+      s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
+  }
+}
+
+/**
+ * @param divId the `id` used in the html `div` tag
+ * @param data the data for the distribution graph
+ * @param minY the min value of Y axis
+ * @param maxY the max value of Y axis
+ * @param unitY the unit of Y axis
+ */
+private[ui] case class DistributionUIData(
+    divId: String, data: Seq[_], minY: Long, maxY: Long, unitY: String) {
+
+  def toHtmlAndJs: (Seq[Node], String) = {
+    val jsForData = data.mkString("[", ",", "]")
+
+    (<div id={divId}></div>,
+      s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY');")
+  }
+}
+
+private[ui] case class LongStreamingUIData(data: Seq[(Long, Long)]) {
+
+  val avg: Option[Long] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
+
+  val max: Option[Long] = if (data.isEmpty) None else Some(data.map(_._2).max)
+}
+
+private[ui] case class DoubleStreamingUIData(data: Seq[(Long, Double)]) {
+
+  val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
+
+  val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
+}
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
@@ -41,12 +91,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content = listener.synchronized {
-      generateLoadResources() ++
-      generateBasicStats() ++
-      generateStatTable() ++
-      generateBatchListTables()
-    }
+    val resources = generateLoadResources()
+    val basicInfo = generateBasicInfo()
+    val content = resources ++
+      basicInfo ++
+      listener.synchronized {
+        generateStatTable() ++
+          generateBatchListTables()
+      }
     UIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
   }
 
@@ -58,8 +110,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // scalastyle:on
   }
 
-  /** Generate basic stats of the streaming program */
-  private def generateBasicStats(): Seq[Node] = {
+  /** Generate basic information of the streaming program */
+  private def generateBasicInfo(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime
     <div>Running batches of
       <strong>
@@ -77,31 +129,127 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   private def generateStatTable(): Seq[Node] = {
-    val avgSchedulingDelay = listener.schedulingDelayDistribution.map(_.statCounter.mean.toLong)
-    val avgProcessingTime = listener.processingDelayDistribution.map(_.statCounter.mean.toLong)
-    val avgTotalDelay = listener.totalDelayDistribution.map(_.statCounter.mean.toLong)
-    val avgReceiverEvents =
-      listener.receivedRecordsDistributions.mapValues(_.map(_.statCounter.mean.toLong))
-    val avgAllReceiverEvents = avgReceiverEvents.values.flatMap(x => x).sum
-    val receivedRecords = listener.allReceivedRecordsWithBatchTime
+    val batchInfos = listener.retainedBatches
 
-    val completedBatches = listener.retainedCompletedBatches
-    val processingTime = completedBatches.
-      flatMap(batchInfo => batchInfo.processingDelay.map(batchInfo.batchTime.milliseconds -> _)).
-      sortBy(_._1)
-    val schedulingDelay = completedBatches.
-      flatMap(batchInfo => batchInfo.schedulingDelay.map(batchInfo.batchTime.milliseconds -> _)).
-      sortBy(_._1)
-    val totalDelay = completedBatches.
-      flatMap(batchInfo => batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)).
-      sortBy(_._1)
+    val batchTimes = batchInfos.map(_.batchTime.milliseconds)
+    val minBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.min
+    val maxBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.max
+
+    val eventRateForAllReceivers = DoubleStreamingUIData(batchInfos.map { batchInfo =>
+      (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)
+    })
+
+    val schedulingDelay = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+      batchInfo.schedulingDelay.map(batchInfo.batchTime.milliseconds -> _)
+    })
+    val processingTime = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+      batchInfo.processingDelay.map(batchInfo.batchTime.milliseconds -> _)
+    })
+    val totalDelay = LongStreamingUIData(batchInfos.flatMap { batchInfo =>
+      batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)
+    })
+
     val jsCollector = ArrayBuffer[String]()
+
+    // Use the max value of "schedulingDelay", "processingTime", and "totalDelay" to make the
+    // Y axis ranges same.
+    val maxTime =
+      (for (m1 <- schedulingDelay.max; m2 <- processingTime.max; m3 <- totalDelay.max) yield
+        m1 max m2 max m3).getOrElse(0L)
+    List(1, 2, 3).sum
+    // Should start at 0
+    val minTime = 0L
+
+    // Use the max input rate for all receivers' graphs to make the Y axis ranges same.
+    // If it's not an integral number, just use its ceil integral number.
+    val maxEventRate = eventRateForAllReceivers.max.map(_.ceil.toLong).getOrElse(0L)
+    val minEventRate = 0L
 
     val triangleJs =
       s"""$$('#inputs-table').toggle('collapsed');
          |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML')
          |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');
          |else $$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');""".stripMargin.replaceAll("\\n", "")
+
+    val timelineDataForEventRateOfAllReceivers =
+      TimelineUIData(
+        "all-receiver-events-timeline",
+        eventRateForAllReceivers.data,
+        minBatchTime,
+        maxBatchTime,
+        minEventRate,
+        maxEventRate,
+        "events/sec").toHtmlAndJs
+    jsCollector += timelineDataForEventRateOfAllReceivers._2
+
+    val distributionDataForEventRateOfAllReceivers =
+      DistributionUIData(
+        "all-receiver-events-distribution",
+        eventRateForAllReceivers.data.map(_._2),
+        minEventRate,
+        maxEventRate,
+        "events/sec").toHtmlAndJs
+    jsCollector += distributionDataForEventRateOfAllReceivers._2
+
+    val timelineDataForSchedulingDelay =
+      TimelineUIData(
+        "scheduling-delay-timeline",
+        schedulingDelay.data,
+        minBatchTime,
+        maxBatchTime,
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += timelineDataForSchedulingDelay._2
+
+    val distributionDataForSchedulingDelay =
+      DistributionUIData(
+        "scheduling-delay-distribution",
+        schedulingDelay.data.map(_._2),
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += distributionDataForSchedulingDelay._2
+
+    val timelineDataForProcessingTime =
+      TimelineUIData(
+        "processing-time-timeline",
+        processingTime.data,
+        minBatchTime,
+        maxBatchTime,
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += timelineDataForProcessingTime._2
+
+    val distributionDataForProcessingTime =
+      DistributionUIData(
+        "processing-time-distribution",
+        processingTime.data.map(_._2),
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += distributionDataForProcessingTime._2
+
+    val timelineDataForTotalDelay =
+      TimelineUIData(
+        "total-delay-timeline",
+        totalDelay.data,
+        minBatchTime,
+        maxBatchTime,
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += timelineDataForTotalDelay._2
+
+    val distributionDataForTotalDelay =
+      DistributionUIData(
+        "total-delay-distribution",
+        totalDelay.data.map(_._2),
+        minTime,
+        maxTime,
+        "ms").toHtmlAndJs
+    jsCollector += distributionDataForTotalDelay._2
 
     val table =
       // scalastyle:off
@@ -111,44 +259,44 @@ private[ui] class StreamingPage(parent: StreamingTab)
       </thead>
       <tbody>
         <tr>
-          <td>
+          <td style="vertical-align: middle;">
             <div>
               <span onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
               <strong>Input Rate</strong>
             </div>
-            <div>Avg: {avgAllReceiverEvents} events/sec</div>
+            <div>Avg: {eventRateForAllReceivers.avg.map(_.formatted("%.2f")).getOrElse(emptyCell)} events/sec</div>
           </td>
-          <td>{generateTimeline(jsCollector, "all-receiver-events-timeline", receivedRecords, "#")}</td>
-          <td>{generateDistribution(jsCollector, "all-receiver-events-distribution", receivedRecords.map(_._2), "#")}</td>
+          <td>{timelineDataForEventRateOfAllReceivers._1}</td>
+          <td>{distributionDataForEventRateOfAllReceivers._1}</td>
         </tr>
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-          {generateInputReceiversTable(jsCollector)}
+          {generateInputReceiversTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
           </td>
         </tr>
         <tr>
-          <td>
-            <div><strong>Processing Time</strong></div>
-            <div>Avg: {formatDurationOption(avgProcessingTime)}</div>
-          </td>
-          <td>{generateTimeline(jsCollector, "processing-time-timeline", processingTime, "ms")}</td>
-          <td>{generateDistribution(jsCollector, "processing-time-distribution", processingTime.map(_._2), "ms")}</td>
-        </tr>
-        <tr>
-          <td>
+          <td style="vertical-align: middle;">
             <div><strong>Scheduling Delay</strong></div>
-            <div>Avg: {formatDurationOption(avgSchedulingDelay)}</div>
+            <div>Avg: {formatDurationOption(schedulingDelay.avg)}</div>
           </td>
-          <td>{generateTimeline(jsCollector, "scheduling-delay-timeline", schedulingDelay, "ms")}</td>
-          <td>{generateDistribution(jsCollector, "scheduling-delay-distribution", schedulingDelay.map(_._2), "ms")}</td>
+          <td>{timelineDataForSchedulingDelay._1}</td>
+          <td>{distributionDataForSchedulingDelay._1}</td>
         </tr>
         <tr>
-          <td>
-            <div><strong>Total Delay</strong></div>
-            <div>Avg: {formatDurationOption(avgTotalDelay)}</div>
+          <td style="vertical-align: middle;">
+            <div><strong>Processing Time</strong></div>
+            <div>Avg: {formatDurationOption(processingTime.avg)}</div>
           </td>
-          <td>{generateTimeline(jsCollector, "total-delay-timeline", totalDelay, "ms")}</td>
-          <td>{generateDistribution(jsCollector, "total-delay-distribution", totalDelay.map(_._2), "ms")}</td>
+          <td>{timelineDataForProcessingTime._1}</td>
+          <td>{distributionDataForProcessingTime._1}</td>
+        </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div><strong>Total Delay</strong></div>
+            <div>Avg: {formatDurationOption(totalDelay.avg)}</div>
+          </td>
+          <td>{timelineDataForTotalDelay._1}</td>
+          <td>{distributionDataForTotalDelay._1}</td>
         </tr>
       </tbody>
     </table>
@@ -162,9 +310,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
     table ++ <script>{Unparsed(js)}</script>
   }
 
-  private def generateInputReceiversTable(jsCollector: ArrayBuffer[String]): Seq[Node] = {
+  private def generateInputReceiversTable(
+      jsCollector: ArrayBuffer[String],
+      minX: Long,
+      maxX: Long,
+      minY: Long,
+      maxY: Long): Seq[Node] = {
     val content = listener.receivedRecordsDistributions.map { case (receiverId, distribution) =>
-      generateInputReceiverRow(jsCollector, receiverId, distribution)
+      generateInputReceiverRow(jsCollector, receiverId, distribution, minX, maxX, minY, maxY)
     }.reduce(_ ++ _)
 
     <table class="table table-bordered">
@@ -184,8 +337,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   private def generateInputReceiverRow(
-      jsCollector: ArrayBuffer[String], receiverId: Int, distribution: Option[Distribution]):
-    Seq[Node] = {
+      jsCollector: ArrayBuffer[String],
+      receiverId: Int,
+      distribution: Option[Distribution],
+      minX: Long,
+      maxX: Long,
+      minY: Long,
+      maxY: Long): Seq[Node] = {
     val avgReceiverEvents = distribution.map(_.statCounter.mean.toLong)
     val receiverInfo = listener.receiverInfo(receiverId)
     val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
@@ -201,9 +359,29 @@ private[ui] class StreamingPage(parent: StreamingTab)
       listener.receiverLastErrorTimeo(receiverId).map(UIUtils.formatDate).getOrElse(emptyCell)
     val receivedRecords = listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq())
 
+    val timelineForEventRate =
+      TimelineUIData(
+        s"receiver-$receiverId-events-timeline",
+        receivedRecords,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        "events/sec").toHtmlAndJs
+    jsCollector += timelineForEventRate._2
+
+    val distributionForEventsRate =
+      DistributionUIData(
+        s"receiver-$receiverId-events-distribution",
+        receivedRecords.map(_._2),
+        minY,
+        maxY,
+        "events/sec").toHtmlAndJs
+    jsCollector += distributionForEventsRate._2
+
     // scalastyle:off
     <tr>
-      <td rowspan="2">
+      <td rowspan="2" style="vertical-align: middle;">
         <div>
           <strong>{receiverName}</strong>
         </div>
@@ -216,149 +394,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
       <tr>
         <td colspan="3">
-          {generateTimeline(jsCollector, s"receiver-$receiverId-events-timeline", receivedRecords, "#")}
+          {timelineForEventRate._1}
         </td>
-        <td>{generateDistribution(jsCollector, s"receiver-$receiverId-events-distribution", receivedRecords.map(_._2), "#")}</td>
+        <td>{distributionForEventsRate._1}</td>
       </tr>
     // scalastyle:on
   }
-
-  private def generateTimeline(
-      jsCollector: ArrayBuffer[String], divId: String, data: Seq[(Long, _)], unit: String):
-    Seq[Node] = {
-    val jsForData = data.map { case (x, y) =>
-      s"""{"x": $x, "y": $y}"""
-    }.mkString("[", ",", "]")
-    jsCollector += s"drawTimeline('#$divId', $jsForData, '$unit');"
-
-    <div id={divId}></div>
-  }
-
-  private def generateDistribution(
-      jsCollector: ArrayBuffer[String], divId: String, data: Seq[_], unit: String): Seq[Node] = {
-    val jsForData = data.mkString("[", ",", "]")
-    jsCollector += s"drawDistribution('#$divId', $jsForData, '$unit');"
-
-    <div id={divId}></div>
-  }
-
-
-  /** Generate stats of data received by the receivers in the streaming program */
-  private def generateReceiverStats(): Seq[Node] = {
-    val receivedRecordDistributions = listener.receivedRecordsDistributions
-    val lastBatchReceivedRecord = listener.lastReceivedBatchRecords
-    val table = if (receivedRecordDistributions.size > 0) {
-      val headerRow = Seq(
-        "Receiver",
-        "Status",
-        "Location",
-        "Events in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
-        "Minimum rate\n[events/sec]",
-        "Median rate\n[events/sec]",
-        "Maximum rate\n[events/sec]",
-        "Last Error"
-      )
-      val dataRows = (0 until listener.numReceivers).map { receiverId =>
-        val receiverInfo = listener.receiverInfo(receiverId)
-        val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
-        val receiverActive = receiverInfo.map { info =>
-          if (info.active) "ACTIVE" else "INACTIVE"
-        }.getOrElse(emptyCell)
-        val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
-        val receiverLastBatchRecords = formatNumber(lastBatchReceivedRecord(receiverId))
-        val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
-          d.getQuantiles(Seq(0.0, 0.5, 1.0)).map(r => formatNumber(r.toLong))
-        }.getOrElse {
-          Seq(emptyCell, emptyCell, emptyCell, emptyCell, emptyCell)
-        }
-        val receiverLastError = listener.receiverInfo(receiverId).map { info =>
-          val msg = s"${info.lastErrorMessage} - ${info.lastError}"
-          if (msg.size > 100) msg.take(97) + "..." else msg
-        }.getOrElse(emptyCell)
-        Seq(receiverName, receiverActive, receiverLocation, receiverLastBatchRecords) ++
-          receivedRecordStats ++ Seq(receiverLastError)
-      }
-      Some(listingTable(headerRow, dataRows))
-    } else {
-      None
-    }
-
-    val content =
-      <h5>Receiver Statistics</h5> ++
-      <div>{table.getOrElse("No receivers")}</div>
-
-    content
-  }
-
-  /** Generate stats of batch jobs of the streaming program */
-  private def generateBatchStatsTable(): Seq[Node] = {
-    val numBatches = listener.retainedCompletedBatches.size
-    val lastCompletedBatch = listener.lastCompletedBatch
-    val table = if (numBatches > 0) {
-      val processingDelayQuantilesRow = {
-        Seq(
-          "Processing Time",
-          formatDurationOption(lastCompletedBatch.flatMap(_.processingDelay))
-        ) ++ getQuantiles(listener.processingDelayDistribution)
-      }
-      val schedulingDelayQuantilesRow = {
-        Seq(
-          "Scheduling Delay",
-          formatDurationOption(lastCompletedBatch.flatMap(_.schedulingDelay))
-        ) ++ getQuantiles(listener.schedulingDelayDistribution)
-      }
-      val totalDelayQuantilesRow = {
-        Seq(
-          "Total Delay",
-          formatDurationOption(lastCompletedBatch.flatMap(_.totalDelay))
-        ) ++ getQuantiles(listener.totalDelayDistribution)
-      }
-      val headerRow = Seq("Metric", "Last batch", "Minimum", "25th percentile",
-        "Median", "75th percentile", "Maximum")
-      val dataRows: Seq[Seq[String]] = Seq(
-        processingDelayQuantilesRow,
-        schedulingDelayQuantilesRow,
-        totalDelayQuantilesRow
-      )
-      Some(listingTable(headerRow, dataRows))
-    } else {
-      None
-    }
-
-    val content =
-      <h5>Batch Processing Statistics</h5> ++
-      <div>
-        <ul class="unstyled">
-          {table.getOrElse("No statistics have been generated yet.")}
-        </ul>
-      </div>
-
-    content
-  }
-
-  def generateTimeRow(title: String, times: Seq[(Time, Long)]): Unit = {
-
-  }
-
 
   /**
    * Returns a human-readable string representing a duration such as "5 second 35 ms"
    */
   private def formatDurationOption(msOption: Option[Long]): String = {
     msOption.map(formatDurationVerbose).getOrElse(emptyCell)
-  }
-
-  /** Get quantiles for any time distribution */
-  private def getQuantiles(timeDistributionOption: Option[Distribution]) = {
-    timeDistributionOption.get.getQuantiles().map { ms => formatDurationVerbose(ms.toLong) }
-  }
-
-  /** Generate HTML table from string data */
-  private def listingTable(headers: Seq[String], data: Seq[Seq[String]]) = {
-    def generateDataRow(data: Seq[String]): Seq[Node] = {
-      <tr> {data.map(d => <td>{d}</td>)} </tr>
-    }
-    UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
   }
 
   private def generateBatchListTables(): Seq[Node] = {
