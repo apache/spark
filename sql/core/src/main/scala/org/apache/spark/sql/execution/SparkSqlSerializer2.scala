@@ -31,7 +31,17 @@ import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.types._
 
 /**
- * The serialization stream for SparkSqlSerializer2.
+ * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in
+ * its `writeObject` are [[Product2]]. The serialization functions for the key and value of the
+ * [[Product2]] are constructed based on their schemata.
+ * The benefit of this serialization stream is that compared with general-purpose serializers like
+ * Kryo and Java serializer, it can significantly reduce the size of serialized and has a lower
+ * allocation cost, which can benefit the shuffle operation. Right now, its main limitations are:
+ *  1. It does not support complex types, i.e. Map, Array, and Struct.
+ *  2. It assumes that the objects passed in are [[Product2]]. So, it cannot be used when
+ *     [[org.apache.spark.util.collection.ExternalSorter]]'s merge sort operation is used because
+ *     the objects passed in the serializer are not in the type of [[Product2]]. Also also see
+ *     the comment of the `serializer` method in [[Exchange]] for more information on it.
  */
 private[sql] class Serializer2SerializationStream(
     keySchema: Array[DataType],
@@ -61,7 +71,7 @@ private[sql] class Serializer2SerializationStream(
 }
 
 /**
- * The deserialization stream for SparkSqlSerializer2.
+ * The corresponding deserialization stream for [[Serializer2SerializationStream]].
  */
 private[sql] class Serializer2DeserializationStream(
     keySchema: Array[DataType],
