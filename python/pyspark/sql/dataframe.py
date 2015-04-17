@@ -489,7 +489,8 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: sort by ascending order or not (default: True)
+        :param ascending: sort by ascending order or not, could be bool, int
+             or list of bool, int (default: True).
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
@@ -511,7 +512,7 @@ class DataFrame(object):
             cols = cols[0]
         jcols = [_to_java_column(c) for c in cols]
         ascending = kwargs.get('ascending', True)
-        if isinstance(ascending, bool):
+        if isinstance(ascending, (bool, int)):
             if not ascending:
                 jcols = [jc.desc() for jc in jcols]
         elif isinstance(ascending, list):
@@ -526,9 +527,14 @@ class DataFrame(object):
     orderBy = sort
 
     def _jseq(self, cols, converter=None):
+        """Return a JVM Seq of Columns from a list of Column or names"""
         return _to_seq(self.sql_ctx._sc, cols, converter)
 
     def _jcols(self, *cols):
+        """Return a JVM Seq of Columns from a list of Column or column names
+
+        If `cols` has only one list in it, cols[0] will be used as the list.
+        """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
@@ -1018,6 +1024,12 @@ def _to_java_column(col):
 
 
 def _to_seq(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM Seq of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
     if converter:
         cols = [converter(c) for c in cols]
     jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
