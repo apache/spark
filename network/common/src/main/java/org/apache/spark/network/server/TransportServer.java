@@ -122,7 +122,8 @@ public class TransportServer implements Closeable {
   }
 
   /**
-   * Attempt to bind to the specified port up to a fixed number of retries.
+   * Attempt to bind on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    * If all attempts fail after the max number of retries, exit.
    */
   private void bindRightPort(int portToBind) {

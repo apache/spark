@@ -98,17 +98,18 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+    Configuration newConf = new Configuration(conf);
 
     // It's better to let the NodeManager get down rather than take a port retry
     // when `spark.shuffle.service.port` has been conflicted during starting
     // the Spark Yarn Shuffle Server, because the retry mechanism will make the
     // inconsistency of shuffle port and also make client fail to find the port.
-    conf.setInt("spark.port.maxRetries", 0);
+    newConf.setInt("spark.port.maxRetries", 0);
 
-    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
+    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(newConf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
-    boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
+    boolean authEnabled = newConf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
     blockHandler = new ExternalShuffleBlockHandler(transportConf);
     RpcHandler rpcHandler = blockHandler;
     if (authEnabled) {
@@ -116,7 +117,7 @@ public class YarnShuffleService extends AuxiliaryService {
       rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
     }
 
-    int port = conf.getInt(
+    int port = newConf.getInt(
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
     TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
     shuffleServer = transportContext.createServer(port);

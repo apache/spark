@@ -43,8 +43,12 @@ object SparkTransportConf {
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
+   * @param disablePortRetry if true, server will not retry its port. It's better for the long-run
+   *                        server to disable it since the server and client had the agreement of
+   *                        the specific port.
    */
-  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0): TransportConf = {
+  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0,
+                    disablePortRetry: Boolean = false): TransportConf = {
     val conf = _conf.clone
 
     // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily
@@ -55,6 +59,10 @@ object SparkTransportConf {
       conf.get("spark.shuffle.io.serverThreads", numThreads.toString))
     conf.set("spark.shuffle.io.clientThreads",
       conf.get("spark.shuffle.io.clientThreads", numThreads.toString))
+    
+    if (disablePortRetry) {
+      conf.set("spark.port.maxRetries", "0")
+    }
 
     new TransportConf(new ConfigProvider {
       override def get(name: String): String = conf.get(name)
