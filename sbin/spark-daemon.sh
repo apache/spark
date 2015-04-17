@@ -129,7 +129,7 @@ run_command() {
 
   if [ -f "$pid" ]; then
     TARGET_ID="$(cat "$pid")"
-    if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+    if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
       echo "$command running as process $TARGET_ID.  Stop it first."
       exit 1
     fi
@@ -163,7 +163,7 @@ run_command() {
   echo "$newpid" > "$pid"
   sleep 2
   # Check if the process has died; in that case we'll tail the log so the user can see
-  if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
+  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
     echo "failed to launch $command:"
     tail -2 "$log" | sed 's/^/  /'
     echo "full log in $log"

@@ -16,14 +16,19 @@
 #
 
 import sys
-import itertools
 import warnings
 import random
+
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+else:
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD, _load_from_socket
+from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -65,19 +70,20 @@ class DataFrame(object):
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
         self._schema = None  # initialized lazily
+        self._lazy_rdd = None
 
     @property
     def rdd(self):
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
         """
-        if not hasattr(self, '_lazy_rdd'):
+        if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
             rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
             schema = self.schema
 
             def applySchema(it):
                 cls = _create_cls(schema)
-                return itertools.imap(cls, it)
+                return map(cls, it)
 
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
@@ -89,13 +95,14 @@ class DataFrame(object):
         """
         return DataFrameNaFunctions(self)
 
-    def toJSON(self, use_unicode=False):
+    @ignore_unicode_prefix
+    def toJSON(self, use_unicode=True):
         """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
         Each row is turned into a JSON document as one element in the returned RDD.
 
         >>> df.toJSON().first()
-        '{"age":2,"name":"Alice"}'
+        u'{"age":2,"name":"Alice"}'
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
@@ -228,7 +235,7 @@ class DataFrame(object):
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
-        print (self._jdf.schema().treeString())
+        print(self._jdf.schema().treeString())
 
     def explain(self, extended=False):
         """Prints the (logical and physical) plans to the console for debugging purpose.
@@ -250,9 +257,9 @@ class DataFrame(object):
         == RDD ==
         """
         if extended:
-            print self._jdf.queryExecution().toString()
+            print(self._jdf.queryExecution().toString())
         else:
-            print self._jdf.queryExecution().executedPlan().toString()
+            print(self._jdf.queryExecution().executedPlan().toString())
 
     def isLocal(self):
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
@@ -270,7 +277,7 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print self._jdf.showString(n).encode('utf8', 'ignore')
+        print(self._jdf.showString(n))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -279,10 +286,11 @@ class DataFrame(object):
         """Returns the number of rows in this :class:`DataFrame`.
 
         >>> df.count()
-        2L
+        2
         """
-        return self._jdf.count()
+        return int(self._jdf.count())
 
+    @ignore_unicode_prefix
     def collect(self):
         """Returns all the records as a list of :class:`Row`.
 
@@ -295,6 +303,7 @@ class DataFrame(object):
         cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
+    @ignore_unicode_prefix
     def limit(self, num):
         """Limits the result count to the number specified.
 
@@ -306,6 +315,7 @@ class DataFrame(object):
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def take(self, num):
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
@@ -314,6 +324,7 @@ class DataFrame(object):
         """
         return self.limit(num).collect()
 
+    @ignore_unicode_prefix
     def map(self, f):
         """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
 
@@ -324,6 +335,7 @@ class DataFrame(object):
         """
         return self.rdd.map(f)
 
+    @ignore_unicode_prefix
     def flatMap(self, f):
         """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
         and then flattening the results.
@@ -353,7 +365,7 @@ class DataFrame(object):
         This is a shorthand for ``df.rdd.foreach()``.
 
         >>> def f(person):
-        ...     print person.name
+        ...     print(person.name)
         >>> df.foreach(f)
         """
         return self.rdd.foreach(f)
@@ -365,7 +377,7 @@ class DataFrame(object):
 
         >>> def f(people):
         ...     for person in people:
-        ...         print person.name
+        ...         print(person.name)
         >>> df.foreachPartition(f)
         """
         return self.rdd.foreachPartition(f)
@@ -412,7 +424,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
         >>> df.distinct().count()
-        2L
+        2
         """
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
@@ -420,10 +432,10 @@ class DataFrame(object):
         """Returns a sampled subset of this :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 97).count()
-        1L
+        1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
@@ -437,6 +449,7 @@ class DataFrame(object):
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
+    @ignore_unicode_prefix
     def columns(self):
         """Returns all column names as a list.
 
@@ -445,6 +458,7 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
+    @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
@@ -470,12 +484,17 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
         return DataFrame(jdf, self.sql_ctx)
 
-    def sort(self, *cols):
+    @ignore_unicode_prefix
+    def sort(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
-        :param cols: list of :class:`Column` to sort by.
+        :param cols: list of :class:`Column` or column names to sort by.
+        :param ascending: sort by ascending order or not, could be bool, int
+             or list of bool, int (default: True).
 
         >>> df.sort(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.sort("age", ascending=False).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         >>> df.orderBy(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
@@ -484,15 +503,41 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.orderBy(desc("age"), "name").collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
             raise ValueError("should sort by at least one column")
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        jcols = [_to_java_column(c) for c in cols]
+        ascending = kwargs.get('ascending', True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                jcols = [jc.desc() for jc in jcols]
+        elif isinstance(ascending, list):
+            jcols = [jc if asc else jc.desc()
+                     for asc, jc in zip(ascending, jcols)]
+        else:
+            raise TypeError("ascending can only be bool or list, but got %s" % type(ascending))
+
+        jdf = self._jdf.sort(self._jseq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
     orderBy = sort
+
+    def _jseq(self, cols, converter=None):
+        """Return a JVM Seq of Columns from a list of Column or names"""
+        return _to_seq(self.sql_ctx._sc, cols, converter)
+
+    def _jcols(self, *cols):
+        """Return a JVM Seq of Columns from a list of Column or column names
+
+        If `cols` has only one list in it, cols[0] will be used as the list.
+        """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        return self._jseq(cols, _to_java_column)
 
     def describe(self, *cols):
         """Computes statistics for numeric columns.
@@ -508,11 +553,10 @@ class DataFrame(object):
         min     2
         max     5
         """
-        cols = ListConverter().convert(cols,
-                                       self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.describe(self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols))
+        jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def head(self, n=None):
         """
         Returns the first ``n`` rows as a list of :class:`Row`,
@@ -528,6 +572,7 @@ class DataFrame(object):
             return rs[0] if rs else None
         return self.take(n)
 
+    @ignore_unicode_prefix
     def first(self):
         """Returns the first row as a :class:`Row`.
 
@@ -536,6 +581,7 @@ class DataFrame(object):
         """
         return self.head()
 
+    @ignore_unicode_prefix
     def __getitem__(self, item):
         """Returns the column as a :class:`Column`.
 
@@ -545,16 +591,23 @@ class DataFrame(object):
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
         >>> df[ df.age > 3 ].collect()
         [Row(age=5, name=u'Bob')]
+        >>> df[df[0] > 3].collect()
+        [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
+            if item not in self.columns:
+                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):
             return self.filter(item)
-        elif isinstance(item, list):
+        elif isinstance(item, (list, tuple)):
             return self.select(*item)
+        elif isinstance(item, int):
+            jc = self._jdf.apply(self.columns[item])
+            return Column(jc)
         else:
-            raise IndexError("unexpected index: %s" % item)
+            raise TypeError("unexpected type: %s" % type(item))
 
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
@@ -562,11 +615,12 @@ class DataFrame(object):
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
-        if name.startswith("__"):
-            raise AttributeError(name)
+        if name not in self.columns:
+            raise AttributeError("No such column: %s" % name)
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    @ignore_unicode_prefix
     def select(self, *cols):
         """Projects a set of expressions and returns a new :class:`DataFrame`.
 
@@ -581,9 +635,7 @@ class DataFrame(object):
         >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.select(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sql_ctx)
 
     def selectExpr(self, *expr):
@@ -594,10 +646,12 @@ class DataFrame(object):
         >>> df.selectExpr("age * 2", "abs(age)").collect()
         [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
         """
-        jexpr = ListConverter().convert(expr, self._sc._gateway._gateway_client)
-        jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]
+        jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def filter(self, condition):
         """Filters rows using the given condition.
 
@@ -626,10 +680,13 @@ class DataFrame(object):
 
     where = filter
 
+    @ignore_unicode_prefix
     def groupBy(self, *cols):
         """Groups the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
+
+        :func:`groupby` is an alias for :func:`groupBy`.
 
         :param cols: list of columns to group by.
             Each element should be a column name (string) or an expression (:class:`Column`).
@@ -640,11 +697,13 @@ class DataFrame(object):
         [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
         >>> df.groupBy(df.name).avg().collect()
         [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        >>> df.groupBy(['name', df.age]).count().collect()
+        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.groupBy(self._jcols(*cols))
         return GroupedData(jdf, self.sql_ctx)
+
+    groupby = groupBy
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
@@ -716,9 +775,7 @@ class DataFrame(object):
         if thresh is None:
             thresh = len(subset) if how == 'any' else 1
 
-        cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
-        cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
-        return DataFrame(self._jdf.na().drop(thresh, cols), self.sql_ctx)
+        return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sql_ctx)
 
     def fillna(self, value, subset=None):
         """Replace null values, alias for ``na.fill()``.
@@ -771,10 +828,9 @@ class DataFrame(object):
             elif not isinstance(subset, (list, tuple)):
                 raise ValueError("subset should be a list or tuple of column names")
 
-            cols = ListConverter().convert(subset, self.sql_ctx._sc._gateway._gateway_client)
-            cols = self.sql_ctx._sc._jvm.PythonUtils.toSeq(cols)
-            return DataFrame(self._jdf.na().fill(value, cols), self.sql_ctx)
+            return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
+    @ignore_unicode_prefix
     def withColumn(self, colName, col):
         """Returns a new :class:`DataFrame` by adding a column.
 
@@ -786,6 +842,7 @@ class DataFrame(object):
         """
         return self.select('*', col.alias(colName))
 
+    @ignore_unicode_prefix
     def withColumnRenamed(self, existing, new):
         """REturns a new :class:`DataFrame` by renaming an existing column.
 
@@ -832,10 +889,8 @@ def dfapi(f):
 
 def df_varargs_api(f):
     def _api(self, *args):
-        jargs = ListConverter().convert(args,
-                                        self.sql_ctx._sc._gateway._gateway_client)
         name = f.__name__
-        jdf = getattr(self._jdf, name)(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jargs))
+        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -852,6 +907,7 @@ class GroupedData(object):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
 
+    @ignore_unicode_prefix
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
@@ -881,9 +937,8 @@ class GroupedData(object):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jcols = ListConverter().convert([c._jc for c in exprs[1:]],
-                                            self.sql_ctx._sc._gateway._gateway_client)
-            jdf = self._jdf.agg(exprs[0]._jc, self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+            jdf = self._jdf.agg(exprs[0]._jc,
+                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
@@ -975,6 +1030,19 @@ def _to_java_column(col):
     return jcol
 
 
+def _to_seq(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM Seq of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
+    if converter:
+        cols = [converter(c) for c in cols]
+    jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+    return sc._jvm.PythonUtils.toSeq(jcols)
+
+
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
@@ -1041,11 +1109,13 @@ class Column(object):
     __sub__ = _bin_op("minus")
     __mul__ = _bin_op("multiply")
     __div__ = _bin_op("divide")
+    __truediv__ = _bin_op("divide")
     __mod__ = _bin_op("mod")
     __radd__ = _bin_op("plus")
     __rsub__ = _reverse_op("minus")
     __rmul__ = _bin_op("multiply")
     __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
 
     # logistic operators
@@ -1067,7 +1137,39 @@ class Column(object):
     # container operators
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
-    getField = _bin_op("getField", "An expression that gets a field by name in a StructField.")
+
+    def getItem(self, key):
+        """An expression that gets an item at position `ordinal` out of a list,
+         or gets an item by key out of a dict.
+
+        >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
+        >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
+        l[0] d[key]
+        1    value
+        >>> df.select(df.l[0], df.d["key"]).show()
+        l[0] d[key]
+        1    value
+        """
+        return self[key]
+
+    def getField(self, name):
+        """An expression that gets a field by name in a StructField.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
+        >>> df.select(df.r.getField("b")).show()
+        r.b
+        b
+        >>> df.select(df.r.a).show()
+        r.a
+        1
+        """
+        return Column(self._jc.getField(name))
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self.getField(item)
 
     # string methods
     rlike = _bin_op("rlike")
@@ -1075,6 +1177,7 @@ class Column(object):
     startswith = _bin_op("startsWith")
     endswith = _bin_op("endsWith")
 
+    @ignore_unicode_prefix
     def substr(self, startPos, length):
         """
         Return a :class:`Column` which is a substring of the column
@@ -1097,6 +1200,7 @@ class Column(object):
 
     __getslice__ = substr
 
+    @ignore_unicode_prefix
     def inSet(self, *cols):
         """ A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
@@ -1110,8 +1214,7 @@ class Column(object):
             cols = cols[0]
         cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
-        jc = getattr(self._jc, "in")(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
         return Column(jc)
 
     # order
@@ -1131,6 +1234,7 @@ class Column(object):
         """
         return Column(getattr(self._jc, "as")(alias))
 
+    @ignore_unicode_prefix
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
