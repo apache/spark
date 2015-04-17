@@ -22,6 +22,7 @@ import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.apache.spark.sql.test._
+import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{FunSuite, BeforeAndAfter}
 import TestSQLContext._
@@ -33,6 +34,13 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   var conn: java.sql.Connection = null
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
+
+  val testH2Dialect = new JdbcDialect {
+    def canHandle(url: String) = url.startsWith("jdbc:h2")
+    override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
+      StringType
+    }
+  }
 
   before {
     Class.forName("org.h2.Driver")
@@ -282,4 +290,47 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         """.stripMargin.replaceAll("\n", " "))
     }
   }
+
+  test("Remap types via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    val df = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    assert(df.schema.filter(
+      _.dataType != org.apache.spark.sql.types.StringType
+    ).isEmpty)
+    val rows = df.collect()
+    assert(rows(0).get(0).isInstanceOf[String])
+    assert(rows(0).get(1).isInstanceOf[String])
+    JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Default jdbc dialect registration") {
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("test.invalid") == NoopDialect)
+  }
+
+  test("Dialect unregister") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    JdbcDialects.unregisterDialect(testH2Dialect)
+    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+  }
+
+  test("Aggregated dialects") {
+    val agg = new AggregatedDialect(List(new JdbcDialect {
+      def canHandle(url: String) = url.startsWith("jdbc:h2:")
+      override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): DataType = {
+        if (sqlType % 2 == 0) {
+          LongType
+        } else {
+          null
+        }
+      }
+    }, testH2Dialect))
+    assert(agg.canHandle("jdbc:h2:xxx"))
+    assert(!agg.canHandle("jdbc:h2"))
+    assert(agg.getCatalystType(0,"",1,null) == LongType)
+    assert(agg.getCatalystType(1,"",1,null) == StringType)
+  }
+
 }
+

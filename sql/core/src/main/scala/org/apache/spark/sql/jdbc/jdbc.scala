@@ -123,10 +123,10 @@ package object jdbc {
      */
     def schemaString(df: DataFrame, url: String): String = {
       val sb = new StringBuilder()
-      val quirks = DriverQuirks.get(url)
+      val dialect = JdbcDialects.get(url)
       df.schema.fields foreach { field => {
         val name = field.name
-        var typ: String = quirks.getJDBCType(field.dataType)._1
+        var typ: String = dialect.getJDBCType(field.dataType)._1
         if (typ == null) typ = field.dataType match {
           case IntegerType => "INTEGER"
           case LongType => "BIGINT"
@@ -152,9 +152,9 @@ package object jdbc {
      * Saves the RDD to the database in a single transaction.
      */
     def saveTable(df: DataFrame, url: String, table: String) {
-      val quirks = DriverQuirks.get(url)
+      val dialect = JdbcDialects.get(url)
       var nullTypes: Array[Int] = df.schema.fields.map(field => {
-        var nullType: Option[Int] = quirks.getJDBCType(field.dataType)._2
+        var nullType: Option[Int] = dialect.getJDBCType(field.dataType)._2
         if (nullType.isEmpty) {
           field.dataType match {
             case IntegerType => java.sql.Types.INTEGER
