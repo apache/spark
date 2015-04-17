@@ -37,9 +37,8 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   private lazy val rateLimiter = GuavaRateLimiter.create(desiredRate)
 
   def waitToPush() {
-    if( desiredRate <= 0 ) {
-      return
+    if( desiredRate > 0 ) {
+      rateLimiter.acquire()
     }
-    rateLimiter.acquire()
   }
 }
