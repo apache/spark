@@ -239,16 +239,15 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
-    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("C:/path to/file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
+    assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+    assertResolves("file:foo", s"file:foo")
+    assertResolves("file:foo:baby", s"file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
@@ -268,9 +267,9 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
     assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4",
       testWindows = true)
   }
 
