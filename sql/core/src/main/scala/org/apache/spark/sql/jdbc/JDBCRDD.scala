@@ -41,7 +41,7 @@ private[sql] object JDBCRDD extends Logging {
 
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
-   * the DriverQuirks class corresponding to your database driver returns null.
+   * the JdbcDialect class corresponding to your database driver returns null.
    *
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
@@ -51,7 +51,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.ARRAY         => null
       case java.sql.Types.BIGINT        => LongType
       case java.sql.Types.BINARY        => BinaryType
-      case java.sql.Types.BIT           => BooleanType // Per JDBC; Quirks handles quirky drivers.
+      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType
       case java.sql.Types.BOOLEAN       => BooleanType
       case java.sql.Types.CHAR          => StringType
@@ -108,7 +108,7 @@ private[sql] object JDBCRDD extends Logging {
    * @throws SQLException if the table contains an unsupported type.
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
-    val quirks = DriverQuirks.get(url)
+    val dialect = JdbcDialects.get(url)
     val conn: Connection = DriverManager.getConnection(url, properties)
     try {
       val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
@@ -125,8 +125,9 @@ private[sql] object JDBCRDD extends Logging {
           val fieldScale = rsmd.getScale(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
-          var columnType = quirks.getCatalystType(dataType, typeName, fieldSize, metadata)
-          if (columnType == null) columnType = getCatalystType(dataType, fieldSize, fieldScale)
+          val columnType =
+            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+              getCatalystType(dataType, fieldSize, fieldScale))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
