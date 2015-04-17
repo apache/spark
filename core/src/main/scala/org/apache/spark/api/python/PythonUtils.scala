@@ -35,10 +35,6 @@ private[spark] object PythonUtils {
       pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip").mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
-    sys.env.get("PYSPARK_ARCHIVES_PATH") match {
-      case Some(path) => pythonPath += path
-      case None => // do nothing
-    }
     pythonPath.mkString(File.pathSeparator)
   }
 

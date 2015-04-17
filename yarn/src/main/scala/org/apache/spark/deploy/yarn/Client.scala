@@ -247,6 +247,7 @@ private[spark] class Client(
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
+      (PYSPARK_ARCHIVES, pysparkArchives(sparkConf), CONF_PYSPARK_ARCHIVES),
       ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
@@ -386,6 +387,12 @@ private[spark] class Client(
     val appStagingDir = getAppStagingDir(appId)
     val localResources = prepareLocalResources(appStagingDir)
     val launchEnv = setupLaunchEnv(appStagingDir)
+    // From SPARK-1920 and SPARK-1520 we know PySpark on Yarn can not work when the assembly jar are
+    // package by JDK 1.7+, so we ship PySpark archives to executors as assembly jar, and add this
+    // path to PYTHONPATH.
+    for ((resPath, res) <- localResources if resPath.contains(PYSPARK_ARCHIVES)) {
+      launchEnv("PYSPARK_ARCHIVES_PATH") = resPath
+    }
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
     amContainer.setEnvironment(launchEnv)
@@ -681,9 +688,10 @@ object Client extends Logging {
     new Client(args, sparkConf).run()
   }
 
-  // Alias for the Spark assembly jar and the user jar
+  // Alias for the Spark assembly jar, the user jar and PySpark archives
   val SPARK_JAR: String = "__spark__.jar"
   val APP_JAR: String = "__app__.jar"
+  val PYSPARK_ARCHIVES: String = "__pyspark__.zip"
 
   // URI scheme that identifies local resources
   val LOCAL_SCHEME = "local"
@@ -694,6 +702,9 @@ object Client extends Logging {
   // Location of any user-defined Spark jars
   val CONF_SPARK_JAR = "spark.yarn.jar"
   val ENV_SPARK_JAR = "SPARK_JAR"
+
+  // Location of any user-defined PySpark archives
+  val CONF_PYSPARK_ARCHIVES = "spark.pyspark.archives"
 
   // Internal config to propagate the location of the user's jar to the driver/executors
   val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
@@ -730,6 +741,19 @@ object Client extends Logging {
       System.getenv(ENV_SPARK_JAR)
     } else {
       SparkContext.jarOfClass(this.getClass).head
+    }
+  }
+
+  /**
+   * Find the user-defined PySpark archives if configured, or return default.
+   * The default pyspark.zip is in the same path with assembly jar.
+   */
+  private def pysparkArchives(conf: SparkConf): String = {
+    if (conf.contains(CONF_PYSPARK_ARCHIVES)) {
+      conf.get(CONF_PYSPARK_ARCHIVES)
+    } else {
+      val sparkJarPath = SparkContext.jarOfClass(this.getClass).head
+      sparkJarPath.substring(0, sparkJarPath.lastIndexOf('/')) + "/pyspark.zip"
     }
   }
 

@@ -22,9 +22,6 @@ For Python, you can use the `--py-files` argument of `spark-submit` to add `.py`
 files to be distributed with your application. If you depend on multiple Python files we recommend
 packaging them into a `.zip` or `.egg`.
 
-As Python can not read files from assembly jar which packaged by JDK1.7+, so packaging pyspark into a
-`.zip`(the name contains "pyspark") and use `--py-files` argument of `spark-submit` to distribute it.
-
 # Launching Applications with spark-submit
 
 Once a user application is bundled, it can be launched using the `bin/spark-submit` script.
