@@ -187,16 +187,16 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     // recordedData size should be close to the expected rate
     // use an error margin proportional to the value, so that rate changes don't cause a brittle test
-    val minExpectedMessages = expectedMessages - 0.3 * expectedMessages
-    val maxExpectedMessages = expectedMessages + 0.1 * expectedMessages
+    val minExpectedMessages = expectedMessages - 0.05 * expectedMessages
+    val maxExpectedMessages = expectedMessages + 0.05 * expectedMessages
     val numMessages = recordedData.size
     assert(
       numMessages >= minExpectedMessages && numMessages <= maxExpectedMessages,
       s"#records received = $numMessages, not between $minExpectedMessages and $maxExpectedMessages"
     )
 
-    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 0.3 * expectedMessagesPerBlock
-    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 0.1 * expectedMessagesPerBlock
+    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 0.05 * expectedMessagesPerBlock
+    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 0.05 * expectedMessagesPerBlock
     val receivedBlockSizes = recordedBlocks.map { _.size }.mkString(",")
     assert(
       // the first and last block may be incomplete, so we slice them out
