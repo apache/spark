@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
- package org.apache.spark.sql
+package org.apache.spark.sql
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.expressions
@@ -89,4 +89,5 @@ protected[sql] class SparkPlanner(val sqlContext: SQLContext) extends SparkStrat
       Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
     }
   }
+  
 }
