@@ -221,7 +221,7 @@ private[hive] trait HiveInspectors extends Logging {
     case c: Class[_] if c == classOf[java.util.List[java.lang.Object]] =>
       logWarning("Failed to catch a component type in List<> because of type erasure in JVM," +
         " so you need to cast it into the correct type by yourself")
-      ArrayType(ErasedType)
+      ArrayType(NullType)
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
@@ -684,15 +684,3 @@ private[hive] trait HiveInspectors extends Logging {
     }
   }
 }
-
-/**
- * :: DeveloperApi ::
- * This represents an erased type because of type erasure in JVM.
- */
-@DeveloperApi
-class ErasedType private() extends DataType {
-  override def defaultSize: Int = 1
-  private[spark] override def asNullable: ErasedType = this
-}
-
-case object ErasedType extends ErasedType
