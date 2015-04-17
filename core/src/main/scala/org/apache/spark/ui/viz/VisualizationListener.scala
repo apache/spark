@@ -30,6 +30,10 @@ import org.apache.spark.storage.RDDInfo
 private[spark] class VisualizationListener extends SparkListener {
   private val graphsByStageId = new mutable.HashMap[Int, VizGraph] // stage ID -> viz graph
 
+  def getDotFile(stageId: Int): Option[String] = {
+    graphsByStageId.get(stageId).map(VisualizationListener.makeDotFile)
+  }
+
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val stageId = stageSubmitted.stageInfo.stageId
     val rddInfos = stageSubmitted.stageInfo.rddInfos
@@ -132,7 +136,7 @@ private object VisualizationListener {
    */
   private def makeDotSubgraph(scope: VizScope, indent: String): String = {
     val subgraph = new StringBuilder
-    subgraph.append(indent + "subgraph cluster" + scope.id + "{\n")
+    subgraph.append(indent + "subgraph cluster" + scope.id + " {\n")
     subgraph.append(indent + "  label = \"" + scope.name + "\"\n")
     scope.childrenNodes.foreach { node =>
       subgraph.append(indent + "  " + makeDotNode(node) + "\n")

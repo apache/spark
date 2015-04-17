@@ -32,10 +32,33 @@ import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
-  private val listener = parent.listener
+  private val progressListener = parent.progressListener
+  private val vizListener = parent.vizListener
+
+  private def renderViz(stageId: Int): Seq[Node] = {
+    val dot = vizListener.getDotFile(stageId)
+    if (dot.isEmpty) {
+      println("No viz for stage " + stageId)
+      return Seq.empty
+    }
+    println("Rendering viz for stage " + stageId)
+    val viz = <div id="stage-viz">{dot.get}</div>
+    val script = {
+      <script type="text/javascript">
+        <xml:unparsed>
+          var dot = document.getElementById("stage-viz").innerHTML;
+          var dot = dot.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"");
+          console.log(dot);
+          var viz = Viz(dot, "svg", "dot");
+          document.getElementById("stage-viz").innerHTML = viz;
+        </xml:unparsed>
+      </script>
+    }
+    viz ++ script
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.synchronized {
+    progressListener.synchronized {
       val parameterId = request.getParameter("id")
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
@@ -44,7 +67,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
-      val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
+      val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
 
       if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
         val content =
@@ -56,11 +79,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
       }
 
+      val viz: Seq[Node] = renderViz(stageId)
+
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val accumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasAccumulators = accumulables.size > 0
 
       val summary =
@@ -432,6 +457,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
       val content =
+        viz ++
         summary ++
         showAdditionalMetrics ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
@@ -440,7 +466,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
+      UIUtils.headerSparkPage(
+        "Details for Stage %d".format(stageId), content, parent, showVisualization = true)
     }
   }
 
