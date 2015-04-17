@@ -149,7 +149,7 @@ private[sql] class SQLConf extends Serializable {
    */
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
-  private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "false").toBoolean
+  private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
