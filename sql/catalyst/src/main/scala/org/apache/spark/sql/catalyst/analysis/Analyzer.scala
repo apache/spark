@@ -495,7 +495,7 @@ class Analyzer(
         generatorOutput: Seq[Attribute]): Seq[Attribute] = {
       val elementTypes = generator.elementTypes
 
-      if (generatorOutput.size == elementTypes.size) {
+      if (generatorOutput.length == elementTypes.length) {
         generatorOutput.zip(elementTypes).map {
           case (a, (t, nullable)) if !a.resolved =>
             AttributeReference(a.name, t, nullable)()

@@ -112,8 +112,7 @@ case class Alias(child: Expression, name: String)(
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   override type EvaluatedType = Any
-  // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
-  override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
+  override lazy val resolved = childrenResolved
 
   override def eval(input: Row): Any = child.eval(input)
 
