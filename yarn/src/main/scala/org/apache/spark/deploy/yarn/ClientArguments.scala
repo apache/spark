@@ -103,9 +103,14 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
    * This is intended to be called only after the provided arguments have been parsed.
    */
   private def validateArgs(): Unit = {
-    if (numExecutors <= 0) {
+    if (numExecutors < 0 || (!isDynamicAllocationEnabled && numExecutors == 0)) {
       throw new IllegalArgumentException(
-        "You must specify at least 1 executor!\n" + getUsageMessage())
+        s"""
+           |Number of executors $numExecutors is not legal.
+           |If dynamic allocation is enable, number of executors should at least be 0.
+           |If dynamic allocation is not enabled, number of executors should at least be 1.
+           |${getUsageMessage()}
+         """.stripMargin)
     }
     if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
       throw new SparkException("Executor cores must not be less than " +
