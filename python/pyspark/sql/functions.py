@@ -18,8 +18,10 @@
 """
 A collections of builtin functions
 """
+import sys
 
-from itertools import imap
+if sys.version < "3":
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter
 
@@ -116,7 +118,7 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
@@ -161,7 +163,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import decimal
 import datetime
 import keyword
@@ -25,6 +26,9 @@ import weakref
 from array import array
 from operator import itemgetter
 
+if sys.version >= "3":
+    long = int
+    unicode = str
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -410,7 +414,7 @@ class UserDefinedType(DataType):
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
-        m = __import__(pyModule, globals(), locals(), [pyClass], -1)
+        m = __import__(pyModule, globals(), locals(), [pyClass])
         UDT = getattr(m, pyClass)
         return UDT()
 
@@ -419,10 +423,9 @@ class UserDefinedType(DataType):
 
 
 _all_primitive_types = dict((v.typeName(), v)
-                            for v in globals().itervalues()
-                            if type(v) is PrimitiveTypeSingleton and
-                            v.__base__ == PrimitiveType)
-
+                            for v in list(globals().values())
+                            if (type(v) is type or type(v) is PrimitiveTypeSingleton)
+                            and v.__base__ == PrimitiveType)
 
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
@@ -434,7 +437,7 @@ def _parse_datatype_json_string(json_string):
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
     ...     assert datatype == pickled
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
+    ...     scala_datatype = sqlContext._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_primitive_types.values():
@@ -486,10 +489,10 @@ _FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 
 def _parse_datatype_json_value(json_value):
-    if type(json_value) is unicode:
+    if not isinstance(json_value, dict):
         if json_value in _all_primitive_types.keys():
             return _all_primitive_types[json_value]()
-        elif json_value == u'decimal':
+        elif json_value == 'decimal':
             return DecimalType()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
@@ -511,16 +514,20 @@ _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
     int: LongType,
-    long: LongType,
     float: DoubleType,
     str: StringType,
-    unicode: StringType,
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
     datetime.datetime: TimestampType,
     datetime.time: TimestampType,
 }
+
+if sys.version < "3":
+    _type_mappings.update({
+        unicode: StringType,
+        long: LongType,
+    })
 
 
 def _infer_type(obj):
@@ -541,7 +548,7 @@ def _infer_type(obj):
         return dataType()
 
     if isinstance(obj, dict):
-        for key, value in obj.iteritems():
+        for key, value in obj.items():
             if key is not None and value is not None:
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
@@ -565,10 +572,10 @@ def _infer_schema(row):
         items = sorted(row.items())
 
     elif isinstance(row, (tuple, list)):
-        if hasattr(row, "_fields"):  # namedtuple
+        if hasattr(row, "__fields__"):  # Row
+            items = zip(row.__fields__, tuple(row))
+        elif hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
-        elif hasattr(row, "__FIELDS__"):  # Row
-            items = zip(row.__FIELDS__, tuple(row))
         else:
             names = ['_%d' % i for i in range(1, len(row) + 1)]
             items = zip(names, row)
@@ -647,7 +654,7 @@ def _python_to_sql_converter(dataType):
             if isinstance(obj, dict):
                 return tuple(c(obj.get(n)) for n, c in zip(names, converters))
             elif isinstance(obj, tuple):
-                if hasattr(obj, "_fields") or hasattr(obj, "__FIELDS__"):
+                if hasattr(obj, "__fields__") or hasattr(obj, "_fields"):
                     return tuple(c(v) for c, v in zip(converters, obj))
                 elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
                     d = dict(obj)
@@ -733,12 +740,12 @@ def _create_converter(dataType):
 
     if isinstance(dataType, ArrayType):
         conv = _create_converter(dataType.elementType)
-        return lambda row: map(conv, row)
+        return lambda row: [conv(v) for v in row]
 
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
-        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
 
     elif isinstance(dataType, NullType):
         return lambda x: None
@@ -881,7 +888,7 @@ def _infer_schema_type(obj, dataType):
     >>> _infer_schema_type(row, schema)
     StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
     """
-    if dataType is NullType():
+    if isinstance(dataType, NullType):
         return _infer_type(obj)
 
     if not obj:
@@ -892,7 +899,7 @@ def _infer_schema_type(obj, dataType):
         return ArrayType(eType, True)
 
     elif isinstance(dataType, MapType):
-        k, v = obj.iteritems().next()
+        k, v = next(iter(obj.items()))
         return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
@@ -935,7 +942,7 @@ def _verify_type(obj, dataType):
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
     >>> _verify_type(0, LongType())
-    >>> _verify_type(range(3), ArrayType(ShortType()))
+    >>> _verify_type(list(range(3)), ArrayType(ShortType()))
     >>> _verify_type(set(), ArrayType(StringType())) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
@@ -976,7 +983,7 @@ def _verify_type(obj, dataType):
             _verify_type(i, dataType.elementType)
 
     elif isinstance(dataType, MapType):
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             _verify_type(k, dataType.keyType)
             _verify_type(v, dataType.valueType)
 
@@ -997,12 +1004,13 @@ def _restore_object(dataType, obj):
     # same object in most cases.
     k = id(dataType)
     cls = _cached_cls.get(k)
-    if cls is None:
+    if cls is None or cls.__datatype is not dataType:
         # use dataType as key to avoid create multiple class
         cls = _cached_cls.get(dataType)
         if cls is None:
             cls = _create_cls(dataType)
             _cached_cls[dataType] = cls
+        cls.__datatype = dataType
         _cached_cls[k] = cls
     return cls(obj)
 
@@ -1119,8 +1127,8 @@ def _create_cls(dataType):
     class Row(tuple):
 
         """ Row in DataFrame """
-        __DATATYPE__ = dataType
-        __FIELDS__ = tuple(f.name for f in dataType.fields)
+        __datatype = dataType
+        __fields__ = tuple(f.name for f in dataType.fields)
         __slots__ = ()
 
         # create property for fast access
@@ -1128,22 +1136,22 @@ def _create_cls(dataType):
 
         def asDict(self):
             """ Return as a dict """
-            return dict((n, getattr(self, n)) for n in self.__FIELDS__)
+            return dict((n, getattr(self, n)) for n in self.__fields__)
 
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                                          for n in self.__FIELDS__))
+                                          for n in self.__fields__))
 
         def __reduce__(self):
-            return (_restore_object, (self.__DATATYPE__, tuple(self)))
+            return (_restore_object, (self.__datatype, tuple(self)))
 
     return Row
 
 
 def _create_row(fields, values):
     row = Row(*values)
-    row.__FIELDS__ = fields
+    row.__fields__ = fields
     return row
 
 
@@ -1183,7 +1191,7 @@ class Row(tuple):
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__FIELDS__ = names
+            row.__fields__ = names
             return row
 
         else:
@@ -1193,11 +1201,11 @@ class Row(tuple):
         """
         Return as an dict
         """
-        if not hasattr(self, "__FIELDS__"):
+        if not hasattr(self, "__fields__"):
             raise TypeError("Cannot convert a Row class into dict")
-        return dict(zip(self.__FIELDS__, self))
+        return dict(zip(self.__fields__, self))
 
-    # let obect acs like class
+    # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
         return _create_row(self, args)
@@ -1208,21 +1216,23 @@ class Row(tuple):
         try:
             # it will be slow when it has many fields,
             # but this will not be used in normal cases
-            idx = self.__FIELDS__.index(item)
+            idx = self.__fields__.index(item)
             return self[idx]
         except IndexError:
             raise AttributeError(item)
+        except ValueError:
+            raise AttributeError(item)
 
     def __reduce__(self):
-        if hasattr(self, "__FIELDS__"):
-            return (_create_row, (self.__FIELDS__, tuple(self)))
+        if hasattr(self, "__fields__"):
+            return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
     def __repr__(self):
-        if hasattr(self, "__FIELDS__"):
+        if hasattr(self, "__fields__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
-                                         for k, v in zip(self.__FIELDS__, self))
+                                         for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join(self)
 
@@ -1237,7 +1247,7 @@ def _test():
     globs = pyspark.sql.types.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['ExamplePoint'] = ExamplePoint
     globs['ExamplePointUDT'] = ExamplePointUDT
     (failure_count, test_count) = doctest.testmod(

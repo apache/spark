@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.{ScalaReflection, trees}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -72,6 +72,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
+  /** Specifies how data is ordered in each partition. */
+  def outputOrdering: Seq[SortOrder] = Nil
+
+  /** Specifies sort order for each partition requirements on the input data for this operator. */
+  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+
   /**
    * Runs this query returning the result as an RDD.
    */
@@ -80,8 +86,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
+
   def executeCollect(): Array[Row] = {
-    execute().map(ScalaReflection.convertRowToScala(_, schema)).collect()
+    execute().mapPartitions { iter =>
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      iter.map(converter(_).asInstanceOf[Row])
+    }.collect()
   }
 
   /**
@@ -125,7 +135,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    buf.toArray.map(converter(_).asInstanceOf[Row])
   }
 
   protected def newProjection(

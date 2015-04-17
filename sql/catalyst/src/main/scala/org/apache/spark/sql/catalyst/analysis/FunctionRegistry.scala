@@ -57,8 +57,8 @@ class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistr
 }
 
 /**
- * A trivial catalog that returns an error when a function is requested.  Used for testing when all
- * functions are already filled in and the analyser needs only to resolve attribute references.
+ * A trivial catalog that returns an error when a function is requested. Used for testing when all
+ * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {

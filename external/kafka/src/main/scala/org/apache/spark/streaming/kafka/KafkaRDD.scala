@@ -23,10 +23,9 @@ import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
 
-import java.util.Properties
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
-import kafka.consumer.{ConsumerConfig, SimpleConsumer}
+import kafka.consumer.SimpleConsumer
 import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
