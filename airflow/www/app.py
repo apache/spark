@@ -1295,6 +1295,15 @@ def duration_f(v, c, m, p):
     if m.end_date:
         return timedelta(seconds=m.duration)
 
+def datetime_f(v, c, m, p):
+    s = getattr(m, p).isoformat()
+    if datetime.now().isoformat()[:4] == s[:4]:
+        s = s[5:]
+    return Markup("<nobr>{}</nobr>".format(s))
+
+def nobr_f(v, c, m, p):
+    return Markup("<nobr>{}</nobr>".format(getattr(m, p)))
+
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
@@ -1318,12 +1327,18 @@ class TaskInstanceModelView(ModelViewOnly):
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
+        hostname=nobr_f,
+        execution_date=datetime_f,
+        start_date=datetime_f,
+        end_date=datetime_f,
         dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_list = (
         'dag_id', 'task_id', 'execution_date',
-        'start_date', 'end_date', 'duration', 'state', 'job_id', 'log')
+        'start_date', 'end_date', 'duration', 'state', 'job_id', 'hostname',
+        'log')
     can_delete = True
+    page_size = 100
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)

@@ -170,8 +170,10 @@ class HivePartitionSensor(BaseSensorOperator):
             table, partition="ds='{{ ds }}'",
             metastore_conn_id='metastore_default',
             schema='default',
+            poke_interval=60*3,
             *args, **kwargs):
-        super(HivePartitionSensor, self).__init__(*args, **kwargs)
+        super(HivePartitionSensor, self).__init__(
+            poke_interval=poke_interval, *args, **kwargs)
         if '.' in table:
             schema, table = table.split('.')
         if not partition:
