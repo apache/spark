@@ -68,7 +68,12 @@ object MimaExcludes {
             // SPARK-6693 add tostring with max lines and width for matrix
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.toString")
+          )++ Seq(
+            // SPARK-5352 Add getPartitionStrategy in Graph
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.getPartitionStrategy")
           )
+
 
         case v if v.startsWith("1.3") =>
           Seq(
