@@ -224,7 +224,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(fs.exists(path))
 
     // the checkpoint is not cleaned by default (without the configuration set)
-    var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil)
+    var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Nil)
     rdd = null // Make RDD out of scope
     runGC()
     postGCTester.assertCleanup()
@@ -245,7 +245,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
 
     // Test that GC causes checkpoint data cleanup after dereferencing the RDD
-    postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil)
+    postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
     rdd = null // Make RDD out of scope
     runGC()
     postGCTester.assertCleanup()
@@ -429,7 +429,7 @@ class CleanerTester(
 
     def broadcastCleaned(broadcastId: Long): Unit = {
       toBeCleanedBroadcstIds -= broadcastId
-      logInfo("Broadcast" + broadcastId + " cleaned")
+      logInfo("Broadcast " + broadcastId + " cleaned")
     }
 
     def accumCleaned(accId: Long): Unit = {
@@ -438,7 +438,7 @@ class CleanerTester(
 
     def checkpointCleaned(rddId: Long): Unit = {
       toBeCheckpointIds -= rddId
-      logInfo("checkpoint rddId " + rddId + " cleaned")
+      logInfo("checkpoint  " + rddId + " cleaned")
     }
   }
 
@@ -463,7 +463,8 @@ class CleanerTester(
 
   /** Verify that RDDs, shuffles, etc. occupy resources */
   private def preCleanupValidate() {
-    assert(rddIds.nonEmpty || shuffleIds.nonEmpty || broadcastIds.nonEmpty, "Nothing to cleanup")
+    assert(rddIds.nonEmpty || shuffleIds.nonEmpty || broadcastIds.nonEmpty ||
+      checkpointIds.nonEmpty, "Nothing to cleanup")
 
     // Verify the RDDs have been persisted and blocks are present
     rddIds.foreach { rddId =>
