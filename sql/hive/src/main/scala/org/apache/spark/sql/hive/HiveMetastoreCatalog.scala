@@ -197,7 +197,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
     val table = synchronized {
-      client.getTable(databaseName, tblName)
+      client.getTable(databaseName, tblName, false)
     }
     if (table == null) {
       throw new NoSuchTableException
