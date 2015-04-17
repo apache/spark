@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.util.{Failure, Success}
-import scala.collection.JavaConversions._
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
+
+import scala.collection.JavaConversions._
+import scala.util.{Failure, Success}
+
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
