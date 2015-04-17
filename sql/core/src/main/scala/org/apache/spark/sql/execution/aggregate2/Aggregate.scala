@@ -56,7 +56,7 @@ sealed class BufferAndKey(leftLen: Int, rightLen: Int)
     // copy the keys to the last
     var idx = leftLen
     var idx2 = 0
-    while (idx < keys.length) {
+    while (idx2 < keys.length) {
       this.values(idx) = keys(idx2)
       idx2 += 1
       idx += 1
@@ -210,7 +210,7 @@ case class AggregatePreShuffle(
           val keys = groupByProjection(currentRow)
           results(keys) match {
             case null =>
-              val buffer = new BufferAndKey(output.length, keys)
+              val buffer = new BufferAndKey(buffersSchema.length, keys)
               // update the aggregate buffers
               var idx = 0
               while (idx < aggregates.length) {
@@ -426,7 +426,7 @@ case class DistinctAggregate(
           val keys = groupByProjection(currentRow)
           results(keys) match {
             case null =>
-              val buffer = new BufferAndKey(aggregates.length, keys)
+              val buffer = new BufferAndKey(buffersSchema.length, keys)
               val seens = new Array[JSet[Any]](aggregates.length)
 
               // update the aggregate buffers
