@@ -178,6 +178,14 @@ class DataFrameSuite extends QueryTest {
       testData.select('key).collect().toSeq)
   }
 
+  test("coalesce") {
+    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+
+    checkAnswer(
+      testData.select('key).coalesce(1).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
   test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b")),
