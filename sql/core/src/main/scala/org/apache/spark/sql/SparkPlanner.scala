@@ -89,5 +89,5 @@ protected[sql] class SparkPlanner(val sqlContext: SQLContext) extends SparkStrat
       Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
     }
   }
-  
+
 }

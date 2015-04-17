@@ -14,8 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
- package org.apache.spark.sql
+package org.apache.spark.sql
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -44,7 +43,6 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
     SparkPlan.currentContext.set(sqlContext)
     sqlContext.planner(optimizedPlan).next()
   }
-
 
   /**
    * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
@@ -91,4 +89,3 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
       """.stripMargin.trim
   }
 }
-
