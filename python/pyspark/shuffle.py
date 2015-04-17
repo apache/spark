@@ -513,7 +513,7 @@ class ExternalSorter(object):
                 chunks.append(load(open(path, 'rb')))
                 current_chunk = []
                 gc.collect()
-                batch /= 2
+                batch //= 2
                 limit = self._next_limit()
                 MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
                 DiskBytesSpilled += os.path.getsize(path)

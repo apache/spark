@@ -31,10 +31,8 @@ import tempfile
 import time
 import zipfile
 import random
-import itertools
 import threading
 import hashlib
-from StringIO import StringIO
 
 from py4j.protocol import Py4JJavaError
 
@@ -49,6 +47,11 @@ else:
     if sys.version_info[0] >= 3:
         xrange = range
         basestring = str
+
+if sys.version >= "3":
+    from io import StringIO
+else:
+    from StringIO import StringIO
 
 
 from pyspark.conf import SparkConf
