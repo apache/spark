@@ -406,12 +406,14 @@ class CleanerTester(
     sc: SparkContext,
     rddIds: Seq[Int] = Seq.empty,
     shuffleIds: Seq[Int] = Seq.empty,
-    broadcastIds: Seq[Long] = Seq.empty)
+    broadcastIds: Seq[Long] = Seq.empty,
+    checkpointIds: Seq[Long] = Seq.empty)
   extends Logging {
 
   val toBeCleanedRDDIds = new HashSet[Int] with SynchronizedSet[Int] ++= rddIds
   val toBeCleanedShuffleIds = new HashSet[Int] with SynchronizedSet[Int] ++= shuffleIds
   val toBeCleanedBroadcstIds = new HashSet[Long] with SynchronizedSet[Long] ++= broadcastIds
+  val toBeCheckpointIds = new HashSet[Long] with SynchronizedSet[Long] ++= checkpointIds
   val isDistributed = !sc.isLocal
 
   val cleanerListener = new CleanerListener {
@@ -432,6 +434,11 @@ class CleanerTester(
 
     def accumCleaned(accId: Long): Unit = {
       logInfo("Cleaned accId " + accId + " cleaned")
+    }
+
+    def checkpointCleaned(rddId: Long): Unit = {
+      toBeCheckpointIds -= rddId
+      logInfo("checkpoint rddId " + rddId + " cleaned")
     }
   }
 
@@ -547,7 +554,8 @@ class CleanerTester(
   private def isAllCleanedUp =
     toBeCleanedRDDIds.isEmpty &&
     toBeCleanedShuffleIds.isEmpty &&
-    toBeCleanedBroadcstIds.isEmpty
+    toBeCleanedBroadcstIds.isEmpty &&
+    toBeCheckpointIds.isEmpty
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {
