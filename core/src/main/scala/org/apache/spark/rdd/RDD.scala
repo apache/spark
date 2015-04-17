@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import java.util.Random
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
@@ -140,7 +141,7 @@ abstract class RDD[T: ClassTag](
   val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
-  @transient var name: String = null
+  @transient var name: String = Utils.getFormattedClassName(this)
 
   /** Assign a name to this RDD */
   def setName(_name: String): this.type = {
@@ -1612,14 +1613,22 @@ abstract class RDD[T: ClassTag](
  */
 object RDD {
 
+  private[spark] val SCOPE_NESTING_DELIMITER = ";"
+  private[spark] val SCOPE_NAME_DELIMITER = "_"
+
   /**
    *
    */
-  private[spark] def withScope[T](
-      sc: SparkContext,
-      allowNesting: Boolean = false)(body: => T): T = {
-    val parentMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
-    withScope[T](sc, parentMethodName, allowNesting)(body)
+  private val scopeCounter = new AtomicInteger(0)
+
+  /**
+   * ...
+   * This assumes the existing ID looks like this...
+   */
+  private def makeScopeId(name: String): String = {
+    name.replace(SCOPE_NESTING_DELIMITER, "-")
+      .replace(SCOPE_NAME_DELIMITER, "-") +
+      SCOPE_NAME_DELIMITER + scopeCounter.getAndIncrement
   }
 
   /**
@@ -1627,7 +1636,17 @@ object RDD {
    */
   private[spark] def withScope[T](
       sc: SparkContext,
-      scope: String,
+      allowNesting: Boolean = false)(body: => T): T = {
+    val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
+    withScope[T](sc, callerMethodName, allowNesting)(body)
+  }
+
+  /**
+   *
+   */
+  private[spark] def withScope[T](
+      sc: SparkContext,
+      name: String,
       allowNesting: Boolean = false)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
@@ -1637,7 +1656,9 @@ object RDD {
     try {
       // Set the scope only if the higher level caller allows us to do so
       if (sc.getLocalProperty(noOverrideKey) == null) {
-        sc.setLocalProperty(scopeKey, scope)
+        val oldScopeId = Option(oldScope).map { _ + SCOPE_NESTING_DELIMITER }.getOrElse("")
+        val newScopeId = oldScopeId + makeScopeId(name)
+        sc.setLocalProperty(scopeKey, newScopeId)
       }
       // Optionally disallow the child body to override our scope
       if (!allowNesting) {
