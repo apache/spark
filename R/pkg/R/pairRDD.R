@@ -16,6 +16,8 @@
 #
 
 # Operations supported on RDDs contains pairs (i.e key, value)
+#' @include generics.R jobj.R RDD.R
+NULL
 
 ############ Actions and Transformations ############
 

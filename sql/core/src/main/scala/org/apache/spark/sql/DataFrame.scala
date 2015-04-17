@@ -909,6 +909,20 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   * @group rdd
+   */
+  override def coalesce(numPartitions: Int): DataFrame = {
+    sqlContext.createDataFrame(
+      queryExecution.toRdd.coalesce(numPartitions),
+      schema,
+      needsConversion = false)
+  }
+
+  /**
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
    * @group dfops
    */

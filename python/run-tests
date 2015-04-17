@@ -66,7 +66,7 @@ function run_core_tests() {
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql/types.py"
+    run_test "pyspark/sql/_types.py"
     run_test "pyspark/sql/context.py"
     run_test "pyspark/sql/dataframe.py"
     run_test "pyspark/sql/functions.py"
@@ -135,6 +135,19 @@ run_sql_tests
 run_mllib_tests
 run_ml_tests
 run_streaming_tests
+
+# Try to test with Python 3
+if [ $(which python3.4) ]; then
+    export PYSPARK_PYTHON="python3.4"
+    echo "Testing with Python3.4 version:"
+    $PYSPARK_PYTHON --version
+
+    run_core_tests
+    run_sql_tests
+    run_mllib_tests
+    run_ml_tests
+    run_streaming_tests
+fi
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then
