@@ -537,4 +537,13 @@ class DataFrameSuite extends QueryTest {
     val df = TestSQLContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
   }
+
+  test("SPARK-6899") {
+    val originalValue = TestSQLContext.conf.codegenEnabled
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      decimalData.agg(avg('a)),
+      Row(new java.math.BigDecimal(2.0)))
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
 }
