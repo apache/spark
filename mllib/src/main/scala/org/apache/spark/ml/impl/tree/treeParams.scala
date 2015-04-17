@@ -283,7 +283,7 @@ private[ml] trait TreeRegressorParams extends Params {
   def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
-  protected def getOldImpurity: OldImpurity = {
+  private[ml] def getOldImpurity: OldImpurity = {
     getImpurity match {
       case "variance" => OldVariance
       case _ =>

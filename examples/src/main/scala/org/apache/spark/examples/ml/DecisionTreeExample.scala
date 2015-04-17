@@ -70,7 +70,7 @@ object DecisionTreeExample {
     val parser = new OptionParser[Params]("DecisionTreeExample") {
       head("DecisionTreeExample: an example decision tree app.")
       opt[String]("algo")
-        .text(s"algorithm (Classification, Regression), default: ${defaultParams.algo}")
+        .text(s"algorithm (classification, regression), default: ${defaultParams.algo}")
         .action((x, c) => c.copy(algo = x))
       opt[Int]("maxDepth")
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
@@ -221,18 +221,23 @@ object DecisionTreeExample {
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
-      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol(labelColName)
+      val labelIndexer = new StringIndexer()
+        .setInputCol("labelString")
+        .setOutputCol(labelColName)
       stages += labelIndexer
     }
     // (2) Identify categorical features using VectorIndexer.
     //     Features with more than maxCategories values will be treated as continuous.
-    val featuresIndexer = new VectorIndexer().setInputCol("features")
-      .setOutputCol("indexedFeatures").setMaxCategories(10)
+    val featuresIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(10)
     stages += featuresIndexer
     // (3) Learn DecisionTree
     val dt = algo match {
       case "classification" =>
-        new DecisionTreeClassifier().setFeaturesCol("indexedFeatures")
+        new DecisionTreeClassifier()
+          .setFeaturesCol("indexedFeatures")
           .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
@@ -241,7 +246,8 @@ object DecisionTreeExample {
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
       case "regression" =>
-        new DecisionTreeRegressor().setFeaturesCol("indexedFeatures")
+        new DecisionTreeRegressor()
+          .setFeaturesCol("indexedFeatures")
           .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
