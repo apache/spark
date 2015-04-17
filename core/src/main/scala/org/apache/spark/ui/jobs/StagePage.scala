@@ -299,7 +299,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val launchTimes = validTasks.map { case TaskUIData(info, metrics, _) =>
             info.launchTime
           }
-          graphData("Launch Time") = launchTimes.mkString(",")
+          graphData("launchtime") = launchTimes.mkString(",")
 
           val durations = validTasks.map { case TaskUIData(info, metrics, _) => if (info.status == "RUNNING") 
             info.timeRunning(System.currentTimeMillis()) else metrics.map(_.executorRunTime).getOrElse(1L)
