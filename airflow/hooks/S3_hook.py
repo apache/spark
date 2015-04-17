@@ -77,10 +77,16 @@ class S3Hook(BaseHook):
         self.s3_conn = self.get_connection(s3_conn_id)
         self.profile = None
         self._sts_conn_required = False
+        self._creds_in_config_file = False
         try:
             self.extra_params = json.loads(self.s3_conn.extra)
-            self.s3_config_format = self.extra_params['s3_config_format']
-            self.s3_config_file = self.extra_params['s3_config_file']
+            if 'aws_secret_access_key' in self.extra_params:
+                self._a_key = self.extra_params['aws_access_key_id']
+                self._s_key = self.extra_params['aws_secret_access_key']
+            else:
+                self._creds_in_config_file = True
+                self.s3_config_format = self.extra_params['s3_config_format']
+                self.s3_config_file = self.extra_params['s3_config_file']
             if 'profile' in self.extra_params:
                 self.profile = self.extra_params['profile']
             self._sts_conn_required = 'aws_account_id' in self.extra_params
@@ -105,14 +111,27 @@ class S3Hook(BaseHook):
         self.__dict__.update(d)
         self.__dict__['connection'] = self.get_conn()
 
+    def _parse_s3_url(self, s3url):
+        parsed_url = urlparse(s3url)
+        if not parsed_url.netloc:
+            raise Exception('Please provide a bucket_name')
+        else:
+            bucket_name = parsed_url.netloc
+            key = parsed_url.path
+            return (bucket_name, key)
+
     def get_conn(self):
         '''
         Returns the boto S3Connection object.
         '''
         _s3_conn = self.get_connection(self.s3_conn_id)
-        a_key, s_key = _parse_s3_config(self.s3_config_file,
-                                        self.s3_config_format,
-                                        self.profile)
+        if self._creds_in_config_file:
+            a_key, s_key = _parse_s3_config(self.s3_config_file,
+                                            self.s3_config_format,
+                                            self.profile)
+        else:
+            a_key = self._a_key
+            s_key = self._s_key
         if self._sts_conn_required:
             sts_connection = STSConnection(aws_access_key_id=a_key,
                                            aws_secret_access_key=s_key,
@@ -143,7 +162,7 @@ class S3Hook(BaseHook):
 
     def get_bucket(self, bucket_name):
         '''
-        Returns a boto.s3.bucket object
+        Returns a boto.s3.bucket.Bucket object
 
         :param bucket_name: the name of the bucket
         :type bucket_name: str
@@ -186,15 +205,24 @@ class S3Hook(BaseHook):
         '''
         Checks that a key exists in a bucket
         '''
-        if bucket_name is None:
-            parsed_url = urlparse(key)
-            if parsed_url.netloc == '':
-                raise Exception('Please provide a bucket_name')
-            else:
-                bucket_name = parsed_url.netloc
-                key = parsed_url.path
+        if not bucket_name:
+            (bucket_name, key) = self._parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
         return bucket.get_key(key) is not None
+
+    def get_key(self, key, bucket_name=None):
+        '''
+        Returns a boto.s3.key.Key object
+
+        :param key: the path to the key
+        :type key: str
+        :param bucket_name: the name of the bucket
+        :type bucket_name: str
+        '''
+        if not bucket_name:
+            (bucket_name, key) = self._parse_s3_url(key)
+        bucket = self.get_bucket(bucket_name)
+        return bucket.get_key(key)
 
     def check_for_prefix(self, bucket_name, prefix, delimiter):
         '''
@@ -206,3 +234,35 @@ class S3Hook(BaseHook):
         leaf_prefix = prefix_split[1]
         plist = self.list_prefixes(bucket_name, previous_level, delimiter)
         return False if plist is None else prefix in plist
+
+    def load_file(self, filename,
+                  key, bucket_name=None,
+                  replace=False):
+        """
+        Loads a local file to S3
+
+        This is provided as a convenience to drop a file in S3. It uses the
+        boto infrastructure to ship a file to s3. It is currently using only
+        a single part download, and should not be used to move large files.
+
+        :param filename: name of the file to load.
+        :type filename: str
+        :param key: S3 key that will point to the file
+        :type key: str
+        :param bucket_name: Name of the bucket in which to store the file
+        :type bucket_name: str
+        :param replace: A flag to decide whther or not to overwrite the key
+            if it already exists
+        :type replace: bool
+        """
+        if not bucket_name:
+            (bucket_name, key) = self._parse_s3_url(key)
+        bucket = self.get_bucket(bucket_name)
+        if not self.check_for_key(key, bucket_name):
+            key_obj = bucket.new_key(key_name=key)
+        else:
+            key_obj = bucket.get_key(key)
+        key_size = key_obj.set_contents_from_filename(filename, replace=replace)
+        logging.info("The key {key} now contains"
+                     " {key_size} bytes".format(**locals()))
+
