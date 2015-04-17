@@ -18,8 +18,10 @@
 """
 A collections of builtin functions
 """
+import sys
 
-from itertools import imap
+if sys.version < "3":
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter
 
@@ -76,7 +78,7 @@ __all__.sort()
 
 
 def countDistinct(col, *cols):
-    """ Return a new Column for distinct count of `col` or `cols`
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
@@ -91,7 +93,7 @@ def countDistinct(col, *cols):
 
 
 def approxCountDistinct(col, rsd=None):
-    """ Return a new Column for approximate distinct count of `col`
+    """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
     >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
     [Row(c=2)]
@@ -116,14 +118,15 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+        fname = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        judf = sc._jvm.UserDefinedPythonFunction(fname, bytearray(pickled_command), env,
                                                  includes, sc.pythonExec, broadcast_vars,
                                                  sc._javaAccumulator, jdt)
         return judf
@@ -142,7 +145,7 @@ class UserDefinedFunction(object):
 
 
 def udf(f, returnType=StringType()):
-    """Create a user defined function (UDF)
+    """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
@@ -160,7 +163,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

@@ -526,7 +526,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairDStream[K, U] = {
     import scala.collection.JavaConverters._
-    def fn = (x: V) => f.apply(x).asScala
+    def fn: (V) => Iterable[U] = (x: V) => f.apply(x).asScala
     implicit val cm: ClassTag[U] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     dstream.flatMapValues(fn)

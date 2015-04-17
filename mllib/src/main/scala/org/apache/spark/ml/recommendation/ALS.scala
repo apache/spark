@@ -34,6 +34,7 @@ import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -54,86 +55,88 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for rank of the matrix factorization.
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization", Some(10))
+  val rank = new IntParam(this, "rank", "rank of the factorization")
 
   /** @group getParam */
-  def getRank: Int = get(rank)
+  def getRank: Int = getOrDefault(rank)
 
   /**
    * Param for number of user blocks.
    * @group param
    */
-  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
+  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks")
 
   /** @group getParam */
-  def getNumUserBlocks: Int = get(numUserBlocks)
+  def getNumUserBlocks: Int = getOrDefault(numUserBlocks)
 
   /**
    * Param for number of item blocks.
    * @group param
    */
   val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
+    new IntParam(this, "numItemBlocks", "number of item blocks")
 
   /** @group getParam */
-  def getNumItemBlocks: Int = get(numItemBlocks)
+  def getNumItemBlocks: Int = getOrDefault(numItemBlocks)
 
   /**
    * Param to decide whether to use implicit preference.
    * @group param
    */
-  val implicitPrefs =
-    new BooleanParam(this, "implicitPrefs", "whether to use implicit preference", Some(false))
+  val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
 
   /** @group getParam */
-  def getImplicitPrefs: Boolean = get(implicitPrefs)
+  def getImplicitPrefs: Boolean = getOrDefault(implicitPrefs)
 
   /**
    * Param for the alpha parameter in the implicit preference formulation.
    * @group param
    */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference", Some(1.0))
+  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference")
 
   /** @group getParam */
-  def getAlpha: Double = get(alpha)
+  def getAlpha: Double = getOrDefault(alpha)
 
   /**
    * Param for the column name for user ids.
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
+  val userCol = new Param[String](this, "userCol", "column name for user ids")
 
   /** @group getParam */
-  def getUserCol: String = get(userCol)
+  def getUserCol: String = getOrDefault(userCol)
 
   /**
    * Param for the column name for item ids.
    * @group param
    */
-  val itemCol =
-    new Param[String](this, "itemCol", "column name for item ids", Some("item"))
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
 
   /** @group getParam */
-  def getItemCol: String = get(itemCol)
+  def getItemCol: String = getOrDefault(itemCol)
 
   /**
    * Param for the column name for ratings.
    * @group param
    */
-  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
+  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
 
   /** @group getParam */
-  def getRatingCol: String = get(ratingCol)
+  def getRatingCol: String = getOrDefault(ratingCol)
 
   /**
    * Param for whether to apply nonnegativity constraints.
    * @group param
    */
   val nonnegative = new BooleanParam(
-    this, "nonnegative", "whether to use nonnegative constraint for least squares", Some(false))
+    this, "nonnegative", "whether to use nonnegative constraint for least squares")
 
   /** @group getParam */
-  val getNonnegative: Boolean = get(nonnegative)
+  def getNonnegative: Boolean = getOrDefault(nonnegative)
+
+  setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
+    implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
+    ratingCol -> "rating", nonnegative -> false)
 
   /**
    * Validates and transforms the input schema.
@@ -142,7 +145,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     assert(schema(map(userCol)).dataType == IntegerType)
     assert(schema(map(itemCol)).dataType== IntegerType)
     val ratingType = schema(map(ratingCol)).dataType
@@ -171,7 +174,7 @@ class ALSModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     import dataset.sqlContext.implicits._
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val users = userFactors.toDF("id", "features")
     val items = itemFactors.toDF("id", "features")
 
@@ -283,7 +286,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val ratings = dataset
       .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
       .map { row =>
@@ -320,7 +323,7 @@ object ALS extends Logging {
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
-    /** Solves a least squares problem (possibly with other constraints). */
+    /** Solves a least squares problem with regularization (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
 
@@ -332,20 +335,19 @@ object ALS extends Logging {
     /**
      * Solves a least squares problem with L2 regularization:
      *
-     *   min norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     *   min norm(A x - b)^2^ + lambda * norm(x)^2^
      *
      * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
-     * @param lambda regularization constant, which will be scaled by n
+     * @param lambda regularization constant
      * @return the solution x
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       val k = ne.k
       // Add scaled lambda to the diagonals of AtA.
-      val scaledlambda = lambda * ne.n
       var i = 0
       var j = 2
       while (i < ne.triK) {
-        ne.ata(i) += scaledlambda
+        ne.ata(i) += lambda
         i += j
         j += 1
       }
@@ -391,7 +393,7 @@ object ALS extends Logging {
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       val rank = ne.k
       initialize(rank)
-      fillAtA(ne.ata, lambda * ne.n)
+      fillAtA(ne.ata, lambda)
       val x = NNLS.solve(ata, ne.atb, workspace)
       ne.reset()
       x.map(x => x.toFloat)
@@ -420,7 +422,15 @@ object ALS extends Logging {
     }
   }
 
-  /** Representing a normal equation (ALS' subproblem). */
+  /**
+   * Representing a normal equation to solve the following weighted least squares problem:
+   *
+   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - b,,i,,)^2^ + lambda * x^T^ x.
+   *
+   * Its normal equation is given by
+   *
+   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - b,,i,, a,,i,,) + lambda * x = 0.
+   */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
     /** Number of entries in the upper triangular part of a k-by-k matrix. */
@@ -429,8 +439,6 @@ object ALS extends Logging {
     val ata = new Array[Double](triK)
     /** A^T^ * b */
     val atb = new Array[Double](k)
-    /** Number of observations. */
-    var n = 0
 
     private val da = new Array[Double](k)
     private val upper = "U"
@@ -444,28 +452,13 @@ object ALS extends Logging {
     }
 
     /** Adds an observation. */
-    def add(a: Array[Float], b: Float): this.type = {
+    def add(a: Array[Float], b: Double, c: Double = 1.0): this.type = {
+      require(c >= 0.0)
       require(a.length == k)
       copyToDouble(a)
-      blas.dspr(upper, k, 1.0, da, 1, ata)
-      blas.daxpy(k, b.toDouble, da, 1, atb, 1)
-      n += 1
-      this
-    }
-
-    /**
-     * Adds an observation with implicit feedback. Note that this does not increment the counter.
-     */
-    def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
-      require(a.length == k)
-      // Extension to the original paper to handle b < 0. confidence is a function of |b| instead
-      // so that it is never negative.
-      val confidence = 1.0 + alpha * math.abs(b)
-      copyToDouble(a)
-      blas.dspr(upper, k, confidence - 1.0, da, 1, ata)
-      // For b <= 0, the corresponding preference is 0. So the term below is only added for b > 0.
-      if (b > 0) {
-        blas.daxpy(k, confidence, da, 1, atb, 1)
+      blas.dspr(upper, k, c, da, 1, ata)
+      if (b != 0.0) {
+        blas.daxpy(k, c * b, da, 1, atb, 1)
       }
       this
     }
@@ -475,7 +468,6 @@ object ALS extends Logging {
       require(other.k == k)
       blas.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       blas.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
-      n += other.n
       this
     }
 
@@ -483,7 +475,6 @@ object ALS extends Logging {
     def reset(): Unit = {
       ju.Arrays.fill(ata, 0.0)
       ju.Arrays.fill(atb, 0.0)
-      n = 0
     }
   }
 
@@ -1114,6 +1105,7 @@ object ALS extends Logging {
             ls.merge(YtY.get)
           }
           var i = srcPtrs(j)
+          var numExplicits = 0
           while (i < srcPtrs(j + 1)) {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
@@ -1121,13 +1113,23 @@ object ALS extends Logging {
             val srcFactor = sortedSrcFactors(blockId)(localIndex)
             val rating = ratings(i)
             if (implicitPrefs) {
-              ls.addImplicit(srcFactor, rating, alpha)
+              // Extension to the original paper to handle b < 0. confidence is a function of |b|
+              // instead so that it is never negative. c1 is confidence - 1.0.
+              val c1 = alpha * math.abs(rating)
+              // For rating <= 0, the corresponding preference is 0. So the term below is only added
+              // for rating > 0. Because YtY is already added, we need to adjust the scaling here.
+              if (rating > 0) {
+                numExplicits += 1
+                ls.add(srcFactor, (c1 + 1.0) / c1, c1)
+              }
             } else {
               ls.add(srcFactor, rating)
+              numExplicits += 1
             }
             i += 1
           }
-          dstFactors(j) = solver.solve(ls, regParam)
+          // Weight lambda by the number of explicit ratings based on the ALS-WR paper.
+          dstFactors(j) = solver.solve(ls, numExplicits * regParam)
           j += 1
         }
         dstFactors
@@ -1141,7 +1143,7 @@ object ALS extends Logging {
   private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
     factorBlocks.values.aggregate(new NormalEquation(rank))(
       seqOp = (ne, factors) => {
-        factors.foreach(ne.add(_, 0.0f))
+        factors.foreach(ne.add(_, 0.0))
         ne
       },
       combOp = (ne1, ne2) => ne1.merge(ne2))

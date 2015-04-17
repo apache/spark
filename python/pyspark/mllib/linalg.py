@@ -25,7 +25,13 @@ SciPy is available in their environment.
 
 import sys
 import array
-import copy_reg
+
+if sys.version >= '3':
+    basestring = str
+    xrange = range
+    import copyreg as copy_reg
+else:
+    import copy_reg
 
 import numpy as np
 
@@ -57,7 +63,7 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
@@ -88,7 +94,7 @@ def _vector_size(v):
     """
     if isinstance(v, Vector):
         return len(v)
-    elif type(v) in (array.array, list, tuple):
+    elif type(v) in (array.array, list, tuple, xrange):
         return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
@@ -173,10 +179,27 @@ class Vector(object):
 
 class DenseVector(Vector):
     """
-    A dense vector represented by a value array.
+    A dense vector represented by a value array. We use numpy array for
+    storage and arithmetics will be delegated to the underlying numpy
+    array.
+
+    >>> v = Vectors.dense([1.0, 2.0])
+    >>> u = Vectors.dense([3.0, 4.0])
+    >>> v + u
+    DenseVector([4.0, 6.0])
+    >>> 2 - v
+    DenseVector([1.0, 0.0])
+    >>> v / 2
+    DenseVector([0.5, 1.0])
+    >>> v * u
+    DenseVector([3.0, 8.0])
+    >>> u / v
+    DenseVector([3.0, 2.0])
+    >>> u % 2
+    DenseVector([1.0, 0.0])
     """
     def __init__(self, ar):
-        if isinstance(ar, basestring):
+        if isinstance(ar, bytes):
             ar = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
             ar = np.array(ar, dtype=np.float64)
@@ -292,6 +315,27 @@ class DenseVector(Vector):
     def __getattr__(self, item):
         return getattr(self.array, item)
 
+    def _delegate(op):
+        def func(self, other):
+            if isinstance(other, DenseVector):
+                other = other.array
+            return DenseVector(getattr(self.array, op)(other))
+        return func
+
+    __neg__ = _delegate("__neg__")
+    __add__ = _delegate("__add__")
+    __sub__ = _delegate("__sub__")
+    __mul__ = _delegate("__mul__")
+    __div__ = _delegate("__div__")
+    __truediv__ = _delegate("__truediv__")
+    __mod__ = _delegate("__mod__")
+    __radd__ = _delegate("__radd__")
+    __rsub__ = _delegate("__rsub__")
+    __rmul__ = _delegate("__rmul__")
+    __rdiv__ = _delegate("__rdiv__")
+    __rtruediv__ = _delegate("__rtruediv__")
+    __rmod__ = _delegate("__rmod__")
+
 
 class SparseVector(Vector):
     """
@@ -308,12 +352,12 @@ class SparseVector(Vector):
         :param args: Non-zero entries, as a dictionary, list of tupes,
                or two sorted lists containing indices and values.
 
-        >>> print SparseVector(4, {1: 1.0, 3: 5.5})
-        (4,[1,3],[1.0,5.5])
-        >>> print SparseVector(4, [(1, 1.0), (3, 5.5)])
-        (4,[1,3],[1.0,5.5])
-        >>> print SparseVector(4, [1, 3], [1.0, 5.5])
-        (4,[1,3],[1.0,5.5])
+        >>> SparseVector(4, {1: 1.0, 3: 5.5})
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> SparseVector(4, [(1, 1.0), (3, 5.5)])
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> SparseVector(4, [1, 3], [1.0, 5.5])
+        SparseVector(4, {1: 1.0, 3: 5.5})
         """
         self.size = int(size)
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
@@ -325,8 +369,8 @@ class SparseVector(Vector):
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
         else:
-            if isinstance(args[0], basestring):
-                assert isinstance(args[1], str), "values should be string too"
+            if isinstance(args[0], bytes):
+                assert isinstance(args[1], bytes), "values should be string too"
                 if args[0]:
                     self.indices = np.frombuffer(args[0], np.int32)
                     self.values = np.frombuffer(args[1], np.float64)
@@ -555,12 +599,12 @@ class Vectors(object):
         :param args: Non-zero entries, as a dictionary, list of tupes,
                      or two sorted lists containing indices and values.
 
-        >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})
-        (4,[1,3],[1.0,5.5])
-        >>> print Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
-        (4,[1,3],[1.0,5.5])
-        >>> print Vectors.sparse(4, [1, 3], [1.0, 5.5])
-        (4,[1,3],[1.0,5.5])
+        >>> Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
+        SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> Vectors.sparse(4, [1, 3], [1.0, 5.5])
+        SparseVector(4, {1: 1.0, 3: 5.5})
         """
         return SparseVector(size, *args)
 
@@ -604,6 +648,15 @@ class Matrix(object):
         """
         raise NotImplementedError
 
+    @staticmethod
+    def _convert_to_array(array_like, dtype):
+        """
+        Convert Matrix attributes which are array-like or buffer to array.
+        """
+        if isinstance(array_like, bytes):
+            return np.frombuffer(array_like, dtype=dtype)
+        return np.asarray(array_like, dtype=dtype)
+
 
 class DenseMatrix(Matrix):
     """
@@ -611,13 +664,8 @@ class DenseMatrix(Matrix):
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
-        if isinstance(values, basestring):
-            values = np.frombuffer(values, dtype=np.float64)
-        elif not isinstance(values, np.ndarray):
-            values = np.array(values, dtype=np.float64)
+        values = self._convert_to_array(values, np.float64)
         assert len(values) == numRows * numCols
-        if values.dtype != np.float64:
-            values.astype(np.float64)
         self.values = values
 
     def __reduce__(self):
@@ -634,11 +682,108 @@ class DenseMatrix(Matrix):
         """
         return self.values.reshape((self.numRows, self.numCols), order='F')
 
+    def toSparse(self):
+        """Convert to SparseMatrix"""
+        indices = np.nonzero(self.values)[0]
+        colCounts = np.bincount(indices // self.numRows)
+        colPtrs = np.cumsum(np.hstack(
+            (0, colCounts, np.zeros(self.numCols - colCounts.size))))
+        values = self.values[indices]
+        rowIndices = indices % self.numRows
+
+        return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
+
+    def __getitem__(self, indices):
+        i, j = indices
+        if i < 0 or i >= self.numRows:
+            raise ValueError("Row index %d is out of range [0, %d)"
+                             % (i, self.numRows))
+        if j >= self.numCols or j < 0:
+            raise ValueError("Column index %d is out of range [0, %d)"
+                             % (j, self.numCols))
+        return self.values[i + j * self.numRows]
+
     def __eq__(self, other):
         return (isinstance(other, DenseMatrix) and
                 self.numRows == other.numRows and
                 self.numCols == other.numCols and
                 all(self.values == other.values))
+
+
+class SparseMatrix(Matrix):
+    """Sparse Matrix stored in CSC format."""
+    def __init__(self, numRows, numCols, colPtrs, rowIndices, values,
+                 isTransposed=False):
+        Matrix.__init__(self, numRows, numCols)
+        self.isTransposed = isTransposed
+        self.colPtrs = self._convert_to_array(colPtrs, np.int32)
+        self.rowIndices = self._convert_to_array(rowIndices, np.int32)
+        self.values = self._convert_to_array(values, np.float64)
+
+        if self.isTransposed:
+            if self.colPtrs.size != numRows + 1:
+                raise ValueError("Expected colPtrs of size %d, got %d."
+                                 % (numRows + 1, self.colPtrs.size))
+        else:
+            if self.colPtrs.size != numCols + 1:
+                raise ValueError("Expected colPtrs of size %d, got %d."
+                                 % (numCols + 1, self.colPtrs.size))
+        if self.rowIndices.size != self.values.size:
+            raise ValueError("Expected rowIndices of length %d, got %d."
+                             % (self.rowIndices.size, self.values.size))
+
+    def __reduce__(self):
+        return SparseMatrix, (
+            self.numRows, self.numCols, self.colPtrs.tostring(),
+            self.rowIndices.tostring(), self.values.tostring(),
+            self.isTransposed)
+
+    def __getitem__(self, indices):
+        i, j = indices
+        if i < 0 or i >= self.numRows:
+            raise ValueError("Row index %d is out of range [0, %d)"
+                             % (i, self.numRows))
+        if j < 0 or j >= self.numCols:
+            raise ValueError("Column index %d is out of range [0, %d)"
+                             % (j, self.numCols))
+
+        # If a CSR matrix is given, then the row index should be searched
+        # for in ColPtrs, and the column index should be searched for in the
+        # corresponding slice obtained from rowIndices.
+        if self.isTransposed:
+            j, i = i, j
+
+        colStart = self.colPtrs[j]
+        colEnd = self.colPtrs[j + 1]
+        nz = self.rowIndices[colStart: colEnd]
+        ind = np.searchsorted(nz, i) + colStart
+        if ind < colEnd and self.rowIndices[ind] == i:
+            return self.values[ind]
+        else:
+            return 0.0
+
+    def toArray(self):
+        """
+        Return an numpy.ndarray
+        """
+        A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
+        for k in xrange(self.colPtrs.size - 1):
+            startptr = self.colPtrs[k]
+            endptr = self.colPtrs[k + 1]
+            if self.isTransposed:
+                A[k, self.rowIndices[startptr:endptr]] = self.values[startptr:endptr]
+            else:
+                A[self.rowIndices[startptr:endptr], k] = self.values[startptr:endptr]
+        return A
+
+    def toDense(self):
+        densevals = np.reshape(
+            self.toArray(), (self.numRows * self.numCols), order='F')
+        return DenseMatrix(self.numRows, self.numCols, densevals)
+
+    # TODO: More efficient implementation:
+    def __eq__(self, other):
+        return np.all(self.toArray == other.toArray)
 
 
 class Matrices(object):
@@ -648,6 +793,13 @@ class Matrices(object):
         Create a DenseMatrix
         """
         return DenseMatrix(numRows, numCols, values)
+
+    @staticmethod
+    def sparse(numRows, numCols, colPtrs, rowIndices, values):
+        """
+        Create a SparseMatrix
+        """
+        return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
 
 
 def _test():

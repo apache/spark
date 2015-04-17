@@ -31,7 +31,8 @@ class TestNullableColumnAccessor[T <: DataType, JvmType](
   with NullableColumnAccessor
 
 object TestNullableColumnAccessor {
-  def apply[T <: DataType, JvmType](buffer: ByteBuffer, columnType: ColumnType[T, JvmType]) = {
+  def apply[T <: DataType, JvmType](buffer: ByteBuffer, columnType: ColumnType[T, JvmType])
+    : TestNullableColumnAccessor[T, JvmType] = {
     // Skips the column type ID
     buffer.getInt()
     new TestNullableColumnAccessor(buffer, columnType)

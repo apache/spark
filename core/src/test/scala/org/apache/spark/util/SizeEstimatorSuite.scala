@@ -98,8 +98,10 @@ class SizeEstimatorSuite
 
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
-    assertResult(72)(SizeEstimator.estimate(Array.fill(10)(d1))) // 10 pointers plus 8-byte object
-    assertResult(432)(SizeEstimator.estimate(Array.fill(100)(d1))) // 100 pointers plus 8-byte object
+    // 10 pointers plus 8-byte object
+    assertResult(72)(SizeEstimator.estimate(Array.fill(10)(d1)))
+    // 100 pointers plus 8-byte object
+    assertResult(432)(SizeEstimator.estimate(Array.fill(100)(d1)))
 
     // Same thing with huge array containing the same element many times. Note that this won't
     // return exactly 4032 because it can't tell that *all* the elements will equal the first

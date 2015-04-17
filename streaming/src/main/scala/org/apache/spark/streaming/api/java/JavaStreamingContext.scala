@@ -192,7 +192,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
       converter: JFunction[InputStream, java.lang.Iterable[T]],
       storageLevel: StorageLevel)
   : JavaReceiverInputDStream[T] = {
-    def fn = (x: InputStream) => converter.call(x).toIterator
+    def fn: (InputStream) => Iterator[T] = (x: InputStream) => converter.call(x).toIterator
     implicit val cmt: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.socketStream(hostname, port, fn, storageLevel)
@@ -313,7 +313,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
-    def fn = (x: Path) => filter.call(x).booleanValue()
+    def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly)
   }
 
@@ -344,7 +344,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
-    def fn = (x: Path) => filter.call(x).booleanValue()
+    def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
   }
 
@@ -625,7 +625,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
+  def stop(stopSparkContext: Boolean): Unit = ssc.stop(stopSparkContext)
 
   /**
    * Stop the execution of the streams.
@@ -633,7 +633,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param stopGracefully Stop gracefully by waiting for the processing of all
    *                       received data to be completed
    */
-  def stop(stopSparkContext: Boolean, stopGracefully: Boolean) = {
+  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     ssc.stop(stopSparkContext, stopGracefully)
   }
 

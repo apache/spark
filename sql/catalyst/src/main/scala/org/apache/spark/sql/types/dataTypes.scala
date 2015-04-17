@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -349,7 +350,7 @@ class StringType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = String
+  private[sql] type JvmType = UTF8String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 
@@ -670,6 +671,10 @@ case class PrecisionInfo(precision: Int, scale: Int)
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = Decimal.DecimalIsFractional
@@ -819,6 +824,10 @@ object ArrayType {
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
       s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
@@ -856,6 +865,9 @@ case class StructField(
     dataType: DataType,
     nullable: Boolean = true,
     metadata: Metadata = Metadata.empty) {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, null)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
@@ -923,7 +935,9 @@ object StructType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
             DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
+        DecimalType(
+          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
+          max(leftScale, rightScale))
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
@@ -1002,6 +1016,9 @@ object StructType {
  */
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -1121,6 +1138,10 @@ case class MapType(
     keyType: DataType,
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  def this() = this(null, null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
     builder.append(s"$prefix-- value: ${valueType.typeName} " +
@@ -1175,8 +1196,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /**
    * Convert the user type to a SQL datum
    *
-   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
-   *       where we need to convert Any to UserType.
+   * TODO: Can we make this take obj: UserType?  The issue is in
+   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
   def serialize(obj: Any): Any
 

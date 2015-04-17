@@ -19,10 +19,8 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
-import akka.actor.{ActorRef, Actor}
-
 import org.apache.spark._
-import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, RpcEndpoint}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
 
@@ -34,8 +32,8 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
  * policy.
  *
  * OutputCommitCoordinator is instantiated in both the drivers and executors. On executors, it is
- * configured with a reference to the driver's OutputCommitCoordinatorActor, so requests to commit
- * output will be forwarded to the driver's OutputCommitCoordinator.
+ * configured with a reference to the driver's OutputCommitCoordinatorEndpoint, so requests to
+ * commit output will be forwarded to the driver's OutputCommitCoordinator.
  *
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
@@ -43,10 +41,7 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
 private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   // Initialized by SparkEnv
-  var coordinatorActor: Option[ActorRef] = None
-  private val timeout = AkkaUtils.askTimeout(conf)
-  private val maxAttempts = AkkaUtils.numRetries(conf)
-  private val retryInterval = AkkaUtils.retryWaitMs(conf)
+  var coordinatorRef: Option[RpcEndpointRef] = None
 
   private type StageId = Int
   private type PartitionId = Long
@@ -65,6 +60,13 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   private type CommittersByStageMap = mutable.Map[StageId, mutable.Map[PartitionId, TaskAttemptId]]
 
   /**
+   * Returns whether the OutputCommitCoordinator's internal data structures are all empty.
+   */
+  def isEmpty: Boolean = {
+    authorizedCommittersByStage.isEmpty
+  }
+
+  /**
    * Called by tasks to ask whether they can commit their output to HDFS.
    *
    * If a task attempt has been authorized to commit, then all other attempts to commit the same
@@ -81,9 +83,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       partition: PartitionId,
       attempt: TaskAttemptId): Boolean = {
     val msg = AskPermissionToCommitOutput(stage, partition, attempt)
-    coordinatorActor match {
-      case Some(actor) =>
-        AkkaUtils.askWithReply[Boolean](msg, actor, maxAttempts, retryInterval, timeout)
+    coordinatorRef match {
+      case Some(endpointRef) =>
+        endpointRef.askWithReply[Boolean](msg)
       case None =>
         logError(
           "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
@@ -118,15 +120,17 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
         logInfo(
           s"Task was denied committing, stage: $stage, partition: $partition, attempt: $attempt")
       case otherReason =>
-        logDebug(s"Authorized committer $attempt (stage=$stage, partition=$partition) failed;" +
-          s" clearing lock")
-        authorizedCommitters.remove(partition)
+        if (authorizedCommitters.get(partition).exists(_ == attempt)) {
+          logDebug(s"Authorized committer $attempt (stage=$stage, partition=$partition) failed;" +
+            s" clearing lock")
+          authorizedCommitters.remove(partition)
+        }
     }
   }
 
   def stop(): Unit = synchronized {
-    coordinatorActor.foreach(_ ! StopCoordinator)
-    coordinatorActor = None
+    coordinatorRef.foreach(_ send StopCoordinator)
+    coordinatorRef = None
     authorizedCommittersByStage.clear()
   }
 
@@ -157,16 +161,20 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 private[spark] object OutputCommitCoordinator {
 
   // This actor is used only for RPC
-  class OutputCommitCoordinatorActor(outputCommitCoordinator: OutputCommitCoordinator)
-    extends Actor with ActorLogReceive with Logging {
+  private[spark] class OutputCommitCoordinatorEndpoint(
+      override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
+    extends RpcEndpoint with Logging {
 
-    override def receiveWithLogging: PartialFunction[Any, Unit] = {
-      case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
-        sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt)
+    override def receive: PartialFunction[Any, Unit] = {
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
-        context.stop(self)
-        sender ! true
+        stop()
+    }
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
+        context.reply(
+          outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt))
     }
   }
 }

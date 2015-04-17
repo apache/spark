@@ -136,7 +136,7 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
    * @param query the query to analyze
    * @param token a unique token in the string that should be indicated by the exception
    */
-  def positionTest(name: String, query: String, token: String) = {
+  def positionTest(name: String, query: String, token: String): Unit = {
     def parseTree =
       Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
 

@@ -58,19 +58,25 @@ phase, use the following sytax:
 We use Sphinx to generate Python API docs, so you will need to install it by running
 `sudo pip install sphinx`.
 
-## API Docs (Scaladoc and Sphinx)
+## knitr, devtools
 
-You can build just the Spark scaladoc by running `build/sbt doc` from the SPARK_PROJECT_ROOT directory.
+SparkR documentation is written using `roxygen2` and we use `knitr`, `devtools` to generate
+documentation. To install these packages you can run `install.packages(c("knitr", "devtools"))` from a
+R console.
+
+## API Docs (Scaladoc, Sphinx, roxygen2)
+
+You can build just the Spark scaladoc by running `build/sbt unidoc` from the SPARK_PROJECT_ROOT directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
 SPARK_PROJECT_ROOT/python/docs directory. Documentation is only generated for classes that are listed as
-public in `__init__.py`.
+public in `__init__.py`. The SparkR docs can be built by running SPARK_PROJECT_ROOT/R/create-docs.sh.
 
 When you run `jekyll` in the `docs` directory, it will also copy over the scaladoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
-jekyll plugin to run `build/sbt doc` before building the site so if you haven't run it (recently) it
+jekyll plugin to run `build/sbt unidoc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
 PySpark docs [Sphinx](http://sphinx-doc.org/).
 
-NOTE: To skip the step of building and copying over the Scala and Python API docs, run `SKIP_API=1
+NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
 jekyll`.

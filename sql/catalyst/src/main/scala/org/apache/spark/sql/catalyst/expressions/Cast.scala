@@ -21,7 +21,6 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types._
 
 /** Cast the child expression to the target data type. */
@@ -112,21 +111,21 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
-    case DateType => buildCast[Int](_, d => DateUtils.toString(d))
-    case TimestampType => buildCast[Timestamp](_, timestampToString)
-    case _ => buildCast[Any](_, _.toString)
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
+    case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
+    case TimestampType => buildCast[Timestamp](_, t => UTF8String(timestampToString(t)))
+    case _ => buildCast[Any](_, o => UTF8String(o.toString))
   }
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
-    case StringType => buildCast[String](_, _.getBytes("UTF-8"))
+    case StringType => buildCast[UTF8String](_, _.getBytes)
   }
 
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, _.length() != 0)
+      buildCast[UTF8String](_, _.length() != 0)
     case TimestampType =>
       buildCast[Timestamp](_, t => t.getTime() != 0 || t.getNanos() != 0)
     case DateType =>
@@ -151,8 +150,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => {
+      buildCast[UTF8String](_, utfs => {
         // Throw away extra if more than 9 decimal places
+        val s = utfs.toString
         val periodIdx = s.indexOf(".")
         var n = s
         if (periodIdx != -1 && n.length() - periodIdx > 9) {
@@ -227,8 +227,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s =>
-        try DateUtils.fromJavaDate(Date.valueOf(s))
+      buildCast[UTF8String](_, s =>
+        try DateUtils.fromJavaDate(Date.valueOf(s.toString))
         catch { case _: java.lang.IllegalArgumentException => null }
       )
     case TimestampType =>
@@ -245,7 +245,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toLong catch {
+      buildCast[UTF8String](_, s => try s.toString.toLong catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -261,7 +261,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toInt catch {
+      buildCast[UTF8String](_, s => try s.toString.toInt catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -277,7 +277,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toShort catch {
+      buildCast[UTF8String](_, s => try s.toString.toShort catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -293,7 +293,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toByte catch {
+      buildCast[UTF8String](_, s => try s.toString.toByte catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -323,7 +323,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try changePrecision(Decimal(s.toDouble), target) catch {
+      buildCast[UTF8String](_, s => try {
+        changePrecision(Decimal(s.toString.toDouble), target)
+      } catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -348,7 +350,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toDouble catch {
+      buildCast[UTF8String](_, s => try s.toString.toDouble catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -364,7 +366,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // FloatConverter
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[String](_, s => try s.toFloat catch {
+      buildCast[UTF8String](_, s => try s.toString.toFloat catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -394,10 +396,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val casts = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
-    // TODO: This is very slow!
-    buildCast[Row](_, row => Row(row.toSeq.zip(casts).map {
-      case (v, cast) => if (v == null) null else cast(v)
-    }: _*))
+    // TODO: Could be faster?
+    val newRow = new GenericMutableRow(from.fields.size)
+    buildCast[Row](_, row => {
+      var i = 0
+      while (i < row.length) {
+        val v = row(i)
+        newRow.update(i, if (v == null) null else casts(i)(v))
+        i += 1
+      }
+      newRow.copy()
+    })
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
