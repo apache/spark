@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -141,7 +141,7 @@ private[clustering] object LDASuite {
     (terms.toArray, termWeights.toArray)
   }
 
-  def tinyCorpus = Array(
+  def tinyCorpus: Array[(Long, Vector)] = Array(
     Vectors.dense(1, 3, 0, 2, 8),
     Vectors.dense(0, 2, 1, 0, 4),
     Vectors.dense(2, 3, 12, 3, 1),

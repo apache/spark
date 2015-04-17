@@ -83,7 +83,7 @@ object TestObject {
 class TestClass extends Serializable {
   var x = 5
 
-  def getX = x
+  def getX: Int = x
 
   def run(): Int = {
     var nonSer = new NonSerializable
@@ -95,7 +95,7 @@ class TestClass extends Serializable {
 }
 
 class TestClassWithoutDefaultConstructor(x: Int) extends Serializable {
-  def getX = x
+  def getX: Int = x
 
   def run(): Int = {
     var nonSer = new NonSerializable
@@ -164,7 +164,7 @@ object TestObjectWithNesting {
 }
 
 class TestClassWithNesting(val y: Int) extends Serializable {
-  def getY = y
+  def getY: Int = y
 
   def run(): Int = {
     var nonSer = new NonSerializable

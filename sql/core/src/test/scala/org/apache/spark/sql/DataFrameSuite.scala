@@ -86,6 +86,12 @@ class DataFrameSuite extends QueryTest {
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
+  test("access complex data") {
+    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
+  }
+
   test("table scan") {
     checkAnswer(
       testData,
@@ -169,6 +175,14 @@ class DataFrameSuite extends QueryTest {
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
+  test("coalesce") {
+    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+
+    checkAnswer(
+      testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
   }
 
@@ -329,8 +343,9 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
+    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -439,6 +454,15 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("call udf in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
@@ -520,5 +544,14 @@ class DataFrameSuite extends QueryTest {
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val df = TestSQLContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
+  }
+
+  test("SPARK-6899") {
+    val originalValue = TestSQLContext.conf.codegenEnabled
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      decimalData.agg(avg('a)),
+      Row(new java.math.BigDecimal(2.0)))
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 }

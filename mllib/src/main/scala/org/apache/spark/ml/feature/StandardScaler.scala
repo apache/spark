@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -47,7 +48,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler().fit(input)
     val model = new StandardScalerModel(this, map, scaler)
@@ -56,7 +57,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${map(inputCol)} must be a vector column")
@@ -86,13 +87,13 @@ class StandardScalerModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val scale = udf((v: Vector) => { scaler.transform(v) } : Vector)
     dataset.withColumn(map(outputCol), scale(col(map(inputCol))))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${map(inputCol)} must be a vector column")

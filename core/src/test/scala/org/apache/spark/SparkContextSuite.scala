@@ -114,11 +114,13 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
 
         if (length1 != gotten1.length()) {
           throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " + absolutePath1)
+            s"file has different length $length1 than added file ${gotten1.length()} : " +
+              absolutePath1)
         }
         if (length2 != gotten2.length()) {
           throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " + absolutePath2)
+            s"file has different length $length2 than added file ${gotten2.length()} : " +
+              absolutePath2)
         }
 
         if (absolutePath1 == gotten1.getAbsolutePath) {
