@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
@@ -752,8 +753,17 @@ object Client extends Logging {
     if (conf.contains(CONF_PYSPARK_ARCHIVES)) {
       conf.get(CONF_PYSPARK_ARCHIVES)
     } else {
-      val sparkJarPath = SparkContext.jarOfClass(this.getClass).head
-      sparkJarPath.substring(0, sparkJarPath.lastIndexOf('/')) + "/pyspark.zip"
+      SparkContext.jarOfClass(this.getClass) match {
+        case Some(jarPath) =>
+          val path = new File(jarPath)
+          val archives = new File(path.getParent + File.separator + "pyspark.zip")
+          if (archives.exists()) {
+            archives.getAbsolutePath
+          } else {
+            ""
+          }
+        case None => ""
+      }
     }
   }
 
