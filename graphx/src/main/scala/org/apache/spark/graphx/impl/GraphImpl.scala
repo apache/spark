@@ -53,6 +53,10 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     })
   }
 
+  @transient var partitionStrategy: Option[PartitionStrategy] = None
+
+  override def getPartitionStrategy: Option[PartitionStrategy] = partitionStrategy
+
   override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
     vertices.persist(newLevel)
     replicatedVertexView.edges.persist(newLevel)
@@ -99,6 +103,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def partitionBy(
       partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
+    this.partitionStrategy = Some(partitionStrategy)
     val edTag = classTag[ED]
     val vdTag = classTag[VD]
     val newEdges = edges.withPartitionsRDD(edges.map { e =>
