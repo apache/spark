@@ -169,7 +169,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * Override QueryExecution with special debug workflow.
    */
   class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
+    extends HiveQueryExecution(this, logicalPlan) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
