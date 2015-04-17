@@ -457,10 +457,14 @@ class DataFrameSuite extends QueryTest {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
 
+  test("replace column using withColumn") {
     val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
-    assert(df3.select("x").collect().toSeq === Seq(Row(2), Row(3), Row(4)))
+    checkAnswer(
+      df3.select("x"),
+      Row(2) :: Row(3) :: Row(4) :: Nil)
   }
 
   test("withColumnRenamed") {
