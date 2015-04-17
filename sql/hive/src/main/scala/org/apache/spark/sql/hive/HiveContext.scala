@@ -81,8 +81,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
-  override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution(plan)
+  override protected[sql] def executePlan(plan: LogicalPlan): QueryExecution =
+    new QueryExecution(this, plan)
 
   @transient
   protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
@@ -385,48 +385,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] val planner = hivePlanner
 
-  /** Extends QueryExecution with hive specific features. */
-  protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
-    // Like what we do in runHive, makes sure the session represented by the
-    // `sessionState` field is activated.
-    if (SessionState.get() != sessionState) {
-      SessionState.start(sessionState)
-    }
-
-    /**
-     * Returns the result as a hive compatible sequence of strings.  For native commands, the
-     * execution is simply passed back to Hive.
-     */
-    def stringResult(): Seq[String] = executedPlan match {
-      case ExecutedCommand(desc: DescribeHiveTableCommand) =>
-        // If it is a describe command for a Hive table, we want to have the output format
-        // be similar with Hive.
-        desc.run(self).map {
-          case Row(name: String, dataType: String, comment) =>
-            Seq(name, dataType,
-              Option(comment.asInstanceOf[String]).getOrElse(""))
-              .map(s => String.format(s"%-20s", s))
-              .mkString("\t")
-        }
-      case command: ExecutedCommand =>
-        command.executeCollect().map(_(0).toString)
-
-      case other =>
-        val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
-        // We need the types so we can output struct field names
-        val types = analyzed.output.map(_.dataType)
-        // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
-    }
-
-    override def simpleString: String =
-      logical match {
-        case _: HiveNativeCommand => "<Native command: executed by Hive>"
-        case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => super.simpleString
-      }
-  }
 }
 
 
