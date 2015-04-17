@@ -196,12 +196,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = try {
-      synchronized {
+    val table = synchronized {
         client.getTable(databaseName, tblName)
-      }
-    } catch {
-      case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+    }
+    if (table == null) {
         throw new NoSuchTableException
     }
 
