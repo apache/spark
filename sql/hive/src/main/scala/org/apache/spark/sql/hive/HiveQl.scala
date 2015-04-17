@@ -730,10 +730,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               generator,
               join = true,
               outer = false,
-              withWhere,
               Some(alias.toLowerCase),
-              attributes,
-              Nil)
+              attributes.map(UnresolvedAttribute(_)),
+              withWhere)
         }.getOrElse(withWhere)
 
         // The projection of the query can either be a normal projection, an aggregation
@@ -841,10 +840,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           generator,
           join = true,
           outer = isOuter.nonEmpty,
-          nodeToRelation(relationClause),
           Some(alias.toLowerCase),
-          attributes,
-          Nil)
+          attributes.map(UnresolvedAttribute(_)),
+          nodeToRelation(relationClause))
 
     /* All relations, possibly with aliases or sampling clauses. */
     case Token("TOK_TABREF", clauses) =>

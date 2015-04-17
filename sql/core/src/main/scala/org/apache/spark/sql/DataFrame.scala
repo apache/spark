@@ -34,7 +34,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -719,7 +719,8 @@ class DataFrame private[sql](
       f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
-    Generate(generator, join = true, outer = false, logicalPlan, qualifier = None, names, Nil)
+    Generate(generator, join = true, outer = false,
+      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
   }
 
   /**
@@ -745,7 +746,8 @@ class DataFrame private[sql](
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
-    Generate(generator, join = true, outer = false, logicalPlan, qualifier = None, names, Nil)
+    Generate(generator, join = true, outer = false,
+      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
   }
 
   /////////////////////////////////////////////////////////////////////////////

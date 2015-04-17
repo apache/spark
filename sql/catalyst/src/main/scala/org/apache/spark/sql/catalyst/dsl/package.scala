@@ -289,8 +289,8 @@ package object dsl {
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
-        alias: Option[String] = None): Generate =
-      Generate(generator, join, outer, logicalPlan, alias)
+        alias: Option[String] = None): LogicalPlan =
+      Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
 
     def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
       InsertIntoTable(

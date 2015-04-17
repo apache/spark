@@ -45,27 +45,23 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
- * @param child Children logical plan node
  * @param qualifier Qualifier for the attributes of generator(UDTF)
- * @param attributeNames the column names for the generator(UDTF), will be _c0, _c1 .. _cN if
- *                       leave as default (empty)
- * @param gOutput The output of Generator.
+ * @param generatorOutput The output schema of the Generator.
+ * @param child Children logical plan node
  */
 case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    child: LogicalPlan,
-    qualifier: Option[String] = None,
-    attributeNames: Seq[String] = Nil,
-    gOutput: Seq[Attribute] = Nil)
+    qualifier: Option[String],
+    generatorOutput: Seq[Attribute],
+    child: LogicalPlan)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
-      attributeNames.length > 0 &&
-      gOutput.map(_.name) == attributeNames
+      !generatorOutput.exists(!_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
@@ -73,7 +69,11 @@ case class Generate(
   override def expressions: Seq[Expression] = generator :: Nil
 
   def output: Seq[Attribute] = {
-    if (join) child.output ++ gOutput else gOutput
+    val withoutQualifier = if (join) child.output ++ generatorOutput else generatorOutput
+
+    qualifier.map(q =>
+      withoutQualifier.map(_.withQualifiers(q :: Nil))
+    ).getOrElse(withoutQualifier)
   }
 }
 

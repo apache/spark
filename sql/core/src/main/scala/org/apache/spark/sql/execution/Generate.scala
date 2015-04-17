@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
+ * @param generator the generator expression
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
@@ -39,8 +40,8 @@ case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    child: SparkPlan,
-    output: Seq[Attribute])
+    output: Seq[Attribute],
+    child: SparkPlan)
   extends UnaryNode {
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)

@@ -486,7 +486,7 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
         val withPushdown = Generate(g.generator, join = g.join, outer = g.outer,
-          Filter(pushDownPredicate, g.child), g.qualifier, g.attributeNames, g.gOutput)
+          g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
         stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter

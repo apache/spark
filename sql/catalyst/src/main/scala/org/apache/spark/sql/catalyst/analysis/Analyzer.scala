@@ -474,46 +474,60 @@ class Analyzer(
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(Seq(Alias(g: Generator, name)), child) =>
-        Generate(g, join = false, outer = false, child, qualifier = None, name :: Nil, Nil)
+        Generate(g, join = false, outer = false,
+          qualifier = None, UnresolvedAttribute(name) :: Nil, child)
       case Project(Seq(MultiAlias(g: Generator, names)), child) =>
-        Generate(g, join = false, outer = false, child, qualifier = None, names, Nil)
+        Generate(g, join = false, outer = false,
+          qualifier = None, names.map(UnresolvedAttribute(_)), child)
     }
   }
 
+  /**
+   * Resolve the Generate, if the output names specified, we will take them, otherwise
+   * we will try to provide the default names, which follow the same rule with Hive.
+   */
   object ResolveGenerate extends Rule[LogicalPlan] {
     // Construct the output attributes for the generator,
     // The output attribute names can be either specified or
     // auto generated.
     private def makeGeneratorOutput(
         generator: Generator,
-        attributeNames: Seq[String],
-        qualifier: Option[String]): Array[Attribute] = {
+        generatorOutput: Seq[Attribute]): Seq[Attribute] = {
       val elementTypes = generator.elementTypes
 
-      val raw = if (attributeNames.size == elementTypes.size) {
-        attributeNames.zip(elementTypes).map {
-          case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
+      if (generatorOutput.size == elementTypes.size) {
+        generatorOutput.zip(elementTypes).map {
+          case (a, (t, nullable)) if !a.resolved =>
+            AttributeReference(a.name, t, nullable)()
+          case (a, _) => a
         }
-      } else {
+      } else if (generatorOutput.length == 0) {
         elementTypes.zipWithIndex.map {
           // keep the default column names as Hive does _c0, _c1, _cN
           case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
         }
+      } else {
+        throw new AnalysisException(
+          s"""
+             |The number of aliases supplied in the AS clause does not match
+             |the number of columns output by the UDTF expected
+             |${elementTypes.size} aliases but got ${generatorOutput.size}
+           """.stripMargin)
       }
-
-      qualifier.map(q => raw.map(_.withQualifiers(q :: Nil))).getOrElse(raw).toArray[Attribute]
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
       case p: Generate if p.resolved == false =>
         // if the generator output names are not specified, we will use the default ones.
-        val gOutput = makeGeneratorOutput(p.generator, p.attributeNames, p.qualifier)
         Generate(
-          p.generator, p.join, p.outer, p.child, p.qualifier, gOutput.map(_.name), gOutput)
+          p.generator,
+          join = p.join,
+          outer = p.outer,
+          p.qualifier,
+          makeGeneratorOutput(p.generator, p.generatorOutput), p.child)
     }
   }
-
 }
 
 /**

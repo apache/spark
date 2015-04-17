@@ -42,12 +42,15 @@ abstract class Generator extends Expression {
 
   override type EvaluatedType = TraversableOnce[Row]
 
-  override def dataType: DataType = ???
+  // TODO ideally we should return the type of ArrayType(StructType),
+  // however, we don't keep the output field names in the Generator.
+  override def dataType: DataType = throw new UnsupportedOperationException
 
   override def nullable: Boolean = false
 
   /**
    * The output element data types in structure of Seq[(DataType, Nullable)]
+   * TODO we probably need to add more information like metadata etc.
    */
   def elementTypes: Seq[(DataType, Boolean)]
 
