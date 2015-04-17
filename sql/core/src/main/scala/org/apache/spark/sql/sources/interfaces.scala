@@ -126,6 +126,16 @@ abstract class BaseRelation {
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
    */
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
+
+  /**
+   * Whether does it need to convert the objects in Row to internal representation, for example:
+   *  java.lang.String -> UTF8String
+   *  java.lang.Decimal -> Decimal
+   *
+   * Note: The internal representation is not stable across releases and thus data sources outside
+   * of Spark SQL should leave this as true.
+   */
+  def needConversion: Boolean = true
 }
 
 /**

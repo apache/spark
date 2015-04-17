@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import os
 
 from pyspark import SparkContext
@@ -68,6 +70,6 @@ if __name__ == "__main__":
     teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
-        print each[0]
+        print(each[0])
 
     sc.stop()

@@ -86,10 +86,10 @@ follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.update.interval.seconds</td>
-    <td>10</td>
+    <td>spark.history.fs.update.interval</td>
+    <td>10s</td>
     <td>
-      The period, in seconds, at which information displayed by this history server is updated.
+      The period at which information displayed by this history server is updated.
       Each update checks for any changes made to the event logs in persisted storage.
     </td>
   </tr>
