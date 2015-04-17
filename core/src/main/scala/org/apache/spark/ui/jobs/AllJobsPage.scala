@@ -74,14 +74,14 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </td>
         <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
         <td class="stage-progress-cell">
-          {job.completedStageIndices.size}/{job.stageIds.size - job.numSkippedStages}
+          {job.completedStageIndices.size}/{job.stageIds.size}
           {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
           {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
         </td>
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
            failed = job.numFailedTasks, skipped = job.numSkippedTasks,
-           total = job.numTasks - job.numSkippedTasks)}
+           total = job.numTasks)}
         </td>
       </tr>
     }
