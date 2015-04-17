@@ -1296,10 +1296,11 @@ def duration_f(v, c, m, p):
         return timedelta(seconds=m.duration)
 
 def datetime_f(v, c, m, p):
-    s = getattr(m, p).isoformat()
-    if datetime.now().isoformat()[:4] == s[:4]:
-        s = s[5:]
-    return Markup("<nobr>{}</nobr>".format(s))
+    attr = getattr(m, p)
+    dttm = attr.isoformat() if attr else ''
+    if datetime.now().isoformat()[:4] == dttm[:4]:
+        dttm = dttm[5:]
+    return Markup("<nobr>{}</nobr>".format(dttm))
 
 def nobr_f(v, c, m, p):
     return Markup("<nobr>{}</nobr>".format(getattr(m, p)))
