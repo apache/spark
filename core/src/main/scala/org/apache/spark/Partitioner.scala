@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.language.implicitConversions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{ClassTag, classTag}
@@ -65,6 +66,10 @@ object Partitioner {
       new HashPartitioner(bySize.head.partitions.size)
     }
   }
+
+  /** Automatically create a hash partitioner when given an Int */
+  implicit def intToPartitionerConversion (numPartitions: Int): Partitioner =
+    new HashPartitioner(numPartitions)
 }
 
 /**

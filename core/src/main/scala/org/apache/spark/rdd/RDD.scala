@@ -1001,7 +1001,7 @@ abstract class RDD[T: ClassTag](
       val curNumPartitions = numPartitions
       partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex { (i, iter) =>
         iter.map((i % curNumPartitions, _))
-      }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
+      }.reduceByKey(cleanCombOp, new HashPartitioner(curNumPartitions)).values
     }
     partiallyAggregated.reduce(cleanCombOp)
   }
@@ -1579,5 +1579,9 @@ object RDD {
   implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T])
     : DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
+  }
+
+  implicit def partitionsToPartitioner (numPartitions: Int): Partitioner = {
+    new HashPartitioner(numPartitions)
   }
 }

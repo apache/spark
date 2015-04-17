@@ -25,7 +25,7 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner, SerializableWritable}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, PairRDDLike}
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 
@@ -34,7 +34,8 @@ import org.apache.spark.streaming.StreamingContext.rddToFileName
  */
 class PairDStreamFunctions[K, V](self: DStream[(K,V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
-  extends Serializable
+  extends PairRDDLike[K, V, DStream]
+  with Serializable
 {
   private[streaming] def ssc = self.ssc
 
@@ -108,9 +109,45 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
     partitioner: Partitioner,
-    mapSideCombine: Boolean = true): DStream[(K, C)] = {
+    mapSideCombine: Boolean): DStream[(K, C)] = {
     new ShuffledDStream[K, V, C](self, createCombiner, mergeValue, mergeCombiner, partitioner,
       mapSideCombine)
+  }
+
+  /**
+   * A simplified version of combineByKey that fulfils one of the versions specified by the 
+   * PairRDDLike interface.
+   */
+  def combineByKey[C: ClassTag](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiner: (C, C) => C,
+      partitioner: Partitioner): DStream[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiner, partitioner, true)
+  }
+
+  /**
+   * A simplified version of combineByKey that fulfils one of the versions specified by the 
+   * PairRDDLike interface.
+   */
+  def combineByKey[C: ClassTag](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiner: (C, C) => C,
+      numPartitions: Int): DStream[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiner, new HashPartitioner(numPartitions),
+      true)
+  }
+
+  /**
+   * A simplified version of combineByKey that fulfils one of the versions specified by the 
+   * PairRDDLike interface.
+   */
+  def combineByKey[C: ClassTag](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiner: (C, C) => C): DStream[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiner, defaultPartitioner(), true)
   }
 
   /**
@@ -479,7 +516,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Hash partitioning is used to generate the RDDs with Spark's default number
    * of partitions.
    */
-  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Iterable[V], Iterable[W]))] = {
+  def cogroup[W](other: DStream[(K, W)]): DStream[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner())
   }
 
@@ -487,7 +524,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
-  def cogroup[W: ClassTag](other: DStream[(K, W)], numPartitions: Int)
+  def cogroup[W](other: DStream[(K, W)], numPartitions: Int)
   : DStream[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(numPartitions))
   }
@@ -496,7 +533,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
    * The supplied org.apache.spark.Partitioner is used to partition the generated RDDs.
    */
-  def cogroup[W: ClassTag](
+  def cogroup[W](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (Iterable[V], Iterable[W]))] = {
@@ -510,7 +547,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    */
-  def join[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (V, W))] = {
+  def join[W](other: DStream[(K, W)]): DStream[(K, (V, W))] = {
     join[W](other, defaultPartitioner())
   }
 
@@ -518,7 +555,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
-  def join[W: ClassTag](other: DStream[(K, W)], numPartitions: Int): DStream[(K, (V, W))] = {
+  def join[W](other: DStream[(K, W)], numPartitions: Int): DStream[(K, (V, W))] = {
     join[W](other, defaultPartitioner(numPartitions))
   }
 
@@ -526,7 +563,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
    * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
-  def join[W: ClassTag](
+  def join[W](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (V, W))] = {
@@ -541,7 +578,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
    * number of partitions.
    */
-  def leftOuterJoin[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (V, Option[W]))] = {
+  def leftOuterJoin[W](other: DStream[(K, W)]): DStream[(K, (V, Option[W]))] = {
     leftOuterJoin[W](other, defaultPartitioner())
   }
 
@@ -550,7 +587,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
    * partitions.
    */
-  def leftOuterJoin[W: ClassTag](
+  def leftOuterJoin[W](
       other: DStream[(K, W)],
       numPartitions: Int
     ): DStream[(K, (V, Option[W]))] = {
@@ -562,7 +599,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
-  def leftOuterJoin[W: ClassTag](
+  def leftOuterJoin[W](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (V, Option[W]))] = {
@@ -577,7 +614,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
    * number of partitions.
    */
-  def rightOuterJoin[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Option[V], W))] = {
+  def rightOuterJoin[W](other: DStream[(K, W)]): DStream[(K, (Option[V], W))] = {
     rightOuterJoin[W](other, defaultPartitioner())
   }
 
@@ -586,7 +623,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
    * partitions.
    */
-  def rightOuterJoin[W: ClassTag](
+  def rightOuterJoin[W](
       other: DStream[(K, W)],
       numPartitions: Int
     ): DStream[(K, (Option[V], W))] = {
@@ -598,7 +635,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
-  def rightOuterJoin[W: ClassTag](
+  def rightOuterJoin[W](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (Option[V], W))] = {
@@ -613,7 +650,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
    * number of partitions.
    */
-  def fullOuterJoin[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Option[V], Option[W]))] = {
+  def fullOuterJoin[W](other: DStream[(K, W)]): DStream[(K, (Option[V], Option[W]))] = {
     fullOuterJoin[W](other, defaultPartitioner())
   }
 
@@ -622,7 +659,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
    * partitions.
    */
-  def fullOuterJoin[W: ClassTag](
+  def fullOuterJoin[W](
       other: DStream[(K, W)],
       numPartitions: Int
     ): DStream[(K, (Option[V], Option[W]))] = {
@@ -634,7 +671,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
-  def fullOuterJoin[W: ClassTag](
+  def fullOuterJoin[W](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (Option[V], Option[W]))] = {
