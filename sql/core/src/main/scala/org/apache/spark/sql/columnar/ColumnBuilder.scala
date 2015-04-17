@@ -153,6 +153,7 @@ private[sql] object ColumnBuilder {
     val builder: ColumnBuilder = dataType match {
       case IntegerType => new IntColumnBuilder
       case LongType => new LongColumnBuilder
+      case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder

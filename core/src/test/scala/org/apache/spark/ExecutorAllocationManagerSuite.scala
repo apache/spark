@@ -56,19 +56,13 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     // Min < 0
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
     intercept[SparkException] { contexts += new SparkContext(conf1) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
 
     // Max < 0
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
     intercept[SparkException] { contexts += new SparkContext(conf2) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
 
     // Both min and max, but min > max
     intercept[SparkException] { createSparkContext(2, 1) }
-    SparkEnv.get.stop()
-    SparkContext.clearActiveContext()
 
     // Both min and max, and min == max
     val sc1 = createSparkContext(1, 1)
@@ -684,10 +678,11 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout.toString)
+      .set("spark.dynamicAllocation.schedulerBacklogTimeout",
+          s"${schedulerBacklogTimeout.toString}s")
       .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
-        sustainedSchedulerBacklogTimeout.toString)
-      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout.toString)
+        s"${sustainedSchedulerBacklogTimeout.toString}s")
+      .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
       .set("spark.dynamicAllocation.testing", "true")
     val sc = new SparkContext(conf)
     contexts += sc

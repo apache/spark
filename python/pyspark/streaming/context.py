@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from __future__ import print_function
+
 import os
 import sys
 
@@ -157,7 +160,7 @@ class StreamingContext(object):
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
         except Exception:
-            print >>sys.stderr, "failed to load StreamingContext from checkpoint"
+            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
         jsc = jssc.sparkContext()

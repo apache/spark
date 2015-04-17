@@ -45,7 +45,8 @@ case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: SparkPlan,
-    overwrite: Boolean) extends UnaryNode with HiveInspectors {
+    overwrite: Boolean,
+    ifNotExists: Boolean) extends UnaryNode with HiveInspectors {
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
@@ -219,15 +220,25 @@ case class InsertIntoHiveTable(
             isSkewedStoreAsSubdir)
         }
       } else {
-        catalog.synchronized {
-          catalog.client.loadPartition(
-            outputPath,
-            qualifiedTableName,
-            orderedPartitionSpec,
-            overwrite,
-            holdDDLTime,
-            inheritTableSpecs,
-            isSkewedStoreAsSubdir)
+        // scalastyle:off
+        // ifNotExists is only valid with static partition, refer to
+        // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
+        // scalastyle:on
+        val oldPart = catalog.synchronized {
+          catalog.client.getPartition(
+            catalog.client.getTable(qualifiedTableName), partitionSpec, false)
+        }
+        if (oldPart == null || !ifNotExists) {
+          catalog.synchronized {
+            catalog.client.loadPartition(
+              outputPath,
+              qualifiedTableName,
+              orderedPartitionSpec,
+              overwrite,
+              holdDDLTime,
+              inheritTableSpecs,
+              isSkewedStoreAsSubdir)
+          }
         }
       }
     } else {

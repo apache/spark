@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.NumericType
 @Experimental
 class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
 
-  private[this] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
+  private[sql] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     val namedGroupingExprs = groupingExprs.map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()

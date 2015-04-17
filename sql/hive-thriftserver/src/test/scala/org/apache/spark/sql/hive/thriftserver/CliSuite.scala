@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,22 +25,31 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
-class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
+class CliSuite extends FunSuite with BeforeAndAfter with Logging {
+  val warehousePath = Utils.createTempDir()
+  val metastorePath = Utils.createTempDir()
+
+  before {
+      warehousePath.delete()
+      metastorePath.delete()
+  }
+
+  after {
+      warehousePath.delete()
+      metastorePath.delete()
+  }
+
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty)(
-      queriesAndExpectedAnswers: (String, String)*) {
+      queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
-    val warehousePath = Utils.createTempDir()
-    warehousePath.delete()
-    val metastorePath = Utils.createTempDir()
-    metastorePath.delete()
     val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
 
     val command = {
@@ -96,8 +104,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
          """.stripMargin, cause)
       throw cause
     } finally {
-      warehousePath.delete()
-      metastorePath.delete()
       process.destroy()
     }
   }
@@ -124,5 +130,25 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
   test("Single command with -e") {
     runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+  }
+
+  test("Single command with --database") {
+    runCliWithin(1.minute)(
+      "CREATE DATABASE hive_test_db;"
+        -> "OK",
+      "USE hive_test_db;"
+        -> "OK",
+      "CREATE TABLE hive_test(key INT, val STRING);"
+        -> "OK",
+      "SHOW TABLES;"
+        -> "Time taken: "
+    )
+
+    runCliWithin(1.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
+      ""
+        -> "OK",
+      ""
+        -> "hive_test"
+    )
   }
 }

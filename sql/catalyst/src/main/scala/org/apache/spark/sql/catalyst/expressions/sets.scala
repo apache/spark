@@ -20,6 +20,33 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/** The data type for expressions returning an OpenHashSet as the result. */
+private[sql] class OpenHashSetUDT(
+    val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
+
+  override def sqlType: DataType = ArrayType(elementType)
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def serialize(obj: Any): Seq[Any] = {
+    obj.asInstanceOf[OpenHashSet[Any]].iterator.toSeq
+  }
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def deserialize(datum: Any): OpenHashSet[Any] = {
+    val iterator = datum.asInstanceOf[Seq[Any]].iterator
+    val set = new OpenHashSet[Any]
+    while(iterator.hasNext) {
+      set.add(iterator.next())
+    }
+
+    set
+  }
+
+  override def userClass: Class[OpenHashSet[Any]] = classOf[OpenHashSet[Any]]
+
+  private[spark] override def asNullable: OpenHashSetUDT = this
+}
+
 /**
  * Creates a new set of the specified type
  */
@@ -28,9 +55,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 
   override def nullable: Boolean = false
 
-  // We are currently only using these Expressions internally for aggregation.  However, if we ever
-  // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
-  override def dataType: DataType = ArrayType(elementType)
+  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(elementType)
 
   override def eval(input: Row): Any = {
     new OpenHashSet[Any]()
@@ -50,7 +75,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 
   override def nullable: Boolean = set.nullable
 
-  override def dataType: DataType = set.dataType
+  override def dataType: OpenHashSetUDT = set.dataType.asInstanceOf[OpenHashSetUDT]
 
   override def eval(input: Row): Any = {
     val itemEval = item.eval(input)
@@ -80,7 +105,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def dataType: DataType = left.dataType
+  override def dataType: OpenHashSetUDT = left.dataType.asInstanceOf[OpenHashSetUDT]
 
   override def symbol: String = "++="
 

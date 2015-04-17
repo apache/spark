@@ -53,8 +53,9 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
     val selectedInput = if (index < input.size) input(index) else Seq[T]()
 
     // lets us test cases where RDDs are not created
-    if (selectedInput == null)
+    if (selectedInput == null) {
       return None
+    }
 
     val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
     logInfo("Created RDD " + rdd.id + " with " + selectedInput)
@@ -104,7 +105,9 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
     output.clear()
   }
 
-  def toTestOutputStream = new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+  def toTestOutputStream: TestOutputStream[T] = {
+    new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+  }
 }
 
 /**
@@ -148,34 +151,34 @@ class BatchCounter(ssc: StreamingContext) {
 trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
-  def framework = this.getClass.getSimpleName
+  def framework: String = this.getClass.getSimpleName
 
   // Master for Spark context
-  def master = "local[2]"
+  def master: String = "local[2]"
 
   // Batch duration
-  def batchDuration = Seconds(1)
+  def batchDuration: Duration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  lazy val checkpointDir = {
+  lazy val checkpointDir: String = {
     val dir = Utils.createTempDir()
     logDebug(s"checkpointDir: $dir")
     dir.toString
   }
 
   // Number of partitions of the input parallel collections created for testing
-  def numInputPartitions = 2
+  def numInputPartitions: Int = 2
 
   // Maximum time to wait before the test times out
-  def maxWaitTimeMillis = 10000
+  def maxWaitTimeMillis: Int = 10000
 
   // Whether to use manual clock or not
-  def useManualClock = true
+  def useManualClock: Boolean = true
 
   // Whether to actually wait in real time before changing manual clock
-  def actuallyWait = false
+  def actuallyWait: Boolean = false
 
-  //// A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
+  // A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
@@ -346,7 +349,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()
-      while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+      while (output.size < numExpectedOutput &&
+        System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
         ssc.awaitTerminationOrTimeout(50)
       }
