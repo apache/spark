@@ -176,7 +176,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       blockGenerator.addData(count)
       generatedData += count
       count += 1
-      Thread.sleep(0)
+      Thread.`yield`()
     }
     blockGenerator.stop()
 
