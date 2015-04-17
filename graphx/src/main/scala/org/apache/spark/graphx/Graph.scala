@@ -79,6 +79,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   @transient val triplets: RDD[EdgeTriplet[VD, ED]]
 
+  /** Return a strategy to specify how edges are partitioned. */
+  def getPartitionStrategy: Option[PartitionStrategy]
+
   /**
    * Caches the vertices and edges associated with this graph at the specified storage level,
    * ignoring any target storage levels previously set.
