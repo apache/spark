@@ -20,7 +20,7 @@ package org.apache.spark.deploy.mesos
 import java.util.Date
 
 import org.apache.spark.deploy.Command
-import org.apache.spark.scheduler.cluster.mesos.RetryState
+import org.apache.spark.scheduler.cluster.mesos.MesosClusterRetryState
 
 /**
  * Describes a Spark driver that is submitted from the
@@ -28,7 +28,7 @@ import org.apache.spark.scheduler.cluster.mesos.RetryState
  * [[org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler]].
  * @param jarUrl URL to the application jar
  * @param mem Amount of memory for the driver
- * @param cores Amount of cores for the driver
+ * @param cores Number of cores for the driver
  * @param supervise Supervise the driver for long running app
  * @param command The command to launch the driver.
  * @param schedulerProperties Extra properties to pass the Mesos scheduler
@@ -43,8 +43,9 @@ private[spark] class MesosDriverDescription(
     val schedulerProperties: Map[String, String],
     val submissionId: String,
     val submissionDate: Date,
-    val retryState: Option[RetryState] = None)
+    val retryState: Option[MesosClusterRetryState] = None)
   extends Serializable {
+
   def copy(
       name: String = name,
       jarUrl: String = jarUrl,
@@ -53,11 +54,12 @@ private[spark] class MesosDriverDescription(
       supervise: Boolean = supervise,
       command: Command = command,
       schedulerProperties: Map[String, String] = schedulerProperties,
-      retryState: Option[RetryState] = retryState,
       submissionId: String = submissionId,
-      submissionDate: Date = submissionDate): MesosDriverDescription = {
+      submissionDate: Date = submissionDate,
+      retryState: Option[MesosClusterRetryState] = retryState): MesosDriverDescription = {
     new MesosDriverDescription(name, jarUrl, mem, cores, supervise, command, schedulerProperties,
       submissionId, submissionDate, retryState)
   }
+
   override def toString: String = s"MesosDriverDescription (${command.mainClass})"
 }

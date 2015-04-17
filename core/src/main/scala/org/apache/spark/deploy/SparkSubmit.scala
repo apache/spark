@@ -22,6 +22,8 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
@@ -38,7 +40,6 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -380,10 +381,6 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Standalone cluster only
-      // Do not set CL arguments here because there are multiple possibilities for the main class
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
@@ -418,7 +415,8 @@ object SparkSubmit {
       OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
-        sysProp = "spark.driver.supervise")
+        sysProp = "spark.driver.supervise"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
     )
 
     // In client mode, launch the application main class directly
@@ -457,7 +455,7 @@ object SparkSubmit {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.RestClient"
+        childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
@@ -503,7 +501,7 @@ object SparkSubmit {
 
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
-      childMainClass = "org.apache.spark.deploy.rest.RestClient"
+      childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
       childArgs += (args.primaryResource, args.mainClass)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs

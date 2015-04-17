@@ -332,7 +332,7 @@ private[spark] object RestSubmissionClient {
 
   def main(args: Array[String]): Unit = {
     if (args.size < 2) {
-      sys.error("Usage: RestClient [app resource] [main class] [app args*]")
+      sys.error("Usage: RestSubmissionClient [app resource] [main class] [app args*]")
       sys.exit(1)
     }
     val appResource = args(0)

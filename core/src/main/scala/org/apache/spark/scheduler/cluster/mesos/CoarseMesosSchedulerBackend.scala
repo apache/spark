@@ -20,15 +20,15 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{Collections, List => JList}
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{HashMap, HashSet}
+
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{AkkaUtils, Utils}
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -78,7 +78,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def start() {
     super.start()
     val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
-    startScheduler("CoarseMesosSchedulerBackend", master, CoarseMesosSchedulerBackend.this, fwInfo)
+    startScheduler(master, CoarseMesosSchedulerBackend.this, fwInfo)
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
@@ -239,7 +239,8 @@ private[spark] class CoarseMesosSchedulerBackend(
                 "is Spark installed on it?")
           }
         }
-        driver.reviveOffers() // In case we'd rejected everything before but have now lost a node
+        // In case we'd rejected everything before but have now lost a node
+        mesosDriver.reviveOffers()
       }
     }
   }
@@ -251,8 +252,8 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def stop() {
     super.stop()
-    if (driver != null) {
-      driver.stop()
+    if (mesosDriver != null) {
+      mesosDriver.stop()
     }
   }
 

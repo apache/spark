@@ -29,10 +29,8 @@ import org.apache.spark.{LocalSparkContext, SparkConf}
 
 
 class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with MockitoSugar {
-  def createCommand: Command = {
-    new Command(
-      "mainClass", Seq("arg"), null, null, null, null)
-  }
+
+  private val command = new Command("mainClass", Seq("arg"), null, null, null, null)
 
   test("can queue drivers") {
     val conf = new SparkConf()
@@ -40,20 +38,21 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(
       new BlackHoleMesosClusterPersistenceEngineFactory, conf) {
-      override def start(): Unit = ready = true
+      override def start(): Unit = { ready = true }
     }
     scheduler.start()
     val response = scheduler.submitDriver(
         new MesosDriverDescription("d1", "jar", 1000, 1, true,
-          createCommand, Map[String, String](), "s1", new Date()))
+          command, Map[String, String](), "s1", new Date()))
     assert(response.success)
     val response2 =
       scheduler.submitDriver(new MesosDriverDescription(
-        "d1", "jar", 1000, 1, true, createCommand, Map[String, String](), "s2", new Date()))
+        "d1", "jar", 1000, 1, true, command, Map[String, String](), "s2", new Date()))
     assert(response2.success)
-    val state = scheduler.getState()
-    assert(state.queuedDrivers.exists(d => d.submissionId == response.submissionId))
-    assert(state.queuedDrivers.exists(d => d.submissionId == response2.submissionId))
+    val state = scheduler.getSchedulerState()
+    val queuedDrivers = state.queuedDrivers.toList
+    assert(queuedDrivers(0).submissionId == response.submissionId)
+    assert(queuedDrivers(1).submissionId == response2.submissionId)
   }
 
   test("can kill queued drivers") {
@@ -62,16 +61,16 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(
       new BlackHoleMesosClusterPersistenceEngineFactory, conf) {
-      override def start(): Unit = ready = true
+      override def start(): Unit = { ready = true }
     }
     scheduler.start()
     val response = scheduler.submitDriver(
         new MesosDriverDescription("d1", "jar", 1000, 1, true,
-          createCommand, Map[String, String](), "s1", new Date()))
+          command, Map[String, String](), "s1", new Date()))
     assert(response.success)
     val killResponse = scheduler.killDriver(response.submissionId)
     assert(killResponse.success)
-    val state = scheduler.getState()
+    val state = scheduler.getSchedulerState()
     assert(state.queuedDrivers.isEmpty)
   }
 }

@@ -567,12 +567,14 @@ private class FaultyStandaloneRestServer(
     masterActor: ActorRef,
     masterUrl: String)
   extends RestSubmissionServer(host, requestedPort, masterConf) {
-  val submitRequestServlet = new MalformedSubmitServlet
-  val killRequestServlet = new InvalidKillServlet
-  val statusRequestServlet = new ExplodingStatusServlet
+
+  protected override val submitRequestServlet = new MalformedSubmitServlet
+  protected override val killRequestServlet = new InvalidKillServlet
+  protected override val statusRequestServlet = new ExplodingStatusServlet
 
   /** A faulty servlet that produces malformed responses. */
-  class MalformedSubmitServlet extends StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf) {
+  class MalformedSubmitServlet
+    extends StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf) {
     protected override def sendResponse(
         responseMessage: SubmitRestProtocolResponse,
         responseServlet: HttpServletResponse): Unit = {

@@ -36,23 +36,18 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   private final val registerLatch = new CountDownLatch(1)
 
   // Driver for talking to Mesos
-  protected var driver: MesosSchedulerDriver = null
+  protected var mesosDriver: MesosSchedulerDriver = null
 
   /**
    * Starts the MesosSchedulerDriver with the provided information. This method returns
-   * until the scheduler has registered with Mesos.
-   * @param name Name of the scheduler
+   * only after the scheduler has registered with Mesos.
    * @param masterUrl Mesos master connection URL
    * @param scheduler Scheduler object
    * @param fwInfo FrameworkInfo to pass to the Mesos master
    */
-  def startScheduler(
-      name: String,
-      masterUrl: String,
-      scheduler: Scheduler,
-      fwInfo: FrameworkInfo): Unit = {
+  def startScheduler(masterUrl: String, scheduler: Scheduler, fwInfo: FrameworkInfo): Unit = {
     synchronized {
-      if (driver != null) {
+      if (mesosDriver != null) {
         registerLatch.await()
         return
       }
@@ -61,9 +56,9 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         setDaemon(true)
 
         override def run() {
-          driver = new MesosSchedulerDriver(scheduler, fwInfo, masterUrl)
+          mesosDriver = new MesosSchedulerDriver(scheduler, fwInfo, masterUrl)
           try {
-            val ret = driver.run()
+            val ret = mesosDriver.run()
             logInfo("driver.run() returned with code " + ret)
             if (ret.equals(Status.DRIVER_ABORTED)) {
               System.exit(1)

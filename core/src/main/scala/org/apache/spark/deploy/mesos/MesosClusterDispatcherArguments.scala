@@ -74,7 +74,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
     case Nil => {
       if (masterUrl == null) {
         System.err.println("--master is required")
-        System.exit(1)
+        printUsageAndExit(1)
       }
     }
 

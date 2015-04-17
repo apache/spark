@@ -18,23 +18,19 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{ArrayList => JArrayList, List => JList}
-import java.util.Collections
+import java.util.{ArrayList => JArrayList, Collections, List => JList}
+
+import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
+import org.apache.mesos.protobuf.ByteString
+import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.spark.executor.MesosExecutorBackend
+import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException, TaskState}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
-
-import org.apache.mesos.protobuf.ByteString
-import org.apache.mesos.{Scheduler => MScheduler}
-import org.apache.mesos._
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState,
-  ExecutorInfo => MesosExecutorInfo, _}
-
-import org.apache.spark.executor.MesosExecutorBackend
-import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler._
-import org.apache.spark.util.Utils
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
@@ -68,7 +64,7 @@ private[spark] class MesosSchedulerBackend(
   override def start() {
     val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
     classLoader = Thread.currentThread.getContextClassLoader
-    startScheduler("MesosSchedulerBackend", master, MesosSchedulerBackend.this, fwInfo)
+    startScheduler(master, MesosSchedulerBackend.this, fwInfo)
   }
 
   def createExecutorInfo(execId: String): MesosExecutorInfo = {
@@ -298,13 +294,13 @@ private[spark] class MesosSchedulerBackend(
   }
 
   override def stop() {
-    if (driver != null) {
-      driver.stop()
+    if (mesosDriver != null) {
+      mesosDriver.stop()
     }
   }
 
   override def reviveOffers() {
-    driver.reviveOffers()
+    mesosDriver.reviveOffers()
   }
 
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
@@ -339,7 +335,7 @@ private[spark] class MesosSchedulerBackend(
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
-    driver.killTask(
+    mesosDriver.killTask(
       TaskID.newBuilder()
         .setValue(taskId.toString).build()
     )

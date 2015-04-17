@@ -151,10 +151,10 @@ Spark on Mesos also supports cluster mode, where the driver is launched in the c
 can find the results of the driver from the Mesos Web UI.
 
 To use cluster mode, you must start the MesosClusterDispatcher in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
-passing in the Mesos master url (ie: mesos://host:5050).
+passing in the Mesos master url (e.g: mesos://host:5050).
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
-to the url of the MesosClusterDispatcher (ie: mesos://dispatcher:7077). You can view driver statuses on the
+to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
 
 # Mesos Run Modes

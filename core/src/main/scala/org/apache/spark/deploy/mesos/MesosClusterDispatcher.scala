@@ -19,7 +19,6 @@ package org.apache.spark.deploy.mesos
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.scheduler.cluster.mesos._
@@ -50,17 +49,14 @@ private[mesos] class MesosClusterDispatcher(
     conf: SparkConf)
   extends Logging {
 
-  private def publicAddress(conf: SparkConf, defaultAddress: String): String = {
-    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
-    if (envVar != null) envVar else defaultAddress
-  }
-
+  private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
   private val recoveryMode = conf.get("spark.mesos.deploy.recoveryMode", "NONE").toUpperCase()
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {
     case "NONE" => new BlackHoleMesosClusterPersistenceEngineFactory
     case "ZOOKEEPER" => new ZookeeperMesosClusterPersistenceEngineFactory(conf)
+    case _ => throw new IllegalArgumentException("Unsupported recovery mode: " + recoveryMode)
   }
 
   private val scheduler = new MesosClusterScheduler(engineFactory, conf)
@@ -70,7 +66,7 @@ private[mesos] class MesosClusterDispatcher(
     new SecurityManager(conf),
     args.webUiPort,
     conf,
-    publicAddress(conf, args.host),
+    publicAddress,
     scheduler)
 
   private val shutdownLatch = new CountDownLatch(1)
@@ -94,7 +90,7 @@ private[mesos] class MesosClusterDispatcher(
   }
 }
 
-private[mesos] object MesosClusterDispatcher extends spark.Logging {
+private[mesos] object MesosClusterDispatcher extends Logging {
   def main(args: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -105,9 +101,7 @@ private[mesos] object MesosClusterDispatcher extends spark.Logging {
       conf.set("spark.mesos.deploy.recoveryMode", "ZOOKEEPER")
       conf.set("spark.mesos.deploy.zookeeper.url", z)
     }
-    val dispatcher = new MesosClusterDispatcher(
-      dispatcherArgs,
-      conf)
+    val dispatcher = new MesosClusterDispatcher(dispatcherArgs, conf)
     dispatcher.start()
     val shutdownHook = new Thread() {
       override def run() {

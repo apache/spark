@@ -25,7 +25,7 @@ import org.apache.spark.ui.{SparkUI, WebUI}
 /**
  * UI that displays driver results from the [[org.apache.spark.deploy.mesos.MesosClusterDispatcher]]
  */
-private [spark] class MesosClusterUI(
+private[spark] class MesosClusterUI(
     securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
@@ -43,6 +43,6 @@ private [spark] class MesosClusterUI(
   }
 }
 
-private[spark] object MesosClusterUI {
+private object MesosClusterUI {
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }

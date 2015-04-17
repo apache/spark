@@ -47,9 +47,9 @@ import org.apache.spark.util.Utils
  * server error.
  */
 private[spark] abstract class RestSubmissionServer(
-  val host: String,
-  val requestedPort: Int,
-  val masterConf: SparkConf) extends Logging {
+    val host: String,
+    val requestedPort: Int,
+    val masterConf: SparkConf) extends Logging {
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -190,8 +190,7 @@ private[rest] abstract class RestServlet extends HttpServlet with Logging {
 /**
  * A servlet for handling kill requests passed to the [[RestSubmissionServer]].
  */
-private[rest] abstract class KillRequestServlet
-  extends RestServlet {
+private[rest] abstract class KillRequestServlet extends RestServlet {
 
   /**
    * If a submission ID is specified in the URL, have the Master kill the corresponding

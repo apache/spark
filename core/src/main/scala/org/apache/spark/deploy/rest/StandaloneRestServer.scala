@@ -56,9 +56,13 @@ private[deploy] class StandaloneRestServer(
     masterActor: ActorRef,
     masterUrl: String)
   extends RestSubmissionServer(host, requestedPort, masterConf) {
-  val submitRequestServlet = new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
-  val killRequestServlet = new StandaloneKillRequestServlet(masterActor, masterConf)
-  val statusRequestServlet = new StandaloneStatusRequestServlet(masterActor, masterConf)
+
+  protected override val submitRequestServlet =
+    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
+  protected override val killRequestServlet =
+    new StandaloneKillRequestServlet(masterActor, masterConf)
+  protected override val statusRequestServlet =
+    new StandaloneStatusRequestServlet(masterActor, masterConf)
 }
 
 /**

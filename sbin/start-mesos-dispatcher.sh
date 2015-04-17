@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 # Starts the Mesos Cluster Dispatcher on the machine this script is executed on.
-# The Mesos Cluster Dispatcher is responsbile for launching the Mesos framework and
+# The Mesos Cluster Dispatcher is responsible for launching the Mesos framework and
 # Rest server to handle driver requests for Mesos cluster mode.
 # Only one cluster dispatcher is needed per Mesos cluster.
 
