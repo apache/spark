@@ -1437,7 +1437,7 @@ abstract class RDD[T: ClassTag](
   @transient private[spark] val creationSite = sc.getCallSite()
 
   /** Dem scopes. Tis null if de scope is not defined'eh. TODO: Make this private[spark]. */
-  @transient val scope = sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)
+  @transient private[spark] val scope = sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 

@@ -26,7 +26,9 @@ class RDDInfo(
     val id: Int,
     val name: String,
     val numPartitions: Int,
-    var storageLevel: StorageLevel)
+    var storageLevel: StorageLevel,
+    val scope: String,
+    val parentIds: Seq[Int])
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
@@ -52,6 +54,7 @@ class RDDInfo(
 private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel)
+    val parentIds = rdd.dependencies.map(_.rdd.id)
+    new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel, rdd.scope, parentIds)
   }
 }

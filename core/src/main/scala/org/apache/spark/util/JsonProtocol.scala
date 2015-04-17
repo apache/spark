@@ -367,8 +367,11 @@ private[spark] object JsonProtocol {
 
   def rddInfoToJson(rddInfo: RDDInfo): JValue = {
     val storageLevel = storageLevelToJson(rddInfo.storageLevel)
+    val parentIds = JArray(rddInfo.parentIds.map(JInt(_)).toList)
     ("RDD ID" -> rddInfo.id) ~
     ("Name" -> rddInfo.name) ~
+    ("Scope" -> Option(rddInfo.scope)) ~
+    ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
@@ -597,7 +600,7 @@ private[spark] object JsonProtocol {
     val attemptId = (json \ "Stage Attempt ID").extractOpt[Int].getOrElse(0)
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
-    val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson(_))
+    val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson)
     val details = (json \ "Details").extractOpt[String].getOrElse("")
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
@@ -783,6 +786,10 @@ private[spark] object JsonProtocol {
   def rddInfoFromJson(json: JValue): RDDInfo = {
     val rddId = (json \ "RDD ID").extract[Int]
     val name = (json \ "Name").extract[String]
+    val scope = Utils.jsonOption(json \ "Scope").map(_.extract[String]).orNull
+    val parentIds = Utils.jsonOption(json \ "Parent IDs")
+      .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
+      .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
@@ -790,7 +797,7 @@ private[spark] object JsonProtocol {
     val tachyonSize = (json \ "Tachyon Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
-    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel)
+    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, scope, parentIds)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.tachyonSize = tachyonSize

@@ -320,6 +320,16 @@ class JsonProtocolSuite extends FunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
+  test("RDDInfo backward compatibility") {
+    // Prior to Spark 1.4.0, RDDInfo did not have a "Scope" and "Parent IDs" properties
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, "fable", Seq(1, 6, 8))
+    val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
+      .removeField({ _._1 == "Scope"})
+      .removeField({ _._1 == "Parent IDs"})
+    val expectedRddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, null, Seq.empty)
+    assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
+  }
+
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
@@ -642,7 +652,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK)
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, "layer", Seq(1, 4, 7))
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -782,6 +792,8 @@ class JsonProtocolSuite extends FunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
+      |        "Scope": "layer",
+      |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
@@ -1165,6 +1177,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 1,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1204,6 +1218,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 2,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1220,6 +1236,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1259,6 +1277,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1275,6 +1295,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1291,6 +1313,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1330,6 +1354,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1346,6 +1372,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1362,6 +1390,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 6,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
@@ -1378,6 +1408,8 @@ class JsonProtocolSuite extends FunSuite {
       |        {
       |          "RDD ID": 7,
       |          "Name": "mayor",
+      |          "Scope": "layer",
+      |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
