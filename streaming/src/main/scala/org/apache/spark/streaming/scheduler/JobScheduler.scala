@@ -48,7 +48,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   val listenerBus = new StreamingListenerBus()
 
   // These two are created only when scheduler starts.
-  // eventActor not being null means the scheduler has been started and not stopped
+  // eventLoop not being null means the scheduler has been started and not stopped
   var receiverTracker: ReceiverTracker = null
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
