@@ -47,6 +47,23 @@ sealed class BufferSeens(var buffer: MutableRow, var seens: Array[JSet[Any]] = n
   }
 }
 
+// A MutableRow for AggregateBuffers and GroupingExpression Values
+sealed class BufferAndKey(leftLen: Int, rightLen: Int)
+  extends GenericMutableRow(leftLen + rightLen) {
+
+  def this(leftLen: Int, keys: Row) = {
+    this(leftLen, keys.length)
+    // copy the keys to the last
+    var idx = leftLen
+    var idx2 = 0
+    while (idx < keys.length) {
+      this.values(idx) = keys(idx2)
+      idx2 += 1
+      idx += 1
+    }
+  }
+}
+
 sealed trait Aggregate {
   self: Product =>
   // HACK: Generators don't correctly preserve their output through serializations so we grab
@@ -159,7 +176,7 @@ case class AggregatePreShuffle(
         // the input is every single row
         val aggregates = initializedAndGetAggregates(PARTIAL1, aggregateExpressions)
         // without group by keys
-        val buffer = new GenericMutableRow(output.length)
+        val buffer = new GenericMutableRow(buffersSchema.length)
         var idx = 0
         while (idx < aggregates.length) {
           val ae = aggregates(idx)
@@ -193,22 +210,13 @@ case class AggregatePreShuffle(
           val keys = groupByProjection(currentRow)
           results(keys) match {
             case null =>
-              val buffer = new GenericMutableRow(output.length)
-              // fill the aggregate buffers
+              val buffer = new BufferAndKey(output.length, keys)
+              // update the aggregate buffers
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
                 ae.reset(buffer)
                 ae.update(currentRow, buffer, null)
-                idx += 1
-              }
-
-              // fill the grouping expression values into the new row
-              idx = buffersSchema.length
-              var idx2 = 0
-              while (idx < output.length) {
-                buffer(idx) = keys(idx2)
-                idx2 += 1
                 idx += 1
               }
 
@@ -362,6 +370,7 @@ case class DistinctAggregate(
         val buffer = new GenericMutableRow(buffersSchema.length)
         val seens = new Array[JSet[Any]](aggregates.length)
 
+        // reset the aggregate buffer
         var idx = 0
         while (idx < aggregates.length) {
           val ae = aggregates(idx)
@@ -375,6 +384,7 @@ case class DistinctAggregate(
         }
         val ibs = new BufferSeens().withBuffer(buffer).withSeens(seens)
 
+        // update the aggregate buffer
         while (iter.hasNext) {
           val currentRow = iter.next()
 
@@ -387,19 +397,21 @@ case class DistinctAggregate(
           }
         }
 
+        // only single output for non grouping keys case
         Iterator(finalProjection(ibs.buffer))
       }
     } else {
       child.execute().mapPartitions { iter =>
         // initialize the aggregate functions for input rows
-        // (update/terminatePartial will be called)
+        // (update will be called)
         val aggregates =
           initializedAndGetAggregates(COMPLETE, computedAggregates(aggregateExpressions))
 
         val buffersSchema = bufferSchemaFromAggregate(aggregates)
         val outputSchema = buffersSchema ++ groupingExpressions.map(_.toAttribute)
 
-        // initialize the aggregate functions for the final output (merge/terminate will be called)
+        // initialize the aggregate functions for the final output
+        // (merge/terminate will be called)
         initializedAndGetAggregates(COMPLETE, computedAggregates(rewrittenProjection))
         // binding the output projection, which takes the aggregate buffer and grouping keys
         // as the input row.
@@ -414,10 +426,10 @@ case class DistinctAggregate(
           val keys = groupByProjection(currentRow)
           results(keys) match {
             case null =>
-              val buffer = new GenericMutableRow(aggregates.length + keys.length)
+              val buffer = new BufferAndKey(aggregates.length, keys)
               val seens = new Array[JSet[Any]](aggregates.length)
 
-              // handle the aggregate buffers
+              // update the aggregate buffers
               var idx = 0
               while (idx < aggregates.length) {
                 val ae = aggregates(idx)
@@ -432,14 +444,6 @@ case class DistinctAggregate(
                 idx += 1
               }
 
-              // fill the grouping expression values into the new row
-              idx = buffersSchema.length
-              var idx2 = 0
-              while (idx < output.length) {
-                buffer(idx) = keys(idx2)
-                idx2 += 1
-                idx += 1
-              }
               results(keys.copy()) = new BufferSeens(buffer, seens)
 
             case bufferSeens =>
