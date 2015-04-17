@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
- package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.{QueryExecution, Row}
