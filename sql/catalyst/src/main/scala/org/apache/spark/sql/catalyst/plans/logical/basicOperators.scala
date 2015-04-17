@@ -69,12 +69,12 @@ case class Generate(
   override def expressions: Seq[Expression] = generator :: Nil
 
   def output: Seq[Attribute] = {
-    val withoutQualifier = if (join) child.output ++ generatorOutput else generatorOutput
-
-    qualifier.map(q =>
+    val qualified = qualifier.map(q =>
       // prepend the new qualifier to the existed one
-      withoutQualifier.map(a => a.withQualifiers(q +: a.qualifiers))
-    ).getOrElse(withoutQualifier)
+      generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
+    ).getOrElse(generatorOutput)
+
+    if (join) child.output ++ qualified else qualified
   }
 }
 
