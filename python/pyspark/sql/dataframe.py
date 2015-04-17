@@ -563,16 +563,23 @@ class DataFrame(object):
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
         >>> df[ df.age > 3 ].collect()
         [Row(age=5, name=u'Bob')]
+        >>> df[df[0] > 3].collect()
+        [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
+            if item not in self.columns:
+                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):
             return self.filter(item)
-        elif isinstance(item, list):
+        elif isinstance(item, (list, tuple)):
             return self.select(*item)
+        elif isinstance(item, int):
+            jc = self._jdf.apply(self.columns[item])
+            return Column(jc)
         else:
-            raise IndexError("unexpected index: %s" % item)
+            raise TypeError("unexpected type: %s" % type(item))
 
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
@@ -580,8 +587,8 @@ class DataFrame(object):
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
-        if name.startswith("__"):
-            raise AttributeError(name)
+        if name not in self.columns:
+            raise AttributeError("No such column: %s" % name)
         jc = self._jdf.apply(name)
         return Column(jc)
 
@@ -1093,7 +1100,39 @@ class Column(object):
     # container operators
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
-    getField = _bin_op("getField", "An expression that gets a field by name in a StructField.")
+
+    def getItem(self, key):
+        """An expression that gets an item at position `ordinal` out of a list,
+         or gets an item by key out of a dict.
+
+        >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
+        >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
+        l[0] d[key]
+        1    value
+        >>> df.select(df.l[0], df.d["key"]).show()
+        l[0] d[key]
+        1    value
+        """
+        return self[key]
+
+    def getField(self, name):
+        """An expression that gets a field by name in a StructField.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
+        >>> df.select(df.r.getField("b")).show()
+        r.b
+        b
+        >>> df.select(df.r.a).show()
+        r.a
+        1
+        """
+        return Column(self._jc.getField(name))
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self.getField(item)
 
     # string methods
     rlike = _bin_op("rlike")
