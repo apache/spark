@@ -106,9 +106,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     if (numExecutors < 0 || (!isDynamicAllocationEnabled && numExecutors == 0)) {
       throw new IllegalArgumentException(
         s"""
-           |Number of executors $numExecutors is not legal.
-           |If dynamic allocation is enable, number of executors should at least be 0.
-           |If dynamic allocation is not enabled, number of executors should at least be 1.
+           |Number of executors was $numExecutors, but must be at least 1
+           |(or 0 if dynamic executor allocation is enabled).
            |${getUsageMessage()}
          """.stripMargin)
     }
