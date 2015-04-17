@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
 
 
-class QueryPartitionSuite extends QueryTest {
+class sqQueryPartitionSuite extends QueryTest {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   test("SPARK-5068: query data when path doesn't exist"){
