@@ -308,6 +308,12 @@ class ExecutorRunnable(
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
+
+    // Add PySpark archives path
+    sys.env.get("PYSPARK_ARCHIVES_PATH") match {
+      case Some(pythonArchivesPath) => env("PYSPARK_ARCHIVES_PATH") = pythonArchivesPath
+      case None =>
+    }
     env
   }
 }

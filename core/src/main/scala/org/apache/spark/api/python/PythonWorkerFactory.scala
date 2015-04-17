@@ -49,7 +49,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
-    envVars.getOrElse("PYTHONPATH", ""),
+    envVars.getOrElse("PYTHONPATH", sys.env.getOrElse("PYSPARK_ARCHIVES_PATH", "")),
     sys.env.getOrElse("PYTHONPATH", ""))
 
   def create(): Socket = {
