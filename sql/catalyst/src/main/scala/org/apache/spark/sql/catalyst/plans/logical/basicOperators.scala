@@ -72,7 +72,8 @@ case class Generate(
     val withoutQualifier = if (join) child.output ++ generatorOutput else generatorOutput
 
     qualifier.map(q =>
-      withoutQualifier.map(_.withQualifiers(q :: Nil))
+      // prepend the new qualifier to the existed one
+      withoutQualifier.map(a => a.withQualifiers(q +: a.qualifiers))
     ).getOrElse(withoutQualifier)
   }
 }
