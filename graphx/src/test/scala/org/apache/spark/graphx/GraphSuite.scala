@@ -347,7 +347,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val reverseStar = starGraph(sc, n).reverse.cache()
       // outerJoinVertices changing type
       val reverseStarDegrees =
-        reverseStar.outerJoinVertices(reverseStar.outDegrees) { (vid, a, bOpt) => bOpt.getOrElse(0) }
+        reverseStar.outerJoinVertices(reverseStar.outDegrees) {
+          (vid, a, bOpt) => bOpt.getOrElse(0) }
       val neighborDegreeSums = reverseStarDegrees.aggregateMessages[Int]( ctx => {
         ctx.sendToSrc(ctx.dstAttr)
         ctx.sendToDst(ctx.srcAttr)
