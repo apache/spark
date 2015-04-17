@@ -101,7 +101,7 @@ private[spark] class TachyonBlockManager(
 
   // TODO: Some of the logic here could be consolidated/de-duplicated with that in the DiskStore.
   private def createTachyonDirs(): Array[TachyonFile] = {
-    logDebug(s"Creating tachyon directories at root dirs '$rootDirs'")
+    logDebug("Creating tachyon directories at root dirs '" + rootDirs + "'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
     rootDirs.split(",").map { rootDir =>
       var foundLocalDir = false
@@ -120,14 +120,15 @@ private[spark] class TachyonBlockManager(
           }
         } catch {
           case e: Exception =>
-            logWarning(s"Attempt $tries to create tachyon dir $tachyonDir failed", e)
+            logWarning("Attempt " + tries + " to create tachyon dir " + tachyonDir + " failed", e)
         }
       }
       if (!foundLocalDir) {
-        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create tachyon dir in $rootDir")
+        logError("Failed " + MAX_DIR_CREATION_ATTEMPTS + " attempts to create tachyon dir in " +
+          rootDir)
         System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_CREATE_DIR)
       }
-      logInfo(s"Created tachyon directory at $tachyonDir")
+      logInfo("Created tachyon directory at " + tachyonDir)
       tachyonDir
     }
   }
@@ -144,7 +145,7 @@ private[spark] class TachyonBlockManager(
             }
           } catch {
             case e: Exception =>
-              logError(s"Exception while deleting tachyon spark dir: $tachyonDir", e)
+              logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
           }
         }
         client.close()

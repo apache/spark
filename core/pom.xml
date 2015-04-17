@@ -279,135 +279,47 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
-      <version>0.6.3</version>
+      <version>0.6.4</version>
       <exclusions>
         <exclusion>
-          <groupId>commons-beanutils</groupId>
-          <artifactId>commons-beanutils</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-beanutils</groupId>
-          <artifactId>commons-beanutils-core</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-collections</groupId>
-          <artifactId>commons-collections</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-configuration</groupId>
-          <artifactId>commons-configuration</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-digester</groupId>
-          <artifactId>commons-digester</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-el</groupId>
-          <artifactId>commons-el</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-lang</groupId>
-          <artifactId>commons-lang</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>hsqldb</groupId>
-          <artifactId>hsqldb</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>jline</groupId>
-          <artifactId>jline</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpcore</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-framework</artifactId>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.apache.curator</groupId>
           <artifactId>curator-recipes</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.zookeeper</groupId>
-          <artifactId>zookeeper</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-jsp</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-continuation</artifactId>
+          <artifactId>jetty-webapp</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-http</artifactId>
+          <artifactId>jetty-server</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-io</artifactId>
+          <artifactId>jetty-servlet</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-security</artifactId>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-util</artifactId>
+          <groupId>org.powermock</groupId>
+          <artifactId>powermock-module-junit4</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-xml</artifactId>
+          <groupId>org.powermock</groupId>
+          <artifactId>powermock-api-mockito</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>javax.servlet</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>javax.servlet.jsp</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>org.apache.jasper.glassfish</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>javax.servlet.jsp.jstl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>org.apache.taglibs.standard.glassfish</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>javax.el</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>com.sun.el</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.eclipse.jetty.orbit</groupId>
-          <artifactId>org.eclipse.jdt.core</artifactId>
+          <groupId>org.apache.curator</groupId>
+          <artifactId>curator-test</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
