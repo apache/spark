@@ -83,6 +83,8 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     // Try creating second context to confirm that it's still possible, if desired
     sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
         .set("spark.driver.allowMultipleContexts", "true"))
+    
+    sc2.stop()
   }
   
   test("BytesWritable implicit conversion is correct") {
