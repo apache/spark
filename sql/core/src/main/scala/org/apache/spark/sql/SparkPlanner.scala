@@ -43,7 +43,7 @@ protected[sql] class SparkPlanner(val sqlContext: SQLContext) extends SparkStrat
    * The required attributes for both filtering and expression evaluation are passed to the
    * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
    */
-  def pruneFilterProject(
+  override def pruneFilterProject(
       projectList: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
       prunePushedDownFilters: Seq[Expression] => Seq[Expression],
