@@ -31,7 +31,7 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ImmutableRDDLike, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
@@ -46,10 +46,14 @@ import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelec
 import org.apache.spark.util.Utils
 
 
-private[sql] object DataFrame {
-  def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+object DataFrame {
+  private[sql] def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
   }
+
+  /** Automatically convert a DataFrame to an RDDLike object as necessary. */
+  implicit def dataFrameRDDlikeConversion (dataFrame: DataFrame): ImmutableRDDLike[Row, RDD] =
+    new RDDLikeDataFrameWrapper(dataFrame)
 }
 
 
@@ -118,7 +122,7 @@ private[sql] object DataFrame {
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
-  extends RDDApi[Row] with Serializable {
+  extends Serializable {
 
   /**
    * A constructor that automatically analyzes the logical plan.
@@ -839,72 +843,73 @@ class DataFrame private[sql](
    * Returns the first row. Alias for head().
    * @group action
    */
-  override def first(): Row = head()
+  def first(): Row = head()
 
   /**
    * Returns a new RDD by applying a function to all rows of this DataFrame.
    * @group rdd
    */
-  override def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
+  def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
 
   /**
    * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
    * and then flattening the results.
    * @group rdd
    */
-  override def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
+  def flatMap[R: ClassTag](f: Row => Traversable[R]): RDD[R] = rdd.flatMap(f)
 
   /**
    * Returns a new RDD by applying a function to each partition of this DataFrame.
    * @group rdd
    */
-  override def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
-    rdd.mapPartitions(f)
+  def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R],
+                                 preservesPartitioning: Boolean = false): RDD[R] = {
+    rdd.mapPartitions(f, preservesPartitioning)
   }
 
   /**
    * Applies a function `f` to all rows.
    * @group rdd
    */
-  override def foreach(f: Row => Unit): Unit = rdd.foreach(f)
+  def foreach(f: Row => Unit): Unit = rdd.foreach(f)
 
   /**
    * Applies a function f to each partition of this [[DataFrame]].
    * @group rdd
    */
-  override def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
    * @group action
    */
-  override def take(n: Int): Array[Row] = head(n)
+  def take(n: Int): Array[Row] = head(n)
 
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
    * @group action
    */
-  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+  def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
 
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
    * @group action
    */
-  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
+  def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
 
   /**
    * Returns the number of rows in the [[DataFrame]].
    * @group action
    */
-  override def count(): Long = groupBy().count().collect().head.getLong(0)
+  def count(): Long = groupBy().count().collect().head.getLong(0)
 
   /**
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
    * @group rdd
    */
-  override def repartition(numPartitions: Int): DataFrame = {
+  def repartition(numPartitions: Int)(implicit ord: Ordering[Row] = null): DataFrame = {
     sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions)(ord),
       schema, needsConversion = false)
   }
 
@@ -915,9 +920,9 @@ class DataFrame private[sql](
    * the 100 new partitions will claim 10 of the current partitions.
    * @group rdd
    */
-  override def coalesce(numPartitions: Int): DataFrame = {
+  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[Row] = null): DataFrame = {
     sqlContext.createDataFrame(
-      queryExecution.toRdd.coalesce(numPartitions),
+      queryExecution.toRdd.coalesce(numPartitions, shuffle)(ord),
       schema,
       needsConversion = false)
   }
@@ -926,12 +931,12 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
    * @group dfops
    */
-  override def distinct: DataFrame = Distinct(logicalPlan)
+  def distinct: DataFrame = Distinct(logicalPlan)
 
   /**
    * @group basic
    */
-  override def persist(): this.type = {
+  def persist(): this.type = {
     sqlContext.cacheManager.cacheQuery(this)
     this
   }
@@ -939,12 +944,12 @@ class DataFrame private[sql](
   /**
    * @group basic
    */
-  override def cache(): this.type = persist()
+  def cache(): this.type = persist()
 
   /**
    * @group basic
    */
-  override def persist(newLevel: StorageLevel): this.type = {
+  def persist(newLevel: StorageLevel): this.type = {
     sqlContext.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
@@ -952,15 +957,10 @@ class DataFrame private[sql](
   /**
    * @group basic
    */
-  override def unpersist(blocking: Boolean): this.type = {
+  def unpersist(blocking: Boolean = false): this.type = {
     sqlContext.cacheManager.tryUncacheQuery(this, blocking)
     this
   }
-
-  /**
-   * @group basic
-   */
-  override def unpersist(): this.type = unpersist(blocking = false)
 
   /////////////////////////////////////////////////////////////////////////////
   // I/O
@@ -1330,4 +1330,64 @@ class DataFrame private[sql](
     val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
   }
+}
+
+/**
+ * This class acts as a wrapper around a dataframe, so as to make it fully compliant with RDDLike.
+ * 
+ * Note that some functions here return an RDD, whereas the corresponding version on DataFrame
+ * returns a DataFrame; this is made necessary by the needed argument to the Col generic argument
+ * in RDDLike.
+ */
+class RDDLikeDataFrameWrapper (dataFrame: DataFrame) extends ImmutableRDDLike[Row, RDD] {
+  def cache(): this.type = {
+    dataFrame.cache()
+    this
+  }
+
+  def persist(): this.type = {
+    dataFrame.persist()
+    this
+  }
+
+  def persist(newLevel: StorageLevel): this.type = {
+    dataFrame.persist(newLevel)
+    this
+  }
+
+  def unpersist(blocking: Boolean): this.type = {
+    dataFrame.unpersist(blocking)
+    this
+  }
+
+  def map[R: ClassTag](f: Row => R): RDD[R] = dataFrame.map(f)
+
+  def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R],
+                                 preservesPartitioning: Boolean = false): RDD[R] =
+    dataFrame.mapPartitions(f, preservesPartitioning)
+
+  def foreach(f: Row => Unit): Unit = dataFrame.foreach(f)
+
+  def foreachPartition(f: Iterator[Row] => Unit): Unit =
+    dataFrame.foreachPartition(f)
+
+  def repartition(numPartitions: Int)(implicit ord: Ordering[Row] = null): RDD[Row] =
+    dataFrame.repartition(numPartitions)(ord).rdd
+
+  def flatMap[R: ClassTag](f: Row => Traversable[R]): RDD[R] =
+    dataFrame.flatMap(f)
+
+  def take(n: Int): Array[Row] = dataFrame.take(n)
+
+  def collect(): Array[Row] = dataFrame.collect()
+
+  def first(): Row = dataFrame.first
+
+  def distinct: RDD[Row] = dataFrame.distinct.rdd
+
+  def count(): Long = dataFrame.count
+
+  def coalesce (numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[Row] = null)
+      : RDD[Row] =
+    dataFrame.coalesce(numPartitions, shuffle)(ord).rdd
 }

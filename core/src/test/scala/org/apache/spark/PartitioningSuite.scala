@@ -100,10 +100,10 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     partitioner.getPartition(Row(100))
   }
 
-  test("RangPartitioner.sketch") {
+  test("RangePartitioner.sketch") {
     val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
       val random = new java.util.Random(i)
-      Iterator.fill(i)(random.nextDouble())
+      Traversable.fill(i)(random.nextDouble())
     }.cache()
     val sampleSizePerPartition = 10
     val (count, sketched) = RangePartitioner.sketch(rdd, sampleSizePerPartition)
@@ -125,7 +125,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
   test("RangePartitioner should run only one job if data is roughly balanced") {
     val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
       val random = new java.util.Random(i)
-      Iterator.fill(5000 * i)((random.nextDouble() + i, i))
+      Traversable.fill(5000 * i)((random.nextDouble() + i, i))
     }.cache()
     for (numPartitions <- Seq(10, 20, 40)) {
       val partitioner = new RangePartitioner(numPartitions, rdd)
@@ -138,7 +138,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
   test("RangePartitioner should work well on unbalanced data") {
     val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
       val random = new java.util.Random(i)
-      Iterator.fill(20 * i * i * i)((random.nextDouble() + i, i))
+      Traversable.fill(20 * i * i * i)((random.nextDouble() + i, i))
     }.cache()
     for (numPartitions <- Seq(2, 4, 8)) {
       val partitioner = new RangePartitioner(numPartitions, rdd)

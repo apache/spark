@@ -74,7 +74,7 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
 abstract class RDD[T: ClassTag](
     @transient private var _sc: SparkContext,
     @transient private var deps: Seq[Dependency[_]]
-  ) extends Serializable with Logging {
+  ) extends ImmutableRDDLike[T, RDD] with Serializable with Logging {
 
   if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {
     // This is a warning instead of an exception in order to avoid breaking user programs that
@@ -291,7 +291,7 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = {
+  def flatMap[U: ClassTag](f: T => Traversable[U]): RDD[U] = {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
   }
@@ -635,8 +635,8 @@ abstract class RDD[T: ClassTag](
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
-  def mapPartitions[U: ClassTag](
-      f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
+  def mapPartitions[R: ClassTag](
+      f: Iterator[T] => Iterator[R], preservesPartitioning: Boolean = false): RDD[R] = {
     val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
   }
