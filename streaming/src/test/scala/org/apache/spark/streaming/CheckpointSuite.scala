@@ -43,7 +43,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   var ssc: StreamingContext = null
 
-  override def batchDuration = Milliseconds(500)
+  override def batchDuration: Duration = Milliseconds(500)
 
   override def beforeFunction() {
     super.beforeFunction()
@@ -72,7 +72,7 @@ class CheckpointSuite extends TestSuiteBase {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.sum + state.getOrElse(0)))
+        Some(values.sum + state.getOrElse(0))
       }
       st.map(x => (x, 1))
       .updateStateByKey(updateFunc)
@@ -146,7 +146,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   // This tests whether spark conf persists through checkpoints, and certain
   // configs gets scrubbed
-  test("persistence of conf through checkpoints") {
+  test("recovery of conf through checkpoints") {
     val key = "spark.mykey"
     val value = "myvalue"
     System.setProperty(key, value)
@@ -154,7 +154,7 @@ class CheckpointSuite extends TestSuiteBase {
     val originalConf = ssc.conf
 
     val cp = new Checkpoint(ssc, Time(1000))
-    val cpConf = cp.sparkConf
+    val cpConf = cp.createSparkConf()
     assert(cpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(cpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(cpConf.get(key) === value)
@@ -163,7 +163,8 @@ class CheckpointSuite extends TestSuiteBase {
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
 
-    val newCpConf = newCp.sparkConf
+    // Verify new SparkConf has all the previous properties
+    val newCpConf = newCp.createSparkConf()
     assert(newCpConf.get("spark.master") === originalConf.get("spark.master"))
     assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
     assert(newCpConf.get(key) === value)
@@ -174,6 +175,20 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf = ssc.conf
     assert(restoredConf.get(key) === value)
+    ssc.stop()
+
+    // Verify new SparkConf picks up new master url if it is set in the properties. See SPARK-6331.
+    try {
+      val newMaster = "local[100]"
+      System.setProperty("spark.master", newMaster)
+      val newCpConf = newCp.createSparkConf()
+      assert(newCpConf.get("spark.master") === newMaster)
+      assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+      ssc = new StreamingContext(null, newCp, null)
+      assert(ssc.sparkContext.master === newMaster)
+    } finally {
+      System.clearProperty("spark.master")
+    }
   }
 
 
@@ -184,7 +199,12 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq() ),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
-      Seq( Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq() ),
+      Seq(
+        Seq(("a", 2), ("b", 1)),
+        Seq(("", 2)),
+        Seq(),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("", 2)), Seq() ),
       3
     )
   }
@@ -197,7 +217,8 @@ class CheckpointSuite extends TestSuiteBase {
     val n = 10
     val w = 4
     val input = (1 to n).map(_ => Seq("a")).toSeq
-    val output = Seq(Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 3))) ++ (1 to (n - w + 1)).map(x => Seq(("a", 4)))
+    val output = Seq(
+      Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 3))) ++ (1 to (n - w + 1)).map(x => Seq(("a", 4)))
     val operation = (st: DStream[String]) => {
       st.map(x => (x, 1))
         .reduceByKeyAndWindow(_ + _, _ - _, batchDuration * w, batchDuration)
@@ -207,7 +228,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -221,7 +242,13 @@ class CheckpointSuite extends TestSuiteBase {
             classOf[TextOutputFormat[Text, IntWritable]])
           output
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -230,7 +257,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsNewAPIHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -244,7 +271,13 @@ class CheckpointSuite extends TestSuiteBase {
             classOf[NewTextOutputFormat[Text, IntWritable]])
           output
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -268,7 +301,7 @@ class CheckpointSuite extends TestSuiteBase {
     //
     // After SPARK-5079 is addressed, should be able to remove this test since a strengthened
     // version of the other saveAsHadoopFile* tests would prevent regressions for this issue.
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -283,7 +316,13 @@ class CheckpointSuite extends TestSuiteBase {
             output
           }
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -518,7 +557,8 @@ class CheckpointSuite extends TestSuiteBase {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] =
+  {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.getTimeMillis())
     for (i <- 1 to numBatches.toInt) {
@@ -528,7 +568,7 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("Manual clock after advancing = " + clock.getTimeMillis())
     Thread.sleep(batchDuration.milliseconds)
 
-    val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
+    val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
     }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     outputStream.output.map(_.flatten)

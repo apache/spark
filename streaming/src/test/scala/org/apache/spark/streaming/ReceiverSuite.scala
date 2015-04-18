@@ -24,7 +24,6 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -34,6 +33,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
 class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
@@ -131,11 +131,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
   test("block generator") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockInterval = 200
-    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString)
+    val blockIntervalMs = 200
+    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 5
-    val waitTime = expectedBlocks * blockInterval + (blockInterval / 2)
+    val waitTime = expectedBlocks * blockIntervalMs + (blockIntervalMs / 2)
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
@@ -157,15 +157,15 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
   test("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockInterval = 100
+    val blockIntervalMs = 100
     val maxRate = 100
-    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
+    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms").
       set("spark.streaming.receiver.maxRate", maxRate.toString)
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 20
-    val waitTime = expectedBlocks * blockInterval
+    val waitTime = expectedBlocks * blockIntervalMs
     val expectedMessages = maxRate * waitTime / 1000
-    val expectedMessagesPerBlock = maxRate * blockInterval / 1000
+    val expectedMessagesPerBlock = maxRate * blockIntervalMs / 1000
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
@@ -222,7 +222,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
       .set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
     val batchDuration = Milliseconds(500)
-    val tempDirectory = Files.createTempDir()
+    val tempDirectory = Utils.createTempDir()
     val logDirectory1 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 0))
     val logDirectory2 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 1))
     val allLogFiles1 = new mutable.HashSet[String]()
@@ -251,7 +251,6 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     withStreamingContext(new StreamingContext(sparkConf, batchDuration)) { ssc =>
-      tempDirectory.deleteOnExit()
       val receiver1 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
       val receiver2 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
       val receiverStream1 = ssc.receiverStream(receiver1)
@@ -309,7 +308,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val errors = new ArrayBuffer[Throwable]
 
     /** Check if all data structures are clean */
-    def isAllEmpty = {
+    def isAllEmpty: Boolean = {
       singles.isEmpty && byteBuffers.isEmpty && iterators.isEmpty &&
         arrayBuffers.isEmpty && errors.isEmpty
     }
@@ -321,24 +320,21 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def pushBytes(
         bytes: ByteBuffer,
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       byteBuffers += bytes
     }
 
     def pushIterator(
         iterator: Iterator[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       iterators += iterator
     }
 
     def pushArrayBuffer(
         arrayBuffer: ArrayBuffer[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]
-      ) {
+        optionalBlockId: Option[StreamBlockId]) {
       arrayBuffers +=  arrayBuffer
     }
 

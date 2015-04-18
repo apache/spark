@@ -23,7 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
-private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
+private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private val pageSize = 20
   private val plusOrMinus = 2
@@ -90,6 +90,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
                 </span>
               </h4> ++
               appTable
+            } else if (requestedIncomplete) {
+              <h4>No incomplete applications found!</h4>
             } else {
               <h4>No completed applications found!</h4> ++
               <p>Did you specify the correct logging directory?

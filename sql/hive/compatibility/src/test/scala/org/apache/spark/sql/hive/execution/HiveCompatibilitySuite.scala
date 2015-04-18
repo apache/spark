@@ -236,7 +236,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // timestamp in array, the output format of Hive contains double quotes, while
     // Spark SQL doesn't
-    "udf_sort_array"
+    "udf_sort_array",
+
+    // It has a bug and it has been fixed by
+    // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
+    "input46"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -528,6 +532,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl7",
     "inputddl8",
     "insert1",
+    "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
     "insert_compressed",
     "join0",
@@ -726,6 +731,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semicolon",
     "semijoin",
     "serde_regex",
     "serde_reported_schema",
@@ -795,6 +801,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udaf_covar_pop",
     "udaf_covar_samp",
     "udaf_histogram_numeric",
+    "udaf_number_format",
     "udf2",
     "udf5",
     "udf6",

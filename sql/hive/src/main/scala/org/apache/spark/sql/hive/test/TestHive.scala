@@ -23,6 +23,7 @@ import java.util.{Set => JavaSet}
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -30,7 +31,6 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -69,22 +69,19 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
-  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  lazy val warehousePath = Utils.createTempDir()
+  lazy val metastorePath = Utils.createTempDir()
 
   /** Sets up the system initially or after a RESET command */
   protected def configure(): Unit = {
+    warehousePath.delete()
+    metastorePath.delete()
     setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
-    Utils.registerShutdownDeleteDir(new File(warehousePath))
-    Utils.registerShutdownDeleteDir(new File(metastorePath))
+    setConf("hive.metastore.warehouse.dir", warehousePath.toString)
   }
 
-  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
-  testTempDir.delete()
-  testTempDir.mkdir()
-  Utils.registerShutdownDeleteDir(testTempDir)
+  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
@@ -102,10 +99,16 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  /** Fewer partitions to speed up testing. */
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  override protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[hive] class SQLSession extends super.SQLSession {
+    /** Fewer partitions to speed up testing. */
+    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+      override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+    }
   }
 
   /**
@@ -151,10 +154,15 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
+  val vs = new VariableSubstitution()
+
+  // we should substitute variables in hql to pass the text to parseSql() as a parameter.
+  // Hive parser need substituted text. HiveContext.sql() does this but return a DataFrame,
+  // while we need a logicalPlan so we cannot reuse that.
   protected[hive] class HiveQLQueryExecution(hql: String)
-    extends this.QueryExecution(HiveQl.parseSql(hql)) {
-    def hiveExec() = runSqlHive(hql)
-    override def toString = hql + "\n" + super.toString
+    extends this.QueryExecution(HiveQl.parseSql(vs.substitute(hiveconf, hql))) {
+    def hiveExec(): Seq[String] = runSqlHive(hql)
+    override def toString: String = hql + "\n" + super.toString
   }
 
   /**
@@ -184,7 +192,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   case class TestTable(name: String, commands: (()=>Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
-    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    def cmd: () => Unit = {
+      () => new HiveQLQueryExecution(sql).stringResult(): Unit
+    }
   }
 
   /**
@@ -192,7 +202,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * demand when a query are run against it.
    */
   lazy val testTables = new mutable.HashMap[String, TestTable]()
-  def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
+
+  def registerTestTable(testTable: TestTable): Unit = {
+    testTables += (testTable.name -> testTable)
+  }
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
@@ -249,12 +262,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |WITH SERDEPROPERTIES ('field.delim'='\\t')
        """.stripMargin.cmd,
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
-    TestTable("sales",
-      s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
-         |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
-         |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
          |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'

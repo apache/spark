@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
@@ -25,8 +26,10 @@ import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
-
 import org.apache.spark.util.Utils
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
@@ -79,13 +82,14 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
   }
-  
+
   test("addFile works") {
-    val file1 = File.createTempFile("someprefix1", "somesuffix1")
+    val dir = Utils.createTempDir()
+
+    val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
     val absolutePath1 = file1.getAbsolutePath
 
-    val pluto = Utils.createTempDir()
-    val file2 = File.createTempFile("someprefix2", "somesuffix2", pluto)
+    val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
     val relativePath = file2.getParent + "/../" + file2.getParentFile.getName + "/" + file2.getName
     val absolutePath2 = file2.getAbsolutePath
 
@@ -110,11 +114,13 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
 
         if (length1 != gotten1.length()) {
           throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " + absolutePath1)
+            s"file has different length $length1 than added file ${gotten1.length()} : " +
+              absolutePath1)
         }
         if (length2 != gotten2.length()) {
           throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " + absolutePath2)
+            s"file has different length $length2 than added file ${gotten2.length()} : " +
+              absolutePath2)
         }
 
         if (absolutePath1 == gotten1.getAbsolutePath) {
@@ -129,7 +135,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       sc.stop()
     }
   }
-  
+
   test("addFile recursive works") {
     val pluto = Utils.createTempDir()
     val neptune = Utils.createTempDir(pluto.getAbsolutePath)
@@ -168,6 +174,21 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       intercept[SparkException] {
         sc.addFile(dir.getAbsolutePath)
       }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
+      sc.cancelJobGroup("nonExistGroupId")
+      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+
+      // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
+      // SparkContext to shutdown, so the following assertion will fail.
+      assert(sc.parallelize(1 to 10).count() == 10L)
     } finally {
       sc.stop()
     }

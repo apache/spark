@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import java.io.File
+import java.io._
 
 import scala.util.Properties
 import scala.collection.JavaConversions._
@@ -119,7 +119,9 @@ object SparkBuild extends PomBuild {
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
-    javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
+    javaHome := sys.env.get("JAVA_HOME")
+      .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
+      .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -163,6 +165,9 @@ object SparkBuild extends PomBuild {
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
+
+  /* Package pyspark artifacts in the main assembly. */
+  enable(PySparkAssembly.settings)(assembly)
 
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
@@ -314,6 +319,7 @@ object Hive {
 }
 
 object Assembly {
+  import sbtassembly.AssemblyUtils._
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
@@ -345,6 +351,60 @@ object Assembly {
   )
 }
 
+object PySparkAssembly {
+  import sbtassembly.Plugin._
+  import AssemblyKeys._
+
+  lazy val settings = Seq(
+    unmanagedJars in Compile += { BuildCommons.sparkHome / "python/lib/py4j-0.8.2.1-src.zip" },
+    // Use a resource generator to copy all .py files from python/pyspark into a managed directory
+    // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
+    // list since that will copy unneeded / unwanted files.
+    resourceGenerators in Compile <+= resourceManaged in Compile map { outDir: File =>
+      val dst = new File(outDir, "pyspark")
+      if (!dst.isDirectory()) {
+        require(dst.mkdirs())
+      }
+
+      val src = new File(BuildCommons.sparkHome, "python/pyspark")
+      copy(src, dst)
+    }
+  )
+
+  private def copy(src: File, dst: File): Seq[File] = {
+    src.listFiles().flatMap { f =>
+      val child = new File(dst, f.getName())
+      if (f.isDirectory()) {
+        child.mkdir()
+        copy(f, child)
+      } else if (f.getName().endsWith(".py")) {
+        var in: Option[FileInputStream] = None
+        var out: Option[FileOutputStream] = None
+        try {
+          in = Some(new FileInputStream(f))
+          out = Some(new FileOutputStream(child))
+
+          val bytes = new Array[Byte](1024)
+          var read = 0
+          while (read >= 0) {
+            read = in.get.read(bytes)
+            if (read > 0) {
+              out.get.write(bytes, 0, read)
+            }
+          }
+
+          Some(child)
+        } finally {
+          in.foreach(_.close())
+          out.foreach(_.close())
+        }
+      } else {
+        None
+      }
+    }
+  }
+}
+
 object Unidoc {
 
   import BuildCommons._
@@ -360,15 +420,15 @@ object Unidoc {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("akka")))
-      .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
-      .map(_.filterNot(_.getCanonicalPath.contains("network")))
-      .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
-      .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/shuffle")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
-      .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
@@ -426,8 +486,10 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
-      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
+    envVars in Test ++= Map(
+      "SPARK_DIST_CLASSPATH" -> 
+        (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
+      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",

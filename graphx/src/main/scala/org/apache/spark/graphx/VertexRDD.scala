@@ -122,6 +122,22 @@ abstract class VertexRDD[VD](
   def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2]
 
   /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other an RDD to run the set operation against
+   */
+  def minus(other: RDD[(VertexId, VD)]): VertexRDD[VD]
+
+  /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other a VertexRDD to run the set operation against
+   */
+  def minus(other: VertexRDD[VD]): VertexRDD[VD]
+
+  /**
    * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
    * differing values; for values that are different, keeps the values from `other`. This is
    * only guaranteed to work if the VertexRDDs share a common ancestor.

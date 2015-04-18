@@ -28,7 +28,7 @@ class FlatMapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](
     flatMapValueFunc: V => TraversableOnce[U]
   ) extends DStream[(K, U)](parent.ssc) {
 
-  override def dependencies = List(parent)
+  override def dependencies: List[DStream[_]] = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 

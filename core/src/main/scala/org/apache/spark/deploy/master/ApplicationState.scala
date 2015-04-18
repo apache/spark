@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-private[spark] object ApplicationState extends Enumeration {
+private[master] object ApplicationState extends Enumeration {
 
   type ApplicationState = Value
 

@@ -68,6 +68,8 @@ public class SparkSubmitCommandBuilderSuite {
       parser.DRIVER_JAVA_OPTIONS,
       "extraJavaOpt",
       parser.CONF,
+      "spark.randomOption=foo",
+      parser.CONF,
       SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath");
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
@@ -77,6 +79,8 @@ public class SparkSubmitCommandBuilderSuite {
     assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
     assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms42g"));
     assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
+    assertTrue("Command should contain user-defined conf.",
+      Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
   }
 
   @Test
@@ -94,7 +98,7 @@ public class SparkSubmitCommandBuilderSuite {
       parser.NAME,
       "appName");
 
-    List<String> args = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> args = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     List<String> expected = Arrays.asList("spark-shell", "--app-arg", "bar", "--app-switch");
     assertEquals(expected, args.subList(args.size() - expected.size(), args.size()));
   }
@@ -106,7 +110,7 @@ public class SparkSubmitCommandBuilderSuite {
       parser.MASTER + "=foo",
       parser.DEPLOY_MODE + "=bar");
 
-    List<String> cmd = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     assertEquals("org.my.Class", findArgValue(cmd, parser.CLASS));
     assertEquals("foo", findArgValue(cmd, parser.MASTER));
     assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));
@@ -149,7 +153,7 @@ public class SparkSubmitCommandBuilderSuite {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
-      new SparkSubmitCommandBuilder(Collections.<String>emptyList());
+      newCommandBuilder(Collections.<String>emptyList());
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";
@@ -269,10 +273,15 @@ public class SparkSubmitCommandBuilderSuite {
     return contains(needle, list.split(sep));
   }
 
-  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+  private SparkSubmitCommandBuilder newCommandBuilder(List<String> args) {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
     builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
-    return builder.buildCommand(env);
+    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_ASSEMBLY, "dummy");
+    return builder;
+  }
+
+  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+    return newCommandBuilder(args).buildCommand(env);
   }
 
 }

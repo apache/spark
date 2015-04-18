@@ -18,7 +18,14 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.Executors
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
+
+import org.apache.commons.logging.Log
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.cli.thrift.TProtocolVersion
+import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
@@ -27,7 +34,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.session.{SessionManager, HiveSession}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
@@ -189,5 +196,45 @@ private[hive] class SparkExecuteStatementOperation(
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
+  }
+}
+
+private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
+  extends SessionManager
+  with ReflectedCompositeService {
+
+  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
+
+  override def init(hiveConf: HiveConf) {
+    setSuperField(this, "hiveConf", hiveConf)
+
+    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
+    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
+    getAncestorField[Log](this, 3, "LOG").info(
+      s"HiveServer2: Async execution pool size $backgroundPoolSize")
+
+    setSuperField(this, "operationManager", sparkSqlOperationManager)
+    addService(sparkSqlOperationManager)
+
+    initCompositeService(hiveConf)
+  }
+
+  override def openSession(
+      protocol: TProtocolVersion,
+      username: String,
+      passwd: String,
+      sessionConf: java.util.Map[String, String],
+      withImpersonation: Boolean,
+      delegationToken: String): SessionHandle = {
+    hiveContext.openSession()
+
+    super.openSession(protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+  }
+
+  override def closeSession(sessionHandle: SessionHandle) {
+    super.closeSession(sessionHandle)
+    sparkSqlOperationManager.sessionToActivePool -= sessionHandle
+
+    hiveContext.detachSession()
   }
 }

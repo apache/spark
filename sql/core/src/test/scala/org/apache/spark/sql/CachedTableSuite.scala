@@ -22,6 +22,7 @@ import scala.language.{implicitConversions, postfixOps}
 
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.Accumulators
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.test.TestSQLContext._
@@ -92,7 +93,8 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF().registerTempTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+      .registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(table("bigData").count() === 200000L)
     table("bigData").unpersist(blocking = true)
@@ -295,5 +297,22 @@ class CachedTableSuite extends QueryTest {
     cacheTable("t2")
     sql("Clear CACHE")
     assert(cacheManager.isEmpty)
+  }
+
+  test("Clear accumulators when uncacheTable to prevent memory leaking") {
+    val accsSize = Accumulators.originals.size
+
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t2")
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
+    uncacheTable("t1")
+    uncacheTable("t2")
+
+    assert(accsSize >= Accumulators.originals.size)
   }
 }
