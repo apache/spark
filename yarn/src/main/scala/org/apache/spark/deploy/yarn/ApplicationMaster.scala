@@ -373,14 +373,7 @@ private[spark] class ApplicationMaster(
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     sparkContextRef.synchronized {
-      val waitTries = sparkConf.getOption("spark.yarn.applicationMaster.waitTries")
-        .map(_.toLong * 10000L)
-      if (waitTries.isDefined) {
-        logWarning(
-          "spark.yarn.applicationMaster.waitTries is deprecated, use spark.yarn.am.waitTime")
-      }
-      val totalWaitTime = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", 
-        s"${waitTries.getOrElse(100000L)}ms")
+      val totalWaitTime = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
       val deadline = System.currentTimeMillis() + totalWaitTime
 
       while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {

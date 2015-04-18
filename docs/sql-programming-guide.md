@@ -193,8 +193,8 @@ df.groupBy("age").count().show()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sc: JavaSparkContext // An existing SparkContext.
-val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+JavaSparkContext sc // An existing SparkContext.
+SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // Create the DataFrame
 DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
@@ -308,8 +308,8 @@ val df = sqlContext.sql("SELECT * FROM table")
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sqlContext = ...  // An existing SQLContext
-val df = sqlContext.sql("SELECT * FROM table")
+SQLContext sqlContext = ...  // An existing SQLContext
+DataFrame df = sqlContext.sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
 
@@ -435,7 +435,7 @@ DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AN
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -599,7 +599,7 @@ DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> names = results.map(new Function<Row, String>() {
+List<String> names = results.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -860,7 +860,7 @@ DataFrame parquetFile = sqlContext.parquetFile("people.parquet");
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
