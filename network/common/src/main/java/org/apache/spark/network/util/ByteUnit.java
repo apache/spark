@@ -25,46 +25,46 @@ public enum ByteUnit {
   },
 
   /** Kibibyte (KiB) = 1024 Byte */
-  KB {
-    public long toBytes(long d) { return x(d, C_KB); }
+  KiB {
+    public long toBytes(long d) { return x(d, C_KiB); }
     
-    public long convert(long d, ByteUnit u) { return u.toKB(d); }
+    public long convert(long d, ByteUnit u) { return u.toKiB(d); }
   },
 
   /** Mebibyte (MiB) = (1024^2) Byte */
-  MB {
-    public long toBytes(long d) { return x(d, C_MB); }
+  MiB {
+    public long toBytes(long d) { return x(d, C_MiB); }
     
-    public long convert(long d, ByteUnit u) { return u.toMB(d); }
+    public long convert(long d, ByteUnit u) { return u.toMiB(d); }
   },
 
   /** Gibibyte (GiB) = (1024^3) Byte */
-  GB {
-    public long toBytes(long d) { return x(d, C_GB);
+  GiB {
+    public long toBytes(long d) { return x(d, C_GiB);
     }
 
-    public long convert(long d, ByteUnit u) { return u.toGB(d); }
+    public long convert(long d, ByteUnit u) { return u.toGiB(d); }
   },
 
   /** Tebibyte (TiB) = (1024^4) Byte */
-  TB {
-    public long toBytes(long d) { return x(d, C_TB); }
+  TiB {
+    public long toBytes(long d) { return x(d, C_TiB); }
     
-    public long convert(long d, ByteUnit u) { return u.toTB(d); }
+    public long convert(long d, ByteUnit u) { return u.toTiB(d); }
   },
 
   /** Pebibyte (PB) = (1024^5) Byte */
-  PB {
-    public long toBytes(long d) { return x(d, C_PB); }
+  PiB {
+    public long toBytes(long d) { return x(d, C_PiB); }
     
-    public long convert(long d, ByteUnit u) { return u.toPB(d); }
+    public long convert(long d, ByteUnit u) { return u.toPiB(d); }
   };
 
-  static final long C_KB = 1024l;
-  static final long C_MB = (long) Math.pow(1024l, 2l);
-  static final long C_GB = (long) Math.pow(1024l, 3l);
-  static final long C_TB = (long) Math.pow(1024l, 4l);
-  static final long C_PB = (long) Math.pow(1024l, 5l);
+  static final long C_KiB = 1024l;
+  static final long C_MiB = (long) Math.pow(1024l, 2l);
+  static final long C_GiB = (long) Math.pow(1024l, 3l);
+  static final long C_TiB = (long) Math.pow(1024l, 4l);
+  static final long C_PiB = (long) Math.pow(1024l, 5l);
 
   static final long MAX = Long.MAX_VALUE;
 
@@ -78,19 +78,18 @@ public enum ByteUnit {
     if (d < -over) return Long.MIN_VALUE;
     return d * m;
   }
-  
-  public long toBytes(long d) { throw new AbstractMethodError(); }
+
   public long convert(long d, ByteUnit u) { throw new AbstractMethodError(); }
   
-  public long toKB(long d) { return toBytes(d) / C_KB; }
-
-  public long toMB(long d) { return toBytes(d) / C_MB; }
-
-  public long toGB(long d) { return toBytes(d) / C_GB; }
-
-  public long toTB(long d) { return toBytes(d) / C_TB; }
-
-  public long toPB(long d) { return toBytes(d) / C_PB; }
-
+  public long toBytes(long d) { throw new AbstractMethodError(); }
   
+  public long toKiB(long d) { return toBytes(d) / C_KiB; }
+
+  public long toMiB(long d) { return toBytes(d) / C_MiB; }
+
+  public long toGiB(long d) { return toBytes(d) / C_GiB; }
+
+  public long toTiB(long d) { return toBytes(d) / C_TiB; }
+
+  public long toPiB(long d) { return toBytes(d) / C_PiB; }
 }

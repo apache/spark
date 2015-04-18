@@ -140,11 +140,11 @@ public class JavaUtils {
   private static ImmutableMap<String, ByteUnit> byteSuffixes =
     ImmutableMap.<String, ByteUnit>builder()
       .put("b", ByteUnit.BYTE)
-      .put("k", ByteUnit.KB)
-      .put("m", ByteUnit.MB)
-      .put("g", ByteUnit.GB)
-      .put("t", ByteUnit.TB)
-      .put("p", ByteUnit.PB)
+      .put("k", ByteUnit.KiB)
+      .put("m", ByteUnit.MiB)
+      .put("g", ByteUnit.GiB)
+      .put("t", ByteUnit.TiB)
+      .put("p", ByteUnit.PiB)
       .build();
 
   /**
@@ -250,7 +250,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in kibibytes.
    */
   public static long byteStringAsKb(String str) {
-    return parseByteString(str, ByteUnit.KB);
+    return parseByteString(str, ByteUnit.KiB);
   }
   
   /**
@@ -260,7 +260,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in mebibytes.
    */
   public static long byteStringAsMb(String str) {
-    return parseByteString(str, ByteUnit.MB);
+    return parseByteString(str, ByteUnit.MiB);
   }
 
   /**
@@ -270,6 +270,6 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in gibibytes.
    */
   public static long byteStringAsGb(String str) {
-    return parseByteString(str, ByteUnit.GB);
+    return parseByteString(str, ByteUnit.GiB);
   }
 }

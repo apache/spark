@@ -366,10 +366,10 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.reducer.maxMbInFlight</code></td>
-  <td>48</td>
+  <td><code>spark.reducer.maxSizeInFlight</code></td>
+  <td>48m</td>
   <td>
-    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    Maximum size of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
   </td>
@@ -650,10 +650,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryoserializer.buffer.mb</code></td>
-  <td>0.064</td>
+  <td><code>spark.kryoserializer.buffer</code></td>
+  <td>64k</td>
   <td>
-    Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
+    Initial size of Kryo's serialization buffer. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
      <code>spark.kryoserializer.buffer.max.mb</code> if needed.
   </td>

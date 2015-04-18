@@ -55,7 +55,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   val shuffleManager = new HashShuffleManager(conf)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  conf.set("spark.kryoserializer.buffer.mb", "1")
+  conf.set("spark.kryoserializer.buffer", "1m")
   val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.

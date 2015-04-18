@@ -211,7 +211,74 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     Utils.timeStringAsMs(get(key, defaultValue))
   }
 
+  /**
+   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then bytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsBytes(key: String): Long = {
+    Utils.byteStringAsBytes(get(key))
+  }
 
+  /**``
+   * Get a size parameter as bytes, falling back to a default if not set. If no
+   * suffix is provided then bytes are assumed.
+   */
+  def getSizeAsBytes(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsKb(key: String): Long = {
+    Utils.byteStringAsMb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   */
+  def getSizeAsKb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsMb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsMb(key: String): Long = {
+    Utils.byteStringAsMb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   */
+  def getSizeAsMb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsMb(get(key, defaultValue))
+  }
+  
+  /**
+   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   * @throws NoSuchElementException
+   */
+  def getSizeAsGb(key: String): Long = {
+    Utils.byteStringAsGb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   */
+  def getSizeAsGb(key: String, defaultValue: String): Long = {
+    Utils.byteStringAsGb(get(key, defaultValue))
+  }
+  
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
@@ -407,7 +474,13 @@ private[spark] object SparkConf extends Logging {
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
         "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
-        "Please use spark.{driver,executor}.userClassPathFirst instead."))
+        "Please use spark.{driver,executor}.userClassPathFirst instead."),
+      DeprecatedConfig("spark.reducer.maxMbInFlight", "1.4",
+        "Please use spark.reducer.maxSizeInFlight instead."),
+      DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
+        "Please use spark.kryoserializer.buffer instead."))
+
+    
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
   }
 
@@ -431,8 +504,12 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.am.waitTime" -> Seq(
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
-        translation = s => s"${s.toLong * 10}s"))
-    )
+        translation = s => s"${s.toLong * 10}s")),
+    "spark.reducer.maxSizeInFlight" -> Seq(
+      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
+    "spark.kryoserializer.buffer" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4"))
+  )
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
