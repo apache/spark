@@ -78,7 +78,7 @@ class FileShuffleBlockManager(conf: SparkConf)
   private val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
-  private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  private val bufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
 
   /**
    * Contains all the state related to a particular shuffle. This includes a pool of unused

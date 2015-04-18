@@ -480,7 +480,11 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.max.mb", "1.4",
-        "Please use spark.kryoserializer.buffer.max instead."))
+        "Please use spark.kryoserializer.buffer.max instead."),
+      DeprecatedConfig("spark.shuffle.file.buffer.kb", "1.4",
+        "Please use spark.shuffle.file.buffer instead."))
+
+    
 
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
@@ -512,7 +516,9 @@ private[spark] object SparkConf extends Logging {
     "spark.kryoserializer.buffer" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4")),
     "spark.kryoserializer.buffer.max" -> Seq(
-      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4"))
+      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
+    "spark.shuffle.file.buffer" -> Seq(
+      AlternateConfig("spark.shuffle.file.buffer.kb", "1.4"))
   )
 
   /**
