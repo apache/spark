@@ -137,7 +137,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 /**
  * :: DeveloperApi ::
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by `spark.io.compression.snappy.block.size`.
+ * Block size can be configured by `spark.io.compression.snappy.blockSize`.
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
  *       of Spark. This is intended for use as an internal compression utility within a single Spark
@@ -153,7 +153,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getInt("spark.io.compression.snappy.block.size", 32768)
+    val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
     new SnappyOutputStream(s, blockSize)
   }
 
