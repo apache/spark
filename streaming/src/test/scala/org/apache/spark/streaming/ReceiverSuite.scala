@@ -194,16 +194,20 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       s"#records received = $numMessages, not between $minExpectedMessages and $maxExpectedMessages"
     )
 
+    // XXX Checking every block would require an even distribution of messages across blocks,
+    // which throttling code does not control. Therefore, test against the average.
     val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 0.05 * expectedMessagesPerBlock
     val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 0.05 * expectedMessagesPerBlock
     val receivedBlockSizes = recordedBlocks.map { _.size }.mkString(",")
+
+    // the first and last block may be incomplete, so we slice them out
+    val validBlocks = recordedBlocks.drop(1).dropRight(1)
+    val averageBlockSize = validBlocks.map(block => block.size).sum / validBlocks.size
+
     assert(
-      // the first and last block may be incomplete, so we slice them out
-      recordedBlocks.drop(1).dropRight(1).forall { block =>
-        block.size >= minExpectedMessagesPerBlock && block.size <= maxExpectedMessagesPerBlock
-      },
+      averageBlockSize >= minExpectedMessagesPerBlock && averageBlockSize <= maxExpectedMessagesPerBlock,
       s"# records in received blocks = [$receivedBlockSizes], not between " +
-        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock"
+        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock, on average"
     )
   }
 
