@@ -242,8 +242,7 @@ private[spark] class PythonRDD(
         dataOut.writeInt(command.length)
         dataOut.write(command)
         // Data values
-        PythonRDD.writeIteratorToStream(
-          firstParent.iterator(split, context, cacheRemote = false), dataOut)
+        PythonRDD.writeIteratorToStream(firstParent.iterator(split, context), dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()

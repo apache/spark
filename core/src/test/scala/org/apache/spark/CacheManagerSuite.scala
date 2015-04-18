@@ -94,7 +94,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     when(blockManager.putArray(RDDBlockId(0, 0), Array(5, 6, 7), StorageLevel.MEMORY_ONLY))
       .thenThrow(new RuntimeException("putArray"))
 
-    assert(blockInfo.contains(RDDBlockId(0, 0)) === false)
+    assert(!blockInfo.contains(RDDBlockId(0, 0)))
 
     val context = new TaskContextImpl(0, 0, 0, 0)
     try {
@@ -108,7 +108,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     }
 
     // remotely block is cached now
-    assert(blockInfo.contains(RDDBlockId(0, 0)) === true)
+    assert(blockInfo.contains(RDDBlockId(0, 0)))
   }
 
   test("get uncached local rdd") {
