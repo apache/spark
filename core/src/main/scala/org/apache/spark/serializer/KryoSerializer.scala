@@ -56,9 +56,9 @@ class KryoSerializer(conf: SparkConf)
   }
   private val bufferSize = (bufferSizeMb * 1024 * 1024).toInt
 
-  val maxBufferSizeMb = conf.getInt("spark.kryoserializer.buffer.max.mb", 64)
+  val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m")
   if (maxBufferSizeMb >= 2048) {
-    throw new IllegalArgumentException("spark.kryoserializer.buffer.max.mb must be less than " +
+    throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
       s"2048 mb, got: + $maxBufferSizeMb mb.")
   }
   private val maxBufferSize = maxBufferSizeMb * 1024 * 1024
@@ -173,7 +173,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max.mb value.")
+          "increase spark.kryoserializer.buffer.max value.")
     }
     ByteBuffer.wrap(output.toBytes)
   }

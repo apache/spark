@@ -478,7 +478,9 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.reducer.maxMbInFlight", "1.4",
         "Please use spark.reducer.maxSizeInFlight instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
-        "Please use spark.kryoserializer.buffer instead."))
+        "Please use spark.kryoserializer.buffer instead."),
+      DeprecatedConfig("spark.kryoserializer.buffer.max.mb", "1.4",
+        "Please use spark.kryoserializer.buffer.max instead."))
 
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
@@ -508,7 +510,9 @@ private[spark] object SparkConf extends Logging {
     "spark.reducer.maxSizeInFlight" -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" -> Seq(
-      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4"))
+      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4")),
+    "spark.kryoserializer.buffer.max" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4"))
   )
 
   /**
