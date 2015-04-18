@@ -236,10 +236,17 @@ abstract class RDD[T: ClassTag](
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
    * This should ''not'' be called by users directly, but is available for implementors of custom
    * subclasses of RDD.
+   * @param split the partition of RDD
+   * @param context context of task
+     @param cacheRemote whether to cache remotely received block in block manager or not
+   * @return Iterator of data in RDD
    */
-  final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+  final def iterator(
+      split: Partition,
+      context: TaskContext,
+      cacheRemote: Boolean = false): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
+      SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel, cacheRemote)
     } else {
       computeOrReadCheckpoint(split, context)
     }

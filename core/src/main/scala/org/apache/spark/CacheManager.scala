@@ -37,7 +37,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       rdd: RDD[T],
       partition: Partition,
       context: TaskContext,
-      storageLevel: StorageLevel): Iterator[T] = {
+      storageLevel: StorageLevel,
+      cacheRemote: Boolean = false): Iterator[T] = {
 
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
@@ -50,11 +51,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         existingMetrics.incBytesRead(inputMetrics.bytesRead)
 
         val buf = blockResult.data.toArray
-        if (rdd.sparkContext.getConf.getBoolean("spark.rdd.remoteblock.cache", false)) {
           // If the block is retrieved remotely, try to cache it locally
-          if (!blockManager.containsBlockId(key)) {
+        if (cacheRemote && !blockManager.containsBlockId(key)) {
             blockManager.putArray(key, buf, storageLevel)
-          }
         }
 
         val iter = buf.toIterator.asInstanceOf[Iterator[T]]

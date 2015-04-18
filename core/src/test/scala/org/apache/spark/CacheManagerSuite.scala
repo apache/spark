@@ -85,16 +85,6 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
   }
 
   test("cache remotely block") {
-    val conf = new SparkConf(true)
-    conf.set("spark.rdd.remoteblock.cache", "true")
-    sc = new SparkContext("local", "test", conf)
-    rdd = new RDD[Int](sc, Nil) {
-      override def getPartitions: Array[Partition] = Array(split)
-      override val getDependencies = List[Dependency[_]]()
-      override def compute(split: Partition, context: TaskContext): Iterator[Int] =
-        Array(1, 2, 3, 4).iterator
-    }
-
     val blockInfo = new TimeStampedHashMap[BlockId, Boolean]
     val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
     // mock remotely received block
@@ -108,7 +98,8 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
 
     val context = new TaskContextImpl(0, 0, 0, 0)
     try {
-      val computeValue = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+      val computeValue =
+        cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY, cacheRemote = true)
     } catch {
       case e: RuntimeException =>
         if (e.getMessage().contains("putArray")) {
