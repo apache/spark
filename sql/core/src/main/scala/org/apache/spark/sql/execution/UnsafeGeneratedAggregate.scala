@@ -349,6 +349,10 @@ case class UnsafeGeneratedAggregate(
               aggregationBufferSchema.fields.length,
               aggregationBufferSchema
             )
+            // TODO: once the iterator has been fully consumed, we need to free the map so that
+            // its off-heap memory is reclaimed.  This may mean that we'll have to perform an extra
+            // defensive copy of the last row so that we can free that memory before returning
+            // to the caller.
             resultProjection(joinedRow(key, value))
           }
         }
