@@ -62,6 +62,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       override protected def onError(e: Throwable): Unit = reportError("Error in job scheduler", e)
     }
     eventLoop.start()
+
     listenerBus.start(ssc.sparkContext)
     receiverTracker = new ReceiverTracker(ssc)
     receiverTracker.start()

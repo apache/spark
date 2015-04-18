@@ -85,6 +85,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       override protected def onError(e: Throwable): Unit = logError("Error in job generator", e)
     }
     eventLoop.start()
+
     if (ssc.isCheckpointPresent) {
       restart()
     } else {
