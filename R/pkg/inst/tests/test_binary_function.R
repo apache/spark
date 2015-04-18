@@ -83,7 +83,7 @@ test_that("zipPartitions() on RDDs", {
   rdd <- textFile(sc, fileName, 1)
   actual <- collect(zipPartitions(rdd, rdd, 
                                   func = function(x, y) { list(paste(x, y, sep = "\n")) }))
-  expected <- list(paste(x, x, sep = "\n"))
+  expected <- list(paste(mockFile, mockFile, sep = "\n"))
   expect_equal(actual, expected)
   
   rdd1 <- parallelize(sc, 0:1, 1)
