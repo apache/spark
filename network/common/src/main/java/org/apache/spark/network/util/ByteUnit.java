@@ -86,9 +86,7 @@ public enum ByteUnit {
     }
 
     @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toGB(d);
-    }
+    public double convert(double d, ByteUnit u) { return u.toGB(d); }
   },
 
   /**

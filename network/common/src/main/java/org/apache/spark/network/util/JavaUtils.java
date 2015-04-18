@@ -222,7 +222,8 @@ public class JavaUtils {
       }
 
       // If suffix is valid use that, otherwise none was provided and use the default passed
-      return (long) unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit);
+      return new Double(
+        unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit)).longValue();
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
         "kilobytes (kb), megabytes (mb), gigabytes (gb), terabytes (tb), or petabytes(pb). " +
