@@ -33,6 +33,7 @@ import java.util.List;
 
 
 // TODO: pick a better name for this class, since this is potentially confusing.
+// Maybe call it UnsafeMutableRow?
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objets.
