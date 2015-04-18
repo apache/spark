@@ -155,6 +155,11 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
       df.map(r => r.getString(0)).collect().toSeq ===
       table("shuffle").select("col0").map(r => r.getString(0)).collect().sorted.toSeq)
   }
+
+  test("no map output field") {
+    val df = sql(s"SELECT 1 + 1 FROM shuffle")
+    checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+  }
 }
 
 /** Tests SparkSqlSerializer2 with sort based shuffle without sort merge. */

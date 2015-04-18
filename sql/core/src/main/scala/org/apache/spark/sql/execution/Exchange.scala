@@ -96,11 +96,18 @@ case class Exchange(
     val cannotUseSqlSerializer2 =
       (sortBasedShuffleOn && numPartitions > bypassMergeThreshold) || newOrdering.nonEmpty
 
+    // It is true when there is no field that needs to be write out.
+    // For now, we will not use SparkSqlSerializer2 when noField is true.
+    val noField =
+      (keySchema == null || keySchema.length == 0) &&
+      (valueSchema == null || valueSchema.length == 0)
+
     val useSqlSerializer2 =
-        child.sqlContext.conf.useSqlSerializer2 &&  // SparkSqlSerializer2 is enabled.
-        !cannotUseSqlSerializer2 &&                 // Safe to use Serializer2.
-        SparkSqlSerializer2.support(keySchema) &&   // The schema of key is supported.
-        SparkSqlSerializer2.support(valueSchema)    // The schema of value is supported.
+        child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
+        !cannotUseSqlSerializer2 &&                  // Safe to use Serializer2.
+        SparkSqlSerializer2.support(keySchema) &&    // The schema of key is supported.
+        SparkSqlSerializer2.support(valueSchema) &&  // The schema of value is supported.
+        !noField
 
     val serializer = if (useSqlSerializer2) {
       logInfo("Using SparkSqlSerializer2.")
