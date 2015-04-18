@@ -403,6 +403,9 @@ private[spark] object SparkConf extends Logging {
    */
   private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
+      DeprecatedConfig("spark.cache.class", "0.8",
+        "The spark.cache.class property is no longer being used! Specify storage levels using " +
+        "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
         "Please use spark.{driver,executor}.userClassPathFirst instead."))
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
@@ -420,7 +423,15 @@ private[spark] object SparkConf extends Logging {
     "spark.history.fs.update.interval" -> Seq(
       AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
       AlternateConfig("spark.history.fs.updateInterval", "1.3"),
-      AlternateConfig("spark.history.updateInterval", "1.3"))
+      AlternateConfig("spark.history.updateInterval", "1.3")),
+    "spark.history.fs.cleaner.interval" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
+    "spark.history.fs.cleaner.maxAge" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
+    "spark.yarn.am.waitTime" -> Seq(
+      AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
+        // Translate old value to a duration, with 10s wait time per try.
+        translation = s => s"${s.toLong * 10}s"))
     )
 
   /**
@@ -470,7 +481,7 @@ private[spark] object SparkConf extends Logging {
     configsWithAlternatives.get(key).flatMap { alts =>
       alts.collectFirst { case alt if conf.contains(alt.key) =>
         val value = conf.get(alt.key)
-        alt.translation.map(_(value)).getOrElse(value)
+        if (alt.translation != null) alt.translation(value) else value
       }
     }
   }
@@ -514,6 +525,6 @@ private[spark] object SparkConf extends Logging {
   private case class AlternateConfig(
       key: String,
       version: String,
-      translation: Option[String => String] = None)
+      translation: String => String = null)
 
 }
