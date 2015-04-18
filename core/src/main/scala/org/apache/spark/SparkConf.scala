@@ -487,8 +487,8 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.executor.logs.rolling.maxSize instead."),
       DeprecatedConfig("spark.io.compression.snappy.block.size", "1.4",
         "Please use spark.io.compression.snappy.blockSize instead."),
-    DeprecatedConfig("spark.io.compression.lz4.block.size", "1.4",
-      "Please use spark.io.compression.lz4.blockSize instead."))
+      DeprecatedConfig("spark.io.compression.lz4.block.size", "1.4",
+        "Please use spark.io.compression.lz4.blockSize instead."))
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
   }
