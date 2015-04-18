@@ -23,6 +23,12 @@
         {{ form.arrange(class_="form-control") | safe }}
         <input type="submit" value="Go" class="btn btn-default"
         action="" method="get">
+        <div class="input-group" style="float:right;">
+          <input type="text" id="searchbox" class="form-control" placeholder="Search for...">
+          <span class="input-group-btn">
+          </span>
+        </div><!-- /input-group -->
+
     </div>
 </form>
 <hr/>
@@ -105,6 +111,41 @@
     $("g.node").tooltip({
       html: true,
       container: "body",
+    });
+    d3.select("#searchbox").on("keyup", function(){
+        var duration = 500;
+        var s = document.getElementById("searchbox").value;
+        d3.selectAll("g.nodes g.node").filter(function(d, i){
+            if (s==""){
+                d3.select("g.edgePaths")
+                    .transition().duration(duration)
+                    .style("opacity", 1);
+                d3.select(this)
+                    .transition().duration(duration)
+                    .style("opacity", 1)
+                    .selectAll("rect")
+                    .style("stroke-width", "2px");
+            }
+            else{ 
+                d3.select("g.edgePaths")
+                    .transition().duration(duration)
+                    .style("opacity", 0.2);
+                if (d.indexOf(s) > -1) {
+                    d3.select(this)
+                        .transition().duration(duration)
+                        .style("opacity", 1)
+                        .selectAll("rect")
+                        .style("stroke-width", "10px");
+                }
+                else {
+                    d3.select(this)
+                        .transition()
+                        .style("opacity", 0.2).duration(duration)
+                        .selectAll("rect")
+                        .style("stroke-width", "2px");
+                }
+            }
+        });
     });
     </script>
 {% endblock %}
