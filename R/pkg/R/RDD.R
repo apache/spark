@@ -1529,3 +1529,50 @@ setMethod("zipRDD",
             
             PipelinedRDD(zippedRDD, partitionFunc)
           })
+
+#' Zip an RDD's partitions with one (or more) RDD(s).
+#'
+#' Return a new RDD by applying a function to the zipped partitions. 
+#' Assumes that all the RDDs have the same number of partitions*, but does *not* 
+#' require them to have the same number of elements in each partition.
+#' 
+#' @param x An RDD to be zipped.
+#' @param other Another RDD to be zipped.
+#' @return An RDD zipped from the two RDDs.
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, 1:2, 2L)  # 1, 2
+#' rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
+#' rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
+#' collect(zipPartitions(rdd1, rdd2, rdd3, 
+#'                       func = function(x, y, z) { list(list(x, y, z))} ))
+#' # list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6)))
+#'}
+#' @rdname zipRDD
+#' @aliases zipPartitions,RDD
+setMethod("zipPartitions",
+          "RDD",
+          function(..., func) {
+            rrdds <- list(...)
+            if (length(rrdds) == 1) {
+              return(rrdds[[1]])
+            }
+            nPart <- sapply(rrdds, numPartitions)
+            if (length(unique(nPart)) != 1) {
+              stop("Can only zipPartitions RDDs which have the same number of partitions.")
+            }
+            
+            rrdds <- lapply(rrdds, function(rdd) {
+              mapPartitionsWithIndex(rdd, function(split, part) {
+                print(length(part))
+                list(list(split, part))
+              })
+            })
+            union.rdd <- Reduce(unionRDD, rrdds)
+            zipped.rdd <- values(groupByKey(union.rdd, numPartitions = nPart[1]))
+            res <- mapPartitions(zipped.rdd, function(plist) {
+              do.call(func, plist[[1]])
+            })
+            res
+          })

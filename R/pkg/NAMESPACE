@@ -66,6 +66,7 @@ exportMethods(
               "unpersist",
               "value",
               "values",
+              "zipPartitions",
               "zipRDD",
               "zipWithIndex",
               "zipWithUniqueId"
