@@ -220,7 +220,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     Utils.byteStringAsBytes(get(key))
   }
 
-  /**``
+  /**
    * Get a size parameter as bytes, falling back to a default if not set. If no
    * suffix is provided then bytes are assumed.
    */
