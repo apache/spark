@@ -555,13 +555,16 @@ by `SQLContext`.
 
 For example:
 {% highlight java %}
-// Import factory methods provided by DataType.
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.api.java.function.Function;
+// Import factory methods provided by DataTypes.
+import org.apache.spark.sql.types.DataTypes;
 // Import StructType and StructField
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructField;
 // Import Row.
 import org.apache.spark.sql.Row;
+// Import RowFactory.
+import org.apache.spark.sql.RowFactory;
 
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -575,16 +578,16 @@ String schemaString = "name age";
 // Generate the schema based on the string of schema
 List<StructField> fields = new ArrayList<StructField>();
 for (String fieldName: schemaString.split(" ")) {
-  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+  fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
-StructType schema = DataType.createStructType(fields);
+StructType schema = DataTypes.createStructType(fields);
 
 // Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
   new Function<String, Row>() {
     public Row call(String record) throws Exception {
       String[] fields = record.split(",");
-      return Row.create(fields[0], fields[1].trim());
+      return RowFactory.create(fields[0], fields[1].trim());
     }
   });
 
