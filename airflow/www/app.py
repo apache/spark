@@ -1295,12 +1295,14 @@ def duration_f(v, c, m, p):
     if m.end_date:
         return timedelta(seconds=m.duration)
 
+
 def datetime_f(v, c, m, p):
     attr = getattr(m, p)
     dttm = attr.isoformat() if attr else ''
     if datetime.now().isoformat()[:4] == dttm[:4]:
         dttm = dttm[5:]
     return Markup("<nobr>{}</nobr>".format(dttm))
+
 
 def nobr_f(v, c, m, p):
     return Markup("<nobr>{}</nobr>".format(getattr(m, p)))
@@ -1337,7 +1339,7 @@ class TaskInstanceModelView(ModelViewOnly):
     column_list = (
         'dag_id', 'task_id', 'execution_date',
         'start_date', 'end_date', 'duration', 'state', 'job_id', 'hostname',
-        'log')
+        'unixname', 'log')
     can_delete = True
     page_size = 100
 mv = TaskInstanceModelView(
