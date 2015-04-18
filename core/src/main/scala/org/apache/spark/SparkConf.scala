@@ -483,7 +483,6 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer.max instead."),
       DeprecatedConfig("spark.shuffle.file.buffer.kb", "1.4",
         "Please use spark.shuffle.file.buffer instead."))
-
     
 
     

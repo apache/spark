@@ -74,7 +74,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     } else {
       None
     }
-    blockSize = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
+    blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
   }
   setConf(SparkEnv.get.conf)
 
