@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.string;
 
 import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 import java.io.UnsupportedEncodingException;import java.lang.Object;import java.lang.String;
 
@@ -43,19 +44,57 @@ public final class UTF8StringMethods {
   public static int compare(
       Object leftBaseObject,
       long leftBaseOffset,
-      int leftBaseLengthInBytes,
+      int leftLengthInBytes,
       Object rightBaseObject,
       long rightBaseOffset,
-      int rightBaseLengthInBytes) {
+      int rightLengthInBytes) {
     int i = 0;
-    while (i < leftBaseLengthInBytes && i < rightBaseLengthInBytes) {
+    while (i < leftLengthInBytes && i < rightLengthInBytes) {
       final byte leftByte = PlatformDependent.UNSAFE.getByte(leftBaseObject, leftBaseOffset + i);
       final byte rightByte = PlatformDependent.UNSAFE.getByte(rightBaseObject, rightBaseOffset + i);
       final int res = leftByte - rightByte;
       if (res != 0) return res;
       i += 1;
     }
-    return leftBaseLengthInBytes - rightBaseLengthInBytes;
+    return leftLengthInBytes - rightLengthInBytes;
+  }
+
+  public static boolean startsWith(
+      Object strBaseObject,
+      long strBaseOffset,
+      int strLengthInBytes,
+      Object prefixBaseObject,
+      long prefixBaseOffset,
+      int prefixLengthInBytes) {
+    if (prefixLengthInBytes > strLengthInBytes) {
+      return false;
+    } {
+      return ByteArrayMethods.arrayEquals(
+        strBaseObject,
+        strBaseOffset,
+        prefixBaseObject,
+        prefixBaseOffset,
+        prefixLengthInBytes);
+    }
+  }
+
+  public static boolean endsWith(
+      Object strBaseObject,
+      long strBaseOffset,
+      int strLengthInBytes,
+      Object suffixBaseObject,
+      long suffixBaseOffset,
+      int suffixLengthInBytes) {
+    if (suffixLengthInBytes > strLengthInBytes) {
+      return false;
+    } {
+      return ByteArrayMethods.arrayEquals(
+        strBaseObject,
+        strBaseOffset + strLengthInBytes - suffixLengthInBytes,
+        suffixBaseObject,
+        suffixBaseOffset,
+        suffixLengthInBytes);
+    }
   }
 
   /**

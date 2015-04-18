@@ -19,8 +19,9 @@ package org.apache.spark.sql.types
 
 import java.util.Arrays
 
-import org.apache.spark.unsafe.PlatformDependent
-import org.apache.spark.unsafe.string.{UTF8StringPointer, UTF8StringMethods}
+import org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET
+import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.string.UTF8StringMethods
 
 /**
  *  A UTF-8 String, as internal representation of StringType in SparkSQL
@@ -35,8 +36,6 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   private[this] var bytes: Array[Byte] = _
 
-  private val pointer: UTF8StringPointer = new UTF8StringPointer
-
   /**
    * Update the UTF8String with String.
    */
@@ -49,7 +48,6 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
    */
   def set(bytes: Array[Byte]): UTF8String = {
     this.bytes = bytes
-    pointer.set(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, bytes.length)
     this
   }
 
@@ -59,7 +57,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
    * This is only used by Substring() when `start` is negative.
    */
   def length(): Int = {
-    pointer.getLengthInCodePoints
+    UTF8StringMethods.getLengthInCodePoints(bytes, BYTE_ARRAY_OFFSET, bytes.length)
   }
 
   def getBytes: Array[Byte] = {
@@ -107,19 +105,27 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
   }
 
   def startsWith(prefix: UTF8String): Boolean = {
-    val b = prefix.getBytes
-    if (b.length > bytes.length) {
-      return false
-    }
-    Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b)
+    val prefixBytes = prefix.getBytes
+    UTF8StringMethods.startsWith(
+      bytes,
+      BYTE_ARRAY_OFFSET,
+      bytes.length,
+      prefixBytes,
+      BYTE_ARRAY_OFFSET,
+      prefixBytes.length
+    )
   }
 
   def endsWith(suffix: UTF8String): Boolean = {
-    val b = suffix.getBytes
-    if (b.length > bytes.length) {
-      return false
-    }
-    Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b)
+    val suffixBytes = suffix.getBytes
+    UTF8StringMethods.endsWith(
+      bytes,
+      BYTE_ARRAY_OFFSET,
+      bytes.length,
+      suffixBytes,
+      BYTE_ARRAY_OFFSET,
+      suffixBytes.length
+    )
   }
 
   def toUpperCase(): UTF8String = {
@@ -139,13 +145,14 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
   override def clone(): UTF8String = new UTF8String().set(this.bytes)
 
   override def compare(other: UTF8String): Int = {
+    val otherBytes = other.getBytes
     UTF8StringMethods.compare(
-      pointer.getBaseObject,
-      pointer.getBaseOffset,
-      pointer.getLengthInBytes,
-      other.pointer.getBaseObject,
-      other.pointer.getBaseOffset,
-      other.pointer.getLengthInBytes
+      bytes,
+      BYTE_ARRAY_OFFSET,
+      bytes.length,
+      otherBytes,
+      BYTE_ARRAY_OFFSET,
+      otherBytes.length
     )
   }
 
@@ -155,7 +162,14 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   override def equals(other: Any): Boolean = other match {
     case s: UTF8String =>
-      Arrays.equals(bytes, s.getBytes)
+      val otherBytes = s.getBytes
+      otherBytes.length == bytes.length && ByteArrayMethods.arrayEquals(
+        bytes,
+        BYTE_ARRAY_OFFSET,
+        otherBytes,
+        BYTE_ARRAY_OFFSET,
+        otherBytes.length
+      )
     case s: String =>
       // This is only used for Catalyst unit tests
       // fail fast

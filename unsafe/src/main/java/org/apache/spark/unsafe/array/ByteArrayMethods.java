@@ -23,8 +23,32 @@ import java.lang.Object;
 
 public class ByteArrayMethods {
 
+  // TODO: there are substantial opportunities for optimization here and we should investigate them.
+  // See the fast comparisions in Guava's UnsignedBytes, for instance:
+  // https://code.google.com/p/guava-libraries/source/browse/guava/src/com/google/common/primitives/UnsignedBytes.java
+
   private ByteArrayMethods() {
     // Private constructor, since this class only contains static methods.
+  }
+
+  /**
+   * Optimized  equality check for equal-length byte arrays.
+   * @return true if the arrays are equal, false otherwise
+   */
+  public static boolean arrayEquals(
+      Object leftBaseObject,
+      long leftBaseOffset,
+      Object rightBaseObject,
+      long rightBaseOffset,
+      long arrayLengthInBytes) {
+    for (int i = 0; i < arrayLengthInBytes; i++) {
+      final byte left =
+        PlatformDependent.UNSAFE.getByte(leftBaseObject, leftBaseOffset + i);
+      final byte right =
+        PlatformDependent.UNSAFE.getByte(rightBaseObject, rightBaseOffset + i);
+      if (left != right) return false;
+    }
+    return true;
   }
 
   /**
