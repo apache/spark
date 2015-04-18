@@ -2268,6 +2268,7 @@ def _prepare_for_python_RDD(sc, command, obj=None):
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)
     # There is a bug in py4j.java_gateway.JavaClass with auto_convert
+    # https://github.com/bartdag/py4j/issues/161
     # TODO: use auto_convert once py4j fix the bug
     broadcast_vars = ListConverter().convert(
         [x._jbroadcast for x in sc._pickled_broadcast_vars],
