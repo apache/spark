@@ -49,7 +49,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           .getInputMetricsForReadMethod(inputMetrics.readMethod)
         existingMetrics.incBytesRead(inputMetrics.bytesRead)
 
-        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        val buf = blockResult.data.toArray
+        if (rdd.sparkContext.getConf.getBoolean("spark.rdd.remoteblock.cache", false)) {
+          // If the block is retrieved remotely, try to cache it locally
+          if (!blockManager.containsBlockId(key)) {
+            blockManager.putArray(key, buf, storageLevel)
+          }
+        }
+
+        val iter = buf.toIterator.asInstanceOf[Iterator[T]]
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsRead(1)
@@ -73,7 +81,6 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (context.isRunningLocally) {
             return computedValues
           }
-
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
@@ -115,7 +122,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           }
         }
         logInfo(s"Finished waiting for $id")
-        val values = blockManager.get(id)
+        val values = blockManager.getLocal(id)
         if (!values.isDefined) {
           /* The block is not guaranteed to exist even after the other thread has finished.
            * For instance, the block could be evicted after it was put, but before our get.

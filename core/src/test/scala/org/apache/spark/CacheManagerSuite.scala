@@ -24,6 +24,8 @@ import org.scalatest.mock.MockitoSugar
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.util.TimeStampedHashMap
+
 
 // TODO: Test the CacheManager's thread-safety aspects
 class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter
@@ -80,6 +82,42 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     val context = new TaskContextImpl(0, 0, 0, 0)
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(5, 6, 7))
+  }
+
+  test("cache remotely block") {
+    val conf = new SparkConf(true)
+    conf.set("spark.rdd.remoteblock.cache", "true")
+    sc = new SparkContext("local", "test", conf)
+    rdd = new RDD[Int](sc, Nil) {
+      override def getPartitions: Array[Partition] = Array(split)
+      override val getDependencies = List[Dependency[_]]()
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] =
+        Array(1, 2, 3, 4).iterator
+    }
+
+    val blockInfo = new TimeStampedHashMap[BlockId, Boolean]
+    val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+    // mock remotely received block
+    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
+    when(blockManager.containsBlockId(RDDBlockId(0, 0)))
+      .thenReturn(false)
+    when(blockManager.putArray(RDDBlockId(0, 0), Array(5, 6, 7), StorageLevel.MEMORY_ONLY))
+      .thenThrow(new RuntimeException("putArray"))
+
+    assert(blockInfo.contains(RDDBlockId(0, 0)) === false)
+
+    val context = new TaskContextImpl(0, 0, 0, 0)
+    try {
+      val computeValue = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+    } catch {
+      case e: RuntimeException =>
+        if (e.getMessage().contains("putArray")) {
+          blockInfo.putIfAbsent(RDDBlockId(0, 0), true)
+        }
+    }
+
+    // remotely block is cached now
+    assert(blockInfo.contains(RDDBlockId(0, 0)) === true)
   }
 
   test("get uncached local rdd") {
