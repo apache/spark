@@ -369,6 +369,51 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
   override def toString: String = s"MaxOf($left, $right)"
 }
 
+case class MinOf(left: Expression, right: Expression) extends Expression {
+  type EvaluatedType = Any
+
+  override def foldable: Boolean = left.foldable && right.foldable
+
+  override def nullable: Boolean = left.nullable && right.nullable
+
+  override def children: Seq[Expression] = left :: right :: Nil
+
+  override lazy val resolved =
+    left.resolved && right.resolved &&
+    left.dataType == right.dataType
+
+  override def dataType: DataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
+    }
+    left.dataType
+  }
+
+  lazy val ordering = left.dataType match {
+    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+    case other => sys.error(s"Type $other does not support ordered operations")
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    val evalE2 = right.eval(input)
+    if (evalE1 == null) {
+      evalE2
+    } else if (evalE2 == null) {
+      evalE1
+    } else {
+      if (ordering.compare(evalE1, evalE2) < 0) {
+        evalE1
+      } else {
+        evalE2
+      }
+    }
+  }
+
+  override def toString: String = s"MinOf($left, $right)"
+}
+
 /**
  * A function that get the absolute value of the numeric value.
  */

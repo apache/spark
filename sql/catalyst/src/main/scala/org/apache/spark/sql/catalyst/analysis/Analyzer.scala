@@ -297,14 +297,15 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
-          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
+          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
+            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
-          case u @ UnresolvedAttribute(name) =>
+          case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
+              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
@@ -383,12 +384,12 @@ class Analyzer(
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
       // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[String] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+      val unresolved: Seq[Seq[String]] =
+        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
 
       // Create a map from name, to resolved attributes, when the desired name can be found
       // prior to the projection.
-      val resolved: Map[String, NamedExpression] =
+      val resolved: Map[Seq[String], NamedExpression] =
         unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
 
       // Construct a set that contains all of the attributes that we need to evaluate the

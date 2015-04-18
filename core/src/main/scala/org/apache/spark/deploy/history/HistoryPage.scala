@@ -90,6 +90,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 </span>
               </h4> ++
               appTable
+            } else if (requestedIncomplete) {
+              <h4>No incomplete applications found!</h4>
             } else {
               <h4>No completed applications found!</h4> ++
               <p>Did you specify the correct logging directory?
