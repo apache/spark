@@ -32,7 +32,7 @@ from pyspark.serializers import read_int
 
 # patching ListConverter, or it will convert bytearray into Java ArrayList
 def can_convert_list(self, obj):
-    return isinstance(obj, list)
+    return isinstance(obj, (list, tuple))
 
 ListConverter.can_convert = can_convert_list
 
