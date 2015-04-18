@@ -22,14 +22,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
-
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.sun.javafx.css.SizeUnits;
 import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,11 +140,11 @@ public class JavaUtils {
   private static ImmutableMap<String, ByteUnit> byteSuffixes =
     ImmutableMap.<String, ByteUnit>builder()
       .put("b", ByteUnit.BYTE)
-      .put("kb", ByteUnit.KB)
-      .put("mb", ByteUnit.MB)
-      .put("gb", ByteUnit.GB)
-      .put("tb", ByteUnit.TB)
-      .put("pb", ByteUnit.PB)
+      .put("k", ByteUnit.KB)
+      .put("m", ByteUnit.MB)
+      .put("g", ByteUnit.GB)
+      .put("t", ByteUnit.TB)
+      .put("p", ByteUnit.PB)
       .build();
 
   /**
@@ -273,6 +271,4 @@ public class JavaUtils {
   public static long byteStringAsGB(String str) {
     return parseByteString(str, ByteUnit.GB);
   }
-
-  
 }

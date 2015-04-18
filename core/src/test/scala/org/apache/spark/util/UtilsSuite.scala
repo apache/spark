@@ -33,6 +33,7 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
@@ -64,6 +65,10 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     
     // Test invalid strings
     intercept[NumberFormatException] {
+      Utils.timeStringAsMs("600l")
+    }
+    
+    intercept[NumberFormatException] {
       Utils.timeStringAsMs("This breaks 600s")
     }
 
@@ -77,6 +82,64 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     intercept[NumberFormatException] {
       Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+
+  test("Test byteString conversion") {
+    // Test zero
+    assert(Utils.byteStringAsBytes("0") === 0)
+
+    assert(Utils.byteStringAsGB("1") === 1)
+    assert(Utils.byteStringAsGB("1g") === 1)
+    assert(Utils.byteStringAsGB("1000m") === 1)
+    assert(Utils.byteStringAsGB("1000000k") === 1)
+    assert(Utils.byteStringAsGB("1k") === ByteUnit.KB.toGB(1))
+    assert(Utils.byteStringAsGB("1m") === ByteUnit.MB.toGB(1))
+    assert(Utils.byteStringAsGB("1t") === ByteUnit.TB.toGB(1))
+    assert(Utils.byteStringAsGB("1p") === ByteUnit.PB.toGB(1))
+    
+    assert(Utils.byteStringAsMB("1") === 1)
+    assert(Utils.byteStringAsMB("1m") === 1)
+    assert(Utils.byteStringAsMB("1000k") === 1)
+    assert(Utils.byteStringAsMB("1k") === ByteUnit.KB.toMB(1))
+    assert(Utils.byteStringAsMB("1g") === ByteUnit.GB.toMB(1))
+    assert(Utils.byteStringAsMB("1t") === ByteUnit.TB.toMB(1))
+    assert(Utils.byteStringAsMB("1p") === ByteUnit.PB.toMB(1))
+
+    assert(Utils.byteStringAsKB("1") === 1)
+    assert(Utils.byteStringAsKB("1k") === 1)
+    assert(Utils.byteStringAsKB("1m") === ByteUnit.MB.toKB(1))
+    assert(Utils.byteStringAsKB("1g") === ByteUnit.GB.toKB(1))
+    assert(Utils.byteStringAsKB("1t") === ByteUnit.TB.toKB(1))
+    assert(Utils.byteStringAsKB("1p") === ByteUnit.PB.toKB(1))
+    
+    assert(Utils.byteStringAsBytes("1") === 1)
+    assert(Utils.byteStringAsBytes("1k") === ByteUnit.KB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1m") === ByteUnit.MB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1g") === ByteUnit.GB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1t") === ByteUnit.TB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1p") === ByteUnit.PB.toBytes(1))
+
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("500ub")
+    }
+    
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This breaks 600b")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This breaks 600")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("600gb This breaks")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.byteStringAsBytes("This 123mb breaks")
     }
   }
   

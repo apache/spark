@@ -1037,6 +1037,46 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to bytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in bytes.
+   */
+  def byteStringAsBytes(str: String): Long = {
+    JavaUtils.byteStringAsBytes(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to kilobytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in kilobytes.
+   */
+  def byteStringAsKB(str: String): Long = {
+    JavaUtils.byteStringAsKB(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to megabytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in megabytes.
+   */
+  def byteStringAsMB(str: String): Long = {
+    JavaUtils.byteStringAsMB(str)
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb, 500gb) to gigabytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in gigabytes.
+   */
+  def byteStringAsGB(str: String): Long = {
+    JavaUtils.byteStringAsGB(str)
+  }
+
+  /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
    */
   def memoryStringToMb(str: String): Int = {
