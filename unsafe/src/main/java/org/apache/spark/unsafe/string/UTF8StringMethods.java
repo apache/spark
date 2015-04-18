@@ -40,12 +40,44 @@ public final class UTF8StringMethods {
     return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
   }
 
-  public static String toJavaString(Object baseObject, long baseOffset) {
-    final long lengthInBytes = getLengthInBytes(baseObject, baseOffset);
+  public static int compare(
+      Object leftBaseObject,
+      long leftBaseOffset,
+      int leftBaseLengthInBytes,
+      Object rightBaseObject,
+      long rightBaseOffset,
+      int rightBaseLengthInBytes) {
+    int i = 0;
+    while (i < leftBaseLengthInBytes && i < rightBaseLengthInBytes) {
+      final byte leftByte = PlatformDependent.UNSAFE.getByte(leftBaseObject, leftBaseOffset + i);
+      final byte rightByte = PlatformDependent.UNSAFE.getByte(rightBaseObject, rightBaseOffset + i);
+      final int res = leftByte - rightByte;
+      if (res != 0) return res;
+      i += 1;
+    }
+    return leftBaseLengthInBytes - rightBaseLengthInBytes;
+  }
+
+  /**
+   * Return the number of code points in a string.
+   *
+   * This is only used by Substring() when `start` is negative.
+   */
+  public static int getLengthInCodePoints(Object baseObject, long baseOffset, int lengthInBytes) {
+    int len = 0;
+    int i = 0;
+    while (i < lengthInBytes) {
+      i += numOfBytes(PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i));
+      len += 1;
+    }
+    return len;
+  }
+
+  public static String toJavaString(Object baseObject, long baseOffset, int lengthInBytes) {
     final byte[] bytes = new byte[(int) lengthInBytes];
     PlatformDependent.UNSAFE.copyMemory(
       baseObject,
-      baseOffset + 8,  // skip over the length
+      baseOffset,
       bytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,
       lengthInBytes
@@ -67,15 +99,40 @@ public final class UTF8StringMethods {
   public static long createFromJavaString(Object baseObject, long baseOffset, String str) {
     final byte[] strBytes = str.getBytes();
     final long strLengthInBytes = strBytes.length;
-    PlatformDependent.UNSAFE.putLong(baseObject, baseOffset, strLengthInBytes);
     PlatformDependent.copyMemory(
       strBytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,
       baseObject,
-      baseOffset + 8,
+      baseOffset,
       strLengthInBytes
     );
-    return (8 + strLengthInBytes);
+    return strLengthInBytes;
   }
+
+  /**
+   * Return the number of bytes for a code point with the first byte as `b`
+   * @param b The first byte of a code point
+   */
+  public static int numOfBytes(byte b) {
+    final int offset = (b & 0xFF) - 192;
+    if (offset >= 0) {
+      return bytesOfCodePointInUTF8[offset];
+    } else {
+      return 1;
+    }
+  }
+
+  /**
+   * number of tailing bytes in a UTF8 sequence for a code point
+   * see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
+   */
+  private static int[] bytesOfCodePointInUTF8 = new int[] {
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    5, 5, 5, 5,
+    6, 6, 6, 6
+  };
 
 }

@@ -19,6 +19,9 @@ package org.apache.spark.sql.types
 
 import java.util.Arrays
 
+import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.string.{UTF8StringPointer, UTF8StringMethods}
+
 /**
  *  A UTF-8 String, as internal representation of StringType in SparkSQL
  *
@@ -32,12 +35,13 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 
   private[this] var bytes: Array[Byte] = _
 
+  private val pointer: UTF8StringPointer = new UTF8StringPointer
+
   /**
    * Update the UTF8String with String.
    */
   def set(str: String): UTF8String = {
-    bytes = str.getBytes("utf-8")
-    this
+    set(str.getBytes("utf-8"))
   }
 
   /**
@@ -45,17 +49,8 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
    */
   def set(bytes: Array[Byte]): UTF8String = {
     this.bytes = bytes
+    pointer.set(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, bytes.length)
     this
-  }
-
-  /**
-   * Return the number of bytes for a code point with the first byte as `b`
-   * @param b The first byte of a code point
-   */
-  @inline
-  private[this] def numOfBytes(b: Byte): Int = {
-    val offset = (b & 0xFF) - 192
-    if (offset >= 0) UTF8String.bytesOfCodePointInUTF8(offset) else 1
   }
 
   /**
@@ -64,13 +59,7 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
    * This is only used by Substring() when `start` is negative.
    */
   def length(): Int = {
-    var len = 0
-    var i: Int = 0
-    while (i < bytes.length) {
-      i += numOfBytes(bytes(i))
-      len += 1
-    }
-    len
+    pointer.getLengthInCodePoints
   }
 
   def getBytes: Array[Byte] = {
@@ -90,12 +79,12 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     var c = 0
     var i: Int = 0
     while (c < start && i < bytes.length) {
-      i += numOfBytes(bytes(i))
+      i += UTF8StringMethods.numOfBytes(bytes(i))
       c += 1
     }
     var j = i
     while (c < until && j < bytes.length) {
-      j += numOfBytes(bytes(j))
+      j += UTF8StringMethods.numOfBytes(bytes(j))
       c += 1
     }
     UTF8String(Arrays.copyOfRange(bytes, i, j))
@@ -150,14 +139,14 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
   override def clone(): UTF8String = new UTF8String().set(this.bytes)
 
   override def compare(other: UTF8String): Int = {
-    var i: Int = 0
-    val b = other.getBytes
-    while (i < bytes.length && i < b.length) {
-      val res = bytes(i).compareTo(b(i))
-      if (res != 0) return res
-      i += 1
-    }
-    bytes.length - b.length
+    UTF8StringMethods.compare(
+      pointer.getBaseObject,
+      pointer.getBaseOffset,
+      pointer.getLengthInBytes,
+      other.pointer.getBaseObject,
+      other.pointer.getBaseOffset,
+      other.pointer.getLengthInBytes
+    )
   }
 
   override def compareTo(other: UTF8String): Int = {
@@ -181,14 +170,6 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
 }
 
 object UTF8String {
-  // number of tailing bytes in a UTF8 sequence for a code point
-  // see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
-  private[types] val bytesOfCodePointInUTF8: Array[Int] = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    5, 5, 5, 5,
-    6, 6, 6, 6)
 
   /**
    * Create a UTF-8 String from String

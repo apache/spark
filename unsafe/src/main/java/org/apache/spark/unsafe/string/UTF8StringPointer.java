@@ -17,16 +17,39 @@
 
 package org.apache.spark.unsafe.string;
 
-import org.apache.spark.unsafe.memory.MemoryLocation;
+import javax.annotation.Nullable;
 
 /**
  * A pointer to UTF8String data.
  */
-public class UTF8StringPointer extends MemoryLocation {
+public class UTF8StringPointer {
 
-  public long getLengthInBytes() { return UTF8StringMethods.getLengthInBytes(obj, offset); }
+  @Nullable
+  protected Object obj;
+  protected long offset;
+  protected int lengthInBytes;
 
-  public String toJavaString() { return UTF8StringMethods.toJavaString(obj, offset); }
+  public UTF8StringPointer() { }
+
+  public void set(Object obj, long offset, int lengthInBytes) {
+    this.obj = obj;
+    this.offset = offset;
+    this.lengthInBytes = lengthInBytes;
+  }
+
+  public int getLengthInCodePoints() {
+    return UTF8StringMethods.getLengthInCodePoints(obj, offset, lengthInBytes);
+  }
+
+  public int getLengthInBytes() { return lengthInBytes; }
+
+  public Object getBaseObject() { return obj; }
+
+  public long getBaseOffset() { return offset; }
+
+  public String toJavaString() {
+    return UTF8StringMethods.toJavaString(obj, offset, lengthInBytes);
+  }
 
   @Override public String toString() { return toJavaString(); }
 }
