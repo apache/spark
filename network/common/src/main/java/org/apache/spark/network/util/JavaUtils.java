@@ -22,12 +22,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.sun.javafx.css.SizeUnits;
 import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,6 +139,16 @@ public class JavaUtils {
       .put("d", TimeUnit.DAYS)
       .build();
 
+  private static ImmutableMap<String, ByteUnit> byteSuffixes =
+    ImmutableMap.<String, ByteUnit>builder()
+      .put("b", ByteUnit.BYTE)
+      .put("kb", ByteUnit.KB)
+      .put("mb", ByteUnit.MB)
+      .put("gb", ByteUnit.GB)
+      .put("tb", ByteUnit.TB)
+      .put("pb", ByteUnit.PB)
+      .build();
+
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
@@ -164,7 +176,7 @@ public class JavaUtils {
       return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
-              "milliseconds (ms), microseconds (us), minutes (m or min) hour (h), or day (d). " +
+              "milliseconds (ms), microseconds (us), minutes (m or min), hour (h), or day (d). " +
               "E.g. 50s, 100ms, or 250us.";
       
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
@@ -186,5 +198,81 @@ public class JavaUtils {
   public static long timeStringAsSec(String str) {
     return parseTimeString(str, TimeUnit.SECONDS);
   }
+  
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to a ByteUnit for
+   * internal use. If no suffix is provided a direct conversion of the provided default is 
+   * attempted.
+   */
+  private static long parseByteString(String str, ByteUnit unit) {
+    String lower = str.toLowerCase().trim();
 
+    try {
+      String suffix;
+      long val;
+      Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
+      if (m.matches()) {
+        val = Long.parseLong(m.group(1));
+        suffix = m.group(2);
+      } else {
+        throw new NumberFormatException("Failed to parse byte string: " + str);
+      }
+
+      // Check for invalid suffixes
+      if (suffix != null && !byteSuffixes.containsKey(suffix)) {
+        throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
+      }
+
+      // If suffix is valid use that, otherwise none was provided and use the default passed
+      return (long) unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit);
+    } catch (NumberFormatException e) {
+      String timeError = "Size must be specified as bytes (b), " +
+        "kilobytes (kb), megabytes (mb), gigabytes (gb), terabytes (tb), or petabytes(pb). " +
+        "E.g. 50b, 100kb, or 250mb.";
+
+      throw new NumberFormatException(timeError + "\n" + e.getMessage());
+    }
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to bytes for
+   * internal use.
+   * 
+   * If no suffix is provided, the passed number is assumed to be in bytes.
+   */
+  public static long byteStringAsBytes(String str) {
+    return parseByteString(str, ByteUnit.BYTE);
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to kilobytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in kilobytes.
+   */
+  public static long byteStringAsKB(String str) {
+    return parseByteString(str, ByteUnit.KB);
+  }
+  
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to megabytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in megabytes.
+   */
+  public static long byteStringAsMB(String str) {
+    return parseByteString(str, ByteUnit.MB);
+  }
+
+  /**
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to gigabytes for
+   * internal use.
+   *
+   * If no suffix is provided, the passed number is assumed to be in gigabytes.
+   */
+  public static long byteStringAsGB(String str) {
+    return parseByteString(str, ByteUnit.GB);
+  }
+
+  
 }
