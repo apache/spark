@@ -42,8 +42,7 @@ public enum ByteUnit {
 
   /**
    * <pre>
-   * Kilobyte (kB)
-   * 10^3 Byte = 1.000 Byte
+   * Kilobyte (kB) = 1024 Byte
    */
   KB {
     @Override
@@ -59,8 +58,7 @@ public enum ByteUnit {
 
   /**
    * <pre>
-   * Megabyte (MB)
-   * 10^6 Byte = 1.000.000 Byte
+   * Megabyte (MB) = 1024 * 1024 Byte
    */
   MB {
     @Override
@@ -76,8 +74,7 @@ public enum ByteUnit {
 
   /**
    * <pre>
-   * Gigabyte (GB)
-   * 10^9 Byte = 1.000.000.000 Byte
+   * Gigabyte (GB) = 1024 * 1024 * 1024 Byte
    */
   GB {
     @Override
@@ -91,8 +88,7 @@ public enum ByteUnit {
 
   /**
    * <pre>
-   * Terabyte (TB)
-   * 10^12 Byte = 1.000.000.000.000 Byte
+   * Terabyte (TB) = 1024 * 1024 * 1024 * 1024 Byte
    */
   TB {
     @Override
@@ -108,8 +104,7 @@ public enum ByteUnit {
 
   /**
    * <pre>
-   * Petabyte (PB)
-   * 10^15 Byte = 1.000.000.000.000.000 Byte
+   * Petabyte (PB) = 1024 * 1024 * 1024 * 1024 * 1024 Byte
    */
   PB {
     @Override
@@ -123,11 +118,11 @@ public enum ByteUnit {
     }
   };
 
-  static final double C_KB = Math.pow(10d, 3d);
-  static final double C_MB = Math.pow(10d, 6d);
-  static final double C_GB = Math.pow(10d, 9d);
-  static final double C_TB = Math.pow(10d, 12d);
-  static final double C_PB = Math.pow(10d, 15d);
+  static final double C_KB = 1024d;
+  static final double C_MB = Math.pow(1024d, 2d);
+  static final double C_GB = Math.pow(1024d, 3d);
+  static final double C_TB = Math.pow(1024d, 4d);
+  static final double C_PB = Math.pow(1024d, 5d);
 
   private static final double MAX = Double.MAX_VALUE;
 
