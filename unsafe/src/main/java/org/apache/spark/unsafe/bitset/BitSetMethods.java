@@ -70,6 +70,18 @@ public final class BitSetMethods {
   }
 
   /**
+   * Returns {@code true} if any bit is set.
+   */
+  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
+    for (int i = 0; i <= bitSetWidthInBytes; i++) {
+      if (PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i) != 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Returns the index of the first bit that is set to true that occurs on or after the
    * specified starting index. If no such bit exists then {@code -1} is returned.
    * <p>
