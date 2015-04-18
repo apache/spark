@@ -100,7 +100,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val errorTol = 1.0e-5
 
       val staticRanks1 = starGraph.staticPersonalizedPageRank(0,numIter = 1, resetProb).vertices
-      val staticRanks2 = starGraph.staticPersonalizedPageRank(0,numIter = 2, resetProb).vertices.cache()
+      val staticRanks2 = starGraph.staticPersonalizedPageRank(0,numIter = 2, resetProb)
+        .vertices.cache()
 
       // Static PageRank should only take 2 iterations to converge
       val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
@@ -110,7 +111,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
 
       val staticErrors = staticRanks2.map { case (vid, pr) =>
         val correct = (vid > 0 && pr == resetProb) ||
-          (vid == 0 && math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb * (nVertices - 1)) )) < 1.0E-5)
+          (vid == 0 && math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb *
+            (nVertices - 1)) )) < 1.0E-5)
         if (!correct) 1 else 0
       }
       assert(staticErrors.sum === 0)
@@ -159,7 +161,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
 
   test("Chain PersonalizedPageRank") {
     withSpark { sc =>
-      val chain1 = (0 until 9).map(x => (x, x+1) )
+      val chain1 = (0 until 9).map(x => (x, x + 1) )
       val rawEdges = sc.parallelize(chain1, 1).map { case (s,d) => (s.toLong, d.toLong) }
       val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
       val resetProb = 0.15
