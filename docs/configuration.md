@@ -48,6 +48,17 @@ The following format is accepted:
     5d (days)
     1y (years)
     
+    
+Properties that specify a byte size should be configured with a unit of size.  
+The following format is accepted:
+
+    1b (bytes)
+    1k (kibibytes = 1024 bytes)
+    1m (mebibytes = 1024 kibibytes)
+    1g (gibibytes = 1024 mebibytes)
+    1t (tebibytes = 1024 gibibytes)
+    1p (pebibytes = 1024 tebibytes)
+
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
@@ -272,12 +283,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
     Set the max size of the file by which the executor logs will be rolled over.
-    Rolling is disabled by default. Value is set in terms of bytes.
-    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
 </tr>
@@ -582,18 +592,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.io.compression.lz4.block.size</code></td>
-  <td>32768</td>
+  <td><code>spark.io.compression.lz4.blockSize</code></td>
+  <td>32k</td>
   <td>
-    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
-  <td><code>spark.io.compression.snappy.block.size</code></td>
-  <td>32768</td>
+  <td><code>spark.io.compression.snappy.blockSize</code></td>
+  <td>32k</td>
   <td>
-    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
+    Block size used in Snappy compression, in the case when Snappy compression codec
     is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
   </td>
 </tr>
