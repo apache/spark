@@ -403,10 +403,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>32</td>
+  <td><code>spark.shuffle.file.buffer</code></td>
+  <td>32k</td>
   <td>
-    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    Size of the in-memory buffer for each shuffle file output stream. These buffers
     reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
   </td>
 </tr>

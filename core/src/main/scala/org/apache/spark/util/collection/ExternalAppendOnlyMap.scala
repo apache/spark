@@ -89,7 +89,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Number of bytes spilled in total
   private var _diskBytesSpilled = 0L
-
+  
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility of on units are provided
   private val fileBufferSize = sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
 
   // Write metrics for current spill

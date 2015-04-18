@@ -525,7 +525,7 @@ private[spark] object SparkConf extends Logging {
     "spark.io.compression.snappy.blockSize" -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4"))
   )
-
+  
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
    * config keys.
