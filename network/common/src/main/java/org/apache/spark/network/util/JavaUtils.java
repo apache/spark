@@ -226,15 +226,15 @@ public class JavaUtils {
         unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit)).longValue();
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
-        "kilobytes (kb), megabytes (mb), gigabytes (gb), terabytes (tb), or petabytes(pb). " +
-        "E.g. 50b, 100kb, or 250mb.";
+        "kibibytes (kb), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
+        "E.g. 50b, 100k, or 250m.";
 
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
     }
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to bytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for
    * internal use.
    * 
    * If no suffix is provided, the passed number is assumed to be in bytes.
@@ -244,32 +244,32 @@ public class JavaUtils {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to kilobytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in kilobytes.
+   * If no suffix is provided, the passed number is assumed to be in kibibytes.
    */
-  public static long byteStringAsKB(String str) {
+  public static long byteStringAsKb(String str) {
     return parseByteString(str, ByteUnit.KB);
   }
   
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to megabytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in megabytes.
+   * If no suffix is provided, the passed number is assumed to be in mebibytes.
    */
-  public static long byteStringAsMB(String str) {
+  public static long byteStringAsMb(String str) {
     return parseByteString(str, ByteUnit.MB);
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to gigabytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to gibibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in gigabytes.
+   * If no suffix is provided, the passed number is assumed to be in gibibytes.
    */
-  public static long byteStringAsGB(String str) {
+  public static long byteStringAsGb(String str) {
     return parseByteString(str, ByteUnit.GB);
   }
 }

@@ -16,150 +16,81 @@
  */
 package org.apache.spark.network.util;
 
-/**
- * Code based on https://github.com/fabian-barney/Utils
- * Copyright 2011 Fabian Barney
- *
- * @author Fabian Barney
- */
 public enum ByteUnit {
-  /**
-   * <pre>
-   * Byte (B)
-   * 1 Byte
-   */
+  /** Byte (B) */
   BYTE {
-    @Override
-    public double toBytes(double d) {
-      return d;
-    }
-
-    @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toBytes(d);
-    }
+    public long toBytes(long d) { return d; }
+    
+    public long convert(long d, ByteUnit u) { return u.toBytes(d); }
   },
 
-  /**
-   * <pre>
-   * Kilobyte (kB) = 1024 Byte
-   */
+  /** Kibibyte (KiB) = 1024 Byte */
   KB {
-    @Override
-    public double toBytes(double d) {
-      return safeMulti(d, C_KB);
-    }
-
-    @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toKB(d);
-    }
+    public long toBytes(long d) { return x(d, C_KB); }
+    
+    public long convert(long d, ByteUnit u) { return u.toKB(d); }
   },
 
-  /**
-   * <pre>
-   * Megabyte (MB) = 1024 * 1024 Byte
-   */
+  /** Mebibyte (MiB) = (1024^2) Byte */
   MB {
-    @Override
-    public double toBytes(double d) {
-      return safeMulti(d, C_MB);
-    }
-
-    @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toMB(d);
-    }
+    public long toBytes(long d) { return x(d, C_MB); }
+    
+    public long convert(long d, ByteUnit u) { return u.toMB(d); }
   },
 
-  /**
-   * <pre>
-   * Gigabyte (GB) = 1024 * 1024 * 1024 Byte
-   */
+  /** Gibibyte (GiB) = (1024^3) Byte */
   GB {
-    @Override
-    public double toBytes(double d) {
-      return safeMulti(d, C_GB);
+    public long toBytes(long d) { return x(d, C_GB);
     }
 
-    @Override
-    public double convert(double d, ByteUnit u) { return u.toGB(d); }
+    public long convert(long d, ByteUnit u) { return u.toGB(d); }
   },
 
-  /**
-   * <pre>
-   * Terabyte (TB) = 1024 * 1024 * 1024 * 1024 Byte
-   */
+  /** Tebibyte (TiB) = (1024^4) Byte */
   TB {
-    @Override
-    public double toBytes(double d) {
-      return safeMulti(d, C_TB);
-    }
-
-    @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toTB(d);
-    }
+    public long toBytes(long d) { return x(d, C_TB); }
+    
+    public long convert(long d, ByteUnit u) { return u.toTB(d); }
   },
 
-  /**
-   * <pre>
-   * Petabyte (PB) = 1024 * 1024 * 1024 * 1024 * 1024 Byte
-   */
+  /** Pebibyte (PB) = (1024^5) Byte */
   PB {
-    @Override
-    public double toBytes(double d) {
-      return safeMulti(d, C_PB);
-    }
-
-    @Override
-    public double convert(double d, ByteUnit u) {
-      return u.toPB(d);
-    }
+    public long toBytes(long d) { return x(d, C_PB); }
+    
+    public long convert(long d, ByteUnit u) { return u.toPB(d); }
   };
 
-  static final double C_KB = 1024d;
-  static final double C_MB = Math.pow(1024d, 2d);
-  static final double C_GB = Math.pow(1024d, 3d);
-  static final double C_TB = Math.pow(1024d, 4d);
-  static final double C_PB = Math.pow(1024d, 5d);
+  static final long C_KB = 1024l;
+  static final long C_MB = (long) Math.pow(1024l, 2l);
+  static final long C_GB = (long) Math.pow(1024l, 3l);
+  static final long C_TB = (long) Math.pow(1024l, 4l);
+  static final long C_PB = (long) Math.pow(1024l, 5l);
 
-  private static final double MAX = Double.MAX_VALUE;
+  static final long MAX = Long.MAX_VALUE;
 
-  static double safeMulti(double d, double multi) {
-    double limit = MAX / multi;
-
-    if (d > limit) {
-      return Double.MAX_VALUE;
-    }
-    if (d < -limit) {
-      return Double.MIN_VALUE;
-    }
-
-    return d * multi;
+  /**
+   * Scale d by m, checking for overflow.
+   * This has a short name to make above code more readable.
+   */
+  static long x(long d, long m) {
+    long over = MAX / d;
+    if (d >  over) return Long.MAX_VALUE;
+    if (d < -over) return Long.MIN_VALUE;
+    return d * m;
   }
+  
+  public long toBytes(long d) { throw new AbstractMethodError(); }
+  public long convert(long d, ByteUnit u) { throw new AbstractMethodError(); }
+  
+  public long toKB(long d) { return toBytes(d) / C_KB; }
 
-  public abstract double toBytes(double d);
+  public long toMB(long d) { return toBytes(d) / C_MB; }
 
-  public final double toKB(double d) {
-    return toBytes(d) / C_KB;
-  }
+  public long toGB(long d) { return toBytes(d) / C_GB; }
 
-  public final double toMB(double d) {
-    return toBytes(d) / C_MB;
-  }
+  public long toTB(long d) { return toBytes(d) / C_TB; }
 
-  public final double toGB(double d) {
-    return toBytes(d) / C_GB;
-  }
+  public long toPB(long d) { return toBytes(d) / C_PB; }
 
-  public final double toTB(double d) {
-    return toBytes(d) / C_TB;
-  }
-
-  public final double toPB(double d) {
-    return toBytes(d) / C_PB;
-  }
-
-  public abstract double convert(double d, ByteUnit u);
+  
 }

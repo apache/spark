@@ -1037,7 +1037,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to bytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for
    * internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in bytes.
@@ -1047,37 +1047,37 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to kilobytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in kilobytes.
+   * If no suffix is provided, the passed number is assumed to be in kibibytes.
    */
-  def byteStringAsKB(str: String): Long = {
-    JavaUtils.byteStringAsKB(str)
+  def byteStringAsKb(str: String): Long = {
+    JavaUtils.byteStringAsKb(str)
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to megabytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in megabytes.
+   * If no suffix is provided, the passed number is assumed to be in mebibytes.
    */
-  def byteStringAsMB(str: String): Long = {
-    JavaUtils.byteStringAsMB(str)
+  def byteStringAsMb(str: String): Long = {
+    JavaUtils.byteStringAsMb(str)
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb, 500gb) to gigabytes for
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m, 500g) to gibibytes for
    * internal use.
    *
-   * If no suffix is provided, the passed number is assumed to be in gigabytes.
+   * If no suffix is provided, the passed number is assumed to be in gibibytes.
    */
-  def byteStringAsGB(str: String): Long = {
-    JavaUtils.byteStringAsGB(str)
+  def byteStringAsGb(str: String): Long = {
+    JavaUtils.byteStringAsGb(str)
   }
 
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
    */
   def memoryStringToMb(str: String): Int = {
     // Convert to bytes, rather than directly to MB, because when no units are specified the unit
