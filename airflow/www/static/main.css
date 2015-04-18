@@ -131,6 +131,15 @@ div.legend_circle{
     height:15px;
     border:1px solid grey;
     float:left;
+    margin-top: 2px;
+    margin-right: 0px;
+}
+div.square {
+    width:12px;
+    height:12px;
+    float: right;
+    margin-top: 2px;
+    border:1px solid black;
 }
 
 .hll { background-color: #ffffcc }

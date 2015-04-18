@@ -10,10 +10,14 @@
 {% block body %}
 {{ super() }}
 <div>
-    <div class="legend_item" style="border-color:grey;">no status</div>
-    <div class="legend_item" style="border-color:red;">error</div>
-    <div class="legend_item" style="border-color:lime;">running</div>
-    <div class="legend_item" style="border-color:green;">success</div>
+    <div class="legend_item" style="border: none;">no status</div>
+    <div class="square" style="background: white;"></div>
+    <div class="legend_item" style="border: none;">failed</div>
+    <div class="square" style="background: red;"></div>
+    <div class="legend_item" style="border: none;">running</div>
+    <div class="square" style="background: lime;"></div>
+    <div class="legend_item" style="border: none;">success</div>
+    <div class="square" style="background: green;"></div>
     {% for op in operators %}
         <div class="legend_circle" style="background:{{ op.ui_color }};">
         </div>
