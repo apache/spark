@@ -19,7 +19,11 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Map;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.Ints;
+import scala.collection.JavaConversions;
 import scala.collection.Seq;
 
 import org.junit.After;
@@ -34,6 +38,7 @@ import org.apache.spark.sql.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.types.*;
+import scala.collection.mutable.Buffer;
 
 import static org.apache.spark.sql.functions.*;
 
@@ -106,6 +111,7 @@ public class JavaDataFrameSuite {
   public static class Bean implements Serializable {
     private double a = 0.0;
     private Integer[] b = new Integer[]{0, 1};
+    private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
 
     public double getA() {
       return a;
@@ -113,6 +119,10 @@ public class JavaDataFrameSuite {
 
     public Integer[] getB() {
       return b;
+    }
+
+    public Map<String, int[]> getC() {
+      return c;
     }
   }
 
@@ -127,7 +137,12 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(
       new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
       schema.apply("b"));
-    Row first = df.select("a", "b").first();
+    ArrayType valueType = new ArrayType(DataTypes.IntegerType, false);
+    MapType mapType = new MapType(DataTypes.StringType, valueType, true);
+    Assert.assertEquals(
+      new StructField("c", mapType, true, Metadata.empty()),
+      schema.apply("c"));
+    Row first = df.select("a", "b", "c").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converetd to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -136,5 +151,10 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < result.length(); i++) {
       Assert.assertEquals(bean.getB()[i], result.apply(i));
     }
+    Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
+    Assert.assertArrayEquals(
+      bean.getC().get("hello"),
+      Ints.toArray(JavaConversions.asJavaList(outputBuffer)));
   }
+
 }
