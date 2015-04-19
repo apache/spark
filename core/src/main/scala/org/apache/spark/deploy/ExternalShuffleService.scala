@@ -40,7 +40,10 @@ private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
 
-  private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
+  // Check both if shuffle service is enabled, and that the worker should actually host the
+  // shuffle service in that case. (The latter is currently only used for testing.)
+  private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false) &&
+    sparkConf.getBoolean("spark.worker.shouldHostShuffleServiceIfEnabled", true)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 

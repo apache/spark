@@ -43,6 +43,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     conf.set("spark.shuffle.manager", "sort")
     conf.set("spark.shuffle.service.enabled", "true")
     conf.set("spark.shuffle.service.port", server.getPort.toString)
+
+    // local-cluster mode starts a Worker which would start its own shuffle service without this:
+    conf.set("spark.worker.shouldHostShuffleServiceIfEnabled", "false")
   }
 
   override def afterAll() {
