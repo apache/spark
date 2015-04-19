@@ -132,11 +132,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
                codegenEnabled =>
-          execution.GeneratedAggregate(
+          execution.UnsafeGeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
-            execution.GeneratedAggregate(
+            execution.UnsafeGeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,

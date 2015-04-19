@@ -54,8 +54,11 @@ private object UnsafeColumnWriter {
     dataType match {
       case IntegerType => IntUnsafeColumnWriter
       case LongType => LongUnsafeColumnWriter
+      case FloatType => FloatUnsafeColumnWriter
+      case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
-      case _ => throw new UnsupportedOperationException()
+      case t =>
+        throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
     }
   }
 }
@@ -121,6 +124,33 @@ private class LongUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWrit
 }
 private case object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
 
+private class FloatUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter[Float] {
+  override def write(
+      value: Float,
+      columnNumber: Int,
+      row: UnsafeRow,
+      baseObject: Object,
+      baseOffset: Long,
+      appendCursor: Int): Int = {
+    row.setFloat(columnNumber, value)
+    0
+  }
+}
+private case object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
+
+private class DoubleUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter[Double] {
+  override def write(
+      value: Double,
+      columnNumber: Int,
+      row: UnsafeRow,
+      baseObject: Object,
+      baseOffset: Long,
+      appendCursor: Int): Int = {
+    row.setDouble(columnNumber, value)
+    0
+  }
+}
+private case object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 
 class UnsafeRowConverter(fieldTypes: Array[DataType]) {
 

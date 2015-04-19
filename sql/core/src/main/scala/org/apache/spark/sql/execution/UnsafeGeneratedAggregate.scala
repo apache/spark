@@ -194,7 +194,7 @@ case class UnsafeGeneratedAggregate(
       case o => sys.error(s"$o can't be codegened.")
     }
 
-    val computationSchema = computeFunctions.flatMap(_.schema)
+    val computationSchema: Seq[Attribute] = computeFunctions.flatMap(_.schema)
 
     val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
@@ -230,7 +230,7 @@ case class UnsafeGeneratedAggregate(
       // This projection should be targeted at the current values for the group and then applied
       // to a joined row of the current values with the new input row.
       val updateExpressions = computeFunctions.flatMap(_.update)
-      val updateSchema = computeFunctions.flatMap(_.schema) ++ child.output
+      val updateSchema = computationSchema ++ child.output
       val updateProjection = newMutableProjection(updateExpressions, updateSchema)()
       log.info(s"Update Expressions: ${updateExpressions.mkString(",")}")
 
@@ -267,19 +267,25 @@ case class UnsafeGeneratedAggregate(
         // We're going to need to allocate a lot of empty aggregation buffers, so let's do it
         // once and keep a copy of the serialized buffer and copy it into the hash map when we see
         // new keys:
-        val (emptyAggregationBuffer: Array[Long], numberOfColumnsInAggBuffer: Int) = {
+        val emptyAggregationBuffer: Array[Long] = {
           val javaBuffer: MutableRow = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
-          val converter = new UnsafeRowConverter(javaBuffer.schema.fields.map(_.dataType))
+          val fieldTypes = StructType.fromAttributes(computationSchema).map(_.dataType).toArray
+          val converter = new UnsafeRowConverter(fieldTypes)
           val buffer = new Array[Long](converter.getSizeRequirement(javaBuffer))
           converter.writeRow(javaBuffer, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
-          (buffer, javaBuffer.schema.fields.length)
+          buffer
         }
 
-        // TODO: there's got got to be an actual way of obtaining this up front.
-        var groupProjectionSchema: StructType = null
-
         val keyToUnsafeRowConverter: UnsafeRowConverter = {
-          new UnsafeRowConverter(groupProjectionSchema.fields.map(_.dataType))
+          new UnsafeRowConverter(groupingExpressions.map(_.dataType).toArray)
+        }
+
+        val aggregationBufferSchema = StructType.fromAttributes(computationSchema)
+        val keySchema: StructType = {
+          val fields = groupingExpressions.zipWithIndex.map { case (expr, idx) =>
+            StructField(idx.toString, expr.dataType, expr.nullable)
+          }
+          StructType(fields)
         }
 
         // Allocate some scratch space for holding the keys that we use to index into the hash map.
@@ -303,10 +309,9 @@ case class UnsafeGeneratedAggregate(
           if (groupProjectionSize > unsafeRowBuffer.length) {
             throw new IllegalStateException("Group projection does not fit into buffer")
           }
-          keyToUnsafeRowConverter.writeRow(
-            currentGroup, unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET)
+          val keyLengthInBytes: Int = keyToUnsafeRowConverter.writeRow(
+            currentGroup, unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET).toInt // TODO
 
-          val keyLengthInBytes: Int = 0
           val loc: BytesToBytesMap#Location =
             buffers.lookup(unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET, keyLengthInBytes)
           if (!loc.isDefined) {
@@ -316,8 +321,6 @@ case class UnsafeGeneratedAggregate(
             // size of buffers don't grow once created, as is the case for things like grabbing the
             // first row's value for a string-valued column (or the shortest string)).
 
-            // TODO
-
             loc.storeKeyAndValue(
               unsafeRowBuffer,
               PlatformDependent.LONG_ARRAY_OFFSET,
@@ -326,14 +329,17 @@ case class UnsafeGeneratedAggregate(
               PlatformDependent.LONG_ARRAY_OFFSET,
               emptyAggregationBuffer.length
             )
+            // So that the pointers point to the value we just stored:
+            // TODO: reset this inside of the map so that this extra looup isn't necessary
+            buffers.lookup(unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET, keyLengthInBytes)
           }
           // Reset our pointer to point to the buffer stored in the hash map
           val address = loc.getValueAddress
           currentBuffer.set(
             address.getBaseObject,
             address.getBaseOffset,
-            numberOfColumnsInAggBuffer,
-            null
+            aggregationBufferSchema.length,
+            aggregationBufferSchema
           )
           // Target the projection at the current aggregation buffer and then project the updated
           // values.
@@ -354,15 +360,14 @@ case class UnsafeGeneratedAggregate(
             key.set(
               keyAddress.getBaseObject,
               keyAddress.getBaseOffset,
-              groupProjectionSchema.fields.length,
-              groupProjectionSchema)
+              groupingExpressions.length,
+              keySchema)
             val valueAddress = currentGroup.getValueAddress
             value.set(
               valueAddress.getBaseObject,
               valueAddress.getBaseOffset,
-              numberOfColumnsInAggBuffer,
-              null
-            )
+              aggregationBufferSchema.length,
+              aggregationBufferSchema)
             // TODO: once the iterator has been fully consumed, we need to free the map so that
             // its off-heap memory is reclaimed.  This may mean that we'll have to perform an extra
             // defensive copy of the last row so that we can free that memory before returning

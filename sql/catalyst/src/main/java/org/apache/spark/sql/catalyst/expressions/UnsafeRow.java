@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
+import static org.apache.spark.sql.types.DataTypes.*;
+
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.string.UTF8StringMethods;
 import scala.collection.Map;
 import scala.collection.Seq;
+import scala.collection.mutable.ArraySeq;
 
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
@@ -90,6 +94,11 @@ public final class UnsafeRow implements MutableRow {
     BitSetMethods.set(baseObject, baseOffset, i);
   }
 
+  private void setNotNullAt(int i) {
+    assertIndexIsValid(i);
+    BitSetMethods.unset(baseObject, baseOffset, i);
+  }
+
   @Override
   public void update(int ordinal, Object value) {
     assert schema != null : "schema cannot be null when calling the generic update()";
@@ -101,42 +110,49 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putInt(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putBoolean(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putShort(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putByte(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -169,8 +185,23 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public Object get(int i) {
     assertIndexIsValid(i);
-    // TODO: dispatching based on field type
-    throw new UnsupportedOperationException();
+    final DataType dataType = schema.fields()[i].dataType();
+    // TODO: complete this for the remaining types
+    if (isNullAt(i)) {
+      return null;
+    } else if (dataType == IntegerType) {
+      return getInt(i);
+    } else if (dataType == LongType) {
+      return getLong(i);
+    } else if (dataType == DoubleType) {
+      return getDouble(i);
+    } else if (dataType == FloatType) {
+      return getFloat(i);
+    } else if (dataType == StringType) {
+      return getUTF8String(i);
+    } else {
+      throw new UnsupportedOperationException();
+    }
   }
 
   @Override
@@ -219,6 +250,12 @@ public final class UnsafeRow implements MutableRow {
   public double getDouble(int i) {
     assertIndexIsValid(i);
     return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
+  }
+
+  public UTF8String getUTF8String(int i) {
+    // TODO: this is inefficient; just doing this to make some tests pass for now; will fix later
+    assertIndexIsValid(i);
+    return UTF8String.apply(getString(i));
   }
 
   @Override
@@ -292,25 +329,30 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public Seq<Object> toSeq() {
-    // TODO
-    throw new UnsupportedOperationException();
+    final ArraySeq<Object> values = new ArraySeq<Object>(numFields);
+    for (int fieldNumber = 0; fieldNumber < numFields; fieldNumber++) {
+      values.update(fieldNumber, get(fieldNumber));
+    }
+    return values;
+  }
+
+  @Override
+  public String toString() {
+    return mkString("[", ",", "]");
   }
 
   @Override
   public String mkString() {
-    // TODO
-    throw new UnsupportedOperationException();
+    return toSeq().mkString();
   }
 
   @Override
   public String mkString(String sep) {
-    // TODO
-    throw new UnsupportedOperationException();
+    return toSeq().mkString(sep);
   }
 
   @Override
   public String mkString(String start, String sep, String end) {
-    // TODO
-    throw new UnsupportedOperationException();
+    return toSeq().mkString(start, sep, end);
   }
 }
