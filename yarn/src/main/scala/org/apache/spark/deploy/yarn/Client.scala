@@ -331,8 +331,7 @@ private[spark] class Client(
     sys.env.get("PYSPARK_ARCHIVES_PATH").map { archives =>
       // archives will be distributed to each machine's working directory, so strip the
       // path prefix
-      val pythonPath = archives.split(",").map(
-        p => (new Path(p)).getName).mkString(":")
+      val pythonPath = archives.split(",").map(p => (new Path(p)).getName).mkString(":")
       env("PYTHONPATH") = pythonPath
       sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
     }
