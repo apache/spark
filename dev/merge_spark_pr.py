@@ -283,33 +283,41 @@ def resolve_jira_issues(title, merge_branches, comment):
 
 def standardize_jira_ref(text):
     """
-    Standardize the [MODULE] SPARK-XXXXX prefix
-    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[MLLIB] SPARK-XXX: Issue"
+    Standardize the [SPARK-XXXXX] [MODULE] prefix
+    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[SPARK-XXX] [MLLIB] Issue"
     
     >>> standardize_jira_ref("[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
-    '[SQL] SPARK-5821: ParquetRelation2 CTAS should check if delete is successful'
+    '[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful'
     >>> standardize_jira_ref("[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
-    '[PROJECT INFRA] [WIP] SPARK-4123: Show new dependencies added in pull requests'
+    '[SPARK-4123] [PROJECT INFRA] [WIP] Show new dependencies added in pull requests'
     >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
-    '[MLLIB] SPARK-5954: Top by key'
+    '[SPARK-5954] [MLLIB] Top by key'
+    >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
+    '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
+    >>> standardize_jira_ref("SPARK-1094 Support MiMa for reporting binary compatibility accross versions.")
+    '[SPARK-1094] Support MiMa for reporting binary compatibility accross versions.'
+    >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
+    '[SPARK-1146] [WIP] Vagrant support for Spark'
+    >>> standardize_jira_ref("SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
+    '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
     """
-    #If the string is compliant, no need to process any further
-    if (re.search(r'\[[A-Z0-9_]+\] SPARK-[0-9]{3,5}: \S+', text)):
+    # If the string is compliant, no need to process any further
+    if (re.search(r'^\[SPARK-[0-9]{3,6}\] (\[[A-Z0-9_\s,]+\] )+\S+', text)):
         return text
     
     # Extract JIRA ref(s):
     jira_refs = deque()
-    pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,5})', re.IGNORECASE)
+    pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,6})', re.IGNORECASE)
     while (pattern.search(text) is not None):
         ref = pattern.search(text).groups()[0]
         # Replace any whitespace with a dash & convert to uppercase
-        jira_refs.append(re.sub(r'\s+', '-', ref.upper()))
+        jira_refs.append('[' + re.sub(r'\s+', '-', ref.upper()) + ']')
         text = text.replace(ref, '')
 
     # Extract spark component(s):
     components = deque()
-    # Look for alphanumeric chars, spaces, and/or commas
-    pattern = re.compile(r'(\[[\w\s,]+\])', re.IGNORECASE)
+    # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
+    pattern = re.compile(r'(\[[\w\s,-\.]+\])', re.IGNORECASE)
     while (pattern.search(text) is not None):
         component = pattern.search(text).groups()[0]
         # Convert to uppercase
@@ -321,22 +329,22 @@ def standardize_jira_ref(text):
     if (pattern.search(text) is not None):
         text = pattern.search(text).groups()[0]
 
-    # Assemble full text (module(s), JIRA ref(s), remaining text)
-    if (len(components) < 1):
-        components = ""
-    component_text = ' '.join(components).strip()
+    # Assemble full text (JIRA ref(s), module(s), remaining text)
     if (len(jira_refs) < 1):
         jira_ref_text = ""
     jira_ref_text = ' '.join(jira_refs).strip()
+    if (len(components) < 1):
+        components = ""
+    component_text = ' '.join(components).strip()
     
     if (len(jira_ref_text) < 1 and len(component_text) < 1):
         clean_text = text.strip()
     elif (len(jira_ref_text) < 1):
         clean_text = component_text + ' ' + text.strip()
     elif (len(component_text) < 1):
-        clean_text = jira_ref_text + ': ' + text.strip()
+        clean_text = jira_ref_text + ' ' + text.strip()
     else:
-        clean_text = component_text + ' ' + jira_ref_text + ': ' + text.strip()
+        clean_text = jira_ref_text + ' ' + component_text + ' ' + text.strip()
     
     return clean_text
 
