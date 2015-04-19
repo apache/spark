@@ -154,7 +154,11 @@ public final class BytesToBytesMap {
     this(allocator, initialCapacity, 0.70);
   }
 
-  // TODO: consider finalizer.
+  @Override
+  public void finalize() {
+    // In case the programmer forgot to call `free()`, try to perform that cleanup now:
+    free();
+  }
 
   /**
    * Returns the number of keys defined in the map.
@@ -457,12 +461,18 @@ public final class BytesToBytesMap {
   /**
    * Free all allocated memory associated with this map, including the storage for keys and values
    * as well as the hash map array itself.
+   *
+   * This method is idempotent.
    */
   public void free() {
-    allocator.free(longArray.memoryBlock());
-    longArray = null;
-    allocator.free(bitset.memoryBlock());
-    bitset = null;
+    if (longArray != null) {
+      allocator.free(longArray.memoryBlock());
+      longArray = null;
+    }
+    if (bitset != null) {
+      allocator.free(bitset.memoryBlock());
+      bitset = null;
+    }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       allocator.free(dataPagesIterator.next());
