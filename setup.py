@@ -37,7 +37,6 @@ setup(
         'dill>=0.2.2',
         'flask>=0.10.1',
         'flask-admin>=1.0.9',
-        'flask-bootstrap>=3.3.0.1',
         'flask-cache>=0.13.1',
         'flask-login>=0.2.11',
         'flower>=0.7.3',

@@ -6,7 +6,6 @@ dill
 flake8
 flask
 flask-admin
-flask-bootstrap
 flask-cache
 flask-login
 flower
