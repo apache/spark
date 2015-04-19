@@ -329,9 +329,6 @@ case class UnsafeGeneratedAggregate(
               PlatformDependent.LONG_ARRAY_OFFSET,
               emptyAggregationBuffer.length
             )
-            // So that the pointers point to the value we just stored:
-            // TODO: reset this inside of the map so that this extra looup isn't necessary
-            buffers.lookup(unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET, keyLengthInBytes)
           }
           // Reset our pointer to point to the buffer stored in the hash map
           val address = loc.getValueAddress
