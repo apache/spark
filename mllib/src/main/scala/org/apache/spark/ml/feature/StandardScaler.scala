@@ -32,19 +32,18 @@ import org.apache.spark.sql.types.{StructField, StructType}
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
   
   /**
-   * Whether to center the data before scaling
+   * False by default. Centers the data with mean before scaling. 
+   * It will build a dense output, so this does not work on sparse input and will raise an exception.
    * @group param
    */
   val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
   
   /**
-   * Whether to scale the data to have unit standard deviation
+   * True by default. Scales the data to unit standard deviation.
    * @group param
    */
   val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
 }
-
-
 
 /**
  * :: AlphaComponent ::
