@@ -57,7 +57,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
      === linearRegressionModel.weights.size)
   
     // act
-    val ridgeModelExport = PMMLModelExportFactory.createPMMLModelExport(ridgeRegressionModel)         
+    val ridgeModelExport = PMMLModelExportFactory.createPMMLModelExport(ridgeRegressionModel)
     // assert that the PMML format is as expected
     assert(ridgeModelExport.isInstanceOf[PMMLModelExport])
     pmml = ridgeModelExport.asInstanceOf[PMMLModelExport].getPmml()
