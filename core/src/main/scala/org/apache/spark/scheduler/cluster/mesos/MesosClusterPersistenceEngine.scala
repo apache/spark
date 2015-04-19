@@ -55,7 +55,7 @@ private[spark] trait MesosClusterPersistenceEngine {
 private[spark] class ZookeeperMesosClusterPersistenceEngineFactory(conf: SparkConf)
   extends MesosClusterPersistenceEngineFactory(conf) {
 
-  lazy val zk = SparkCuratorUtil.newClient(conf)
+  lazy val zk = SparkCuratorUtil.newClient(conf, "spark.mesos.deploy.zookeeper.url")
 
   def createEngine(path: String): MesosClusterPersistenceEngine = {
     new ZookeeperMesosClusterPersistenceEngine(path, zk, conf)
