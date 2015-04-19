@@ -154,6 +154,7 @@ private[spark] class MesosClusterScheduler(
         return c
       }
       c.submissionId = desc.submissionId
+      queuedDriversState.persist(desc.submissionId, desc)
       queuedDrivers += desc
       c.success = true
     }
