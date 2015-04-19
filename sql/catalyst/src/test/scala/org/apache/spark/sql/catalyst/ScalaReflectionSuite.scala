@@ -61,6 +61,7 @@ case class OptionalData(
 case class ComplexData(
     arrayField: Seq[Int],
     arrayField1: Array[Int],
+    arrayField2: List[Int],
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
@@ -135,6 +136,10 @@ class ScalaReflectionSuite extends FunSuite {
           nullable = true),
         StructField(
           "arrayField1",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayField2",
           ArrayType(IntegerType, containsNull = false),
           nullable = true),
         StructField(
@@ -255,7 +260,7 @@ class ScalaReflectionSuite extends FunSuite {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
-    assert(convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
@@ -265,7 +270,7 @@ class ScalaReflectionSuite extends FunSuite {
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
       Row(1, 1, 1, 1, 1, 1, true))
-    assert(convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
   }
 
   test("infer schema from case class with multiple constructors") {

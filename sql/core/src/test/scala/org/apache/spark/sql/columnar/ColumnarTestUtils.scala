@@ -24,10 +24,10 @@ import scala.util.Random
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{DataType, NativeType}
+import org.apache.spark.sql.types.{UTF8String, DataType, Decimal, NativeType}
 
 object ColumnarTestUtils {
-  def makeNullRow(length: Int) = {
+  def makeNullRow(length: Int): GenericMutableRow = {
     val row = new GenericMutableRow(length)
     (0 until length).foreach(row.setNullAt)
     row
@@ -41,16 +41,17 @@ object ColumnarTestUtils {
     }
 
     (columnType match {
-      case BYTE      => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
-      case SHORT     => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
-      case INT       => Random.nextInt()
-      case LONG      => Random.nextLong()
-      case FLOAT     => Random.nextFloat()
-      case DOUBLE    => Random.nextDouble()
-      case STRING    => Random.nextString(Random.nextInt(32))
-      case BOOLEAN   => Random.nextBoolean()
-      case BINARY    => randomBytes(Random.nextInt(32))
-      case DATE      => Random.nextInt()
+      case BYTE => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
+      case SHORT => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
+      case INT => Random.nextInt()
+      case LONG => Random.nextLong()
+      case FLOAT => Random.nextFloat()
+      case DOUBLE => Random.nextDouble()
+      case FIXED_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
+      case STRING => UTF8String(Random.nextString(Random.nextInt(32)))
+      case BOOLEAN => Random.nextBoolean()
+      case BINARY => randomBytes(Random.nextInt(32))
+      case DATE => Random.nextInt()
       case TIMESTAMP =>
         val timestamp = new Timestamp(Random.nextLong())
         timestamp.setNanos(Random.nextInt(999999999))
@@ -92,7 +93,7 @@ object ColumnarTestUtils {
 
   def makeUniqueValuesAndSingleValueRows[T <: NativeType](
       columnType: NativeColumnType[T],
-      count: Int) = {
+      count: Int): (Seq[T#JvmType], Seq[GenericMutableRow]) = {
 
     val values = makeUniqueRandomValues(columnType, count)
     val rows = values.map { value =>

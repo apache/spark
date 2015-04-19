@@ -20,11 +20,12 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
-
 
 /**
  * :: AlphaComponent ::
@@ -35,21 +36,33 @@ import org.apache.spark.sql.types.DoubleType
 class BinaryClassificationEvaluator extends Evaluator with Params
   with HasRawPredictionCol with HasLabelCol {
 
-  /** param for metric name in evaluation */
+  /**
+   * param for metric name in evaluation
+   * @group param
+   */
   val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
-  def getMetricName: String = get(metricName)
+    "metric name in evaluation (areaUnderROC|areaUnderPR)")
+
+  /** @group getParam */
+  def getMetricName: String = getOrDefault(metricName)
+
+  /** @group setParam */
   def setMetricName(value: String): this.type = set(metricName, value)
 
+  /** @group setParam */
   def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
+
+  /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  setDefault(metricName -> "areaUnderROC")
+
   override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     val schema = dataset.schema
-    checkInputColumn(schema, map(rawPredictionCol), new VectorUDT)
-    checkInputColumn(schema, map(labelCol), DoubleType)
+    SchemaUtils.checkColumnType(schema, map(rawPredictionCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, map(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabels = dataset.select(map(rawPredictionCol), map(labelCol))

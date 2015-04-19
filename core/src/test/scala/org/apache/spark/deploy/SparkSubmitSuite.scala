@@ -21,6 +21,8 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.ByteStreams
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
@@ -400,8 +402,10 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val archives = "file:/archive1,archive2" // spark.yarn.dist.archives
     val pyFiles = "py-file1,py-file2" // spark.submit.pyFiles
 
+    val tmpDir = Utils.createTempDir()
+
     // Test jars and files
-    val f1 = File.createTempFile("test-submit-jars-files", "")
+    val f1 = File.createTempFile("test-submit-jars-files", "", tmpDir)
     val writer1 = new PrintWriter(f1)
     writer1.println("spark.jars " + jars)
     writer1.println("spark.files " + files)
@@ -418,7 +422,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps("spark.files") should be(Utils.resolveURIs(files))
 
     // Test files and archives (Yarn)
-    val f2 = File.createTempFile("test-submit-files-archives", "")
+    val f2 = File.createTempFile("test-submit-files-archives", "", tmpDir)
     val writer2 = new PrintWriter(f2)
     writer2.println("spark.yarn.dist.files " + files)
     writer2.println("spark.yarn.dist.archives " + archives)
@@ -435,7 +439,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
 
     // Test python files
-    val f3 = File.createTempFile("test-submit-python-files", "")
+    val f3 = File.createTempFile("test-submit-python-files", "", tmpDir)
     val writer3 = new PrintWriter(f3)
     writer3.println("spark.submit.pyFiles " + pyFiles)
     writer3.close()
@@ -448,6 +452,19 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val sysProps3 = SparkSubmit.prepareSubmitEnvironment(appArgs3)._3
     sysProps3("spark.submit.pyFiles") should be(
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+  }
+
+  test("user classpath first in driver") {
+    val systemJar = TestUtils.createJarWithFiles(Map("test.resource" -> "SYSTEM"))
+    val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local",
+      "--conf", "spark.driver.extraClassPath=" + systemJar,
+      "--conf", "spark.driver.userClassPathFirst=true",
+      userJar.toString)
+    runSparkSubmit(args)
   }
 
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
@@ -538,6 +555,18 @@ object SimpleApplicationTest {
         throw new SparkException(
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
+    }
+  }
+}
+
+object UserClasspathFirstTest {
+  def main(args: Array[String]) {
+    val ccl = Thread.currentThread().getContextClassLoader()
+    val resource = ccl.getResourceAsStream("test.resource")
+    val bytes = ByteStreams.toByteArray(resource)
+    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    if (contents != "USER") {
+      throw new SparkException("Should have read user resource, but instead read: " + contents)
     }
   }
 }

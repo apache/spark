@@ -19,7 +19,7 @@ package org.apache.spark.mllib.util
 
 import java.util.StringTokenizer
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.{ArrayBuilder, ListBuffer}
 
 import org.apache.spark.SparkException
 
@@ -51,7 +51,7 @@ private[mllib] object NumericParser {
   }
 
   private def parseArray(tokenizer: StringTokenizer): Array[Double] = {
-    val values = ArrayBuffer.empty[Double]
+    val values = ArrayBuilder.make[Double]
     var parsing = true
     var allowComma = false
     var token: String = null
@@ -67,14 +67,14 @@ private[mllib] object NumericParser {
         }
       } else {
         // expecting a number
-        values.append(parseDouble(token))
+        values += parseDouble(token)
         allowComma = true
       }
     }
     if (parsing) {
       throw new SparkException(s"An array must end with ']'.")
     }
-    values.toArray
+    values.result()
   }
 
   private def parseTuple(tokenizer: StringTokenizer): Seq[_] = {
@@ -114,7 +114,7 @@ private[mllib] object NumericParser {
     try {
       java.lang.Double.parseDouble(s)
     } catch {
-      case e: Throwable =>
+      case e: NumberFormatException =>
         throw new SparkException(s"Cannot parse a double from: $s", e)
     }
   }

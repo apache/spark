@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.FunSuite
+import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-class HiveTypeCoercionSuite extends FunSuite {
+class HiveTypeCoercionSuite extends PlanTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
@@ -96,7 +96,9 @@ class HiveTypeCoercionSuite extends FunSuite {
     widenTest(StringType, TimestampType, None)
 
     // ComplexType
-    widenTest(NullType, MapType(IntegerType, StringType, false), Some(MapType(IntegerType, StringType, false)))
+    widenTest(NullType,
+      MapType(IntegerType, StringType, false),
+      Some(MapType(IntegerType, StringType, false)))
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
@@ -106,30 +108,34 @@ class HiveTypeCoercionSuite extends FunSuite {
     val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      assert(booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)) ==
+      comparePlans(
+        booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)),
         Project(Seq(Alias(transformed, "a")()), testRelation))
     }
     // Remove superflous boolean -> boolean casts.
     ruleTest(Cast(Literal(true), BooleanType), Literal(true))
     // Stringify boolean when casting to string.
-    ruleTest(Cast(Literal(false), StringType), If(Literal(false), Literal("true"), Literal("false")))
+    ruleTest(
+      Cast(Literal(false), StringType),
+      If(Literal(false), Literal("true"), Literal("false")))
   }
 
   test("coalesce casts") {
     val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      assert(fac(Project(Seq(Alias(initial, "a")()), testRelation)) ==
+      comparePlans(
+        fac(Project(Seq(Alias(initial, "a")()), testRelation)),
         Project(Seq(Alias(transformed, "a")()), testRelation))
     }
     ruleTest(
       Coalesce(Literal(1.0)
         :: Literal(1)
-        :: Literal(1.0, FloatType)
+        :: Literal.create(1.0, FloatType)
         :: Nil),
       Coalesce(Cast(Literal(1.0), DoubleType)
         :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal(1.0, FloatType), DoubleType)
+        :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
     ruleTest(
       Coalesce(Literal(1L)

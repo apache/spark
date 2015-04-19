@@ -41,6 +41,9 @@ import org.apache.spark.annotation.DeveloperApi
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   extends Serializable {
 
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
 

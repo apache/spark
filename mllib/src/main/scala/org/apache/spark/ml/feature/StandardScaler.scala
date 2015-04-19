@@ -20,10 +20,11 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -39,12 +40,15 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler().fit(input)
     val model = new StandardScalerModel(this, map, scaler)
@@ -52,8 +56,8 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     model
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${map(inputCol)} must be a vector column")
@@ -75,18 +79,21 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val scale = udf((v: Vector) => { scaler.transform(v) } : Vector)
-    dataset.select($"*", scale(col(map(inputCol))).as(map(outputCol)))
+    dataset.withColumn(map(outputCol), scale(col(map(inputCol))))
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${map(inputCol)} must be a vector column")

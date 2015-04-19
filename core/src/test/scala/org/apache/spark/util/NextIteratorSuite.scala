@@ -71,7 +71,7 @@ class NextIteratorSuite extends FunSuite with Matchers {
   class StubIterator(ints: Buffer[Int])  extends NextIterator[Int] {
     var closeCalled = 0
 
-    override def getNext() = {
+    override def getNext(): Int = {
       if (ints.size == 0) {
         finished = true
         0

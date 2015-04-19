@@ -24,7 +24,7 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[spark] class HistoryNotFoundPage(parent: MasterWebUI)
+private[ui] class HistoryNotFoundPage(parent: MasterWebUI)
   extends WebUIPage("history/not-found") {
 
   /**

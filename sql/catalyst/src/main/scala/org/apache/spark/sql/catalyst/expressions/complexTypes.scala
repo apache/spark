@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.types._
 
 /**
@@ -27,12 +29,12 @@ import org.apache.spark.sql.types._
 case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   type EvaluatedType = Any
 
-  val children = child :: ordinal :: Nil
+  val children: Seq[Expression] = child :: ordinal :: Nil
   /** `Null` is returned for invalid ordinals. */
-  override def nullable = true
-  override def foldable = child.foldable && ordinal.foldable
+  override def nullable: Boolean = true
+  override def foldable: Boolean = child.foldable && ordinal.foldable
 
-  def dataType = child.dataType match {
+  override def dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case MapType(_, vt, _) => vt
   }
@@ -40,7 +42,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
     childrenResolved &&
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
-  override def toString = s"$child[$ordinal]"
+  override def toString: String = s"$child[$ordinal]"
 
   override def eval(input: Row): Any = {
     val value = child.eval(input)
@@ -70,22 +72,83 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   }
 }
 
+
+trait GetField extends UnaryExpression {
+  self: Product =>
+
+  type EvaluatedType = Any
+  override def foldable: Boolean = child.foldable
+  override def toString: String = s"$child.${field.name}"
+
+  def field: StructField
+}
+
+object GetField {
+  /**
+   * Returns the resolved `GetField`, and report error if no desired field or over one
+   * desired fields are found.
+   */
+  def apply(
+      expr: Expression,
+      fieldName: String,
+      resolver: Resolver): GetField = {
+    def findField(fields: Array[StructField]): Int = {
+      val checkField = (f: StructField) => resolver(f.name, fieldName)
+      val ordinal = fields.indexWhere(checkField)
+      if (ordinal == -1) {
+        throw new AnalysisException(
+          s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
+        throw new AnalysisException(
+          s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+      } else {
+        ordinal
+      }
+    }
+    expr.dataType match {
+      case StructType(fields) =>
+        val ordinal = findField(fields)
+        StructGetField(expr, fields(ordinal), ordinal)
+      case ArrayType(StructType(fields), containsNull) =>
+        val ordinal = findField(fields)
+        ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
+      case otherType =>
+        throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
+    }
+  }
+}
+
 /**
  * Returns the value of fields in the Struct `child`.
  */
-case class GetField(child: Expression, field: StructField, ordinal: Int) extends UnaryExpression {
-  type EvaluatedType = Any
+case class StructGetField(child: Expression, field: StructField, ordinal: Int) extends GetField {
 
-  def dataType = field.dataType
-  override def nullable = child.nullable || field.nullable
-  override def foldable = child.foldable
+  override def dataType: DataType = field.dataType
+  override def nullable: Boolean = child.nullable || field.nullable
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
     if (baseValue == null) null else baseValue(ordinal)
   }
+}
 
-  override def toString = s"$child.${field.name}"
+/**
+ * Returns the array of value of fields in the Array of Struct `child`.
+ */
+case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, containsNull: Boolean)
+  extends GetField {
+
+  override def dataType: DataType = ArrayType(field.dataType, containsNull)
+  override def nullable: Boolean = child.nullable
+
+  override def eval(input: Row): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
+    if (baseValue == null) null else {
+      baseValue.map { row =>
+        if (row == null) null else row(ordinal)
+      }
+    }
+  }
 }
 
 /**
@@ -94,7 +157,7 @@ case class GetField(child: Expression, field: StructField, ordinal: Int) extends
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
   
-  override def foldable = !children.exists(!_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable)
   
   lazy val childTypes = children.map(_.dataType).distinct
 
@@ -114,5 +177,32 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     children.map(_.eval(input))
   }
 
-  override def toString = s"Array(${children.mkString(",")})"
+  override def toString: String = s"Array(${children.mkString(",")})"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ * TODO: [[CreateStruct]] does not support codegen.
+ */
+case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
+  override type EvaluatedType = Row
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override lazy val dataType: StructType = {
+    assert(resolved,
+      s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
+    val fields = children.map { child =>
+      StructField(child.name, child.dataType, child.nullable, child.metadata)
+    }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: Row): EvaluatedType = {
+    Row(children.map(_.eval(input)): _*)
+  }
 }

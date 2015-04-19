@@ -24,11 +24,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
@@ -52,18 +51,13 @@ class SparkHadoopUtil extends Logging {
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit) {
-    val user = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
-    if (user != SparkContext.SPARK_UNKNOWN_USER) {
-      logDebug("running as user: " + user)
-      val ugi = UserGroupInformation.createRemoteUser(user)
-      transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-      ugi.doAs(new PrivilegedExceptionAction[Unit] {
-        def run: Unit = func()
-      })
-    } else {
-      logDebug("running as SPARK_UNKNOWN_USER")
-      func()
-    }
+    val user = Utils.getCurrentUserName()
+    logDebug("running as user: " + user)
+    val ugi = UserGroupInformation.createRemoteUser(user)
+    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+    ugi.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -198,13 +192,44 @@ class SparkHadoopUtil extends Logging {
    * that file.
    */
   def listLeafStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
-    def recurse(path: Path) = {
+    def recurse(path: Path): Array[FileStatus] = {
       val (directories, leaves) = fs.listStatus(path).partition(_.isDir)
       leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
     }
 
     val baseStatus = fs.getFileStatus(basePath)
     if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
+  }
+
+  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
+
+  /**
+   * Substitute variables by looking them up in Hadoop configs. Only variables that match the
+   * ${hadoopconf- .. } pattern are substituted.
+   */
+  def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
+    text match {
+      case HADOOP_CONF_PATTERN(matched) => {
+        logDebug(text + " matched " + HADOOP_CONF_PATTERN)
+        val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
+        val eval = Option[String](hadoopConf.get(key))
+          .map { value =>
+            logDebug("Substituted " + matched + " with " + value)
+            text.replace(matched, value)
+          }
+        if (eval.isEmpty) {
+          // The variable was not found in Hadoop configs, so return text as is.
+          text
+        } else {
+          // Continue to substitute more variables.
+          substituteHadoopVariables(eval.get, hadoopConf)
+        }
+      }
+      case _ => {
+        logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
+        text
+      }
+    }
   }
 }
 

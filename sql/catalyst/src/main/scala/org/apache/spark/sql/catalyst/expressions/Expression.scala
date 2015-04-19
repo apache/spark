@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -64,206 +65,17 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = !children.exists(!_.resolved)
 
   /**
-   * A set of helper functions that return the correct descendant of `scala.math.Numeric[T]` type
-   * and do any casting necessary of child evaluation.
+   * Returns a string representation of this expression that does not have developer centric
+   * debugging information like the expression id.
    */
-  @inline
-  def n1(e: Expression, i: Row, f: ((Numeric[Any], Any) => Any)): Any  = {
-    val evalE = e.eval(i)
-    if (evalE == null) {
-      null
-    } else {
-      e.dataType match {
-        case n: NumericType =>
-          val castedFunction = f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType]
-          castedFunction(n.numeric, evalE.asInstanceOf[n.JvmType])
-        case other => sys.error(s"Type $other does not support numeric operations")
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed
-   * to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def n2(
-      i: Row,
-      e1: Expression,
-      e2: Expression,
-      f: ((Numeric[Any], Any, Any) => Any)): Any  = {
-
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = e2.eval(i)
-      if (evalE2 == null) {
-        null
-      } else {
-        e1.dataType match {
-          case n: NumericType =>
-            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => n.JvmType](
-              n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
-          case other => sys.error(s"Type $other does not support numeric operations")
-        }
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 2 Fractional children expressions. Those expressions are
-   * supposed to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def f2(
-      i: Row,
-      e1: Expression,
-      e2: Expression,
-      f: ((Fractional[Any], Any, Any) => Any)): Any  = {
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
-    val evalE1 = e1.eval(i: Row)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = e2.eval(i: Row)
-      if (evalE2 == null) {
-        null
-      } else {
-        e1.dataType match {
-          case ft: FractionalType =>
-            f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
-              ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
-          case other => sys.error(s"Type $other does not support fractional operations")
-        }
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 1 Fractional children expression.
-   * if the expression result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def f1(i: Row, e1: Expression, f: ((Fractional[Any], Any) => Any)): Any  = {
-    val evalE1 = e1.eval(i: Row)
-    if(evalE1 == null) {
-      null
-    } else {
-      e1.dataType match {
-        case ft: FractionalType =>
-          f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType) => ft.JvmType](
-            ft.fractional, evalE1.asInstanceOf[ft.JvmType])
-        case other => sys.error(s"Type $other does not support fractional operations")
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 2 Integral children expressions. Those expressions are
-   * supposed to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def i2(
-      i: Row,
-      e1: Expression,
-      e2: Expression,
-      f: ((Integral[Any], Any, Any) => Any)): Any  = {
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = e2.eval(i)
-      if (evalE2 == null) {
-        null
-      } else {
-        e1.dataType match {
-          case i: IntegralType =>
-            f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
-              i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
-          case i: FractionalType =>
-            f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
-              i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
-          case other => sys.error(s"Type $other does not support numeric operations")
-        }
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 1 Integral children expression.
-   * if the expression result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def i1(i: Row, e1: Expression, f: ((Integral[Any], Any) => Any)): Any  = {
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    } else {
-      e1.dataType match {
-        case i: IntegralType =>
-          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
-            i.integral, evalE1.asInstanceOf[i.JvmType])
-        case i: FractionalType =>
-          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
-            i.asIntegral, evalE1.asInstanceOf[i.JvmType])
-        case other => sys.error(s"Type $other does not support numeric operations")
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 2 Comparable children expressions. Those expressions are
-   * supposed to be in the same data type, and the return type should be Integer:
-   * Negative value: 1st argument less than 2nd argument
-   * Zero:  1st argument equals 2nd argument
-   * Positive value: 1st argument greater than 2nd argument
-   *
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def c2(
-      i: Row,
-      e1: Expression,
-      e2: Expression,
-      f: ((Ordering[Any], Any, Any) => Any)): Any  = {
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = e2.eval(i)
-      if (evalE2 == null) {
-        null
-      } else {
-        e1.dataType match {
-          case i: NativeType =>
-            f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
-              i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
-          case other => sys.error(s"Type $other does not support ordered operations")
-        }
-      }
-    }
+  def prettyString: String = {
+    transform {
+      case a: AttributeReference => PrettyAttribute(a.name)
+      case u: UnresolvedAttribute => PrettyAttribute(u.name)
+    }.toString
   }
 }
 
@@ -272,9 +84,9 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   def symbol: String
 
-  override def foldable = left.foldable && right.foldable
+  override def foldable: Boolean = left.foldable && right.foldable
 
-  override def toString = s"($left $symbol $right)"
+  override def toString: String = s"($left $symbol $right)"
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
@@ -292,8 +104,8 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 case class GroupExpression(children: Seq[Expression]) extends Expression {
   self: Product =>
   type EvaluatedType = Seq[Any]
-  override def eval(input: Row): EvaluatedType = ???
-  override def nullable = false
-  override def foldable = false
-  override def dataType = ???
+  override def eval(input: Row): EvaluatedType = throw new UnsupportedOperationException
+  override def nullable: Boolean = false
+  override def foldable: Boolean = false
+  override def dataType: DataType = throw new UnsupportedOperationException
 }

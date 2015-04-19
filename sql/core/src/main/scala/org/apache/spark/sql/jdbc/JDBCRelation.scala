@@ -17,12 +17,18 @@
 
 package org.apache.spark.sql.jdbc
 
-import scala.collection.mutable.ArrayBuffer
 import java.sql.DriverManager
+import java.util.Properties
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -48,11 +54,6 @@ private[sql] object JDBCRelation {
    * exactly once.  The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
    * will fail to be represented.
-   *
-   * @param column - Column name.  Must refer to a column of integral type.
-   * @param numPartitions - Number of partitions
-   * @param minValue - Smallest value of column.  Advisory.
-   * @param maxValue - Largest value of column.  Advisory.
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
@@ -68,12 +69,17 @@ private[sql] object JDBCRelation {
     var currentValue: Long = partitioning.lowerBound
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lowerBound = (if (i != 0) s"$column >= $currentValue" else null)
+      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
-      val upperBound = (if (i != numPartitions - 1) s"$column < $currentValue" else null)
-      val whereClause = (if (upperBound == null) lowerBound
-                    else if (lowerBound == null) upperBound
-                    else s"$lowerBound AND $upperBound")
+      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val whereClause =
+        if (upperBound == null) {
+          lowerBound
+        } else if (lowerBound == null) {
+          upperBound
+        } else {
+          s"$lowerBound AND $upperBound"
+        }
       ans += JDBCPartition(whereClause, i)
       i = i + 1
     }
@@ -94,9 +100,9 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Class.forName(driver)
+    if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
 
-    if (   partitionColumn != null
+    if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
@@ -104,30 +110,42 @@ private[sql] class DefaultSource extends RelationProvider {
     val partitionInfo = if (partitionColumn == null) {
       null
     } else {
-      JDBCPartitioningInfo(partitionColumn,
-                           lowerBound.toLong, upperBound.toLong,
-                           numPartitions.toInt)
+      JDBCPartitioningInfo(
+        partitionColumn,
+        lowerBound.toLong,
+        upperBound.toLong,
+        numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(url, table, parts)(sqlContext)
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    JDBCRelation(url, table, parts, properties)(sqlContext)
   }
 }
 
-private[sql] case class JDBCRelation(url: String,
-                                     table: String,
-                                     parts: Array[Partition])(
-    @transient val sqlContext: SQLContext)
-  extends PrunedFilteredScan {
+private[sql] case class JDBCRelation(
+    url: String,
+    table: String,
+    parts: Array[Partition],
+    properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
+  extends BaseRelation
+  with PrunedFilteredScan {
 
-  override val schema = JDBCRDD.resolveTable(url, table)
+  override val needConversion: Boolean = false
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
+  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
-    JDBCRDD.scanTable(sqlContext.sparkContext,
-                      schema,
-                      driver, url,
-                      table,
-                      requiredColumns, filters,
-                      parts)
+    JDBCRDD.scanTable(
+      sqlContext.sparkContext,
+      schema,
+      driver,
+      url,
+      properties,
+      table,
+      requiredColumns,
+      filters,
+      parts)
   }
 }

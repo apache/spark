@@ -78,13 +78,13 @@ MLlib recognizes the following types as dense vectors:
 
 and the following as sparse vectors:
 
-* MLlib's [`SparseVector`](api/python/pyspark.mllib.linalg.SparseVector-class.html).
+* MLlib's [`SparseVector`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.SparseVector).
 * SciPy's
   [`csc_matrix`](http://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix)
   with a single column
 
 We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
-in [`Vectors`](api/python/pyspark.mllib.linalg.Vectors-class.html) to create sparse vectors.
+in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vector) to create sparse vectors.
 
 {% highlight python %}
 import numpy as np
@@ -151,7 +151,7 @@ LabeledPoint neg = new LabeledPoint(1.0, Vectors.sparse(3, new int[] {0, 2}, new
 <div data-lang="python" markdown="1">
 
 A labeled point is represented by
-[`LabeledPoint`](api/python/pyspark.mllib.regression.LabeledPoint-class.html).
+[`LabeledPoint`](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint).
 
 {% highlight python %}
 from pyspark.mllib.linalg import SparseVector
@@ -211,7 +211,7 @@ JavaRDD<LabeledPoint> examples =
 </div>
 
 <div data-lang="python" markdown="1">
-[`MLUtils.loadLibSVMFile`](api/python/pyspark.mllib.util.MLUtils-class.html) reads training
+[`MLUtils.loadLibSVMFile`](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) reads training
 examples stored in LIBSVM format.
 
 {% highlight python %}
@@ -295,6 +295,70 @@ backed by an RDD of its entries.
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
 In general the use of non-deterministic RDDs can lead to errors.
+
+### BlockMatrix
+
+A `BlockMatrix` is a distributed matrix backed by an RDD of `MatrixBlock`s, where a `MatrixBlock` is
+a tuple of `((Int, Int), Matrix)`, where the `(Int, Int)` is the index of the block, and `Matrix` is
+the sub-matrix at the given index with size `rowsPerBlock` x `colsPerBlock`.
+`BlockMatrix` supports methods such as `add` and `multiply` with another `BlockMatrix`.
+`BlockMatrix` also has a helper function `validate` which can be used to check whether the
+`BlockMatrix` is set up properly.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+A [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) can be
+most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
+`toBlockMatrix` creates blocks of size 1024 x 1024 by default.
+Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
+
+val entries: RDD[MatrixEntry] = ... // an RDD of (i, j, v) matrix entries
+// Create a CoordinateMatrix from an RDD[MatrixEntry].
+val coordMat: CoordinateMatrix = new CoordinateMatrix(entries)
+// Transform the CoordinateMatrix to a BlockMatrix
+val matA: BlockMatrix = coordMat.toBlockMatrix().cache()
+
+// Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
+// Nothing happens if it is valid.
+matA.validate()
+
+// Calculate A^T A.
+val ata = matA.transpose.multiply(matA)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+A [`BlockMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/BlockMatrix.html) can be
+most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
+`toBlockMatrix` creates blocks of size 1024 x 1024 by default.
+Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+
+JavaRDD<MatrixEntry> entries = ... // a JavaRDD of (i, j, v) Matrix Entries
+// Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
+CoordinateMatrix coordMat = new CoordinateMatrix(entries.rdd());
+// Transform the CoordinateMatrix to a BlockMatrix
+BlockMatrix matA = coordMat.toBlockMatrix().cache();
+
+// Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
+// Nothing happens if it is valid.
+matA.validate();
+
+// Calculate A^T A.
+BlockMatrix ata = matA.transpose().multiply(matA);
+{% endhighlight %}
+</div>
+</div>
 
 ### RowMatrix
 

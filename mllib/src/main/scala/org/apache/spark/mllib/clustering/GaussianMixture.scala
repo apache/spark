@@ -19,10 +19,10 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.IndexedSeq
 
-import breeze.linalg.{DenseMatrix => BreezeMatrix, DenseVector => BreezeVector, Transpose, diag}
+import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Matrices, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -41,7 +41,11 @@ import org.apache.spark.util.Utils
  * less than convergenceTol, or until it has reached the max number of iterations.
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.  
- * 
+ *
+ * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+ *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ *
  * @param k The number of independent Gaussians in the mixture model
  * @param convergenceTol The maximum change in log-likelihood at which convergence
  * is considered to have occurred.
@@ -130,7 +134,7 @@ class GaussianMixture private (
     val sc = data.sparkContext
     
     // we will operate on the data as breeze data
-    val breezeData = data.map(u => u.toBreeze.toDenseVector).cache()
+    val breezeData = data.map(_.toBreeze).cache()
     
     // Get length of the input vectors
     val d = breezeData.first().length
@@ -148,7 +152,7 @@ class GaussianMixture private (
         (Array.fill(k)(1.0 / k), Array.tabulate(k) { i => 
           val slice = samples.view(i * nSamples, (i + 1) * nSamples)
           new MultivariateGaussian(vectorMean(slice), initCovariance(slice)) 
-        })  
+        })
       }
     }
     
@@ -169,7 +173,7 @@ class GaussianMixture private (
       var i = 0
       while (i < k) {
         val mu = sums.means(i) / sums.weights(i)
-        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu).asInstanceOf[DenseVector],
+        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
           Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
         weights(i) = sums.weights(i) / sumWeights
         gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
@@ -185,8 +189,8 @@ class GaussianMixture private (
   }
     
   /** Average of dense breeze vectors */
-  private def vectorMean(x: IndexedSeq[BreezeVector[Double]]): BreezeVector[Double] = {
-    val v = BreezeVector.zeros[Double](x(0).length)
+  private def vectorMean(x: IndexedSeq[BV[Double]]): BDV[Double] = {
+    val v = BDV.zeros[Double](x(0).length)
     x.foreach(xi => v += xi)
     v / x.length.toDouble 
   }
@@ -195,10 +199,10 @@ class GaussianMixture private (
    * Construct matrix where diagonal entries are element-wise
    * variance of input vectors (computes biased variance)
    */
-  private def initCovariance(x: IndexedSeq[BreezeVector[Double]]): BreezeMatrix[Double] = {
+  private def initCovariance(x: IndexedSeq[BV[Double]]): BreezeMatrix[Double] = {
     val mu = vectorMean(x)
-    val ss = BreezeVector.zeros[Double](x(0).length)
-    x.map(xi => (xi - mu) :^ 2.0).foreach(u => ss += u)
+    val ss = BDV.zeros[Double](x(0).length)
+    x.foreach(xi => ss += (xi - mu) :^ 2.0)
     diag(ss / x.length.toDouble)
   }
 }
@@ -207,7 +211,7 @@ class GaussianMixture private (
 private object ExpectationSum {
   def zero(k: Int, d: Int): ExpectationSum = {
     new ExpectationSum(0.0, Array.fill(k)(0.0), 
-      Array.fill(k)(BreezeVector.zeros(d)), Array.fill(k)(BreezeMatrix.zeros(d,d)))
+      Array.fill(k)(BDV.zeros(d)), Array.fill(k)(BreezeMatrix.zeros(d,d)))
   }
   
   // compute cluster contributions for each input point
@@ -215,19 +219,18 @@ private object ExpectationSum {
   def add(
       weights: Array[Double], 
       dists: Array[MultivariateGaussian])
-      (sums: ExpectationSum, x: BreezeVector[Double]): ExpectationSum = {
+      (sums: ExpectationSum, x: BV[Double]): ExpectationSum = {
     val p = weights.zip(dists).map {
       case (weight, dist) => MLUtils.EPSILON + weight * dist.pdf(x)
     }
     val pSum = p.sum
     sums.logLikelihood += math.log(pSum)
-    val xxt = x * new Transpose(x)
     var i = 0
     while (i < sums.k) {
       p(i) /= pSum
       sums.weights(i) += p(i)
       sums.means(i) += x * p(i)
-      BLAS.syr(p(i), Vectors.fromBreeze(x).asInstanceOf[DenseVector],
+      BLAS.syr(p(i), Vectors.fromBreeze(x),
         Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
       i = i + 1
     }
@@ -239,7 +242,7 @@ private object ExpectationSum {
 private class ExpectationSum(
     var logLikelihood: Double,
     val weights: Array[Double],
-    val means: Array[BreezeVector[Double]],
+    val means: Array[BDV[Double]],
     val sigmas: Array[BreezeMatrix[Double]]) extends Serializable {
   
   val k = weights.length

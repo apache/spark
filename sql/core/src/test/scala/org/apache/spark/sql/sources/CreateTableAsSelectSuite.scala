@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
+import java.io.{IOException, File}
 
+import org.apache.spark.sql.AnalysisException
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
@@ -31,7 +31,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   var path: File = null
 
   override def beforeAll(): Unit = {
-    path = util.getTempFilePath("jsonCTAS").getCanonicalFile
+    path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     jsonRDD(rdd).registerTempTable("jt")
   }
@@ -41,7 +41,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   after {
-    if (path.exists()) Utils.deleteRecursively(path)
+    Utils.deleteRecursively(path)
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {
@@ -62,6 +62,29 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     dropTempTable("jsonTable")
   }
 
+  test("CREATE TEMPORARY TABLE AS SELECT based on the file without write permission") {
+    val childPath = new File(path.toString, "child")
+    path.mkdir()
+    childPath.createNewFile()
+    path.setWritable(false)
+
+    val e = intercept[IOException] {
+      sql(
+        s"""
+           |CREATE TEMPORARY TABLE jsonTable
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '${path.toString}'
+           |) AS
+           |SELECT a, b FROM jt
+        """.stripMargin)
+      sql("SELECT a, b FROM jsonTable").collect()
+    }
+    assert(e.getMessage().contains("Unable to clear output directory"))
+
+    path.setWritable(true)
+  }
+
   test("create a table, drop it and create another one with the same name") {
     sql(
       s"""
@@ -77,12 +100,10 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    dropTempTable("jsonTable")
-
-    val message = intercept[RuntimeException]{
+    val message = intercept[DDLException]{
       sql(
         s"""
-        |CREATE TEMPORARY TABLE jsonTable
+        |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path '${path.toString}'
@@ -91,12 +112,10 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains(s"path ${path.toString} already exists."),
+      message.contains(s"a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
       "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
 
-    // Explicitly delete it.
-    if (path.exists()) Utils.deleteRecursively(path)
-
+    // Overwrite the temporary table.
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
@@ -106,10 +125,27 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
         |) AS
         |SELECT a * 4 FROM jt
       """.stripMargin)
-
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       sql("SELECT a * 4 FROM jt").collect())
+
+    dropTempTable("jsonTable")
+    // Explicitly delete the data.
+    if (path.exists()) Utils.deleteRecursively(path)
+
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT b FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT b FROM jt").collect())
 
     dropTempTable("jsonTable")
   }
@@ -143,5 +179,32 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
         |SELECT a, b FROM jt
       """.stripMargin)
     }
+  }
+
+  test("it is not allowed to write to a table while querying it.") {
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT a, b FROM jt
+      """.stripMargin)
+
+    val message = intercept[AnalysisException] {
+      sql(
+        s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT a, b FROM jsonTable
+      """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("Cannot overwrite table "),
+      "Writing to a table while querying it should not be allowed.")
   }
 }

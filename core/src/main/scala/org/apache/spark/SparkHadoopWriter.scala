@@ -103,26 +103,11 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    val taCtxt = getTaskContext()
-    val cmtr = getOutputCommitter()
-    if (cmtr.needsTaskCommit(taCtxt)) {
-      try {
-        cmtr.commitTask(taCtxt)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException => {
-          logError("Error committing the output of task: " + taID.value, e)
-          cmtr.abortTask(taCtxt)
-          throw e
-        }
-      }
-    } else {
-      logInfo ("No need to commit output of task: " + taID.value)
-    }
+    SparkHadoopMapRedUtil.commitTask(
+      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
   }
 
   def commitJob() {
-    // always ? Or if cmtr.needsTaskCommit ?
     val cmtr = getOutputCommitter()
     cmtr.commitJob(getJobContext())
   }

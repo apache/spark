@@ -45,7 +45,7 @@ public class JavaPipelineSuite {
     jsql = new SQLContext(jsc);
     JavaRDD<LabeledPoint> points =
       jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
-    dataset = jsql.applySchema(points, LabeledPoint.class);
+    dataset = jsql.createDataFrame(points, LabeledPoint.class);
   }
 
   @After

@@ -22,13 +22,12 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
-import util.ManualClock
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
+import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
@@ -172,7 +171,9 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("flatMapValues") {
     testOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
-      (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10)),
+      (s: DStream[String]) => {
+        s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10))
+      },
       Seq( Seq(("a", 2), ("a", 12), ("b", 1), ("b", 11)), Seq(("", 2), ("", 12)), Seq() ),
       true
     )
@@ -475,7 +476,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       stream.foreachRDD(_ => {})  // Dummy output stream
       ssc.start()
       Thread.sleep(2000)
-      def getInputFromSlice(fromMillis: Long, toMillis: Long) = {
+      def getInputFromSlice(fromMillis: Long, toMillis: Long): Set[Int] = {
         stream.slice(new Time(fromMillis), new Time(toMillis)).flatMap(_.collect()).toSet
       }
 
@@ -586,7 +587,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         for (i <- 0 until input.size) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(200)
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           collectRddInfo()
         }
 
@@ -637,8 +638,8 @@ class BasicOperationsSuite extends TestSuiteBase {
         ssc.graph.getOutputStreams().head.dependencies.head.asInstanceOf[DStream[T]]
       if (rememberDuration != null) ssc.remember(rememberDuration)
       val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
-      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      assert(clock.currentTime() === Seconds(10).milliseconds)
+      val clock = ssc.scheduler.clock.asInstanceOf[Clock]
+      assert(clock.getTimeMillis() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream
     }

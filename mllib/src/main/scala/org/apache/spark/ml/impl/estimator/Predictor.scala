@@ -18,13 +18,15 @@
 package org.apache.spark.ml.impl.estimator
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 
@@ -53,14 +55,14 @@ private[spark] trait PredictorParams extends Params
       paramMap: ParamMap,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
-    checkInputColumn(schema, map(featuresCol), featuresDataType)
+    SchemaUtils.checkColumnType(schema, map(featuresCol), featuresDataType)
     if (fitting) {
       // TODO: Allow other numeric types
-      checkInputColumn(schema, map(labelCol), DoubleType)
+      SchemaUtils.checkColumnType(schema, map(labelCol), DoubleType)
     }
-    addOutputColumn(schema, map(predictionCol), DoubleType)
+    SchemaUtils.appendColumn(schema, map(predictionCol), DoubleType)
   }
 }
 
@@ -85,15 +87,20 @@ private[spark] abstract class Predictor[
     M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
+  /** @group setParam */
   def setLabelCol(value: String): Learner = set(labelCol, value).asInstanceOf[Learner]
+
+  /** @group setParam */
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
+
+  /** @group setParam */
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): M = {
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val model = train(dataset, map)
     Params.inheritValues(map, this, model) // copy params to model
     model
@@ -127,7 +134,7 @@ private[spark] abstract class Predictor[
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
   }
 
@@ -136,7 +143,7 @@ private[spark] abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame, paramMap: ParamMap): RDD[LabeledPoint] = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     dataset.select(map(labelCol), map(featuresCol))
       .map { case Row(label: Double, features: Vector) =>
       LabeledPoint(label, features)
@@ -160,8 +167,10 @@ private[spark] abstract class Predictor[
 private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
+  /** @group setParam */
   def setFeaturesCol(value: String): M = set(featuresCol, value).asInstanceOf[M]
 
+  /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
   /**
@@ -177,7 +186,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = false, featuresDataType)
   }
 
@@ -194,7 +203,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {
@@ -209,7 +218,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
       val pred: FeaturesType => Double = (features) => {
         tmpModel.predict(features)
       }
-      dataset.select($"*", callUDF(pred, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
+      dataset.withColumn(map(predictionCol), callUDF(pred, DoubleType, col(map(featuresCol))))
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
