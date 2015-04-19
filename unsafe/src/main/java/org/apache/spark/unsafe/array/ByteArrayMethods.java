@@ -31,6 +31,15 @@ public class ByteArrayMethods {
     // Private constructor, since this class only contains static methods.
   }
 
+  public static int roundNumberOfBytesToNearestWord(int numBytes) {
+    int remainder = numBytes % 8;
+    if (remainder == 0) {
+      return numBytes;
+    } else {
+      return numBytes + (8 - remainder);
+    }
+  }
+
   public static void zeroBytes(
       Object baseObject,
       long baseOffset,

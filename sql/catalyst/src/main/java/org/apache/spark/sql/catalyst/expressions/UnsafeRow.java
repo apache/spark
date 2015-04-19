@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.string.UTF8StringMethods;
 import scala.collection.Map;
 import scala.collection.Seq;
 
@@ -62,12 +63,16 @@ public final class UnsafeRow implements MutableRow {
    return baseOffset + bitSetWidthInBytes + ordinal * 8;
   }
 
+  public static int calculateBitSetWidthInBytes(int numFields) {
+    return ((numFields / 64) + ((numFields % 64 == 0 ? 0 : 1))) * 8;
+  }
+
   public UnsafeRow() { }
 
   public void set(Object baseObject, long baseOffset, int numFields, StructType schema) {
     assert numFields >= 0 : "numFields should >= 0";
     assert schema == null || schema.fields().length == numFields;
-    this.bitSetWidthInBytes = ((numFields / 64) + ((numFields % 64 == 0 ? 0 : 1))) * 8;
+    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.numFields = numFields;
@@ -219,9 +224,11 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public String getString(int i) {
     assertIndexIsValid(i);
-    // TODO
-
-    throw new UnsupportedOperationException();
+    final long offsetToStringSize = getLong(i);
+    final long stringSizeInBytes =
+      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
+    // TODO: ugly cast; figure out whether we'll support mega long strings
+    return UTF8StringMethods.toJavaString(baseObject, baseOffset + offsetToStringSize + 8, (int) stringSizeInBytes);
   }
 
   @Override
