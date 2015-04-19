@@ -234,7 +234,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * @throws NoSuchElementException
    */
   def getSizeAsKb(key: String): Long = {
-    Utils.byteStringAsMb(get(key))
+    Utils.byteStringAsKb(get(key))
   }
 
   /**
@@ -242,7 +242,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * suffix is provided then Kibibytes are assumed.
    */
   def getSizeAsKb(key: String, defaultValue: String): Long = {
-    Utils.byteStringAsMb(get(key, defaultValue))
+    Utils.byteStringAsKb(get(key, defaultValue))
   }
   
   /**

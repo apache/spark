@@ -19,14 +19,34 @@ package org.apache.spark
 
 import java.util.concurrent.{TimeUnit, Executors}
 
+import org.apache.spark.network.util.ByteUnit
+
 import scala.util.{Try, Random}
 
 import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{Utils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
 
 class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+  test("Test byteString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getSizeAsBytes("fake","1k") === ByteUnit.KiB.toBytes(1))
+    assert(conf.getSizeAsKb("fake","1k") === ByteUnit.KiB.toKiB(1))
+    assert(conf.getSizeAsMb("fake","1k") === ByteUnit.KiB.toMiB(1))
+    assert(conf.getSizeAsGb("fake","1k") === ByteUnit.KiB.toGiB(1))
+  }
+
+  test("Test timeString conversion") {
+    val conf = new SparkConf()
+    // Simply exercise the API, we don't need a complete conversion test since that's handled in
+    // UtilsSuite.scala
+    assert(conf.getTimeAsMs("fake","1ms") === TimeUnit.MILLISECONDS.toMillis(1))
+    assert(conf.getTimeAsSeconds("fake","1000ms") === TimeUnit.MILLISECONDS.toSeconds(1000))
+  }
+
   test("loading from system properties") {
     System.setProperty("spark.test.testProperty", "2")
     val conf = new SparkConf()
