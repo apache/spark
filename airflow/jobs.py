@@ -211,12 +211,15 @@ class MasterJob(BaseJob):
             TI.task_id == sq.c.task_id,
             TI.execution_date == sq.c.max_ti,
         )
+        logging.debug("Querying max dates for each task")
         latest_ti = qry.all()
         ti_dict = {ti.task_id: ti for ti in latest_ti}
         session.expunge_all()
         session.commit()
+        logging.debug("{} rows returned".format(len(latest_ti)))
 
         for task in dag.tasks:
+            logging.debug("Processing {}".format(task.task_id))
             if task.adhoc:
                 continue
             if task.task_id not in ti_dict:
@@ -282,7 +285,6 @@ class MasterJob(BaseJob):
         i = 0
         while (not self.test_mode) or i < 1:
             i += 1
-            self.heartbeat()
             dagbag.collect_dags(only_if_updated=True)
             if dag_id:
                 dags = [dagbag.dags[dag_id]]
@@ -297,6 +299,7 @@ class MasterJob(BaseJob):
                     self.process_dag(dag, executor)
                 except Exception as e:
                     logging.exeption(e)
+            self.heartbeat()
         executor.end()
 
     def heartbeat_callback(self):
