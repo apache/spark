@@ -135,9 +135,9 @@ public final class UTF8StringMethods {
    *
    * @return the number of bytes written, including the space for tracking the string's length.
    */
-  public static long createFromJavaString(Object baseObject, long baseOffset, String str) {
+  public static int createFromJavaString(Object baseObject, long baseOffset, String str) {
     final byte[] strBytes = str.getBytes();
-    final long strLengthInBytes = strBytes.length;
+    final int strLengthInBytes = strBytes.length;
     PlatformDependent.copyMemory(
       strBytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,

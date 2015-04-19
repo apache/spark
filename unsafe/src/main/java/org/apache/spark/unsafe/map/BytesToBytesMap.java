@@ -237,8 +237,15 @@ public final class BytesToBytesMap {
    * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
    */
   public final class Location {
+    /** An index into the hash map's Long array */
     private long pos;
+    /** True if this location points to a position where a key is defined, felase otherwise */
     private boolean isDefined;
+    /**
+     * The hashcode of the most recent key passed to
+     * {@link BytesToBytesMap#lookup(Object, long, int)}. Caching this hashcode here allows us to
+     * avoid re-hashing the key when storing a value for that key.
+     */
     private int keyHashcode;
     private final MemoryLocation keyMemoryLocation = new MemoryLocation();
     private final MemoryLocation valueMemoryLocation = new MemoryLocation();
@@ -257,6 +264,20 @@ public final class BytesToBytesMap {
       return isDefined;
     }
 
+    private Object getPage(long fullKeyAddress) {
+      assert (inHeap);
+      final int keyPageNumber = (int) ((fullKeyAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
+      assert (keyPageNumber >= 0 && keyPageNumber < PAGE_TABLE_SIZE);
+      assert (keyPageNumber <= currentPageNumber);
+      final Object page = pageTable[keyPageNumber];
+      assert (page != null);
+      return page;
+    }
+
+    private long getOffsetInPage(long fullKeyAddress) {
+      return (fullKeyAddress & MASK_LONG_LOWER_51_BITS);
+    }
+
     /**
      * Returns the address of the key defined at this position.
      * This points to the first byte of the key data.
@@ -266,13 +287,8 @@ public final class BytesToBytesMap {
     public MemoryLocation getKeyAddress() {
       final long fullKeyAddress = longArray.get(pos * 2);
       if (inHeap) {
-        final int keyPageNumber = (int) ((fullKeyAddress & MASK_LONG_UPPER_13_BITS) >>> 51);
-        assert (keyPageNumber >= 0 && keyPageNumber < PAGE_TABLE_SIZE);
-        assert (keyPageNumber <= currentPageNumber);
-        final Object page = pageTable[keyPageNumber];
-        assert (page != null);
-        final long keyOffsetInPage = (fullKeyAddress & MASK_LONG_LOWER_51_BITS);
-        keyMemoryLocation.setObjAndOffset(pageTable[keyPageNumber], keyOffsetInPage + 8);
+        keyMemoryLocation.setObjAndOffset(
+          getPage(fullKeyAddress), getOffsetInPage(fullKeyAddress) + 8);
       } else {
         keyMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8);
       }
@@ -284,13 +300,13 @@ public final class BytesToBytesMap {
      * Unspecified behavior if the key is not defined.
      */
     public long getKeyLength() {
-      // TODO: this is inefficient since we compute the key address twice if the user calls to get
-      // the length and then calls again to get the address.
-      final MemoryLocation keyAddress = getKeyAddress();
-      return PlatformDependent.UNSAFE.getLong(
-        keyAddress.getBaseObject(),
-        keyAddress.getBaseOffset() - 8
-      );
+      final long fullKeyAddress = longArray.get(pos * 2);
+      if (inHeap) {
+        return PlatformDependent.UNSAFE.getLong(
+          getPage(fullKeyAddress), getOffsetInPage(fullKeyAddress));
+      } else {
+        return PlatformDependent.UNSAFE.getLong(fullKeyAddress);
+      }
     }
 
     /**
@@ -303,11 +319,15 @@ public final class BytesToBytesMap {
       // The relative offset from the key position to the value position was stored in the upper 32
       // bits of the value long:
       final long offsetFromKeyToValue = (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
-      final MemoryLocation keyAddress = getKeyAddress();
-      valueMemoryLocation.setObjAndOffset(
-        keyAddress.getBaseObject(),
-        keyAddress.getBaseOffset() + offsetFromKeyToValue
-      );
+      final long fullKeyAddress = longArray.get(pos * 2);
+      if (inHeap) {
+        valueMemoryLocation.setObjAndOffset(
+          getPage(fullKeyAddress),
+          getOffsetInPage(fullKeyAddress) + 8 + offsetFromKeyToValue
+        );
+      } else {
+        valueMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8 + offsetFromKeyToValue);
+      }
       return valueMemoryLocation;
     }
 
@@ -316,17 +336,40 @@ public final class BytesToBytesMap {
      * Unspecified behavior if the key is not defined.
      */
     public long getValueLength() {
-      // TODO: this is inefficient since we compute the key address twice if the user calls to get
-      // the length and then calls again to get the address.
-      final MemoryLocation valueAddress = getValueAddress();
-      return PlatformDependent.UNSAFE.getLong(
-        valueAddress.getBaseObject(),
-        valueAddress.getBaseOffset() - 8
-      );
+      // The relative offset from the key position to the value position was stored in the upper 32
+      // bits of the value long:
+        final long offsetFromKeyToValue = (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
+      final long fullKeyAddress = longArray.get(pos * 2);
+      if (inHeap) {
+        return PlatformDependent.UNSAFE.getLong(
+          getPage(fullKeyAddress),
+          getOffsetInPage(fullKeyAddress) + offsetFromKeyToValue
+        );
+      } else {
+        return PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
+      }
     }
 
     /**
-     * Sets the value defined at this position. Unspecified behavior if the key is not defined.
+     * Sets the value defined at this position. This method may only be called once for a given
+     * key; if you want to update the value associated with a key, then you can directly manipulate
+     * the bytes stored at the value address.
+     *
+     * It is only valid to call this method after having first called `lookup()` using the same key.
+     *
+     * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
+     * will return information on the data stored by this `storeKeyAndValue` call.
+     *
+     * As an example usage, here's the proper way to store a new key:
+     *
+     * <code>
+     *   Location loc = map.lookup(keyBaseOffset, keyBaseObject, keyLengthInBytes);
+     *   if (!loc.isDefined()) {
+     *     loc.storeKeyAndValue(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
+     *   }
+     * </code>
+     *
+     * Unspecified behavior if the key is not defined.
      */
     public void storeKeyAndValue(
         Object keyBaseObject,
@@ -478,7 +521,7 @@ public final class BytesToBytesMap {
   }
 
   /** Returns the next number greater or equal num that is power of 2. */
-  private long nextPowerOf2(long num) {
+  private static long nextPowerOf2(long num) {
     final long highBit = Long.highestOneBit(num);
     return (highBit == num) ? num : highBit << 1;
   }

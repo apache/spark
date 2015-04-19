@@ -104,10 +104,17 @@ public abstract class AbstractTestBytesToBytesMap {
         BYTE_ARRAY_OFFSET,
         recordLengthBytes
       );
+      // After storing the key and value, the other location methods should return results that
+      // reflect the result of this store without us having to call lookup() again on the same key.
+      Assert.assertEquals(recordLengthBytes, loc.getKeyLength());
+      Assert.assertEquals(recordLengthBytes, loc.getValueLength());
+      Assert.assertArrayEquals(keyData, getByteArray(loc.getKeyAddress(), recordLengthBytes));
+      Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
+
+      // After calling lookup() the location should still point to the correct data.
       Assert.assertTrue(map.lookup(keyData, BYTE_ARRAY_OFFSET, recordLengthBytes).isDefined());
       Assert.assertEquals(recordLengthBytes, loc.getKeyLength());
       Assert.assertEquals(recordLengthBytes, loc.getValueLength());
-
       Assert.assertArrayEquals(keyData, getByteArray(loc.getKeyAddress(), recordLengthBytes));
       Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
 
