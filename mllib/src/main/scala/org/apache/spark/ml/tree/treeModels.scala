@@ -58,3 +58,40 @@ trait DecisionTreeModel {
     header + rootNode.subtreeToString(2)
   }
 }
+
+/**
+ * :: AlphaComponent ::
+ *
+ * Abstraction for models which are ensembles of decision trees
+ *
+ * TODO: Add support for predicting probabilities and raw predictions
+ */
+@AlphaComponent
+trait TreeEnsembleModel {
+
+  /** Trees in this ensemble */
+  def getTrees: Array[DecisionTreeModel]
+
+  /** Weights for each tree, zippable with [[getTrees]] */
+  def getTreeWeights: Array[Double]
+
+  /** Summary of the model */
+  override def toString: String = {
+    // Implementing classes should generally override this method to be more descriptive.
+    s"TreeEnsembleModel with $numTrees trees"
+  }
+
+  /** Full description of model */
+  def toDebugString: String = {
+    val header = toString + "\n"
+    header + getTrees.zip(getTreeWeights).zipWithIndex.map { case ((tree, weight), treeIndex) =>
+      s"  Tree $treeIndex (weight $weight):\n" + tree.rootNode.subtreeToString(4)
+    }.fold("")(_ + _)
+  }
+
+  /** Number of trees in ensemble */
+  val numTrees: Int = getTrees.length
+
+  /** Total number of nodes, summed over all trees in the ensemble. */
+  lazy val totalNumNodes: Int = getTrees.map(_.numNodes).sum
+}

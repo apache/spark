@@ -20,9 +20,12 @@ package org.apache.spark.ml.impl.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
+  BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
   Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -205,7 +208,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
 }
 
 /**
- * (private trait) Parameters for Decision Tree-based classification algorithms.
+ * Parameters for Decision Tree-based classification algorithms.
  */
 private[ml] trait TreeClassifierParams extends Params {
 
@@ -253,7 +256,7 @@ private[ml] object TreeClassifierParams {
 }
 
 /**
- * (private trait) Parameters for Decision Tree-based regression algorithms.
+ * Parameters for Decision Tree-based regression algorithms.
  */
 private[ml] trait TreeRegressorParams extends Params {
 
@@ -297,4 +300,215 @@ private[ml] trait TreeRegressorParams extends Params {
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
   val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Decision Tree-based ensemble algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
+
+  /**
+   * Fraction of the training data used for learning each decision tree.
+   * (default = 1.0)
+   * @group param
+   */
+  final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
+    "Fraction of the training data used for learning each decision tree.")
+
+  /**
+   * Random seed for bootstrapping and choosing feature subsets.
+   * @group param
+   */
+  final val seed: LongParam = new LongParam(this, "seed",
+    "Random seed for bootstrapping and choosing feature subsets.")
+
+  setDefault(subsamplingRate -> 1.0, seed -> Utils.random.nextLong())
+
+  /** @group setParam */
+  def setSubsamplingRate(value: Double): this.type = {
+    require(value > 0.0 && value <= 1.0,
+      s"Subsampling rate must be in range (0,1]. Bad rate: $value")
+    set(subsamplingRate, value)
+    this
+  }
+
+  /** @group getParam */
+  def getSubsamplingRate: Double = getOrDefault(subsamplingRate)
+
+  /** @group setParam */
+  def setSeed(value: Long): this.type = {
+    set(seed, value)
+    this
+  }
+
+  /** @group getParam */
+  def getSeed: Long = getOrDefault(seed)
+
+  /**
+   * Create a Strategy instance to use with the old API.
+   * NOTE: The caller should set impurity and seed.
+   */
+  override private[ml] def getOldStrategy(
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int): OldStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
+    strategy.setSubsamplingRate(getSubsamplingRate)
+    strategy
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Random Forest algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait RandomForestParams extends TreeEnsembleParams {
+
+  /**
+   * Number of trees to train (>= 1).
+   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * TODO: Change to always do bootstrapping (simpler).
+   * (default = 20)
+   * @group param
+   */
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)")
+
+  /**
+   * The number of features to consider for splits at each tree node.
+   * Supported options:
+   *  - "auto": Choose automatically for task:
+   *            If numTrees == 1, set to "all."
+   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *              to "onethird" for regression.
+   *  - "all": use all features
+   *  - "onethird": use 1/3 of the features
+   *  - "sqrt": use sqrt(number of features)
+   *  - "log2": use log2(number of features)
+   * (default = "auto")
+   *
+   * These various settings are based on the following references:
+   *  - log2: tested in Breiman (2001)
+   *  - sqrt: recommended by Breiman manual for random forests
+   *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
+   *    package.
+   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
+   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
+   *     random forests]]
+   *
+   * @group param
+   */
+  final val featuresPerNode: Param[String] = new Param[String](this, "featuresPerNode",
+    "The number of features to consider for splits at each tree node." +
+      s" Supported options: ${RandomForestParams.supportedFeaturesPerNode.mkString(", ")}")
+
+  setDefault(numTrees -> 20, featuresPerNode -> "auto")
+
+  /** @group setParam */
+  def setNumTrees(value: Int): this.type = {
+    require(value >= 1, s"Random Forest numTrees parameter cannot be $value; it must be >= 1.")
+    set(numTrees, value)
+    this
+  }
+
+  /** @group getParam */
+  def getNumTrees: Int = getOrDefault(numTrees)
+
+  /** @group setParam */
+  def setFeaturesPerNode(value: String): this.type = {
+    val featuresPerNodeStr = value.toLowerCase
+    require(RandomForestParams.supportedFeaturesPerNode.contains(featuresPerNodeStr),
+      s"RandomForestParams was given unrecognized featuresPerNode: $value." +
+        s"  Supported options: ${RandomForestParams.supportedFeaturesPerNode.mkString(", ")}")
+    set(featuresPerNode, value)
+    this
+  }
+
+  /** @group getParam */
+  def getFeaturesPerNodeStr: String = getOrDefault(featuresPerNode)
+}
+
+private[ml] object RandomForestParams {
+  // These options should be lowercase.
+  val supportedFeaturesPerNode: Array[String] = Array("auto", "all", "onethird", "sqrt", "log2")
+}
+
+/**
+ * :: DeveloperApi ::
+ * Parameters for Gradient-Boosted Tree algorithms.
+ *
+ * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ */
+@DeveloperApi
+private[ml] trait GBTParams extends TreeEnsembleParams {
+
+  /**
+   * Number of trees to train (>= 1).
+   * (default = 20)
+   * @group param
+   */
+  final val numIterations: IntParam = new IntParam(this, "numIterations",
+    "Number of trees to train (>= 1)")
+
+  /**
+   * Learning rate in interval (0, 1] for shrinking the contribution of each estimator.
+   * (default = 0.1)
+   * @group param
+   */
+  final val learningRate: DoubleParam = new DoubleParam(this, "learningRate",
+    "Learning rate in interval (0, 1] for shrinking the contribution of each estimator")
+
+  /* TODO: Add this doc when we add this param.
+   * Threshold for stopping early when runWithValidation is used.
+   * If the error rate on the validation input changes by less than the validationTol,
+   * then learning will stop early (before [[numIterations]]).
+   * This parameter is ignored when run is used.
+   * (default = 1e-5)
+   * @group param
+   */
+  //final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
+  // validationTol -> 1e-5
+
+  setDefault(numIterations -> 20, learningRate -> 0.1)
+
+  /** @group setParam */
+  def setNumIterations(value: Int): this.type = {
+    require(value >= 1,
+      s"Gradient Boosting numIterations parameter cannot be $value; it must be >= 1.")
+    set(numIterations, value)
+    this
+  }
+
+  /** @group getParam */
+  def getNumIterations: Int = getOrDefault(numIterations)
+
+  /** @group setParam */
+  def setLearningRate(value: Double): this.type = {
+    require(value > 0.0 && value <= 1.0,
+      s"GBT given invalid learning rate ($value).  Value should be in (0,1].")
+    set(learningRate, value)
+    this
+  }
+
+  /** @group getParam */
+  def getLearningRate: Double = getOrDefault(learningRate)
+
+  /**
+   * Create a BoostingStrategy instance to use with the old API.
+   * NOTE: The caller should set numClasses and algo.
+   */
+  private[ml] def getOldBoostingStrategy(
+      categoricalFeatures: Map[Int, Int]): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2)
+    // NOTE: The old API does not support "seed" so we ignore it.
+    new OldBoostingStrategy(strategy, getOldLoss, getNumIterations, getLearningRate)
+  }
+
+  /** Get old Gradient Boosting Loss type */
+  private[ml] def getOldLoss: OldLoss
 }
