@@ -35,7 +35,8 @@ import org.apache.spark.sql.Row
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel (val clusterCenters: Array[Vector]) extends Saveable with Serializable with PMMLExportable {
+class KMeansModel (
+    val clusterCenters: Array[Vector]) extends Saveable with Serializable with PMMLExportable {
 
   /** A Java-friendly constructor that takes an Iterable of Vectors. */
   def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)

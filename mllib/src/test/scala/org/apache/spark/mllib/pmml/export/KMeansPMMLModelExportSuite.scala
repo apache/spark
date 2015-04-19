@@ -26,7 +26,7 @@ class KMeansPMMLModelExportSuite extends FunSuite{
 
    test("KMeansPMMLModelExport generate PMML format") {
     
-    //arrange model to test
+    // arrange model to test
     val clusterCenters = Array(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
@@ -34,23 +34,25 @@ class KMeansPMMLModelExportSuite extends FunSuite{
     )
     val kmeansModel = new KMeansModel(clusterCenters);
     
-    //act by exporting the model to the PMML format
+    // act by exporting the model to the PMML format
     val modelExport = PMMLModelExportFactory.createPMMLModelExport(kmeansModel)
     
-    //assert that the PMML format is as expected
+    // assert that the PMML format is as expected
     assert(modelExport.isInstanceOf[PMMLModelExport])
     val pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml()
     assert(pmml.getHeader().getDescription() === "k-means clustering")
-    //check that the number of fields match the single vector size
+    // check that the number of fields match the single vector size
     assert(pmml.getDataDictionary().getNumberOfFields() === clusterCenters(0).size)
-    //this verify that there is a model attached to the pmml object and the model is a clustering one
-    //it also verifies that the pmml model has the same number of clusters of the spark model
-    assert(pmml.getModels().get(0).asInstanceOf[ClusteringModel].getNumberOfClusters() === clusterCenters.size)
+    // this verify that there is a model attached to the pmml object 
+      // and the model is a clustering one
+    // it also verifies that the pmml model has the same number of clusters of the spark model
+    assert(pmml.getModels().get(0).asInstanceOf[ClusteringModel].getNumberOfClusters()
+        === clusterCenters.size)
     
-    //manual checking
-    //kmeansModel.toPMML("/tmp/kmeans.xml")
-    //kmeansModel.toPMML(System.out)
-    //System.out.println(kmeansModel.toPMML())
+    // manual checking
+    // kmeansModel.toPMML("/tmp/kmeans.xml")
+    // kmeansModel.toPMML(System.out)
+    // System.out.println(kmeansModel.toPMML())
    
    }
   
