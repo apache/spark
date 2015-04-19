@@ -28,7 +28,11 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  */
 case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNode {
 
-  private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
+  private lazy val rdd = {
+    val converted = rows.map(
+      r => CatalystTypeConverters.convertToCatalyst(r, schema).asInstanceOf[Row])
+    sqlContext.sparkContext.parallelize(converted)
+  }
 
   override def execute(): RDD[Row] = rdd
 
