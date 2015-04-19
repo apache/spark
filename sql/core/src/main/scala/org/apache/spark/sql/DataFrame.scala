@@ -33,7 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -158,7 +158,7 @@ class DataFrame private[sql](
   }
 
   protected[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
+    queryExecution.analyzed.resolve(colName.split("\\."), sqlContext.analyzer.resolver).getOrElse {
       throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
@@ -166,7 +166,7 @@ class DataFrame private[sql](
 
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolve(n.name.split("\\."), sqlContext.analyzer.resolver).get
     }
   }
 
@@ -240,8 +240,8 @@ class DataFrame private[sql](
         s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
-    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
-      apply(oldName).as(newName)
+    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
+      Column(oldAttribute).as(newName)
     }
     select(newCols :_*)
   }
@@ -273,7 +273,7 @@ class DataFrame private[sql](
   def printSchema(): Unit = println(schema.treeString)
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purpose.
+   * Prints the plans (logical and physical) to the console for debugging purposes.
    * @group basic
    */
   def explain(extended: Boolean): Unit = {
@@ -285,7 +285,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Only prints the physical plan to the console for debugging purpose.
+   * Only prints the physical plan to the console for debugging purposes.
    * @group basic
    */
   def explain(): Unit = explain(extended = false)
@@ -713,7 +713,7 @@ class DataFrame private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributes = schema.toAttributes
     val rowFunction =
-      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
     val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false, None, logicalPlan)
@@ -734,7 +734,7 @@ class DataFrame private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     def rowFunction(row: Row): TraversableOnce[Row] = {
-      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+      f(row(0).asInstanceOf[A]).map(o => Row(CatalystTypeConverters.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -904,7 +904,22 @@ class DataFrame private[sql](
    */
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.createDataFrame(
-      queryExecution.toRdd.map(_.copy()).repartition(numPartitions), schema)
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
+      schema, needsConversion = false)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   * @group rdd
+   */
+  override def coalesce(numPartitions: Int): DataFrame = {
+    sqlContext.createDataFrame(
+      queryExecution.toRdd.coalesce(numPartitions),
+      schema,
+      needsConversion = false)
   }
 
   /**
@@ -952,13 +967,18 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s.
+   * Represents the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s. Note that the RDD is
+   * memoized. Once called, it won't change even if you change any query planning related Spark SQL
+   * configurations (e.g. `spark.sql.shuffle.partitions`).
    * @group rdd
    */
-  def rdd: RDD[Row] = {
+  lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
+    queryExecution.executedPlan.execute().mapPartitions { rows =>
+      val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      rows.map(converter(_).asInstanceOf[Row])
+    }
   }
 
   /**
@@ -974,8 +994,8 @@ class DataFrame private[sql](
   def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
-   * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-   * table is tied to the [[SQLContext]] that was used to create this DataFrame.
+   * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
+   * temporary table is tied to the [[SQLContext]] that was used to create this DataFrame.
    *
    * @group basic
    */
@@ -1203,7 +1223,7 @@ class DataFrame private[sql](
   @Experimental
   def insertInto(tableName: String, overwrite: Boolean): Unit = {
     sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, logicalPlan, overwrite)).toRdd
+      Map.empty, logicalPlan, overwrite, ifNotExists = false)).toRdd
   }
 
   /**
@@ -1250,7 +1270,7 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
    * If you pass `true` for `allowExisting`, it will drop any table with the
    * given name; if you pass `false`, it will throw if the table already
@@ -1274,7 +1294,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Save this RDD to a JDBC database at `url` under the table name `table`.
+   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
    * Assumes the table already exists and has a compatible schema.  If you
    * pass `true` for `overwrite`, it will `TRUNCATE` the table before
    * performing the `INSERT`s.

@@ -60,6 +60,13 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   private type CommittersByStageMap = mutable.Map[StageId, mutable.Map[PartitionId, TaskAttemptId]]
 
   /**
+   * Returns whether the OutputCommitCoordinator's internal data structures are all empty.
+   */
+  def isEmpty: Boolean = {
+    authorizedCommittersByStage.isEmpty
+  }
+
+  /**
    * Called by tasks to ask whether they can commit their output to HDFS.
    *
    * If a task attempt has been authorized to commit, then all other attempts to commit the same
@@ -113,9 +120,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
         logInfo(
           s"Task was denied committing, stage: $stage, partition: $partition, attempt: $attempt")
       case otherReason =>
-        logDebug(s"Authorized committer $attempt (stage=$stage, partition=$partition) failed;" +
-          s" clearing lock")
-        authorizedCommitters.remove(partition)
+        if (authorizedCommitters.get(partition).exists(_ == attempt)) {
+          logDebug(s"Authorized committer $attempt (stage=$stage, partition=$partition) failed;" +
+            s" clearing lock")
+          authorizedCommitters.remove(partition)
+        }
     }
   }
 

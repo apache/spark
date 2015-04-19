@@ -47,7 +47,7 @@ COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
 # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
 SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
-TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
+TESTS_TIMEOUT="150m" # format: http://linux.die.net/man/1/timeout
 
 # Array to capture all tests to run on the pull request. These tests are held under the
 #+ dev/tests/ directory.
@@ -161,6 +161,10 @@ pr_message=""
 # Ensure we save off the current HEAD to revert to
 current_pr_head="`git rev-parse HEAD`"
 
+echo "HEAD:  `git rev-parse HEAD`"
+echo "GHPRB: $ghprbActualCommit"
+echo "SHA1:  $sha1"
+
 # Run pull request tests
 for t in "${PR_TESTS[@]}"; do
   this_test="${FWDIR}/dev/tests/${t}.sh"
@@ -210,6 +214,8 @@ done
       failing_test="Spark unit tests"
     elif [ "$test_result" -eq "$BLOCK_PYSPARK_UNIT_TESTS" ]; then
       failing_test="PySpark unit tests"
+    elif [ "$test_result" -eq "$BLOCK_SPARKR_UNIT_TESTS" ]; then
+      failing_test="SparkR unit tests"
     else
       failing_test="some tests"
     fi
