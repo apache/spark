@@ -82,7 +82,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {
       override protected def onReceive(event: JobGeneratorEvent): Unit = processEvent(event)
 
-      override protected def onError(e: Throwable): Unit = logError("Error in job generator", e)
+      override protected def onError(e: Throwable): Unit = {
+        jobScheduler.reportError("Error in job generator", e)
+      }
     }
     eventLoop.start()
 
