@@ -326,10 +326,15 @@ private[spark] class Client(
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
-    if (System.getenv("PYSPARK_ARCHIVES_PATH") != null) {
-      val pythonPath = System.getenv("PYSPARK_ARCHIVES_PATH").split(",").map(
+    // If PYSPARK_ARCHIVES_PATH is in the user environment, set PYTHONPATH to be passed
+    // on to the ApplicationMaster and the executors.
+    sys.env.get("PYSPARK_ARCHIVES_PATH").map { archives =>
+      // archives will be distributed to each machine's working directory, so strip the
+      // path prefix
+      val pythonPath = archives.split(",").map(
         p => (new Path(p)).getName).mkString(":")
       env("PYTHONPATH") = pythonPath
+      sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
     }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*

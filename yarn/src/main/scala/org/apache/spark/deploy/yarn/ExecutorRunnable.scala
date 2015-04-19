@@ -285,10 +285,6 @@ class ExecutorRunnable(
       YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
     }
 
-    if (System.getenv("PYTHONPATH") != null) {
-      env("PYTHONPATH") = System.getenv("PYTHONPATH")
-    }
-
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)

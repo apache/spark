@@ -328,8 +328,12 @@ object SparkSubmit {
       }
     }
 
-    if (args.isPython && System.getenv("PYSPARK_ARCHIVES_PATH") != null) {
-      args.files = mergeFileLists(args.files, System.getenv("PYSPARK_ARCHIVES_PATH"))
+    // In yarn mode for a python app, if PYSPARK_ARCHIVES_PATH is in the user environment
+    // add pyspark archives to files that can be distributed with the job
+    if (args.isPython && clusterManager == YARN){
+      sys.env.get("PYSPARK_ARCHIVES_PATH").map { archives =>
+        args.files = mergeFileLists(args.files, Utils.resolveURIs(archives))
+      }
     }
 
     // If we're running a R app, set the main class to our specific R runner
