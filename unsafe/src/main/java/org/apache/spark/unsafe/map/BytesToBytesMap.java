@@ -27,7 +27,12 @@ import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 
-import java.lang.IllegalStateException;import java.lang.Long;import java.lang.Object;import java.lang.Override;import java.lang.UnsupportedOperationException;import java.util.Iterator;
+import java.lang.IllegalStateException;
+import java.lang.Long;
+import java.lang.Object;
+import java.lang.Override;
+import java.lang.UnsupportedOperationException;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -198,7 +203,6 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
-
     final int hashcode = HASHER.hashUnsafeWords(keyBaseObject, keyBaseOffset, keyRowLengthBytes);
     long pos = ((long) hashcode) & mask;
     long step = 1;
@@ -210,7 +214,7 @@ public final class BytesToBytesMap {
         long stored = longArray.get(pos * 2 + 1);
         if (((int) (stored & MASK_LONG_LOWER_32_BITS)) == hashcode) {
           // Full hash code matches.  Let's compare the keys for equality.
-          loc.with(pos, hashcode, false);
+          loc.with(pos, hashcode, true);
           if (loc.getKeyLength() == keyRowLengthBytes) {
             final MemoryLocation keyAddress = loc.getKeyAddress();
             final Object storedKeyBaseObject = keyAddress.getBaseObject();
@@ -223,7 +227,7 @@ public final class BytesToBytesMap {
               keyRowLengthBytes
             );
             if (areEqual) {
-              return loc.with(pos, hashcode, true);
+              return loc;
             }
           }
         }
@@ -239,7 +243,7 @@ public final class BytesToBytesMap {
   public final class Location {
     /** An index into the hash map's Long array */
     private long pos;
-    /** True if this location points to a position where a key is defined, felase otherwise */
+    /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
     /**
      * The hashcode of the most recent key passed to
@@ -249,11 +253,36 @@ public final class BytesToBytesMap {
     private int keyHashcode;
     private final MemoryLocation keyMemoryLocation = new MemoryLocation();
     private final MemoryLocation valueMemoryLocation = new MemoryLocation();
+    private long keyLength;
+    private long valueLength;
+
+    private void updateAddressesAndSizes(long fullKeyAddress, long offsetFromKeyToValue) {
+      if (inHeap) {
+        final Object page = getPage(fullKeyAddress);
+        final long keyOffsetInPage = getOffsetInPage(fullKeyAddress);
+        keyMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8);
+        valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + offsetFromKeyToValue);
+        keyLength = PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
+        valueLength =
+          PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + offsetFromKeyToValue);
+      } else {
+        keyMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8);
+        valueMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8 + offsetFromKeyToValue);
+        keyLength = PlatformDependent.UNSAFE.getLong(fullKeyAddress);
+        valueLength = PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
+      }
+    }
 
     Location with(long pos, int keyHashcode, boolean isDefined) {
       this.pos = pos;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
+      if (isDefined) {
+        final long fullKeyAddress = longArray.get(pos * 2);
+        final long offsetFromKeyToValue =
+          (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
+        updateAddressesAndSizes(fullKeyAddress, offsetFromKeyToValue);
+      }
       return this;
     }
 
@@ -275,6 +304,7 @@ public final class BytesToBytesMap {
     }
 
     private long getOffsetInPage(long fullKeyAddress) {
+      assert (inHeap);
       return (fullKeyAddress & MASK_LONG_LOWER_51_BITS);
     }
 
@@ -285,13 +315,7 @@ public final class BytesToBytesMap {
      * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
      */
     public MemoryLocation getKeyAddress() {
-      final long fullKeyAddress = longArray.get(pos * 2);
-      if (inHeap) {
-        keyMemoryLocation.setObjAndOffset(
-          getPage(fullKeyAddress), getOffsetInPage(fullKeyAddress) + 8);
-      } else {
-        keyMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8);
-      }
+      assert (isDefined);
       return keyMemoryLocation;
     }
 
@@ -300,13 +324,8 @@ public final class BytesToBytesMap {
      * Unspecified behavior if the key is not defined.
      */
     public long getKeyLength() {
-      final long fullKeyAddress = longArray.get(pos * 2);
-      if (inHeap) {
-        return PlatformDependent.UNSAFE.getLong(
-          getPage(fullKeyAddress), getOffsetInPage(fullKeyAddress));
-      } else {
-        return PlatformDependent.UNSAFE.getLong(fullKeyAddress);
-      }
+      assert (isDefined);
+      return keyLength;
     }
 
     /**
@@ -316,18 +335,7 @@ public final class BytesToBytesMap {
      * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
      */
     public MemoryLocation getValueAddress() {
-      // The relative offset from the key position to the value position was stored in the upper 32
-      // bits of the value long:
-      final long offsetFromKeyToValue = (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
-      final long fullKeyAddress = longArray.get(pos * 2);
-      if (inHeap) {
-        valueMemoryLocation.setObjAndOffset(
-          getPage(fullKeyAddress),
-          getOffsetInPage(fullKeyAddress) + 8 + offsetFromKeyToValue
-        );
-      } else {
-        valueMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8 + offsetFromKeyToValue);
-      }
+      assert (isDefined);
       return valueMemoryLocation;
     }
 
@@ -336,18 +344,8 @@ public final class BytesToBytesMap {
      * Unspecified behavior if the key is not defined.
      */
     public long getValueLength() {
-      // The relative offset from the key position to the value position was stored in the upper 32
-      // bits of the value long:
-        final long offsetFromKeyToValue = (longArray.get(pos * 2 + 1) & ~MASK_LONG_LOWER_32_BITS) >>> 32;
-      final long fullKeyAddress = longArray.get(pos * 2);
-      if (inHeap) {
-        return PlatformDependent.UNSAFE.getLong(
-          getPage(fullKeyAddress),
-          getOffsetInPage(fullKeyAddress) + offsetFromKeyToValue
-        );
-      } else {
-        return PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
-      }
+      assert (isDefined);
+      return valueLength;
     }
 
     /**
@@ -439,6 +437,8 @@ public final class BytesToBytesMap {
       final long storedValueOffsetAndKeyHashcode =
         (relativeOffsetFromKeyToValue << 32) | (keyHashcode & MASK_LONG_LOWER_32_BITS);
       longArray.set(pos * 2 + 1, storedValueOffsetAndKeyHashcode);
+      updateAddressesAndSizes(storedKeyAddress, relativeOffsetFromKeyToValue);
+      isDefined = true;
       if (size > growthThreshold) {
         growAndRehash();
       }

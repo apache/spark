@@ -204,7 +204,13 @@ public abstract class AbstractTestBytesToBytesMap {
             BYTE_ARRAY_OFFSET,
             value.length
           );
+          // After calling storeKeyAndValue, the following should be true, even before calling
+          // lookup():
           Assert.assertTrue(loc.isDefined());
+          Assert.assertEquals(key.length, loc.getKeyLength());
+          Assert.assertEquals(value.length, loc.getValueLength());
+          Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), key.length));
+          Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), value.length));
         }
       }
 
