@@ -59,6 +59,16 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
   def write(value: Any)
 
   /**
+   * Writes an object representing the key of a key-value pair.
+   */
+  def writeKey(key: Any)
+
+  /**
+   * Writes an object representing the value of a key-value pair..
+   */
+  def writeValue(value: Any)
+
+  /**
    * Returns the file segment of committed data that this Writer has written.
    * This is only valid after commitAndClose() has been called.
    */
@@ -209,6 +219,34 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     objOut.writeObject(value)
+    numRecordsWritten += 1
+    writeMetrics.incShuffleRecordsWritten(1)
+
+    if (numRecordsWritten % 32 == 0) {
+      updateBytesWritten()
+    }
+  }
+
+  override def writeKey(key: Any) {
+    if (!initialized) {
+      open()
+    }
+
+    objOut.writeKey(key)
+    numRecordsWritten += 1
+    writeMetrics.incShuffleRecordsWritten(1)
+
+    if (numRecordsWritten % 32 == 0) {
+      updateBytesWritten()
+    }
+  }
+
+  override def writeValue(value: Any) {
+    if (!initialized) {
+      open()
+    }
+
+    objOut.writeValue(value)
     numRecordsWritten += 1
     writeMetrics.incShuffleRecordsWritten(1)
 
