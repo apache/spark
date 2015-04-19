@@ -18,10 +18,12 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
+import org.apache.spark.ml.impl.estimator.PredictionModel
 import org.apache.spark.ml.impl.tree._
 import org.apache.spark.ml.param.{Params, ParamMap}
-import org.apache.spark.ml.tree.{DecisionTreeModel, Node}
+import org.apache.spark.ml.prediction.impl.{PredictionModel, Predictor}
+import org.apache.spark.ml.prediction.tree.impl.{TreeRegressorParams, DecisionTreeParams}
+import org.apache.spark.ml.prediction.tree.{DecisionTreeModel, Node}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint

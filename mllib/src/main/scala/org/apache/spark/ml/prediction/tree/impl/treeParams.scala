@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl.tree
+package org.apache.spark.ml.prediction.tree.impl
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.prediction.impl.PredictorParams
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
+import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini,
   Impurity => OldImpurity, Variance => OldVariance}
 
 
@@ -117,7 +117,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this.asInstanceOf[this.type]
+    this
   }
 
   /** @group getParam */
