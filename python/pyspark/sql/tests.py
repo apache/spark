@@ -466,7 +466,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(2**71), LongType())
 
     def test_filter_with_datetime(self):
-        time = datetime.datetime(2015, 4, 17, 23, 01, 02, 3000)
+        time = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000)
         date = time.date()
         row = Row(date=date, time=time)
         df = self.sqlCtx.createDataFrame([row])
