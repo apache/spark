@@ -223,6 +223,8 @@ def webserver(args):
 
 
 def master(args):
+    print(settings.HEADER)
+    log_to_stdout()
     job = jobs.MasterJob(args.dag_id, args.subdir)
     job.run()
 
