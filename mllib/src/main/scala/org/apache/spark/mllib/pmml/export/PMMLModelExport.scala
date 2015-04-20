@@ -19,11 +19,10 @@ package org.apache.spark.mllib.pmml.export
 
 import java.text.SimpleDateFormat
 import java.util.Date
+
 import scala.beans.BeanProperty
-import org.dmg.pmml.Application
-import org.dmg.pmml.Header
-import org.dmg.pmml.PMML
-import org.dmg.pmml.Timestamp
+
+import org.dmg.pmml.{Application, Header, PMML, Timestamp}
 
 private[mllib] trait PMMLModelExport {
   
@@ -31,19 +30,18 @@ private[mllib] trait PMMLModelExport {
    * Holder of the exported model in PMML format
    */
   @BeanProperty
-  val pmml: PMML = new PMML();
+  val pmml: PMML = new PMML
 
-  setHeader(pmml);
+  setHeader(pmml)
   
-  private def setHeader(pmml : PMML): Unit = {
-    val version = getClass().getPackage().getImplementationVersion()
+  private def setHeader(pmml: PMML): Unit = {
+    val version = getClass.getPackage.getImplementationVersion
     val app = new Application().withName("Apache Spark MLlib").withVersion(version)
     val timestamp = new Timestamp()
-        .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+      .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
     val header = new Header()
-        .withApplication(app)
-        .withTimestamp(timestamp)
+      .withApplication(app)
+      .withTimestamp(timestamp)
     pmml.setHeader(header)
-  } 
-  
+  }
 }

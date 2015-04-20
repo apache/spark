@@ -31,25 +31,24 @@ private[mllib] object PMMLModelExportFactory {
    * taking as input the machine learning model (for example KMeansModel).
    */
   def createPMMLModelExport(model: Any): PMMLModelExport = {
-    return model match{
-        case kmeans: KMeansModel => 
-          new KMeansPMMLModelExport(kmeans)
-        case linearRegression: LinearRegressionModel => 
-          new GeneralizedLinearPMMLModelExport(linearRegression, "linear regression")
-        case ridgeRegression: RidgeRegressionModel => 
-          new GeneralizedLinearPMMLModelExport(ridgeRegression, "ridge regression")
-        case lassoRegression: LassoModel => 
-          new GeneralizedLinearPMMLModelExport(lassoRegression, "lasso regression")
-        case svm: SVMModel => 
-          new GeneralizedLinearPMMLModelExport(
-              svm, 
-              "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
-        case logisticRegression: LogisticRegressionModel => 
-          new LogisticRegressionPMMLModelExport(logisticRegression, "logistic regression")
-        case _ => 
-          throw new IllegalArgumentException("PMML Export not supported for model: " 
-              + model.getClass)
-     }
+    model match {
+      case kmeans: KMeansModel =>
+        new KMeansPMMLModelExport(kmeans)
+      case linear: LinearRegressionModel =>
+        new GeneralizedLinearPMMLModelExport(linear, "linear regression")
+      case ridge: RidgeRegressionModel =>
+        new GeneralizedLinearPMMLModelExport(ridge, "ridge regression")
+      case lasso: LassoModel =>
+        new GeneralizedLinearPMMLModelExport(lasso, "lasso regression")
+      case svm: SVMModel =>
+        new GeneralizedLinearPMMLModelExport(svm,
+          "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
+      case logistic: LogisticRegressionModel =>
+        new LogisticRegressionPMMLModelExport(logistic, "logistic regression")
+      case _ =>
+        throw new IllegalArgumentException(
+          "PMML Export not supported for model: " + model.getClass.getName)
+    }
   }
   
 }
