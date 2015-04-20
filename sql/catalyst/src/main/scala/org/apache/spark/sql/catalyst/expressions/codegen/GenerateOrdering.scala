@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StringType, NumericType}
+import org.apache.spark.sql.types.{BinaryType, StringType, NumericType}
 
 /**
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
@@ -43,6 +43,18 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
       val evalB = expressionEvaluator(order.child)
 
       val compare = order.child.dataType match {
+        case BinaryType =>
+          q"""
+          val x = ${if (order.direction == Ascending) evalA.primitiveTerm else evalB.primitiveTerm}
+          val y = ${if (order.direction != Ascending) evalB.primitiveTerm else evalA.primitiveTerm}
+          var i = 0
+          while (i < x.length && i < y.length) {
+            val res = x(i).compareTo(y(i))
+            if (res != 0) return res
+            i = i+1
+          }
+          return x.length - y.length
+          """
         case _: NumericType =>
           q"""
           val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}

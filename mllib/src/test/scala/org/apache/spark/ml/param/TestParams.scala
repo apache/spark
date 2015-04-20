@@ -17,16 +17,13 @@
 
 package org.apache.spark.ml.param
 
+import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter}
+
 /** A subclass of Params for testing. */
-class TestParams extends Params {
+class TestParams extends Params with HasMaxIter with HasInputCol {
 
-  val maxIter = new IntParam(this, "maxIter", "max number of iterations")
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
-  def getMaxIter: Int = getOrDefault(maxIter)
-
-  val inputCol = new Param[String](this, "inputCol", "input column name")
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
-  def getInputCol: String = getOrDefault(inputCol)
 
   setDefault(maxIter -> 10)
 

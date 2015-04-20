@@ -16,12 +16,14 @@
 #
 
 from pyspark import SparkContext
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 
 __all__ = ['FPGrowth', 'FPGrowthModel']
 
 
 @inherit_doc
+@ignore_unicode_prefix
 class FPGrowthModel(JavaModelWrapper):
 
     """

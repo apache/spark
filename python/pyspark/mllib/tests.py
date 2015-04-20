@@ -72,11 +72,11 @@ class VectorTests(PySparkTestCase):
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
+        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
         jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(str(self.sc._jvm.SerDe.dumps(jvecs)))
+        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):
@@ -412,11 +412,11 @@ class StatTests(PySparkTestCase):
         self.assertEqual(10, len(summary.normL1()))
         self.assertEqual(10, len(summary.normL2()))
 
-        data2 = self.sc.parallelize(xrange(10)).map(lambda x: Vectors.dense(x))
+        data2 = self.sc.parallelize(range(10)).map(lambda x: Vectors.dense(x))
         summary2 = Statistics.colStats(data2)
         self.assertEqual(array([45.0]), summary2.normL1())
         import math
-        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, xrange(10))))
+        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, range(10))))
         self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
 
 
@@ -438,11 +438,11 @@ class VectorUDTTests(PySparkTestCase):
     def test_infer_schema(self):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
-        srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema
+        df = rdd.toDF()
+        schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = srdd.map(lambda p: p.features).collect()
+        vectors = df.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -695,7 +695,7 @@ class ChiSqTestTests(PySparkTestCase):
 
 class SerDeTest(PySparkTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
-        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
         self.assertEqual(_to_java_object_rdd(data).count(), 10)
 
 
@@ -771,7 +771,7 @@ class StandardScalerTests(PySparkTestCase):
 
 if __name__ == "__main__":
     if not _have_scipy:
-        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     unittest.main()
     if not _have_scipy:
-        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")

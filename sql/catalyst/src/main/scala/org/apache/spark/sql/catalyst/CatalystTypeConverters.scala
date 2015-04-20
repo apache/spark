@@ -77,6 +77,9 @@ object CatalystTypeConverters {
       }
       new GenericRowWithSchema(ar, structType)
 
+    case (d: String, _) =>
+      UTF8String(d)
+
     case (d: BigDecimal, _) =>
       Decimal(d)
 
@@ -175,6 +178,11 @@ object CatalystTypeConverters {
         case other => other
       }
 
+      case dataType: StringType => (item: Any) => extractOption(item) match {
+        case s: String => UTF8String(s)
+        case other => other
+      }
+
       case _ =>
         (item: Any) => extractOption(item) match {
           case d: BigDecimal => Decimal(d)
@@ -182,6 +190,26 @@ object CatalystTypeConverters {
           case other => other
         }
     }
+  }
+
+  /**
+   *  Converts Scala objects to catalyst rows / types.
+   *
+   *  Note: This should be called before do evaluation on Row
+   *        (It does not support UDT)
+   *  This is used to create an RDD or test results with correct types for Catalyst.
+   */
+  def convertToCatalyst(a: Any): Any = a match {
+    case s: String => UTF8String(s)
+    case d: java.sql.Date => DateUtils.fromJavaDate(d)
+    case d: BigDecimal => Decimal(d)
+    case d: java.math.BigDecimal => Decimal(d)
+    case seq: Seq[Any] => seq.map(convertToCatalyst)
+    case r: Row => Row(r.toSeq.map(convertToCatalyst): _*)
+    case arr: Array[Any] => arr.toSeq.map(convertToCatalyst).toArray
+    case m: Map[Any, Any] =>
+      m.map { case (k, v) => (convertToCatalyst(k), convertToCatalyst(v)) }.toMap
+    case other => other
   }
 
   /** 
@@ -210,6 +238,9 @@ object CatalystTypeConverters {
 
     case (i: Int, DateType) =>
       DateUtils.toJavaDate(i)
+
+    case (s: UTF8String, StringType) =>
+      s.toString()
 
     case (other, _) =>
       other
@@ -259,6 +290,12 @@ object CatalystTypeConverters {
     case DateType =>
       (item: Any) => item match {
         case i: Int => DateUtils.toJavaDate(i)
+        case other => other
+      }
+
+    case StringType =>
+      (item: Any) => item match {
+        case s: UTF8String => s.toString()
         case other => other
       }
 
