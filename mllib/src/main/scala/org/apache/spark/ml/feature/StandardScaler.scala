@@ -33,7 +33,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
   
   /**
    * False by default. Centers the data with mean before scaling. 
-   * It will build a dense output, so this does not work on sparse input and will raise an exception.
+   * It will build a dense output, so this does not work on sparse input 
+   * and will raise an exception.
    * @group param
    */
   val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
