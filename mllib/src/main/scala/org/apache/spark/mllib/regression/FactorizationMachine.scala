@@ -222,7 +222,7 @@ class FMWithSGD(private var stepSize: Double,
 
 
   /**
-   * Create a FMModle from vector.
+   * Create a FMModle from an encoded vector.
    */
   private def createModel(weights: Vector): FMModel = {
 
@@ -377,7 +377,6 @@ class FMGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
 /**
  * :: DeveloperApi ::
  * Updater for L2 regularized problems.
- *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
 class FMUpdater(val k0: Boolean, val k1: Boolean, val k2: Int,
