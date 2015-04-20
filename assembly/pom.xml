@@ -36,6 +36,9 @@
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
     <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
+    <!-- shaded artifacts are generated between shade and ant zip -->
+    <spark.shaded.dir>${project.build.directory}/${spark.jar.dir}/shaded</spark.shaded.dir>
+    <spark.shaded.jar>${spark.shaded.dir}/${spark.jar.basename}</spark.shaded.jar>
   </properties>
 
   <dependencies>
@@ -98,7 +101,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${spark.jar}</outputFile>
+          <outputFile>${spark.shaded.jar}</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -137,6 +140,30 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- ANTRUN plugin takes the shaded JAR and repackages it without zip64 packaging.
+       it must run after the shade; the ordering in the POM is critical -->
+      <plugin>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>${antrun.plugin.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <zip
+                  destfile="${spark.jar}"
+                  encoding="UTF-8"
+                  zip64mode="never">
+                  <zipfileset src="${spark.shaded.jar}" />
+                </zip>
+              </target>
             </configuration>
           </execution>
         </executions>
