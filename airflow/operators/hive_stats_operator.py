@@ -7,7 +7,6 @@ from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
 
-
 class HiveStatsCollectionOperator(BaseOperator):
     """
     Gathers partition statistics using a dynmically generated Presto
@@ -35,7 +34,9 @@ class HiveStatsCollectionOperator(BaseOperator):
     :type col_blacklist: list
     :param assignment_func: a function that receives a column name and
         a type, and returns a dict of metric names and an Presto expressions.
-        If None is returned, the global defaults are applied.
+        If None is returned, the global defaults are applied. If an
+        empty dictionary is returned, no stats are computed for that
+        column.
     :type assignment_func: function
     """
 
@@ -101,7 +102,9 @@ class HiveStatsCollectionOperator(BaseOperator):
             d = {}
             if self.assignment_func:
                 d = self.assignment_func(col, col_type)
-            if not d:
+                if d is None:
+                    d = self.get_default_exprs(col, col_type)
+            else:
                 d = self.get_default_exprs(col, col_type)
             exprs.update(d)
         exprs.update(self.extra_exprs)
