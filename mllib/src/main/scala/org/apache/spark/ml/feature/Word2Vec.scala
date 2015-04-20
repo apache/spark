@@ -183,12 +183,15 @@ class Word2VecModel private[ml] (
 
     if (map(codeCol) != "") {
       val word2vec: String => Vector = (word) => wordVectors.transform(word)
-      tmpData = tmpData.withColumn(map(codeCol), callUDF(word2vec, new VectorUDT, col(map(inputCol))))
+      tmpData = tmpData.withColumn(map(codeCol),
+        callUDF(word2vec, new VectorUDT, col(map(inputCol))))
       numColsOutput += 1
     }
 
     if (map(synonymsCol) != "" & map(numSynonyms) > 0) {
-      val findSynonyms = udf { (word: String) => wordVectors.findSynonyms(word, map(numSynonyms)).toMap : Map[String, Double] }
+      val findSynonyms = udf { (word: String) =>
+        wordVectors.findSynonyms(word, map(numSynonyms)).toMap : Map[String, Double]
+      }
       tmpData = tmpData.withColumn(map(synonymsCol), findSynonyms(col(map(inputCol))))
       numColsOutput += 1
     }
@@ -221,7 +224,8 @@ class Word2VecModel private[ml] (
         s"Output column ${map(synonymsCol)} already exists.")
       require(map(numSynonyms) > 0,
         s"Number of synonyms should larger than 0")
-      outputFields = outputFields :+ StructField(map(synonymsCol), MapType(StringType, DoubleType), false)
+      outputFields = outputFields :+
+        StructField(map(synonymsCol), MapType(StringType, DoubleType), false)
     }
 
     StructType(outputFields)
