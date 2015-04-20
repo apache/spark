@@ -184,15 +184,15 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group expertGetParam */
   def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 
-  /**
-   * Create a Strategy instance to use with the old API.
-   * NOTE: The caller should set impurity and subsamplingRate (which is set to 1.0,
-   *       the default for single trees).
-   */
+  /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = OldStrategy.defaultStategy(OldAlgo.Classification)
+      numClasses: Int,
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity,
+      subsamplingRate: Double): OldStrategy = {
+    val strategy = OldStrategy.defaultStategy(oldAlgo)
+    strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
     strategy.maxBins = getMaxBins
     strategy.maxDepth = getMaxDepth
@@ -202,7 +202,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     strategy.useNodeIdCache = getCacheNodeIds
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
-    strategy.subsamplingRate = 1.0 // default for individual trees
+    strategy.subsamplingRate = subsamplingRate
     strategy
   }
 }

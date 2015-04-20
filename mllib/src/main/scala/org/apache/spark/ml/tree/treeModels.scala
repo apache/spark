@@ -69,6 +69,9 @@ trait DecisionTreeModel {
 @AlphaComponent
 trait TreeEnsembleModel {
 
+  // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
+  //       DecisionTreeModel.
+
   /** Trees in this ensemble */
   def getTrees: Array[DecisionTreeModel]
 
