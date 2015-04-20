@@ -18,45 +18,44 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Estimator
-import org.apache.spark.ml.Model
-import org.apache.spark.ml.param.HasInputCol
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{HasInputCol, ParamMap, Params, _}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * Params for [[StandardScaler]] and [[StandardScalerModel]].
+ * Params for [[Word2Vec]] and [[Word2VecModel]].
  */
-private[feature] trait Word2VecParams extends Params with HasInputCol with HasMaxIter with HasLearningRate {
+private[feature] trait Word2VecParams extends Params
+  with HasInputCol with HasMaxIter with HasLearningRate {
 
   /**
    * The dimension of the code that you want to transform from words.
    */
-  val vectorSize = new IntParam(this, "vectorSize", "", Some(100))
+  val vectorSize = new IntParam(
+    this, "vectorSize", "the dimension of codes after transforming from words", Some(100))
 
   /** @group getParam */
   def getVectorSize: Int = get(vectorSize)
 
   /**
-   * Number of partitions
+   * Number of partitions for sentences of words.
    */
-  val numPartitions = new IntParam(this, "numPartitions", "", Some(1))
+  val numPartitions = new IntParam(
+    this, "numPartitions", "number of partitions for sentences of words", Some(1))
 
   /** @group getParam */
   def getNumPartitions: Int = get(numPartitions)
 
   /**
-   * The random seed
+   * A random seed to random an initial vector.
    */
-  val seed = new LongParam(this, "seed", "", Some(Utils.random.nextLong()))
+  val seed = new LongParam(
+    this, "seed", "a random seed to random an initial vector", Some(Utils.random.nextLong()))
 
   /** @group getParam */
   def getSeed: Long = get(seed)
@@ -64,7 +63,8 @@ private[feature] trait Word2VecParams extends Params with HasInputCol with HasMa
   /**
    * The minimum count of words that can be kept in training set.
    */
-  val minCount = new IntParam(this, "minCount", "", Some(5))
+  val minCount = new IntParam(
+    this, "minCount", "the minimum count of words to filter words", Some(5))
 
   /** @group getParam */
   def getMinCount: Int = get(minCount)
@@ -96,8 +96,8 @@ private[feature] trait Word2VecParams extends Params with HasInputCol with HasMa
 
 /**
  * :: AlphaComponent ::
- * Standardizes features by removing the mean and scaling to unit variance using column summary
- * statistics on the samples in the training set.
+ * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
+ * natural language processing or machine learning process.
  */
 @AlphaComponent
 class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
@@ -122,8 +122,6 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
 
   /** @group setParam */
   def setMinCount(value: Int) = set(minCount, value)
-
-  type S <: Iterable[String]
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): Word2VecModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -153,7 +151,7 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
 
 /**
  * :: AlphaComponent ::
- * Model fitted by [[StandardScaler]].
+ * Model fitted by [[Word2Vec]].
  */
 @AlphaComponent
 class Word2VecModel private[ml] (
@@ -174,6 +172,12 @@ class Word2VecModel private[ml] (
   /** @group setParam */
   def setCodeCol(value: String): this.type = set(codeCol, value)
 
+  /**
+   * The transforming process of `Word2Vec` model has two approaches - 1. Transform a word of
+   * `String` into a code of `Vector`; 2. Find n (given by you) synonyms of a given word.
+   *
+   * Note. Currently we only support finding synonyms for word of `String`, not `Vector`.
+   */
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
@@ -189,6 +193,7 @@ class Word2VecModel private[ml] (
     }
 
     if (map(synonymsCol) != "" & map(numSynonyms) > 0) {
+      // TODO We will add finding synonyms for code of `Vector`.
       val findSynonyms = udf { (word: String) =>
         wordVectors.findSynonyms(word, map(numSynonyms)).toMap : Map[String, Double]
       }
@@ -216,7 +221,7 @@ class Word2VecModel private[ml] (
     if (map(codeCol) != "") {
       require(!schema.fieldNames.contains(map(codeCol)),
         s"Output column ${map(codeCol)} already exists.")
-      outputFields = outputFields :+ StructField(map(codeCol), new VectorUDT, false)
+      outputFields = outputFields :+ StructField(map(codeCol), new VectorUDT, nullable = false)
     }
 
     if (map(synonymsCol) != "") {
@@ -225,7 +230,7 @@ class Word2VecModel private[ml] (
       require(map(numSynonyms) > 0,
         s"Number of synonyms should larger than 0")
       outputFields = outputFields :+
-        StructField(map(synonymsCol), MapType(StringType, DoubleType), false)
+        StructField(map(synonymsCol), MapType(StringType, DoubleType), nullable = false)
     }
 
     StructType(outputFields)
