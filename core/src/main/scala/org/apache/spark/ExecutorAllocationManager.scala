@@ -21,7 +21,10 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
+import com.codahale.metrics.{Gauge, MetricRegistry}
+
 import org.apache.spark.scheduler._
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
 
 /**
@@ -143,6 +146,26 @@ private[spark] class ExecutorAllocationManager(
   // Executor that handles the scheduling task.
   private val executor =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
+
+  // Metric source for ExecutorAllocationManager to expose the its internal executor allocation
+  // status to MetricsSystem.
+  private[spark] val executorAllocationManagerSource = new Source {
+    val sourceName = "ExecutorAllocationManager"
+    val metricRegistry = new MetricRegistry()
+
+    private def registerGauge[T](name: String, value: => T, defaultValue: T): Unit = {
+      metricRegistry.register(MetricRegistry.name("executors", name), new Gauge[T] {
+        override def getValue: T = synchronized { Option(value).getOrElse(defaultValue) }
+      })
+    }
+
+    registerGauge("numberExecutorsToAdd", numExecutorsToAdd, 0)
+    registerGauge("numberExecutorsPending", numExecutorsPending, 0)
+    registerGauge("numberExecutorsPendingToRemove", executorsPendingToRemove.size, 0)
+    registerGauge("numberAllExecutors", executorIds.size, 0)
+    registerGauge("numberTargetExecutors", targetNumExecutors(), 0)
+    registerGauge("numberMaxNeededExecutors", maxNumExecutorsNeeded(), 0)
+  }
 
   /**
    * Verify that the settings specified through the config are valid.
