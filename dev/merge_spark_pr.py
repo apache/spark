@@ -30,7 +30,6 @@ import re
 import subprocess
 import sys
 import urllib2
-from collections import deque
 
 try:
     import jira.client
@@ -300,51 +299,42 @@ def standardize_jira_ref(text):
     '[SPARK-1146] [WIP] Vagrant support for Spark'
     >>> standardize_jira_ref("SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
     '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
+    >>> standardize_jira_ref("[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
+    '[SPARK-6250] [SPARK-6146] [SPARK-5911] [SQL] Types are now reserved words in DDL parser.'
+    >>> standardize_jira_ref("Additional information for users building from source code")
+    'Additional information for users building from source code'
     """
+    jira_refs = []
+    components = []
+    
     # If the string is compliant, no need to process any further
     if (re.search(r'^\[SPARK-[0-9]{3,6}\] (\[[A-Z0-9_\s,]+\] )+\S+', text)):
         return text
     
     # Extract JIRA ref(s):
-    jira_refs = deque()
-    pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,6})', re.IGNORECASE)
-    while (pattern.search(text) is not None):
-        ref = pattern.search(text).groups()[0]
-        # Replace any whitespace with a dash & convert to uppercase
+    pattern = re.compile(r'(SPARK[-\s]*[0-9]{3,6})+', re.IGNORECASE)
+    for ref in pattern.findall(text):
+        # Add brackets, replace spaces with a dash, & convert to uppercase
         jira_refs.append('[' + re.sub(r'\s+', '-', ref.upper()) + ']')
         text = text.replace(ref, '')
 
     # Extract spark component(s):
-    components = deque()
     # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
     pattern = re.compile(r'(\[[\w\s,-\.]+\])', re.IGNORECASE)
-    while (pattern.search(text) is not None):
-        component = pattern.search(text).groups()[0]
-        # Convert to uppercase
+    for component in pattern.findall(text):
         components.append(component.upper())
         text = text.replace(component, '')
 
-    # Cleanup remaining symbols:
+    # Cleanup any remaining symbols:
     pattern = re.compile(r'^\W+(.*)', re.IGNORECASE)
     if (pattern.search(text) is not None):
         text = pattern.search(text).groups()[0]
 
     # Assemble full text (JIRA ref(s), module(s), remaining text)
-    if (len(jira_refs) < 1):
-        jira_ref_text = ""
-    jira_ref_text = ' '.join(jira_refs).strip()
-    if (len(components) < 1):
-        components = ""
-    component_text = ' '.join(components).strip()
+    clean_text = ' '.join(jira_refs).strip() + " " + ' '.join(components).strip() + " " + text.strip()
     
-    if (len(jira_ref_text) < 1 and len(component_text) < 1):
-        clean_text = text.strip()
-    elif (len(jira_ref_text) < 1):
-        clean_text = component_text + ' ' + text.strip()
-    elif (len(component_text) < 1):
-        clean_text = jira_ref_text + ' ' + text.strip()
-    else:
-        clean_text = jira_ref_text + ' ' + component_text + ' ' + text.strip()
+    # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were included
+    clean_text = re.sub(r'\s+', ' ', clean_text.strip())
     
     return clean_text
 
@@ -362,6 +352,21 @@ def main():
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
+
+    # Decide whether to use the modified title or not
+    print "I've re-written the title as follows to match the standard format:"
+    print "Original: %s" % pr["title"]
+    print "Modified: %s" % standardize_jira_ref(pr["title"])
+    prompt = "Would you like to use the modified title?"
+    result = raw_input("%s (y/n): " % prompt)
+    if result.lower() == "y":
+        title = standardize_jira_ref(pr["title"])
+        print "Using modified title:"
+    else:
+        title = pr["title"]
+        print "Using original title:"
+    print title
+
     title = standardize_jira_ref(pr["title"])
     body = pr["body"]
     target_ref = pr["base"]["ref"]
