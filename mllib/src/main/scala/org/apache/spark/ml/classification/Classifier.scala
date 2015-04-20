@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.impl.estimator.PredictionModel
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.prediction.impl.{PredictionModel, PredictorParams, Predictor}

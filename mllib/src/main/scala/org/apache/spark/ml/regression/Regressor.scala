@@ -18,8 +18,8 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
-import org.apache.spark.ml.impl.estimator.PredictionModel
 import org.apache.spark.ml.prediction.impl.{PredictionModel, PredictorParams, Predictor}
+
 
 /**
  * :: DeveloperApi ::

@@ -44,6 +44,13 @@ import org.apache.spark.sql.{SQLContext, DataFrame}
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
  * }}}
+ * Note that Decision Trees can take a large amount of memory.  If the run-example command above
+ * fails, try running via spark-submit and specifying the amount of memory as at least 1g.
+ * For local mode, run
+ * {{{
+ * ./bin/spark-submit --class org.apache.spark.examples.ml.DecisionTreeExample --driver-memory 1g
+ *   [examples JAR path] [options]
+ * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object DecisionTreeExample {

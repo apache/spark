@@ -18,8 +18,6 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.impl.estimator.PredictionModel
-import org.apache.spark.ml.impl.tree._
 import org.apache.spark.ml.param.{Params, ParamMap}
 import org.apache.spark.ml.prediction.impl.{PredictionModel, Predictor}
 import org.apache.spark.ml.prediction.tree.impl.{TreeRegressorParams, DecisionTreeParams}
