@@ -61,6 +61,9 @@ class MySqlHook(BaseHook):
         A generic way to insert a set of tuples into a table,
         the whole set of inserts is treated as one transaction
         """
+        if target_fields:
+            target_fields = ", ".join(target_fields)
+            target_fields = "({})".format(target_fields)
         conn = self.get_conn()
         cur = conn.cursor()
         for row in rows:
@@ -73,9 +76,6 @@ class MySqlHook(BaseHook):
                 else:
                     l.append(str(cell))
             values = tuple(l)
-            if target_fields:
-                target_fields = ", ".join(target_fields)
-                target_fields = "({})".format(target_fields)
             sql = "INSERT INTO {0} {1} VALUES ({2});".format(
                 table,
                 target_fields,
