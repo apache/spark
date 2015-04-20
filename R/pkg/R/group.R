@@ -17,7 +17,7 @@
 
 # group.R - GroupedData class and methods implemented in S4 OO classes
 
-#' @include generics.R jobj.R SQLTypes.R column.R
+#' @include generics.R jobj.R schema.R column.R
 NULL
 
 setOldClass("jobj")

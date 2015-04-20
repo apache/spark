@@ -230,6 +230,10 @@ setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") }
 
 ############ Binary Functions #############
 
+#' @rdname cartesian
+#' @export
+setGeneric("cartesian", function(x, other) { standardGeneric("cartesian") })
+
 #' @rdname countByKey
 #' @export
 setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
@@ -237,6 +241,11 @@ setGeneric("countByKey", function(x) { standardGeneric("countByKey") })
 #' @rdname flatMapValues
 #' @export
 setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
+
+#' @rdname intersection
+#' @export
+setGeneric("intersection", function(x, other, numPartitions = 1L) {
+  standardGeneric("intersection") })
 
 #' @rdname keys
 #' @export
@@ -250,10 +259,16 @@ setGeneric("lookup", function(x, key) { standardGeneric("lookup") })
 #' @export
 setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
 
+#' @rdname sampleByKey
+#' @export
+setGeneric("sampleByKey",
+           function(x, withReplacement, fractions, seed) {
+             standardGeneric("sampleByKey")
+           })
+
 #' @rdname values
 #' @export
 setGeneric("values", function(x) { standardGeneric("values") })
-
 
 
 ############ Shuffle Functions ############
@@ -330,9 +345,24 @@ setGeneric("rightOuterJoin", function(x, y, numPartitions) { standardGeneric("ri
 
 #' @rdname sortByKey
 #' @export
-setGeneric("sortByKey", function(x, ascending = TRUE, numPartitions = 1L) {
-  standardGeneric("sortByKey")
-})
+setGeneric("sortByKey",
+           function(x, ascending = TRUE, numPartitions = 1L) {
+             standardGeneric("sortByKey")
+           })
+
+#' @rdname subtract
+#' @export
+setGeneric("subtract",
+           function(x, other, numPartitions = 1L) {
+             standardGeneric("subtract")
+           })
+
+#' @rdname subtractByKey
+#' @export
+setGeneric("subtractByKey", 
+           function(x, other, numPartitions = 1L) {
+             standardGeneric("subtractByKey")
+           })
 
 
 ################### Broadcast Variable Methods #################
@@ -356,6 +386,10 @@ setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 #' @rdname explain
 #' @export
 setGeneric("explain", function(x, ...) { standardGeneric("explain") })
+
+#' @rdname except
+#' @export
+setGeneric("except", function(x, y) { standardGeneric("except") })
 
 #' @rdname filter
 #' @export
@@ -433,10 +467,6 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @rdname sortDF
 #' @export
 setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
-
-#' @rdname subtract
-#' @export
-setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
 
 #' @rdname tojson
 #' @export

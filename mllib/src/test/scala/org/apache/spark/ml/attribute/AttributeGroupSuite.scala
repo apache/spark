@@ -44,7 +44,7 @@ class AttributeGroupSuite extends FunSuite {
       group("abc")
     }
     assert(group === AttributeGroup.fromMetadata(group.toMetadataImpl, group.name))
-    assert(group === AttributeGroup.fromStructField(group.toStructField))
+    assert(group === AttributeGroup.fromStructField(group.toStructField()))
   }
 
   test("attribute group without attributes") {
@@ -54,7 +54,7 @@ class AttributeGroupSuite extends FunSuite {
     assert(group0.size === 10)
     assert(group0.attributes.isEmpty)
     assert(group0 === AttributeGroup.fromMetadata(group0.toMetadataImpl, group0.name))
-    assert(group0 === AttributeGroup.fromStructField(group0.toStructField))
+    assert(group0 === AttributeGroup.fromStructField(group0.toStructField()))
 
     val group1 = new AttributeGroup("item")
     assert(group1.name === "item")

@@ -208,7 +208,7 @@ class SQLContext(object):
             raise TypeError("Cannot apply schema to DataFrame")
 
         if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType, but got %s" % schema)
+            raise TypeError("schema should be StructType, but got %s" % type(schema))
 
         return self.createDataFrame(rdd, schema)
 
@@ -281,7 +281,7 @@ class SQLContext(object):
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
             except Exception:
-                raise ValueError("cannot create an RDD from type: %s" % type(data))
+                raise TypeError("cannot create an RDD from type: %s" % type(data))
         else:
             rdd = data
 
@@ -293,8 +293,8 @@ class SQLContext(object):
         if isinstance(schema, (list, tuple)):
             first = rdd.first()
             if not isinstance(first, (list, tuple)):
-                raise ValueError("each row in `rdd` should be list or tuple, "
-                                 "but got %r" % type(first))
+                raise TypeError("each row in `rdd` should be list or tuple, "
+                                "but got %r" % type(first))
             row_cls = Row(*schema)
             schema = self._inferSchema(rdd.map(lambda r: row_cls(*r)), samplingRatio)
 

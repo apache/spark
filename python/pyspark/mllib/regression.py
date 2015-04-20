@@ -170,7 +170,7 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
     from pyspark.mllib.classification import LogisticRegressionModel
     first = data.first()
     if not isinstance(first, LabeledPoint):
-        raise ValueError("data should be an RDD of LabeledPoint, but got %s" % first)
+        raise TypeError("data should be an RDD of LabeledPoint, but got %s" % type(first))
     if initial_weights is None:
         initial_weights = [0.0] * len(data.first().features)
     if (modelClass == LogisticRegressionModel):
