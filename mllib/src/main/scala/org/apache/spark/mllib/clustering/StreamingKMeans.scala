@@ -160,7 +160,7 @@ class StreamingKMeansModel(
 class StreamingKMeans(
     var k: Int,
     var decayFactor: Double,
-    var timeUnit: String) extends Logging {
+    var timeUnit: String) extends Logging with Serializable {
 
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
 
