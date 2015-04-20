@@ -68,6 +68,7 @@ class HiveStatsCollectionOperator(BaseOperator):
         self.mysql_conn_id = mysql_conn_id
         self.assignment_func = assignment_func
         self.ds = '{{ ds }}'
+        self.dttm = '{{ execution_date.isoformat() }}'
 
     def get_default_exprs(self, col, col_type):
         if col in self.col_blacklist:
@@ -142,6 +143,19 @@ class HiveStatsCollectionOperator(BaseOperator):
 
         logging.info("Pivoting and loading cells into the Airflow db")
         rows = [
-            (self.ds, self.table, part_json) + (r[0][0], r[0][1], r[1])
+            (self.ds, self.dttm, self.table, part_json) +
+            (r[0][0], r[0][1], r[1])
             for r in zip(exprs, row)]
-        mysql.insert_rows(table='hive_stats', rows=rows)
+        mysql.insert_rows(
+            table='hive_stats',
+            rows=rows,
+            target_fields=[
+                'ds',
+                'dttm',
+                'table_name',
+                'partition_repr',
+                'col',
+                'metric',
+                'value',
+            ]
+        )
