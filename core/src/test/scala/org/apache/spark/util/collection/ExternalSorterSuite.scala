@@ -25,7 +25,12 @@ import org.apache.spark._
 
 import scala.util.Random
 
+import org.apache.spark.util.SimpleResourceCleaner
+
 class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
+
+  val dummyCleaner = new SimpleResourceCleaner
+
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
@@ -59,25 +64,25 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     // Both aggregator and ordering
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
-    assert(sorter.iterator.toSeq === Seq())
+    assert(sorter.iterator(dummyCleaner).toSeq === Seq())
     sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(3)), None, None)
-    assert(sorter2.iterator.toSeq === Seq())
+    assert(sorter2.iterator(dummyCleaner).toSeq === Seq())
     sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    assert(sorter3.iterator.toSeq === Seq())
+    assert(sorter3.iterator(dummyCleaner).toSeq === Seq())
     sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), None, None)
-    assert(sorter4.iterator.toSeq === Seq())
+    assert(sorter4.iterator(dummyCleaner).toSeq === Seq())
     sorter4.stop()
   }
 
@@ -98,28 +103,31 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
     sorter.insertAll(elements.iterator)
-    assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter.partitionedIterator(dummyCleaner).map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), None, None)
     sorter2.insertAll(elements.iterator)
-    assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter2.partitionedIterator(dummyCleaner).map(
+      p => (p._1, p._2.toSet)).toSet === expected)
     sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
     sorter3.insertAll(elements.iterator)
-    assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter3.partitionedIterator(dummyCleaner).map(
+      p => (p._1, p._2.toSet)).toSet === expected)
     sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
     sorter4.insertAll(elements.iterator)
-    assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter4.partitionedIterator(dummyCleaner).map(
+      p => (p._1, p._2.toSet)).toSet === expected)
     sorter4.stop()
   }
 
@@ -138,7 +146,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assertDidNotBypassMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
-    val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
+    val iter = sorter.partitionedIterator(dummyCleaner).map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
     assert(iter.next() === (1, List((1, 1))))
     assert(iter.next() === (2, (0 until 100000).map(x => (2, 2)).toList))
@@ -163,7 +171,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assertBypassedMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
-    val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
+    val iter = sorter.partitionedIterator(dummyCleaner).map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
     assert(iter.next() === (1, List((1, 1))))
     assert(iter.next() === (2, (0 until 100000).map(x => (2, 2)).toList))
@@ -338,7 +346,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assertDidNotBypassMergeSort(sorter2)
     sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
-    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    assert(sorter2.iterator(dummyCleaner).toSet === (0 until 100000).map(i => (i, i)).toSet)
     sorter2.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
   }
@@ -361,7 +369,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assertBypassedMergeSort(sorter2)
     sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
-    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    assert(sorter2.iterator(dummyCleaner).toSet === (0 until 100000).map(i => (i, i)).toSet)
     sorter2.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
   }
@@ -458,7 +466,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i / 4, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i / 4, i)).filter(_._1 % 3 == p).toSet)
     }).toSet
@@ -474,7 +482,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
     sorter.insertAll((0 until 100).iterator.map(i => (i / 2, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
     }).toSet
@@ -490,7 +498,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
     }).toSet
@@ -507,7 +515,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
     }).toSet
@@ -524,7 +532,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100).iterator.map(i => (i, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
     }).toSeq
@@ -541,7 +549,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
-    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
+    val results = sorter.partitionedIterator(dummyCleaner).map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
     }).toSeq
@@ -595,7 +603,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     // Avoid map.size or map.iterator.length because this destructively sorts the underlying map
     var count = 0
 
-    val it = sorter.iterator
+    val it = sorter.iterator(dummyCleaner)
     while (it.hasNext) {
       val kv = it.next()
       val expectedValue = ArrayBuffer[String](collisionPairsMap.getOrElse(kv._1, kv._1))
@@ -618,7 +626,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val toInsert = for (i <- 1 to 10; j <- 1 to 10000) yield (FixedHashObject(j, j % 2), 1)
     sorter.insertAll(toInsert.iterator)
 
-    val it = sorter.iterator
+    val it = sorter.iterator(dummyCleaner)
     var count = 0
     while (it.hasNext) {
       val kv = it.next()
@@ -645,7 +653,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sorter.insertAll(
       (1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
 
-    val it = sorter.iterator
+    val it = sorter.iterator(dummyCleaner)
     while (it.hasNext) {
       // Should not throw NoSuchElementException
       it.next()
@@ -674,7 +682,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       (null.asInstanceOf[String], null.asInstanceOf[String])
     ))
 
-    val it = sorter.iterator
+    val it = sorter.iterator(dummyCleaner)
     while (it.hasNext) {
       // Should not throw NullPointerException
       it.next()
@@ -737,7 +745,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       None, None, Some(wrongOrdering), None)
     val thrown = intercept[IllegalArgumentException] {
       sorter1.insertAll(testData.iterator.map(i => (i, i)))
-      sorter1.iterator
+      sorter1.iterator(dummyCleaner)
     }
 
     assert(thrown.getClass() === classOf[IllegalArgumentException])
@@ -760,7 +768,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
 
     // To validate the hash ordering of key
     var minKey = Int.MinValue
-    sorter2.iterator.foreach { case (k, v) =>
+    sorter2.iterator(dummyCleaner).foreach { case (k, v) =>
       val h = k.hashCode()
       assert(h >= minKey)
       minKey = h

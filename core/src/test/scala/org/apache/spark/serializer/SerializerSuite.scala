@@ -14,22 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.serializer
 
-package org.apache.spark.shuffle
+import java.io.EOFException
 
-import org.apache.spark.util.ResourceCleaner
+import scala.reflect.ClassTag
 
-/**
- * Obtained inside a reduce task to read combined records from the mappers.
- */
-private[spark] trait ShuffleReader[K, C] {
-  /** Read the combined key-values for this reduce task */
-  def read(resourceCleaner: ResourceCleaner): Iterator[Product2[K, C]]
+import org.scalatest.{FunSuite, Matchers}
 
-  /**
-   * Close this reader.
-   * TODO: Add this back when we make the ShuffleReader a developer API that others can implement
-   * (at which point this will likely be necessary).
-   */
-  // def stop(): Unit
+class SerializerSuite extends FunSuite with Matchers {
+  test("DeserializationStream closes input at end") {
+    val in = new IntDeserializationStream(2)
+
+    in.asIterator.toArray
+    // check that it actually closes the input
+    in.closed should be (true)
+  }
+}
+
+class IntDeserializationStream(max: Int) extends DeserializationStream {
+  var closed = false
+  var next = 0
+  override def readObject[T: ClassTag](): T = {
+    if (next > max) {
+      throw new EOFException()
+    }
+    val n = next
+    next +=1
+    n.asInstanceOf[T]
+  }
+
+  override def close(): Unit = {
+    closed = true
+  }
 }

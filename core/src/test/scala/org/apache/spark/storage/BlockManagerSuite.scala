@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.ByteArrayOutputStream
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
@@ -53,6 +54,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
+  val dummyCleaner = new SimpleResourceCleaner
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer.mb", "1")
@@ -159,9 +161,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
@@ -171,8 +173,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     // Drop a1 and a2 from memory; this should be reported back to the master
     store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
     store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
-    assert(store.getSingle("a1") === None, "a1 not removed from store")
-    assert(store.getSingle("a2") === None, "a2 not removed from store")
+    assert(store.getSingle("a1", dummyCleaner) === None, "a1 not removed from store")
+    assert(store.getSingle("a2", dummyCleaner) === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
     assert(master.getLocations("a2").size === 0, "master did not remove a2")
   }
@@ -208,9 +210,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val memStatus = master.getMemoryStatus.head._2
     assert(memStatus._1 == 20000L, "total memory " + memStatus._1 + " should equal 20000")
     assert(memStatus._2 <= 12000L, "remaining memory " + memStatus._2 + " should <= 12000")
-    assert(store.getSingle("a1-to-remove").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2-to-remove").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3-to-remove").isDefined, "a3 was not in store")
+    assert(store.getSingle("a1-to-remove", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.getSingle("a2-to-remove", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3-to-remove", dummyCleaner).isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
@@ -223,15 +225,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     master.removeBlock("a3-to-remove")
 
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a1-to-remove") should be (None)
+      store.getSingle("a1-to-remove", dummyCleaner) should be (None)
       master.getLocations("a1-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a2-to-remove") should be (None)
+      store.getSingle("a2-to-remove", dummyCleaner) should be (None)
       master.getLocations("a2-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a3-to-remove") should not be (None)
+      store.getSingle("a3-to-remove", dummyCleaner) should not be (None)
       master.getLocations("a3-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
@@ -253,24 +255,24 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     master.removeRdd(0, blocking = false)
 
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle(rdd(0, 0)) should be (None)
+      store.getSingle(rdd(0, 0), dummyCleaner) should be (None)
       master.getLocations(rdd(0, 0)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle(rdd(0, 1)) should be (None)
+      store.getSingle(rdd(0, 1), dummyCleaner) should be (None)
       master.getLocations(rdd(0, 1)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("nonrddblock") should not be (None)
+      store.getSingle("nonrddblock", dummyCleaner) should not be (None)
       master.getLocations("nonrddblock") should have size (1)
     }
 
     store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = true)
-    store.getSingle(rdd(0, 0)) should be (None)
+    store.getSingle(rdd(0, 0), dummyCleaner) should be (None)
     master.getLocations(rdd(0, 0)) should have size 0
-    store.getSingle(rdd(0, 1)) should be (None)
+    store.getSingle(rdd(0, 1), dummyCleaner) should be (None)
     master.getLocations(rdd(0, 1)) should have size 0
   }
 
@@ -298,46 +300,46 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
     // verify whether the blocks exist in both the stores
     Seq(driverStore, executorStore).foreach { case s =>
-      s.getLocal(broadcast0BlockId) should not be (None)
-      s.getLocal(broadcast1BlockId) should not be (None)
-      s.getLocal(broadcast2BlockId) should not be (None)
-      s.getLocal(broadcast2BlockId2) should not be (None)
+      s.getLocal(broadcast0BlockId, dummyCleaner) should not be (None)
+      s.getLocal(broadcast1BlockId, dummyCleaner) should not be (None)
+      s.getLocal(broadcast2BlockId, dummyCleaner) should not be (None)
+      s.getLocal(broadcast2BlockId2, dummyCleaner) should not be (None)
     }
 
     // remove broadcast 0 block only from executors
     master.removeBroadcast(0, removeFromMaster = false, blocking = true)
 
     // only broadcast 0 block should be removed from the executor store
-    executorStore.getLocal(broadcast0BlockId) should be (None)
-    executorStore.getLocal(broadcast1BlockId) should not be (None)
-    executorStore.getLocal(broadcast2BlockId) should not be (None)
+    executorStore.getLocal(broadcast0BlockId, dummyCleaner) should be (None)
+    executorStore.getLocal(broadcast1BlockId, dummyCleaner) should not be (None)
+    executorStore.getLocal(broadcast2BlockId, dummyCleaner) should not be (None)
 
     // nothing should be removed from the driver store
-    driverStore.getLocal(broadcast0BlockId) should not be (None)
-    driverStore.getLocal(broadcast1BlockId) should not be (None)
-    driverStore.getLocal(broadcast2BlockId) should not be (None)
+    driverStore.getLocal(broadcast0BlockId, dummyCleaner) should not be (None)
+    driverStore.getLocal(broadcast1BlockId, dummyCleaner) should not be (None)
+    driverStore.getLocal(broadcast2BlockId, dummyCleaner) should not be (None)
 
     // remove broadcast 0 block from the driver as well
     master.removeBroadcast(0, removeFromMaster = true, blocking = true)
-    driverStore.getLocal(broadcast0BlockId) should be (None)
-    driverStore.getLocal(broadcast1BlockId) should not be (None)
+    driverStore.getLocal(broadcast0BlockId, dummyCleaner) should be (None)
+    driverStore.getLocal(broadcast1BlockId, dummyCleaner) should not be (None)
 
     // remove broadcast 1 block from both the stores asynchronously
     // and verify all broadcast 1 blocks have been removed
     master.removeBroadcast(1, removeFromMaster = true, blocking = false)
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      driverStore.getLocal(broadcast1BlockId) should be (None)
-      executorStore.getLocal(broadcast1BlockId) should be (None)
+      driverStore.getLocal(broadcast1BlockId, dummyCleaner) should be (None)
+      executorStore.getLocal(broadcast1BlockId, dummyCleaner) should be (None)
     }
 
     // remove broadcast 2 from both the stores asynchronously
     // and verify all broadcast 2 blocks have been removed
     master.removeBroadcast(2, removeFromMaster = true, blocking = false)
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      driverStore.getLocal(broadcast2BlockId) should be (None)
-      driverStore.getLocal(broadcast2BlockId2) should be (None)
-      executorStore.getLocal(broadcast2BlockId) should be (None)
-      executorStore.getLocal(broadcast2BlockId2) should be (None)
+      driverStore.getLocal(broadcast2BlockId, dummyCleaner) should be (None)
+      driverStore.getLocal(broadcast2BlockId2, dummyCleaner) should be (None)
+      executorStore.getLocal(broadcast2BlockId, dummyCleaner) should be (None)
+      executorStore.getLocal(broadcast2BlockId2, dummyCleaner) should be (None)
     }
     executorStore.stop()
     driverStore.stop()
@@ -350,7 +352,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
@@ -425,17 +427,17 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
-    val list1Get = store.get("list1")
+    val list1Get = store.get("list1", dummyCleaner)
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
     assert(list1Get.get.inputMetrics.bytesRead === list1SizeEstimate)
     assert(list1Get.get.inputMetrics.readMethod === DataReadMethod.Memory)
-    val list2MemoryGet = store.get("list2memory")
+    val list2MemoryGet = store.get("list2memory", dummyCleaner)
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
     assert(list2MemoryGet.get.inputMetrics.bytesRead === list2SizeEstimate)
     assert(list2MemoryGet.get.inputMetrics.readMethod === DataReadMethod.Memory)
-    val list2DiskGet = store.get("list2disk")
+    val list2DiskGet = store.get("list2disk", dummyCleaner)
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
@@ -451,15 +453,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    assert(store.getSingle("a1") === None, "a1 was in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
+    assert(store.getSingle("a1", dummyCleaner) === None, "a1 was in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3") === None, "a3 was in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner) === None, "a3 was in store")
   }
 
   test("in-memory LRU storage with serialization") {
@@ -470,15 +472,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY_SER)
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    assert(store.getSingle("a1") === None, "a1 was in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
+    assert(store.getSingle("a1", dummyCleaner) === None, "a1 was in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3") === None, "a3 was in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner) === None, "a3 was in store")
   }
 
   test("in-memory LRU for partitions of same RDD") {
@@ -491,13 +493,13 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
     // Even though we accessed rdd_0_3 last, it should not have replaced partitions 1 and 2
     // from the same RDD
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
-    assert(store.getSingle(rdd(0, 1)).isDefined, "rdd_0_1 was not in store")
+    assert(store.getSingle(rdd(0, 3), dummyCleaner) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 2), dummyCleaner).isDefined, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 1), dummyCleaner).isDefined, "rdd_0_1 was not in store")
     // Check that rdd_0_3 doesn't replace them even after further accesses
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3), dummyCleaner) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3), dummyCleaner) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3), dummyCleaner) === None, "rdd_0_3 was in store")
   }
 
   test("in-memory LRU for partitions of multiple RDDs") {
@@ -510,7 +512,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(!store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was in store")
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     // Do a get() on rdd_0_2 so that it is the most recently used item
-    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 2), dummyCleaner).isDefined, "rdd_0_2 was not in store")
     // Put in more partitions from RDD 0; they should replace rdd_1_1
     store.putSingle(rdd(0, 3), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(0, 4), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
@@ -534,9 +536,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       store.putSingle("a1", a1, StorageLevel.OFF_HEAP)
       store.putSingle("a2", a2, StorageLevel.OFF_HEAP)
       store.putSingle("a3", a3, StorageLevel.OFF_HEAP)
-      assert(store.getSingle("a3").isDefined, "a3 was in store")
-      assert(store.getSingle("a2").isDefined, "a2 was in store")
-      assert(store.getSingle("a1").isDefined, "a1 was in store")
+      assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was in store")
+      assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was in store")
+      assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was in store")
     } else {
       info("tachyon storage test disabled.")
     }
@@ -550,9 +552,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
     store.putSingle("a2", a2, StorageLevel.DISK_ONLY)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
-    assert(store.getSingle("a2").isDefined, "a2 was in store")
-    assert(store.getSingle("a3").isDefined, "a3 was in store")
-    assert(store.getSingle("a1").isDefined, "a1 was in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was in store")
   }
 
   test("disk and memory storage") {
@@ -563,11 +565,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner) == None, "a1 was in memory store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner).isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with getLocalBytes") {
@@ -580,9 +582,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
     assert(store.getLocalBytes("a2").isDefined, "a2 was not in store")
     assert(store.getLocalBytes("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner) == None, "a1 was in memory store")
     assert(store.getLocalBytes("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner).isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with serialization") {
@@ -593,11 +595,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner) == None, "a1 was in memory store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner).isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
@@ -610,9 +612,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
     assert(store.getLocalBytes("a2").isDefined, "a2 was not in store")
     assert(store.getLocalBytes("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner) == None, "a1 was in memory store")
     assert(store.getLocalBytes("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(store.memoryStore.getValues("a1", dummyCleaner).isDefined, "a1 was not in memory store")
   }
 
   test("LRU with mixed storage levels") {
@@ -626,15 +628,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
     // At this point LRU should not kick in because a3 is only on disk
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
+    assert(store.getSingle("a1", dummyCleaner).isDefined, "a1 was not in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
     store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
-    assert(store.getSingle("a1") == None, "a1 was in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    assert(store.getSingle("a4").isDefined, "a4 was not in store")
+    assert(store.getSingle("a1", dummyCleaner) == None, "a1 was in store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
+    assert(store.getSingle("a3", dummyCleaner).isDefined, "a3 was not in store")
+    assert(store.getSingle("a4", dummyCleaner).isDefined, "a4 was not in store")
   }
 
   test("in-memory LRU with streams") {
@@ -645,20 +647,20 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
+    assert(store.get("list3", dummyCleaner).isDefined, "list3 was not in store")
+    assert(store.get("list3", dummyCleaner).get.data.size === 2)
+    assert(store.get("list1", dummyCleaner) === None, "list1 was in store")
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
     store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    assert(store.get("list3") === None, "list1 was in store")
+    assert(store.get("list1", dummyCleaner).isDefined, "list1 was not in store")
+    assert(store.get("list1", dummyCleaner).get.data.size === 2)
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
+    assert(store.get("list3", dummyCleaner) === None, "list1 was in store")
   }
 
   test("LRU with mixed storage levels and streams") {
@@ -675,27 +677,27 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     listForSizeEstimate ++= list1.iterator
     val listSize = SizeEstimator.estimate(listForSizeEstimate)
     // At this point LRU should not kick in because list3 is only on disk
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
+    assert(store.get("list1", dummyCleaner).isDefined, "list1 was not in store")
+    assert(store.get("list1", dummyCleaner).get.data.size === 2)
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
+    assert(store.get("list3", dummyCleaner).isDefined, "list3 was not in store")
+    assert(store.get("list3", dummyCleaner).get.data.size === 2)
+    assert(store.get("list1", dummyCleaner).isDefined, "list1 was not in store")
+    assert(store.get("list1", dummyCleaner).get.data.size === 2)
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
+    assert(store.get("list3", dummyCleaner).isDefined, "list3 was not in store")
+    assert(store.get("list3", dummyCleaner).get.data.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.putIterator("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
-    assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    assert(store.get("list4").isDefined, "list4 was not in store")
-    assert(store.get("list4").get.data.size === 2)
+    assert(store.get("list1", dummyCleaner) === None, "list1 was in store")
+    assert(store.get("list2", dummyCleaner).isDefined, "list2 was not in store")
+    assert(store.get("list2", dummyCleaner).get.data.size === 2)
+    assert(store.get("list3", dummyCleaner).isDefined, "list3 was not in store")
+    assert(store.get("list3", dummyCleaner).get.data.size === 2)
+    assert(store.get("list4", dummyCleaner).isDefined, "list4 was not in store")
+    assert(store.get("list4", dummyCleaner).get.data.size === 2)
   }
 
   test("negative byte values in ByteBufferInputStream") {
@@ -713,10 +715,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("overly large block") {
     store = makeBlockManager(5000)
     store.putSingle("a1", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a1") === None, "a1 was in store")
+    assert(store.getSingle("a1", dummyCleaner) === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](10000), StorageLevel.MEMORY_AND_DISK)
-    assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.memoryStore.getValues("a2", dummyCleaner) === None, "a2 was in memory store")
+    assert(store.getSingle("a2", dummyCleaner).isDefined, "a2 was not in store")
   }
 
   test("block compression") {
@@ -795,7 +797,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
 
     // Make sure get a1 doesn't hang and returns None.
     failAfter(1 second) {
-      assert(store.getSingle("a1") == None, "a1 should not be in store")
+      assert(store.getSingle("a1", dummyCleaner) == None, "a1 should not be in store")
     }
   }
 
@@ -990,7 +992,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     store.putSingle(rdd(0, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(1, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // Access rdd_1_0 to ensure it's not least recently used.
-    assert(store.getSingle(rdd(1, 0)).isDefined, "rdd_1_0 was not in store")
+    assert(store.getSingle(rdd(1, 0), dummyCleaner).isDefined, "rdd_1_0 was not in store")
     // According to the same-RDD rule, rdd_1_0 should be replaced here.
     store.putSingle(rdd(0, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // rdd_1_0 should have been replaced, even it's not least recently used.
@@ -1250,4 +1252,47 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     assert(result.data === Right(bytes))
     assert(result.droppedBlocks === Nil)
   }
+
+  def makeTestBytes: ByteBuffer = {
+    val out = new ByteArrayOutputStream()
+    val serStream = serializer.newInstance().serializeStream(out)
+    serStream.writeAll((1 to 10).iterator)
+
+    val bytes = out.toByteArray
+
+    ByteBuffer.wrap(bytes)
+  }
+
+  test("dataDeserialize registers the input stream for cleaning") {
+    val bytes = makeTestBytes
+    store = makeBlockManager(0)
+    val cleaner = new SimpleResourceCleaner
+    val (bufferInputStream, itr) = store.dataDeserializeHelper(BlockId("rdd_0_0"), bytes, cleaner)
+    bufferInputStream.disposed should be (false)
+    try {
+      itr.asInstanceOf[Iterator[Int]].map{x =>
+        if (x > 5) {
+          throw new UserException()
+        }
+        x
+      }.toArray
+    } catch {
+      case _: UserException =>
+    } finally {
+      cleaner.doCleanup()
+    }
+    bufferInputStream.disposed should be (true)
+  }
+
+  test("dataDeserialize disposes the byte buffer on a normal read") {
+    val bytes = makeTestBytes
+    store = makeBlockManager(0)
+    val cleaner = new SimpleResourceCleaner
+    val (bufferInputStream, itr) = store.dataDeserializeHelper(BlockId("rdd_0_0"), bytes, cleaner)
+    bufferInputStream.disposed should be (false)
+    itr.toArray
+    bufferInputStream.disposed should be (true)
+  }
+
+
 }

@@ -26,7 +26,7 @@ import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, WriteAheadLogWriter}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SimpleResourceCleaner, Utils}
 
 class WriteAheadLogBackedBlockRDDSuite
   extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
@@ -40,6 +40,7 @@ class WriteAheadLogBackedBlockRDDSuite
   var sparkContext: SparkContext = null
   var blockManager: BlockManager = null
   var dir: File = null
+  val dummyCleaner = new SimpleResourceCleaner
 
   override def beforeEach(): Unit = {
     dir = Utils.createTempDir()
@@ -106,11 +107,11 @@ class WriteAheadLogBackedBlockRDDSuite
 
     // Make sure that the left `numPartitionsInBM` blocks are in block manager, and others are not
     require(
-      blockIds.take(numPartitionsInBM).forall(blockManager.get(_).nonEmpty),
+      blockIds.take(numPartitionsInBM).forall(blockManager.get(_, dummyCleaner).nonEmpty),
       "Expected blocks not in BlockManager"
     )
     require(
-      blockIds.takeRight(numPartitionsInWAL).forall(blockManager.get(_).isEmpty),
+      blockIds.takeRight(numPartitionsInWAL).forall(blockManager.get(_, dummyCleaner).isEmpty),
       "Unexpected blocks in BlockManager"
     )
 
@@ -136,7 +137,7 @@ class WriteAheadLogBackedBlockRDDSuite
         segments.toArray, storeInBlockManager = true, StorageLevel.MEMORY_ONLY)
       assert(rdd2.collect() === data.flatten)
       assert(
-        blockIds.forall(blockManager.get(_).nonEmpty),
+        blockIds.forall(blockManager.get(_, dummyCleaner).nonEmpty),
         "All blocks not found in block manager"
       )
     }

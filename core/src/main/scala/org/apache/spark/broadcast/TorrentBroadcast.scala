@@ -28,7 +28,7 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.util.{ByteBufferInputStream, SimpleResourceCleaner, Utils}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 /**
@@ -164,23 +164,28 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
-      SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
-        case Some(x) =>
-          x.asInstanceOf[T]
+      val cleaner = new SimpleResourceCleaner
+      try {
+        SparkEnv.get.blockManager.getLocal(broadcastId, cleaner).map(_.data.next()) match {
+          case Some(x) =>
+            x.asInstanceOf[T]
 
-        case None =>
-          logInfo("Started reading broadcast variable " + id)
-          val startTimeMs = System.currentTimeMillis()
-          val blocks = readBlocks()
-          logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
+          case None =>
+            logInfo("Started reading broadcast variable " + id)
+            val startTimeMs = System.currentTimeMillis()
+            val blocks = readBlocks()
+            logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
 
-          val obj = TorrentBroadcast.unBlockifyObject[T](
-            blocks, SparkEnv.get.serializer, compressionCodec)
-          // Store the merged copy in BlockManager so other tasks on this executor don't
-          // need to re-fetch it.
-          SparkEnv.get.blockManager.putSingle(
-            broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-          obj
+            val obj = TorrentBroadcast.unBlockifyObject[T](
+              blocks, SparkEnv.get.serializer, compressionCodec)
+            // Store the merged copy in BlockManager so other tasks on this executor don't
+            // need to re-fetch it.
+            SparkEnv.get.blockManager.putSingle(
+              broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+            obj
+        }
+      } finally {
+        cleaner.doCleanup()
       }
     }
   }

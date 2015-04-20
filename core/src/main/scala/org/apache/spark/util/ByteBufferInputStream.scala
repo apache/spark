@@ -32,7 +32,6 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
 
   override def read(): Int = {
     if (buffer == null || buffer.remaining() == 0) {
-      cleanUp()
       -1
     } else {
       buffer.get() & 0xFF
@@ -45,7 +44,6 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (buffer == null || buffer.remaining() == 0) {
-      cleanUp()
       -1
     } else {
       val amountToGet = math.min(buffer.remaining(), length)
@@ -58,24 +56,26 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
     if (buffer != null) {
       val amountToSkip = math.min(bytes, buffer.remaining).toInt
       buffer.position(buffer.position + amountToSkip)
-      if (buffer.remaining() == 0) {
-        cleanUp()
-      }
       amountToSkip
     } else {
       0L
     }
   }
 
+
+  private[spark] var disposed = false
+
   /**
    * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().
    */
-  private def cleanUp() {
+  override def close() {
     if (buffer != null) {
       if (dispose) {
+        disposed = true
         BlockManager.dispose(buffer)
       }
       buffer = null
     }
   }
+
 }

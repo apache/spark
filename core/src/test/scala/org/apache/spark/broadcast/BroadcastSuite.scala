@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.{Assertions, FunSuite}
 
+import org.apache.spark.util.SimpleResourceCleaner
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkEnv}
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
@@ -37,7 +38,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched
-      val isFound = bm.getLocal(BroadcastBlockId(bid)).isDefined
+      val isFound = bm.getLocal(BroadcastBlockId(bid), new SimpleResourceCleaner).isDefined
       (x, isFound)
     }.collect().toSet
   }

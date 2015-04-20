@@ -22,6 +22,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.util.SimpleResourceCleaner
 
 class CachedTableSuite extends QueryTest {
 
@@ -36,7 +37,7 @@ class CachedTableSuite extends QueryTest {
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0), new SimpleResourceCleaner).nonEmpty
   }
 
   test("cache table") {

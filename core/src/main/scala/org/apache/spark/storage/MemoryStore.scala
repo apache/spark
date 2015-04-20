@@ -23,7 +23,7 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.{ResourceCleaner, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
@@ -85,12 +85,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      _bytes: ByteBuffer,
+      level: StorageLevel,
+      resourceCleaner: ResourceCleaner): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
     if (level.deserialized) {
-      val values = blockManager.dataDeserialize(blockId, bytes)
+      val values = blockManager.dataDeserialize(blockId, bytes, resourceCleaner)
       putIterator(blockId, values, level, returnValues = true)
     } else {
       val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
@@ -193,7 +197,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+  override def getValues(
+      blockId: BlockId,
+      resourceCleaner: ResourceCleaner): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -203,7 +209,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
       val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
-      Some(blockManager.dataDeserialize(blockId, buffer))
+      Some(blockManager.dataDeserialize(blockId, buffer, resourceCleaner))
     }
   }
 

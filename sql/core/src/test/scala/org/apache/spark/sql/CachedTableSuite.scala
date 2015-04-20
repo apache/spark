@@ -28,6 +28,7 @@ import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.SimpleResourceCleaner
 
 case class BigData(s: String)
 
@@ -45,7 +46,7 @@ class CachedTableSuite extends QueryTest {
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0), new SimpleResourceCleaner).nonEmpty
   }
 
   test("cache temp table") {

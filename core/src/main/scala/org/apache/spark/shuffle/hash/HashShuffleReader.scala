@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.hash
 
+import org.apache.spark.util.ResourceCleaner
 import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
@@ -35,7 +36,7 @@ private[spark] class HashShuffleReader[K, C](
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
-  override def read(): Iterator[Product2[K, C]] = {
+  override def read(resourceCleaner: ResourceCleaner): Iterator[Product2[K, C]] = {
     val ser = Serializer.getSerializer(dep.serializer)
     val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
 
@@ -61,7 +62,7 @@ private[spark] class HashShuffleReader[K, C](
         sorter.insertAll(aggregatedIter)
         context.taskMetrics.incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
-        sorter.iterator
+        sorter.iterator(resourceCleaner)
       case None =>
         aggregatedIter
     }

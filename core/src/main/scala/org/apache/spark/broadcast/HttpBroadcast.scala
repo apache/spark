@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
+import org.apache.spark.util._
 
 /**
  * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses HTTP server
@@ -81,22 +81,27 @@ private[spark] class HttpBroadcast[T: ClassTag](
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      SparkEnv.get.blockManager.getSingle(blockId) match {
-        case Some(x) => value_ = x.asInstanceOf[T]
-        case None => {
-          logInfo("Started reading broadcast variable " + id)
-          val start = System.nanoTime
-          value_ = HttpBroadcast.read[T](id)
-          /*
-           * We cache broadcast data in the BlockManager so that subsequent tasks using it
-           * do not need to re-fetch. This data is only used locally and no other node
-           * needs to fetch this block, so we don't notify the master.
-           */
-          SparkEnv.get.blockManager.putSingle(
-            blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-          val time = (System.nanoTime - start) / 1e9
-          logInfo("Reading broadcast variable " + id + " took " + time + " s")
+      val cleaner = new SimpleResourceCleaner
+      try {
+        SparkEnv.get.blockManager.getSingle(blockId, cleaner) match {
+          case Some(x) => value_ = x.asInstanceOf[T]
+          case None => {
+            logInfo("Started reading broadcast variable " + id)
+            val start = System.nanoTime
+            value_ = HttpBroadcast.read[T](id)
+            /*
+             * We cache broadcast data in the BlockManager so that subsequent tasks using it
+             * do not need to re-fetch. This data is only used locally and no other node
+             * needs to fetch this block, so we don't notify the master.
+             */
+            SparkEnv.get.blockManager.putSingle(
+              blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+            val time = (System.nanoTime - start) / 1e9
+            logInfo("Reading broadcast variable " + id + " took " + time + " s")
+          }
         }
+      } finally {
+        cleaner.doCleanup()
       }
     }
   }

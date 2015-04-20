@@ -67,7 +67,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     cacheManager = sc.env.cacheManager
     val context = new TaskContextImpl(0, 0, 0, 0)
     val computeValue = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
-    val getValue = blockManager.get(RDDBlockId(rdd.id, split.index))
+    val getValue = blockManager.get(RDDBlockId(rdd.id, split.index), context)
     assert(computeValue.toList === List(1, 2, 3, 4))
     assert(getValue.isDefined, "Block cached from getOrCompute is not found!")
     assert(getValue.get.data.toList === List(1, 2, 3, 4))
@@ -75,18 +75,18 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
 
   test("get cached rdd") {
     val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
-    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
-
     val context = new TaskContextImpl(0, 0, 0, 0)
+    when(blockManager.get(RDDBlockId(0, 0), context)).thenReturn(Some(result))
+
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(5, 6, 7))
   }
 
   test("get uncached local rdd") {
     // Local computation should not persist the resulting value, so don't expect a put().
-    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(None)
-
     val context = new TaskContextImpl(0, 0, 0, 0, true)
+    when(blockManager.get(RDDBlockId(0, 0), context)).thenReturn(None)
+
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(1, 2, 3, 4))
   }
