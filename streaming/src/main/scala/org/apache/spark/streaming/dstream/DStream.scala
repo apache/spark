@@ -513,7 +513,7 @@ abstract class DStream[T: ClassTag] (
     this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
 
   /**
-   * Apply a function to each record in this DStream.  This is an output operator, so 'this' DStream 
+   * Apply a function to each record in this DStream.  This is an output operator, so 'this' DStream
    * will be registered as an output stream, and therefore materialized.
    */
   def foreach(f: T => Unit): Unit = {

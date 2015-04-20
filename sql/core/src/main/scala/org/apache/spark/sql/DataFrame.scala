@@ -920,7 +920,8 @@ class DataFrame private[sql](
    * the 100 new partitions will claim 10 of the current partitions.
    * @group rdd
    */
-  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[Row] = null): DataFrame = {
+  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[Row] = null)
+      : DataFrame = {
     sqlContext.createDataFrame(
       queryExecution.toRdd.coalesce(numPartitions, shuffle)(ord),
       schema,
