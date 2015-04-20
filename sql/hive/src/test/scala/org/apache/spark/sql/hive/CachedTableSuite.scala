@@ -159,10 +159,11 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("udfTest")
   }
 
-  test("REFRESH TABLE also needs to recache the data") {
+  test("REFRESH TABLE also needs to recache the data (data source tables)") {
     val tempPath: File = Utils.createTempDir()
     tempPath.delete()
     table("src").save(tempPath.toString, "parquet", SaveMode.Overwrite)
+    sql("DROP TABLE IF EXISTS refreshTable")
     createExternalTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
