@@ -47,7 +47,7 @@ import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
 private[master] class Master(
     host: String,
@@ -931,7 +931,7 @@ private[deploy] object Master extends Logging {
       securityManager = securityMgr)
     val actor = actorSystem.actorOf(
       Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
-    val timeout = AkkaUtils.askTimeout(conf)
+    val timeout = RpcUtils.askTimeout(conf)
     val portsRequest = actor.ask(BoundPortsRequest)(timeout)
     val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
     (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)

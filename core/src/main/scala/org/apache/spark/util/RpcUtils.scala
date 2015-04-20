@@ -17,6 +17,9 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 
@@ -31,5 +34,25 @@ object RpcUtils {
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
     rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
+  }
+
+  /** Returns the configured number of times to retry connecting */
+  def numRetries(conf: SparkConf): Int = {
+    conf.getInt("spark.rpc.num.retries", 3)
+  }
+
+  /** Returns the configured number of milliseconds to wait on each retry */
+  def retryWaitMs(conf: SparkConf): Long = {
+    conf.getLong("spark.rpc.retry.wait", 3000)
+  }
+
+  /** Returns the default Spark timeout to use for Rpc ask operations. */
+  def askTimeout(conf: SparkConf): FiniteDuration = {
+    conf.getLong("spark.rpc.askTimeout", 30) seconds
+  }
+
+  /** Returns the default Spark timeout to use for Rpc remote endpoint lookup. */
+  def lookupTimeout(conf: SparkConf): FiniteDuration = {
+    conf.getLong("spark.rpc.lookupTimeout", 30) seconds
   }
 }

@@ -222,6 +222,26 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
   }
 
+  test("akka deprecated configs") {
+    val conf = new SparkConf()
+
+    assert(!conf.contains("spark.rpc.num.retries"))
+    assert(!conf.contains("spark.rpc.retry.wait"))
+    assert(!conf.contains("spark.rpc.askTimeout"))
+    assert(!conf.contains("spark.rpc.lookupTimeout"))
+
+    conf.set("spark.akka.num.retries", "1")
+    assert(conf.get("spark.rpc.num.retries") === "1")
+
+    conf.set("spark.akka.retry.wait", "2")
+    assert(conf.get("spark.rpc.retry.wait") === "2")
+
+    conf.set("spark.akka.askTimeout", "3")
+    assert(conf.get("spark.rpc.askTimeout") === "3")
+
+    conf.set("spark.akka.lookupTimeout", "4")
+    assert(conf.get("spark.rpc.lookupTimeout") === "4")
+  }
 }
 
 class Class1 {}
