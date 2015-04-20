@@ -186,9 +186,15 @@ public final class UnsafeRow implements MutableRow {
   public Object get(int i) {
     assertIndexIsValid(i);
     final DataType dataType = schema.fields()[i].dataType();
-    // TODO: complete this for the remaining types
+    // The ordering of these `if` statements is intentional: internally, it looks like this only
+    // gets invoked in JoinedRow when trying to access UTF8String columns. It's extremely unlikely
+    // that internal code will call this on non-string-typed columns, but we support that anyways
+    // just for the sake of completeness.
+    // TODO: complete this for the remaining types?
     if (isNullAt(i)) {
       return null;
+    } else if (dataType == StringType) {
+      return getUTF8String(i);
     } else if (dataType == IntegerType) {
       return getInt(i);
     } else if (dataType == LongType) {
@@ -197,8 +203,6 @@ public final class UnsafeRow implements MutableRow {
       return getDouble(i);
     } else if (dataType == FloatType) {
       return getFloat(i);
-    } else if (dataType == StringType) {
-      return getUTF8String(i);
     } else {
       throw new UnsupportedOperationException();
     }
