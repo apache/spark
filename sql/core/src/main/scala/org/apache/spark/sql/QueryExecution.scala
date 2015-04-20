@@ -3,7 +3,8 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan}
 
 /**
  * :: DeveloperApi ::
@@ -26,9 +27,20 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
     SparkPlan.currentContext.set(sqlContext)
     sqlContext.planner(optimizedPlan).next()
   }
+
+
+  /**
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
+   */
+  @transient
+  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
+    val batches =
+      Batch("Add exchange", Once, EnsureRequirements(sqlContext)) :: Nil
+  }
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[Row] = executedPlan.execute()

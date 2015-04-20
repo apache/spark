@@ -1058,15 +1058,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
 
-  /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
-   */
-  @transient
-  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches =
-      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
-  }
-
   protected[sql] def openSession(): SQLSession = {
     detachSession()
     val session = createSession()
