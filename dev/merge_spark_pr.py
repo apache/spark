@@ -357,8 +357,7 @@ def main():
     print "I've re-written the title as follows to match the standard format:"
     print "Original: %s" % pr["title"]
     print "Modified: %s" % standardize_jira_ref(pr["title"])
-    prompt = "Would you like to use the modified title?"
-    result = raw_input("%s (y/n): " % prompt)
+    result = raw_input("Would you like to use the modified title? (y/n): ")
     if result.lower() == "y":
         title = standardize_jira_ref(pr["title"])
         print "Using modified title:"
@@ -367,7 +366,6 @@ def main():
         print "Using original title:"
     print title
 
-    title = standardize_jira_ref(pr["title"])
     body = pr["body"]
     target_ref = pr["base"]["ref"]
     user_login = pr["user"]["login"]
