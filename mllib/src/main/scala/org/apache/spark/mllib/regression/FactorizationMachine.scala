@@ -22,15 +22,43 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 object FMWithSGD {
 
   def train(input: RDD[LabeledPoint],
-            numIterations: Int = 100,
-            stepSize: Double = 0.01,
-            miniBatchFraction: Double = 0.1,
-            dim: (Boolean, Boolean, Int) = (true, true, 8),
-            regParam: (Double, Double, Double) = (1, 1, 1),
-            initStd: Double = 0.01): FMModel = {
-
+            numIterations: Int,
+            stepSize: Double,
+            miniBatchFraction: Double,
+            dim: (Boolean, Boolean, Int),
+            regParam: (Double, Double, Double),
+            initStd: Double): FMModel = {
     new FMWithSGD(stepSize, numIterations, dim, regParam, miniBatchFraction)
       .setInitStd(initStd)
+      .run(input)
+  }
+
+  def train(input: RDD[LabeledPoint],
+            numIterations: Int,
+            stepSize: Double,
+            miniBatchFraction: Double,
+            regParam: (Double, Double, Double),
+            dim: (Boolean, Boolean, Int)): FMModel = {
+    new FMWithSGD(stepSize, numIterations, dim, regParam, miniBatchFraction)
+      .setInitStd(0.01)
+      .run(input)
+  }
+
+  def train(input: RDD[LabeledPoint],
+            numIterations: Int,
+            stepSize: Double,
+            miniBatchFraction: Double,
+            dim: (Boolean, Boolean, Int)): FMModel = {
+    new FMWithSGD(stepSize, numIterations, dim, (0, 0.01, 0.01), miniBatchFraction)
+      .setInitStd(0.01)
+      .run(input)
+  }
+
+  def train(input: RDD[LabeledPoint],
+            numIterations: Int,
+            dim: (Boolean, Boolean, Int)): FMModel = {
+    new FMWithSGD(1.0, numIterations, dim, (0, 0.01, 0.01), 1.0)
+      .setInitStd(0.01)
       .run(input)
   }
 }
@@ -42,6 +70,13 @@ class FMWithSGD(private var stepSize: Double,
                 private var regParam: (Double, Double, Double),
                 private var miniBatchFraction: Double)
   extends Serializable with Logging {
+
+
+  /**
+   * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
+   * dim: (true, true, 8), regParam: (0, 0.01, 0.01), miniBatchFraction: 1.0}.
+   */
+  def this() = this(1.0, 100, (true, true, 8), (0, 0.01, 0.01), 1.0)
 
   private var k0: Boolean = dim._1
   private var k1: Boolean = dim._2
@@ -139,7 +174,7 @@ class FMWithSGD(private var stepSize: Double,
    * v : numFeatures * numFactors + w : numFeatures + w0 : 1
    * @return
    */
-  private def genInitWeights(): Vector = {
+  private def generateInitWeights(): Vector = {
     (k0, k1) match {
       case (true, true) =>
         Vectors.dense(Array.fill(numFeatures * k2)(Random.nextGaussian() * initStd + initMean) ++
@@ -194,9 +229,9 @@ class FMWithSGD(private var stepSize: Double,
     this.minLabel = minT
     this.maxLabel = maxT
 
-    val gradient = new FMSGDGradient(k0, k1, k2, numFeatures, minLabel, maxLabel)
+    val gradient = new FMGradient(k0, k1, k2, numFeatures, minLabel, maxLabel)
 
-    val updater = new FMSGDUpdater(k0, k1, k2, r0, r1, r2, numFeatures)
+    val updater = new FMUpdater(k0, k1, k2, r0, r1, r2, numFeatures)
 
     val optimizer = new GradientDescent(gradient, updater)
       .setStepSize(stepSize)
@@ -205,7 +240,7 @@ class FMWithSGD(private var stepSize: Double,
 
     val data = input.map(l => (l.label, l.features)).cache()
 
-    val initWeights = genInitWeights()
+    val initWeights = generateInitWeights()
 
     val weights = optimizer.optimize(data, initWeights)
 
@@ -214,8 +249,8 @@ class FMWithSGD(private var stepSize: Double,
 }
 
 
-class FMSGDGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
-                    val numFeatures: Int, val min: Double, val max: Double) extends Gradient {
+class FMGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
+                 val numFeatures: Int, val min: Double, val max: Double) extends Gradient {
 
   private def predict(data: Vector, weights: Vector): (Double, Array[Double]) = {
     var pred = if (k0)
@@ -297,9 +332,9 @@ class FMSGDGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
 }
 
 
-class FMSGDUpdater(val k0: Boolean, val k1: Boolean, val k2: Int,
-                   val r0: Double, val r1: Double, val r2: Double,
-                   val numFeatures: Int) extends Updater {
+class FMUpdater(val k0: Boolean, val k1: Boolean, val k2: Int,
+                val r0: Double, val r1: Double, val r2: Double,
+                val numFeatures: Int) extends Updater {
 
   override def compute(weightsOld: Vector, gradient: Vector,
                        stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
