@@ -143,7 +143,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   import org.apache.spark.mllib.util.Loader._
 
-  private  object SaveLoadV1_0 {
+  private object SaveLoadV1_0 {
 
     def thisFormatVersion: String = "1.0"
 
@@ -167,7 +167,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
-      sqlContext.createDataFrame(boundaries.toList.zip(predictions.toList)
+      sqlContext.createDataFrame(boundaries.toSeq.zip(predictions)
         .map { case (b, p) => Data(b, p) }).saveAsParquetFile(dataPath(path))
     }
 
@@ -177,8 +177,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
-      val (boundaries, predictions) = dataArray.map { 
-        x => (x.getAs[Double](0), x.getAs[Double](1)) }.toList.unzip
+      val (boundaries, predictions) = dataArray.map {
+        x => (x.getDouble(0), x.getDouble(1)) }.toList.sortBy(_._1).unzip
       (boundaries.toArray, predictions.toArray)
     }
   }

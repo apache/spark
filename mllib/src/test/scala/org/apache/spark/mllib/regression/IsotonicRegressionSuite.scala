@@ -75,7 +75,9 @@ class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with M
   }
 
   test("model save/load") {
-    val model = runIsotonicRegression(Seq(1, 2, 3, 1, 6, 17, 16, 17, 18), true)
+    val boundaries = Array(0.0, 1.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    val predictions = Array(1, 2, 2, 6, 16.5, 16.5, 17.0, 18.0)
+    val model = new IsotonicRegressionModel(boundaries, predictions, true)
 
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
