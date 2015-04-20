@@ -2138,6 +2138,9 @@ private[spark] object Utils extends Logging {
 
   /**
    * Adds a shutdown hook with default priority.
+   *
+   * @param hook The code to run during shutdown.
+   * @return A handle that can be used to unregister the shutdown hook.
    */
   def addShutdownHook(hook: () => Unit): AnyRef = {
     addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY, hook)
@@ -2146,6 +2149,9 @@ private[spark] object Utils extends Logging {
   /**
    * Adds a shutdown hook with the given priority. Hooks with lower priority values run
    * first.
+   *
+   * @param hook The code to run during shutdown.
+   * @return A handle that can be used to unregister the shutdown hook.
    */
   def addShutdownHook(priority: Int, hook: () => Unit): AnyRef = {
     shutdownHooks.add(priority, hook)
@@ -2153,6 +2159,9 @@ private[spark] object Utils extends Logging {
 
   /**
    * Remove a previously installed shutdown hook.
+   *
+   * @param ref A handle returned by `addShutdownHook`.
+   * @return Whether the hook was removed.
    */
   def removeShutdownHook(ref: AnyRef): Boolean = {
     shutdownHooks.remove(ref)
