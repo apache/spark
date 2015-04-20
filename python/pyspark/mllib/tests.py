@@ -135,8 +135,10 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(sv[-1], 2)
         self.assertEquals(sv[-2], 0)
         self.assertEquals(sv[-4], 0)
-        for ind in [4, -5, 7.8]:
+        for ind in [4, -5]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
+        for ind in [7.8, '1']:
+            self.assertRaises(TypeError, sv.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -450,7 +452,7 @@ class VectorUDTTests(PySparkTestCase):
             elif isinstance(v, DenseVector):
                 self.assertEqual(v, self.dv1)
             else:
-                raise ValueError("expecting a vector but got %r of type %r" % (v, type(v)))
+                raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

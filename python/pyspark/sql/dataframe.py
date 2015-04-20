@@ -608,7 +608,7 @@ class DataFrame(object):
             jc = self._jdf.apply(self.columns[item])
             return Column(jc)
         else:
-            raise TypeError("unexpected type: %s" % type(item))
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
