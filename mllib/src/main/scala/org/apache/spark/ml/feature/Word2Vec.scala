@@ -92,8 +92,6 @@ private[feature] trait Word2VecParams extends Params with HasInputCol with HasMa
 
   /** @group getParam */
   def getNumSynonyms: Int = get(numSynonyms)
-
-  type S <: Iterable[String]
 }
 
 /**
@@ -125,10 +123,12 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
   /** @group setParam */
   def setMinCount(value: Int) = set(minCount, value)
 
+  type S <: Iterable[String]
+
   override def fit(dataset: DataFrame, paramMap: ParamMap): Word2VecModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val input = dataset.select(map(inputCol)).map { case Row(v: S) => v }
+    val input = dataset.select(map(inputCol)).map { case Row(v: Seq[String]) => v }
     val wordVectors = new feature.Word2Vec()
       .setLearningRate(map(learningRate))
       .setMinCount(map(minCount))
@@ -145,7 +145,7 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
-    require(inputType.isInstanceOf[S],
+    require(inputType.isInstanceOf[ArrayType],
       s"Input column ${map(inputCol)} must be a Iterable[String] column")
     schema
   }
@@ -167,6 +167,9 @@ class Word2VecModel private[ml] (
 
   /** @group setParam */
   def setSynonymsCol(value: String): this.type = set(synonymsCol, value)
+
+  /** @group setParam */
+  def setNumSynonyms(value: Int): this.type = set(numSynonyms, value)
 
   /** @group setParam */
   def setCodeCol(value: String): this.type = set(codeCol, value)
@@ -202,7 +205,7 @@ class Word2VecModel private[ml] (
     val map = this.paramMap ++ paramMap
 
     val inputType = schema(map(inputCol)).dataType
-    require(inputType.isInstanceOf[String],
+    require(inputType.isInstanceOf[StringType],
       s"Input column ${map(inputCol)} must be a string column")
 
     var outputFields = schema.fields
