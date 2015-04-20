@@ -113,7 +113,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Collect the neighbor vertex attributes for each vertex.
    *
    * @note This function could be highly inefficient on power-law
-   * graphs where high degree vertices may force a large ammount of
+   * graphs where high degree vertices may force a large amount of
    * information to be collected to a single location.
    *
    * @param edgeDirection the direction along which to collect
@@ -187,7 +187,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
 
   /**
    * Join the vertices with an RDD and then apply a function from the
-   * the vertex and RDD entry to a new vertex value.  The input table
+   * vertex and RDD entry to a new vertex value.  The input table
    * should contain at most one entry for each vertex.  If no entry is
    * provided the map function is skipped and the old value is used.
    *

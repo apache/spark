@@ -25,8 +25,8 @@ import org.apache.spark.graphx._
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
  *
- * The first implementation uses the [[Pregel]] interface and runs PageRank for a fixed number
- * of iterations:
+ * The first implementation uses the standalone [[Graph]] interface and runs PageRank
+ * for a fixed number of iterations:
  * {{{
  * var PR = Array.fill(n)( 1.0 )
  * val oldPR = Array.fill(n)( 1.0 )
@@ -38,7 +38,7 @@ import org.apache.spark.graphx._
  * }
  * }}}
  *
- * The second implementation uses the standalone [[Graph]] interface and runs PageRank until
+ * The second implementation uses the [[Pregel]] interface and runs PageRank until
  * convergence:
  *
  * {{{
@@ -156,7 +156,7 @@ object PageRank extends Logging {
       (newPR, newPR - oldPR)
     }
 
-    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
+    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]): Iterator[(VertexId, Double)] = {
       if (edge.srcAttr._2 > tol) {
         Iterator((edge.dstId, edge.srcAttr._2 * edge.attr))
       } else {

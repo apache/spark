@@ -108,7 +108,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   private[spark] val env = sc.env
 
-  def statusTracker = new JavaSparkStatusTracker(sc)
+  def statusTracker: JavaSparkStatusTracker = new JavaSparkStatusTracker(sc)
 
   def isLocal: java.lang.Boolean = sc.isLocal
 

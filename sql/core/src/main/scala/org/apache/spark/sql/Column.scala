@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedGetField}
@@ -46,7 +47,7 @@ private[sql] object Column {
  * @groupname Ungrouped Support functions for DataFrames.
  */
 @Experimental
-class Column(protected[sql] val expr: Expression) {
+class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
@@ -59,7 +60,7 @@ class Column(protected[sql] val expr: Expression) {
 
   override def toString: String = expr.prettyString
 
-  override def equals(that: Any) = that match {
+  override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
     case _ => false
   }
@@ -109,7 +110,15 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def === (other: Any): Column = EqualTo(expr, lit(other).expr)
+  def === (other: Any): Column = {
+    val right = lit(other).expr
+    if (this.expr == right) {
+      logWarning(
+        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
+          "Perhaps you need to use aliases.")
+    }
+    EqualTo(expr, right)
+  }
 
   /**
    * Equality test.
@@ -506,14 +515,15 @@ class Column(protected[sql] val expr: Expression) {
   def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
-   * An expression that gets an item at position `ordinal` out of an array.
+   * An expression that gets an item at position `ordinal` out of an array,
+   * or gets a value by key `key` in a [[MapType]].
    *
    * @group expr_ops
    */
-  def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
+  def getItem(key: Any): Column = GetItem(expr, Literal(key))
 
   /**
-   * An expression that gets a field by name in a [[StructField]].
+   * An expression that gets a field by name in a [[StructType]].
    *
    * @group expr_ops
    */
@@ -595,6 +605,19 @@ class Column(protected[sql] val expr: Expression) {
   def as(alias: Symbol): Column = Alias(expr, alias.name)()
 
   /**
+   * Gives the column an alias with metadata.
+   * {{{
+   *   val metadata: Metadata = ...
+   *   df.select($"colA".as("colB", metadata))
+   * }}}
+   *
+   * @group expr_ops
+   */
+  def as(alias: String, metadata: Metadata): Column = {
+    Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
+
+  /**
    * Casts the column to a different data type.
    * {{{
    *   // Casts colA to IntegerType.
@@ -624,20 +647,7 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = cast(to.toLowerCase match {
-    case "string" | "str" => StringType
-    case "boolean" => BooleanType
-    case "byte" => ByteType
-    case "short" => ShortType
-    case "int" => IntegerType
-    case "long" => LongType
-    case "float" => FloatType
-    case "double" => DoubleType
-    case "decimal" => DecimalType.Unlimited
-    case "date" => DateType
-    case "timestamp" => TimestampType
-    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
-  })
+  def cast(to: String): Column = cast(DataTypeParser(to))
 
   /**
    * Returns an ordering used in sorting.

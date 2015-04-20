@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
@@ -67,8 +66,9 @@ private[sql] trait ParquetTest {
    * @todo Probably this method should be moved to a more general place
    */
   protected def withTempPath(f: File => Unit): Unit = {
-    val file = util.getTempFilePath("parquetTest").getCanonicalFile
-    try f(file) finally if (file.exists()) Utils.deleteRecursively(file)
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path) finally Utils.deleteRecursively(path)
   }
 
   /**

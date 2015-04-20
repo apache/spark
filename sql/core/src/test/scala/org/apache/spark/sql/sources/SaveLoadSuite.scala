@@ -21,7 +21,6 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.{SaveMode, SQLConf, DataFrame}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -39,7 +38,8 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     originalDefaultSource = conf.defaultDataSourceName
 
-    path = util.getTempFilePath("datasource").getCanonicalFile
+    path = Utils.createTempDir()
+    path.delete()
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     df = jsonRDD(rdd)
@@ -52,7 +52,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
   after {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
-    if (path.exists()) Utils.deleteRecursively(path)
+    Utils.deleteRecursively(path)
   }
 
   def checkLoad(): Unit = {

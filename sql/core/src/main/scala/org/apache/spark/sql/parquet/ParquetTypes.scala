@@ -64,6 +64,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
       case ParquetPrimitiveTypeName.FLOAT => FloatType
+      case ParquetPrimitiveTypeName.INT32
+        if originalType == ParquetOriginalType.DATE => DateType
       case ParquetPrimitiveTypeName.INT32 => IntegerType
       case ParquetPrimitiveTypeName.INT64 => LongType
       case ParquetPrimitiveTypeName.INT96 if int96AsTimestamp => TimestampType
@@ -222,6 +224,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     // There is no type for Byte or Short so we promote them to INT32.
     case ShortType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
     case ByteType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case DateType => Some(ParquetTypeInfo(
+      ParquetPrimitiveTypeName.INT32, Some(ParquetOriginalType.DATE)))
     case LongType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT64))
     case TimestampType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT96))
     case DecimalType.Fixed(precision, scale) if precision <= 18 =>
@@ -386,6 +390,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   def convertFromAttributes(attributes: Seq[Attribute],
                             toThriftSchemaNames: Boolean = false): MessageType = {
+    checkSpecialCharacters(attributes)
     val fields = attributes.map(
       attribute =>
         fromDataType(attribute.dataType, attribute.name, attribute.nullable,
@@ -400,7 +405,20 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
   }
 
+  private def checkSpecialCharacters(schema: Seq[Attribute]) = {
+    // ,;{}()\n\t= and space character are special characters in Parquet schema
+    schema.map(_.name).foreach { name =>
+      if (name.matches(".*[ ,;{}()\n\t=].*")) {
+        sys.error(
+          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\n\t=".
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" "))
+      }
+    }
+  }
+
   def convertToString(schema: Seq[Attribute]): String = {
+    checkSpecialCharacters(schema)
     StructType.fromAttributes(schema).json
   }
 

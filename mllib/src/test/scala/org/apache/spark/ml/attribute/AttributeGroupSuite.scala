@@ -43,7 +43,7 @@ class AttributeGroupSuite extends FunSuite {
     intercept[NoSuchElementException] {
       group("abc")
     }
-    assert(group === AttributeGroup.fromMetadata(group.toMetadata, group.name))
+    assert(group === AttributeGroup.fromMetadata(group.toMetadataImpl, group.name))
     assert(group === AttributeGroup.fromStructField(group.toStructField()))
   }
 
@@ -53,7 +53,7 @@ class AttributeGroupSuite extends FunSuite {
     assert(group0.numAttributes === Some(10))
     assert(group0.size === 10)
     assert(group0.attributes.isEmpty)
-    assert(group0 === AttributeGroup.fromMetadata(group0.toMetadata, group0.name))
+    assert(group0 === AttributeGroup.fromMetadata(group0.toMetadataImpl, group0.name))
     assert(group0 === AttributeGroup.fromStructField(group0.toStructField()))
 
     val group1 = new AttributeGroup("item")

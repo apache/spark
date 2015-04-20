@@ -409,7 +409,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("twittergraph")
    * val inDeg: RDD[(VertexId, Int)] =
-   *   aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
+   *   rawGraph.aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
    * }}}
    *
    * @note By expressing computation at the edge level we achieve

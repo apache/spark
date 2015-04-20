@@ -21,19 +21,25 @@ import org.scalatest.FunSuite
 
 class ParamsSuite extends FunSuite {
 
-  val solver = new TestParams()
-  import solver.{inputCol, maxIter}
-
   test("param") {
+    val solver = new TestParams()
+    import solver.{maxIter, inputCol}
+
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "max number of iterations")
-    assert(maxIter.defaultValue.get === 100)
     assert(maxIter.parent.eq(solver))
-    assert(maxIter.toString === "maxIter: max number of iterations (default: 100)")
-    assert(inputCol.defaultValue === None)
+    assert(maxIter.toString === "maxIter: max number of iterations (default: 10)")
+
+    solver.setMaxIter(5)
+    assert(maxIter.toString === "maxIter: max number of iterations (default: 10, current: 5)")
+
+    assert(inputCol.toString === "inputCol: input column name (undefined)")
   }
 
   test("param pair") {
+    val solver = new TestParams()
+    import solver.maxIter
+
     val pair0 = maxIter -> 5
     val pair1 = maxIter.w(5)
     val pair2 = ParamPair(maxIter, 5)
@@ -44,10 +50,12 @@ class ParamsSuite extends FunSuite {
   }
 
   test("param map") {
+    val solver = new TestParams()
+    import solver.{maxIter, inputCol}
+
     val map0 = ParamMap.empty
 
     assert(!map0.contains(maxIter))
-    assert(map0(maxIter) === maxIter.defaultValue.get)
     map0.put(maxIter, 10)
     assert(map0.contains(maxIter))
     assert(map0(maxIter) === 10)
@@ -78,23 +86,39 @@ class ParamsSuite extends FunSuite {
   }
 
   test("params") {
+    val solver = new TestParams()
+    import solver.{maxIter, inputCol}
+
     val params = solver.params
-    assert(params.size === 2)
+    assert(params.length === 2)
     assert(params(0).eq(inputCol), "params must be ordered by name")
     assert(params(1).eq(maxIter))
+
+    assert(!solver.isSet(maxIter))
+    assert(solver.isDefined(maxIter))
+    assert(solver.getMaxIter === 10)
+    solver.setMaxIter(100)
+    assert(solver.isSet(maxIter))
+    assert(solver.getMaxIter === 100)
+    assert(!solver.isSet(inputCol))
+    assert(!solver.isDefined(inputCol))
+    intercept[NoSuchElementException](solver.getInputCol)
+
     assert(solver.explainParams() === Seq(inputCol, maxIter).mkString("\n"))
+
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
-    intercept[NoSuchMethodException] {
+    intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
-    assert(!solver.isSet(inputCol))
+
     intercept[IllegalArgumentException] {
       solver.validate()
     }
     solver.validate(ParamMap(inputCol -> "input"))
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
+    assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
     solver.validate()
     intercept[IllegalArgumentException] {
@@ -104,5 +128,8 @@ class ParamsSuite extends FunSuite {
     intercept[IllegalArgumentException] {
       solver.validate()
     }
+
+    solver.clearMaxIter()
+    assert(!solver.isSet(maxIter))
   }
 }

@@ -23,6 +23,7 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
@@ -35,7 +36,50 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
+  
+  test("timeConversion") {
+    // Test -1
+    assert(Utils.timeStringAsSeconds("-1") === -1)
+    
+    // Test zero
+    assert(Utils.timeStringAsSeconds("0") === 0)
+    
+    assert(Utils.timeStringAsSeconds("1") === 1)
+    assert(Utils.timeStringAsSeconds("1s") === 1)
+    assert(Utils.timeStringAsSeconds("1000ms") === 1)
+    assert(Utils.timeStringAsSeconds("1000000us") === 1)
+    assert(Utils.timeStringAsSeconds("1m") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1d") === TimeUnit.DAYS.toSeconds(1))
+    
+    assert(Utils.timeStringAsMs("1") === 1)
+    assert(Utils.timeStringAsMs("1ms") === 1)
+    assert(Utils.timeStringAsMs("1000us") === 1)
+    assert(Utils.timeStringAsMs("1s") === TimeUnit.SECONDS.toMillis(1))
+    assert(Utils.timeStringAsMs("1m") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
+    assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
+    
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600s")
+    }
 
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600ds")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("600s This breaks")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+  
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
@@ -106,7 +150,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val second = 1000
     val minute = second * 60
     val hour = minute * 60
-    def str = Utils.msDurationToString(_)
+    def str: (Long) => String = Utils.msDurationToString(_)
 
     val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
 
@@ -122,7 +166,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes of a file") {
     val tmpDir2 = Utils.createTempDir()
-    tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
     f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
@@ -151,7 +194,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
-    tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), UTF_8)
     Files.write("abcdefghij", files(1), UTF_8)
@@ -201,7 +243,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
-    val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
+    // The parent directory has two child directories
+    val child1: File = Utils.createTempDir(parent.getCanonicalPath)
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
     val child3: File = Utils.createTempDir(child1.getCanonicalPath)
     // set the last modified time of child1 to 30 secs old
@@ -357,7 +400,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   }
 
   test("loading properties from file") {
-    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    val tmpDir = Utils.createTempDir()
+    val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
@@ -370,7 +414,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     } finally {
-      outFile.delete()
+      Utils.deleteRecursively(tmpDir)
     }
   }
 

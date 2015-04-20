@@ -188,7 +188,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     val rdd = sc.parallelize(1 to 10, 2).map { i =>
       JobCancellationSuite.twoJobsSharingStageSemaphore.acquire()
       (i, i)
-    }.reduceByKey(_+_)
+    }.reduceByKey(_ + _)
     val f1 = rdd.collectAsync()
     val f2 = rdd.countAsync()
 

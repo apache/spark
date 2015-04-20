@@ -24,14 +24,14 @@ import scala.collection.JavaConversions._
 import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.apache.hadoop.fs.{FileUtil, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Utils, Clock, SystemClock}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -44,7 +44,8 @@ private[deploy] class DriverRunner(
     val sparkHome: File,
     val driverDesc: DriverDescription,
     val worker: ActorRef,
-    val workerUrl: String)
+    val workerUrl: String,
+    val securityManager: SecurityManager)
   extends Logging {
 
   @volatile private var process: Option[Process] = None
@@ -56,8 +57,14 @@ private[deploy] class DriverRunner(
   private var finalExitCode: Option[Int] = None
 
   // Decoupled for testing
-  def setClock(_clock: Clock) = clock = _clock
-  def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
+  def setClock(_clock: Clock): Unit = {
+    clock = _clock
+  }
+
+  def setSleeper(_sleeper: Sleeper): Unit = {
+    sleeper = _sleeper
+  }
+
   private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
     def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
@@ -130,12 +137,9 @@ private[deploy] class DriverRunner(
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-
     val jarPath = new Path(driverDesc.jarUrl)
 
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
-
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
@@ -143,7 +147,14 @@ private[deploy] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
+      Utils.fetchFile(
+        driverDesc.jarUrl,
+        driverDir,
+        conf,
+        securityManager,
+        hadoopConf,
+        System.currentTimeMillis(),
+        useCache = false)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded
@@ -155,7 +166,7 @@ private[deploy] class DriverRunner(
 
   private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
     builder.directory(baseDir)
-    def initialize(process: Process) = {
+    def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
       CommandUtils.redirectStream(process.getInputStream, stdout)
@@ -169,8 +180,8 @@ private[deploy] class DriverRunner(
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
-  def runCommandWithRetry(command: ProcessBuilderLike, initialize: Process => Unit,
-    supervise: Boolean) {
+  def runCommandWithRetry(
+      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.
@@ -216,8 +227,8 @@ private[deploy] trait ProcessBuilderLike {
 }
 
 private[deploy] object ProcessBuilderLike {
-  def apply(processBuilder: ProcessBuilder) = new ProcessBuilderLike {
-    def start() = processBuilder.start()
-    def command = processBuilder.command()
+  def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
+    override def start(): Process = processBuilder.start()
+    override def command: Seq[String] = processBuilder.command()
   }
 }
