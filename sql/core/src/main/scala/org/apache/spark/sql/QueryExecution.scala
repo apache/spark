@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan}
 
+
 /**
  * :: DeveloperApi ::
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -43,6 +44,7 @@ protected[sql] class QueryExecution(val sqlContext: SQLContext, val logical: Log
     SparkPlan.currentContext.set(sqlContext)
     sqlContext.planner(optimizedPlan).next()
   }
+
 
   /**
    * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
