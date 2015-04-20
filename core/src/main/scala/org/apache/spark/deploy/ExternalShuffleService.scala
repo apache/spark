@@ -17,15 +17,15 @@
 
 package org.apache.spark.deploy
 
+import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
-import org.apache.spark.util.Utils
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslRpcHandler
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
-import java.util.concurrent.CountDownLatch
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
