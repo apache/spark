@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.worker
+package org.apache.spark.deploy
 
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.util.Utils
@@ -24,8 +24,8 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslRpcHandler
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
-
 import java.util.concurrent.CountDownLatch
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
@@ -34,7 +34,7 @@ import java.util.concurrent.CountDownLatch
  *
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
  */
-private[worker]
+private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
 
@@ -54,14 +54,19 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Starts the external shuffle service if the user has configured us to. */
   def startIfEnabled() {
     if (enabled) {
-      require(server == null, "Shuffle server already started")
-      logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
-      server = transportContext.createServer(port)
+      start()
     }
   }
 
+  /** Start the external shuffle service */
+  def start() {
+    require(server == null, "Shuffle server already started")
+    logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
+    server = transportContext.createServer(port)
+  }
+
   def stop() {
-    if (enabled && server != null) {
+    if (server != null) {
       server.close()
       server = null
     }
@@ -86,6 +91,7 @@ object ExternalShuffleService extends Logging {
     // and we assume the user really wants it to be running
     sparkConf.set("spark.shuffle.service.enabled", "true")
     server = new ExternalShuffleService(sparkConf, securityManager)
+    server.start()
 
     installShutdownHook()
 
@@ -93,7 +99,7 @@ object ExternalShuffleService extends Logging {
     barrier.await()
   }
 
-  private def installShutdownHook() = {
+  private def installShutdownHook(): Unit = {
     Runtime.getRuntime.addShutdownHook(new Thread("External Shuffle Service shutdown thread") {
       override def run() {
         logInfo("Shutting down shuffle service.")

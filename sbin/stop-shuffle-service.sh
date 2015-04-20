@@ -22,4 +22,4 @@
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.ExternalShuffleService 1
+"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.ExternalShuffleService 1

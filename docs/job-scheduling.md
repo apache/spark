@@ -99,11 +99,6 @@ then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 `spark.shuffle.service.*` [configurations](configuration.html).
 4. Restart all `NodeManager`s in your cluster.
 
-If you wish to use the external shuffle service in a Mesos deployment you need to launch the
-service on each Mesos slave that might run Spark jobs. A launcher script is provided in the `sbin/`
-directory: `sbin/start-shuffle-service.sh`. You can later stop the service by running
-`sbin/stop-shuffle-service.sh`. Additional configuration options can be passed in `SPARK_SHUFFLE_OPTS`.
-
 ### Resource Allocation Policy
 
 At a high level, Spark should relinquish executors when they are no longer used and acquire
