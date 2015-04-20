@@ -72,7 +72,7 @@ private[spark] class TaskSchedulerImpl(
 
   if (CPUS_PER_TASK < 1) {
     throw new IllegalArgumentException(
-      s"\"spark.task.cpus\" must be greater than 0! (was $CPUS_PER_TASK)")
+      s"spark.task.cpus must be greater than 0! (was $CPUS_PER_TASK)")
   }
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
