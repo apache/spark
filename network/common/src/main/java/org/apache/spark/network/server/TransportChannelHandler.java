@@ -117,7 +117,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
       if (e.state() == IdleState.ALL_IDLE && hasInFlightRequests && isActuallyOverdue) {
         String address = NettyUtils.getRemoteAddress(ctx.channel());
-        logger.error("Channel to {} has been quiet for {} ms while there are outstanding " +
+        logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
           "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
           "is wrong.", address, requestTimeoutNs / 1000 / 1000);
         ctx.close();

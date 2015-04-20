@@ -22,7 +22,7 @@ import com.google.common.collect.Maps;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-/** ConfigProvider based on an immutable Map. */
+/** ConfigProvider based on a Map (copied in the constructor). */
 public class MapConfigProvider extends ConfigProvider {
   private final Map<String, String> config;
 

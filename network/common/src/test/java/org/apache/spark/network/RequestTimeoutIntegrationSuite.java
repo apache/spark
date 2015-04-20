@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit;
  * Suite which ensures that requests that go without a response for the network timeout period are
  * failed, and the connection closed.
  *
- * In this suite, we use 5 seconds as the connection timeout, with some slack given in the tests,
+ * In this suite, we use 2 seconds as the connection timeout, with some slack given in the tests,
  * to ensure stability in different test environments.
  */
 public class RequestTimeoutIntegrationSuite {
@@ -59,7 +59,7 @@ public class RequestTimeoutIntegrationSuite {
   @Before
   public void setUp() throws Exception {
     Map<String, String> configMap = Maps.newHashMap();
-    configMap.put("spark.shuffle.io.connectionTimeout", "5s");
+    configMap.put("spark.shuffle.io.connectionTimeout", "2s");
     conf = new TransportConf(new MapConfigProvider(configMap));
 
     defaultManager = new StreamManager() {
@@ -115,11 +115,11 @@ public class RequestTimeoutIntegrationSuite {
       assert (callback0.success.length == response.length);
     }
 
-    // Second times out after 5 seconds, with slack. Must be IOException.
+    // Second times out after 2 seconds, with slack. Must be IOException.
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
       client.sendRpc(new byte[0], callback1);
-      callback1.wait(FOREVER);
+      callback1.wait(4 * 1000);
       assert (callback1.failure != null);
       assert (callback1.failure instanceof IOException);
     }
@@ -209,17 +209,17 @@ public class RequestTimeoutIntegrationSuite {
     // Send one request, which will eventually fail.
     TestCallback callback0 = new TestCallback();
     client.fetchChunk(0, 0, callback0);
-    Uninterruptibles.sleepUninterruptibly(3500, TimeUnit.MILLISECONDS);
+    Uninterruptibles.sleepUninterruptibly(1200, TimeUnit.MILLISECONDS);
 
     // Send a second request before the first has failed.
     TestCallback callback1 = new TestCallback();
     client.fetchChunk(0, 1, callback1);
-    Uninterruptibles.sleepUninterruptibly(3500, TimeUnit.MILLISECONDS);
+    Uninterruptibles.sleepUninterruptibly(1200, TimeUnit.MILLISECONDS);
 
     synchronized (callback0) {
       // not complete yet, but should complete soon
       assert (callback0.success == null && callback0.failure == null);
-      callback0.wait(5 * 1000);
+      callback0.wait(2 * 1000);
       assert (callback0.failure instanceof IOException);
     }
 

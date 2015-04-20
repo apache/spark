@@ -50,7 +50,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
-  private AtomicLong timeOfLastRequestNs;
+  /** Records the time (in system nanoseconds) that the last fetch or RPC request was sent. */
+  private final AtomicLong timeOfLastRequestNs;
 
   public TransportResponseHandler(Channel channel) {
     this.channel = channel;
