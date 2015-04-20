@@ -671,7 +671,7 @@ class SparkContext(object):
             elif isinstance(value, complex):
                 accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM
             else:
-                raise Exception("No default accumulator param for type %s" % type(value))
+                raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 

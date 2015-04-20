@@ -118,7 +118,7 @@ class StringIndexerModel private[ml] (
     }
     val outputColName = map(outputCol)
     val metadata = NominalAttribute.defaultAttr
-      .withName(outputColName).withValues(labels).toStructField().metadata
+      .withName(outputColName).withValues(labels).toMetadata()
     dataset.select(col("*"), indexer(dataset(map(inputCol))).as(outputColName, metadata))
   }
 

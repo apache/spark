@@ -489,8 +489,9 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: sort by ascending order or not, could be bool, int
-             or list of bool, int (default: True).
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
@@ -519,7 +520,7 @@ class DataFrame(object):
             jcols = [jc if asc else jc.desc()
                      for asc, jc in zip(ascending, jcols)]
         else:
-            raise TypeError("ascending can only be bool or list, but got %s" % type(ascending))
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
 
         jdf = self._jdf.sort(self._jseq(jcols))
         return DataFrame(jdf, self.sql_ctx)
@@ -607,7 +608,7 @@ class DataFrame(object):
             jc = self._jdf.apply(self.columns[item])
             return Column(jc)
         else:
-            raise TypeError("unexpected type: %s" % type(item))
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
