@@ -956,6 +956,16 @@ class GroupedData(object):
         [Row(SUM(age)=7, SUM(height)=165)]
         """
 
+    @df_varargs_api
+    def stddev(self, *cols):
+        """Compute the standard deviation of the value for each numeric columns for each group.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddev('age').collect()
+        [Row(STDDEV(age)=1.5)]
+        """
+
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context

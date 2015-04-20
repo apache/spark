@@ -644,7 +644,7 @@ case class StdDeviation(child: Expression)
   }
 
   /**
-   *
+   * partialSquredSum = partial of sum(xi^2)
    * @param calcType data type during calcuation
    * @return seqPartialData is data for partialEvaluations
    */
@@ -670,6 +670,11 @@ case class StdDeviation(child: Expression)
   override def newInstance(): StdDeviationFunction = new StdDeviationFunction(child, this)
 }
 
+/**
+ * the standard deviation = sqrt(sum((xi-avg)^2)/N)
+ *                        = sqrt(sum(xi^2)/N - avg*avg)
+ * squaredSum is used to calculate the sum of squared every values = sum(xi^2)
+ */
 case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
   def this() = this(null, null) // /Required for serialization.
@@ -687,7 +692,6 @@ case class StdDeviationFunction(expr: Expression, base: AggregateExpression)
   private val zero = Cast(Literal(0), calcType)
 
   private var count: Long = _
-
 
   private val squaredSum = MutableLiteral(zero.eval(null), calcType)
 

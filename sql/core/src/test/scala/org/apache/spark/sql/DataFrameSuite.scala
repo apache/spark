@@ -347,9 +347,6 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(stddev('a), sumDistinct('a)), // non-partial
       Row(testData2ADev, new java.math.BigDecimal(6)) :: Nil)
-
-
-
   }
 
   test("null average") {

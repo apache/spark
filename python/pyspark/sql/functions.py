@@ -65,6 +65,7 @@ _functions = {
     'avg': 'Aggregate function: returns the average of the values in a group.',
     'mean': 'Aggregate function: returns the average of the values in a group.',
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
+    'stddev': 'Aggregate function: returns the standard deviation of the values in the expression.',
 }
 
 

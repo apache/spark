@@ -272,6 +272,20 @@ object functions {
    */
   def max(columnName: String): Column = max(Column(columnName))
 
+  /**
+   * Aggregate func:compute the stand devivation of the specific column.
+   *
+   * @group agg_funcs
+   */
+  def stddev(e: Column): Column = StdDeviation(e.expr)
+
+  /**
+   * Aggregate func:compute the stand devivation of the specific column.
+   *
+   * @group agg_funcs
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -343,20 +357,6 @@ object functions {
    * @group normal_funcs
    */
   def abs(e: Column): Column = Abs(e.expr)
-
-  /**
-   * Aggregate func:compute the stddev of the specific column.
-   *
-   * @group agg_funcs
-   */
-  def stddev(columnName: String): Column = stddev(Column(columnName))
-
-  /**
-   * Aggregate func:compute the stddev of the specific column
-   *
-   * @group agg_funcs
-   */
-  def stddev(e: Column): Column = StdDeviation(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
