@@ -154,36 +154,38 @@ private case object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 
 class UnsafeRowConverter(fieldTypes: Array[DataType]) {
 
+  private[this] val unsafeRow = new UnsafeRow()
+
   private[this] val writers: Array[UnsafeColumnWriter[Any]] = {
     fieldTypes.map(t => UnsafeColumnWriter.forType(t).asInstanceOf[UnsafeColumnWriter[Any]])
   }
+
+  private[this] val fixedLengthSize: Int =
+    (8 * fieldTypes.length) + UnsafeRow.calculateBitSetWidthInBytes(fieldTypes.length)
 
   def getSizeRequirement(row: Row): Int = {
     var fieldNumber = 0
     var variableLengthFieldSize: Int = 0
     while (fieldNumber < writers.length) {
       if (!row.isNullAt(fieldNumber)) {
-        variableLengthFieldSize += writers(fieldNumber).getSize(row.get(fieldNumber))
-
+        variableLengthFieldSize += writers(fieldNumber).getSize(row(fieldNumber))
       }
       fieldNumber += 1
     }
-    (8 * fieldTypes.length) + UnsafeRow.calculateBitSetWidthInBytes(fieldTypes.length) + variableLengthFieldSize
+    fixedLengthSize + variableLengthFieldSize
   }
 
   def writeRow(row: Row, baseObject: Object, baseOffset: Long): Long = {
-    val unsafeRow = new UnsafeRow()
-    unsafeRow.set(baseObject, baseOffset, writers.length, null) // TODO: schema?
+    unsafeRow.set(baseObject, baseOffset, writers.length, null)
     var fieldNumber = 0
-    var appendCursor: Int =
-      (8 * fieldTypes.length) + UnsafeRow.calculateBitSetWidthInBytes(fieldTypes.length)
+    var appendCursor: Int = fixedLengthSize
     while (fieldNumber < writers.length) {
       if (row.isNullAt(fieldNumber)) {
         unsafeRow.setNullAt(fieldNumber)
         // TODO: type-specific null value writing?
       } else {
         appendCursor += writers(fieldNumber).write(
-          row.get(fieldNumber),
+          row(fieldNumber),
           fieldNumber,
           unsafeRow,
           baseObject,
