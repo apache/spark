@@ -572,7 +572,7 @@ private[master] class Master(
     } else {
       // Pack each app into as few workers as possible until we've assigned all its cores
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > app.desc.coresPerTask) {
+        for (app <- waitingApps if app.coresLeft >= app.desc.coresPerTask) {
           allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
         }
       }
@@ -592,9 +592,10 @@ private[master] class Master(
     val cpuPerTask = app.desc.coresPerTask
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     var coresLeft = coresToAllocate - coresToAllocate % cpuPerTask
+    val maxCoresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresLeft)
     val coresPerExecutor = math.max(
-      app.desc.coresPerExecutor.getOrElse(coresLeft),
-      app.desc.coresPerTask)
+      maxCoresPerExecutor - maxCoresPerExecutor % cpuPerTask,
+      cpuPerTask)
     while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
       val exec = app.addExecutor(worker, coresPerExecutor)
       coresLeft -= coresPerExecutor
