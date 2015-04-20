@@ -150,7 +150,8 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
         val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
         val model = vectorIndexer.fit(data)
         val categoryMaps = model.categoryMaps
-        assert(categoryMaps.keys.toSet === categoricalFeatures) // Chose correct categorical features
+        // Chose correct categorical features
+        assert(categoryMaps.keys.toSet === categoricalFeatures)
         val transformed = model.transform(data).select("indexed")
         val indexedRDD: RDD[Vector] = transformed.map(_.getAs[Vector](0))
         val featureAttrs = AttributeGroup.fromStructField(transformed.schema("indexed"))
@@ -227,7 +228,7 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     }
     val attrGroup = new AttributeGroup("features", featureAttributes)
     val densePoints1WithMeta =
-      densePoints1.select(densePoints1("features").as("features", attrGroup.toMetadata))
+      densePoints1.select(densePoints1("features").as("features", attrGroup.toMetadata()))
     val vectorIndexer = getIndexer.setMaxCategories(2)
     val model = vectorIndexer.fit(densePoints1WithMeta)
     // Check that ML metadata are preserved.

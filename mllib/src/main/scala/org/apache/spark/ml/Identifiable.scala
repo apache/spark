@@ -25,7 +25,7 @@ import java.util.UUID
 private[ml] trait Identifiable extends Serializable {
 
   /**
-   * A unique id for the object. The default implementation concatenates the class name, "-", and 8
+   * A unique id for the object. The default implementation concatenates the class name, "_", and 8
    * random hex chars.
    */
   private[ml] val uid: String =

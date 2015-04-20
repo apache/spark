@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-
 import com.google.common.io.Files
+
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.util.Utils
-/* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
-
+import org.apache.spark.util.Utils
 
 
 class QueryPartitionSuite extends QueryTest {
@@ -37,23 +34,28 @@ class QueryPartitionSuite extends QueryTest {
     testData.registerTempTable("testData")
 
     val tmpDir = Files.createTempDir()
-    //create the table for test
-    sql(s"CREATE TABLE table_with_partition(key int,value string) PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') SELECT key,value FROM testData")
+    // create the table for test
+    sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+      s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
+      "SELECT key,value FROM testData")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
+      "SELECT key,value FROM testData")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
+      "SELECT key,value FROM testData")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
+      "SELECT key,value FROM testData")
 
-    //test for the exist path
+    // test for the exist path
     checkAnswer(sql("select key,value from table_with_partition"),
       testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
         ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
 
-    //delect the path of one partition
+    // delete the path of one partition
     val folders = tmpDir.listFiles.filter(_.isDirectory)
     Utils.deleteRecursively(folders(0))
 
-    //test for affter delete the path
+    // test for after delete the path
     checkAnswer(sql("select key,value from table_with_partition"),
       testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
         ++ testData.toSchemaRDD.collect)
