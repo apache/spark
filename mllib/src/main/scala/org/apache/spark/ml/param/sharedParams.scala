@@ -45,6 +45,16 @@ private[ml] trait HasMaxIter extends Params {
   def getMaxIter: Int = get(maxIter)
 }
 
+private[ml] trait HasLearningRate extends Params {
+  /**
+   * param for the learning rate of gradient descent
+   */
+  val learningRate = new DoubleParam(this, "learningRate", "", Some(0.025))
+
+  /** @group getParam */
+  def getLearningRate: Double = get(learningRate)
+}
+
 private[ml] trait HasFeaturesCol extends Params {
   /**
    * param for features column name

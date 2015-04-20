@@ -17,62 +17,80 @@
 
 package org.apache.spark.ml.feature
 
-import com.sun.tools.javac.code.TypeTag
-import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.Model
-import org.apache.spark.ml._
 import org.apache.spark.ml.param.HasInputCol
-import org.apache.spark.ml.param.HasOutputCol
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.feature.Word2Vec
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
-import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-import scala.reflect.ClassTag
-
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
-private[feature] trait Word2VecParams extends Params with HasInputCol {
+private[feature] trait Word2VecParams extends Params with HasInputCol with HasMaxIter with HasLearningRate {
+
+  /**
+   * The dimension of the code that you want to transform from words.
+   */
   val vectorSize = new IntParam(this, "vectorSize", "", Some(100))
+
+  /** @group getParam */
   def getVectorSize: Int = get(vectorSize)
 
-  val learningRate = new DoubleParam(this, "learningRate", "", Some(0.025))
-  def getLearningRate: Double = get(learningRate)
-
+  /**
+   * Number of partitions
+   */
   val numPartitions = new IntParam(this, "numPartitions", "", Some(1))
+
+  /** @group getParam */
   def getNumPartitions: Int = get(numPartitions)
 
-  val numIterations = new IntParam(this, "numIterations", "", Some(1))
-  def getNumIterations: Int = get(numIterations)
-
+  /**
+   * The random seed
+   */
   val seed = new LongParam(this, "seed", "", Some(Utils.random.nextLong()))
+
+  /** @group getParam */
   def getSeed: Long = get(seed)
 
+  /**
+   * The minimum count of words that can be kept in training set.
+   */
   val minCount = new IntParam(this, "minCount", "", Some(5))
+
+  /** @group getParam */
   def getMinCount: Int = get(minCount)
 
+  /**
+   * The column name of the output column - synonyms.
+   */
   val synonymsCol = new Param[String](this, "synonymsCol", "Synonyms column name")
+
+  /** @group getParam */
   def getSynonymsCol: String = get(synonymsCol)
 
+  /**
+   * The column name of the output column - code.
+   */
   val codeCol = new Param[String](this, "codeCol", "Code column name")
+
+  /** @group getParam */
   def getCodeCol: String = get(codeCol)
 
+  /**
+   * The number of synonyms that you want to have.
+   */
   val numSynonyms = new IntParam(this, "numSynonyms", "number of synonyms to find", Some(0))
+
+  /** @group getParam */
   def getNumSynonyms: Int = get(numSynonyms)
 
   type S <: Iterable[String]
@@ -88,11 +106,23 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setVectorSize(value: Int) = set(vectorSize, value)
+
+  /** @group setParam */
   def setLearningRate(value: Double) = set(learningRate, value)
+
+  /** @group setParam */
   def setNumPartitions(value: Int) = set(numPartitions, value)
-  def setNumIterations(value: Int) = set(numIterations, value)
+
+  /** @group setParam */
+  def setMaxIter(value: Int) = set(maxIter, value)
+
+  /** @group setParam */
   def setSeed(value: Long) = set(seed, value)
+
+  /** @group setParam */
   def setMinCount(value: Int) = set(minCount, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): Word2VecModel = {
@@ -102,7 +132,7 @@ class Word2Vec extends Estimator[Word2VecModel] with Word2VecParams {
     val wordVectors = new feature.Word2Vec()
       .setLearningRate(map(learningRate))
       .setMinCount(map(minCount))
-      .setNumIterations(map(numIterations))
+      .setNumIterations(map(maxIter))
       .setNumPartitions(map(numPartitions))
       .setSeed(map(seed))
       .setVectorSize(map(vectorSize))
@@ -155,7 +185,7 @@ class Word2VecModel private[ml] (
     }
 
     if (map(synonymsCol) != "" & map(numSynonyms) > 0) {
-      val findSynonyms = udf { (word: String) => wordVectors.findSynonyms(word, map(numSynonyms)) : Array[(String, Double)] }
+      val findSynonyms = udf { (word: String) => wordVectors.findSynonyms(word, map(numSynonyms)).toMap : Map[String, Double] }
       tmpData = tmpData.withColumn(map(synonymsCol), findSynonyms(col(map(inputCol))))
       numColsOutput += 1
     }
@@ -188,7 +218,7 @@ class Word2VecModel private[ml] (
         s"Output column ${map(synonymsCol)} already exists.")
       require(map(numSynonyms) > 0,
         s"Number of synonyms should larger than 0")
-      outputFields = outputFields :+ StructField(map(synonymsCol), , false)
+      outputFields = outputFields :+ StructField(map(synonymsCol), MapType(StringType, DoubleType), false)
     }
 
     StructType(outputFields)
