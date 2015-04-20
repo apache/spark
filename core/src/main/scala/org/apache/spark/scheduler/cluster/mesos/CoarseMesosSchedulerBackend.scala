@@ -63,16 +63,11 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
   
-  val coreNumPerTask = conf.getInt("spark.task.cpus", 1)
-    
-  if (coreNumPerTask < 1) {
-    throw new IllegalArgumentException(
-      s"spark.task.cpus is set to an invalid value $coreNumPerTask")
-  }
+  val coresPerTask = scheduler.CPUS_PER_TASK
 
-  if (maxCores < coreNumPerTask) {
+  if (maxCores < coresPerTask) {
     throw new IllegalArgumentException(
-      s"spark.task.cpus ($coreNumPerTask) should not be larger than spark.cores.max ($maxCores)")
+      s"spark.task.cpus ($coresPerTask) should not be larger than spark.cores.max ($maxCores)")
   }
 
   // Cores we have acquired with each Mesos task ID
@@ -225,9 +220,10 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
+        val demandCores = math.min(cpus, maxCores - totalCoresAcquired)
+        val cpusToUse = demandCores - demandCores % coresPerTask
         if (totalCoresAcquired < maxCores &&
-            cpusToUse >= coreNumPerTask &&
+            cpusToUse >= coresPerTask &&
             mem >= MemoryUtils.calculateTotalMemory(sc) &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
             !slaveIdsWithExecutors.contains(slaveId)) {
