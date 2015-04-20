@@ -131,7 +131,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
+               codegenEnabled => {
+        if (self.sqlContext.getConf("spark.sql.unsafe.enabled", "false") == "true") {
           execution.UnsafeGeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -141,6 +142,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               groupingExpressions,
               partialComputation,
               planLater(child))) :: Nil
+        } else {
+          execution.GeneratedAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.GeneratedAggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))) :: Nil
+        }
+      }
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(
