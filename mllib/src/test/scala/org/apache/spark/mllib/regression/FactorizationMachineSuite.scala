@@ -43,17 +43,18 @@ class FactorizationMachineSuite extends FunSuite with MLlibTestSparkContext {
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
-    val y = x.map { xi =>
-      var l = blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
+    val y = x.map {
+      xi =>
+        var l = blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
 
-      for (i <- 0 until weights.length; j <- i + 1 until weights.length) {
-        var d = 0.0
-        for (f <- 0 until factors.numRows) {
-          d += factors(f, i) * factors(f, j)
+        for (i <- 0 until weights.length; j <- i + 1 until weights.length) {
+          var d = 0.0
+          for (f <- 0 until factors.numRows) {
+            d += factors(f, i) * factors(f, j)
+          }
+          l += xi(i) * xi(j) * d
         }
-        l += xi(i) * xi(j) * d
-      }
-      l
+        l
     }
 
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))

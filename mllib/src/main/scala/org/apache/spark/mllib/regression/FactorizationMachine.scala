@@ -21,6 +21,24 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 object FMWithSGD {
 
+  /**
+   * Train a Factoriaton Machine Regression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
+   * in gradient descent are initialized using the initial weights provided.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param dim A (Boolean,Boolean,Int) 3-Tuple stands for whether the global bias term should be used, whether the
+   *            one-way interactions should be used, and the number of factors that are used for pairwise
+   *            interactions, respectively.
+   * @param regParam A (Double,Double,Double) 3-Tuple stands for the regularization parameters of intercept, one-way
+   *                 interactions and pairwise interactions, respectively.
+   * @param initStd Standard Deviation used for factorization matrix initialization.
+   */
   def train(input: RDD[LabeledPoint],
             numIterations: Int,
             stepSize: Double,
@@ -73,7 +91,7 @@ class FMWithSGD(private var stepSize: Double,
 
 
   /**
-   * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
+   * Construct an object with default parameters: {stepSize: 1.0, numIterations: 100,
    * dim: (true, true, 8), regParam: (0, 0.01, 0.01), miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, (true, true, 8), (0, 0.01, 0.01), 1.0)
@@ -94,7 +112,8 @@ class FMWithSGD(private var stepSize: Double,
   private var maxLabel: Double = Double.MinValue
 
   /**
-   *
+   * A (Boolean,Boolean,Int) 3-Tuple stands for whether the global bias term should be used, whether the one-way
+   * interactions should be used, and the number of factors that are used for pairwise interactions, respectively.
    */
   def setDim(dim: (Boolean, Boolean, Int)): this.type = {
     require(dim._3 > 0)
@@ -109,32 +128,37 @@ class FMWithSGD(private var stepSize: Double,
    * @param addIntercept determines if the global bias term w0 should be used
    * @param add1Way determines if one-way interactions (bias terms for each variable)
    * @param numFactors the number of factors that are used for pairwise interactions
-   * @return
    */
   def setDim(addIntercept: Boolean = true, add1Way: Boolean = true, numFactors: Int = 8): this.type = {
     setDim((addIntercept, add1Way, numFactors))
   }
 
-  def setRegParam(reg: (Double, Double, Double)): this.type = {
-    require(reg._1 >= 0 && reg._2 >= 0 && reg._3 >= 0)
-    this.r0 = reg._1
-    this.r1 = reg._2
-    this.r2 = reg._3
+
+  /**
+   * @param regParams A (Double,Double,Double) 3-Tuple stands for the regularization parameters of intercept, one-way
+   *                  interactions and pairwise interactions, respectively.
+   */
+  def setRegParam(regParams: (Double, Double, Double)): this.type = {
+    require(regParams._1 >= 0 && regParams._2 >= 0 && regParams._3 >= 0)
+    this.r0 = regParams._1
+    this.r1 = regParams._2
+    this.r2 = regParams._3
     this
   }
 
   /**
-   *
    * @param regIntercept intercept regularization
-   * @param reg1Way one-way regularization
-   * @param reg2Way two-way regularization
-   * @return
+   * @param reg1Way one-way interactions regularization
+   * @param reg2Way pairwise interactions regularization
    */
   def setRegParam(regIntercept: Double = 0, reg1Way: Double = 0, reg2Way: Double = 0): this.type = {
     setRegParam((regIntercept, reg1Way, reg2Way))
   }
 
 
+  /**
+   * @param initStd Standard Deviation used for factorization matrix initialization.
+   */
   def setInitStd(initStd: Double): this.type = {
     require(initStd > 0)
     this.initStd = initStd
@@ -142,7 +166,7 @@ class FMWithSGD(private var stepSize: Double,
   }
 
   /**
-   * Set fraction of data to be used for each SGD iteration. Default 0.1.
+   * Set fraction of data to be used for each SGD iteration.
    */
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     require(miniBatchFraction > 0 && miniBatchFraction <= 1)
@@ -151,7 +175,7 @@ class FMWithSGD(private var stepSize: Double,
   }
 
   /**
-   * Set the number of iterations for SGD. Default 100.
+   * Set the number of iterations for SGD.
    */
   def setNumIterations(numIterations: Int): this.type = {
     require(numIterations > 0)
@@ -160,7 +184,7 @@ class FMWithSGD(private var stepSize: Double,
   }
 
   /**
-   * Set the initial step size of SGD for the first step. Default 0.01.
+   * Set the initial step size of SGD for the first step.
    * In subsequent steps, the step size will decrease with stepSize/sqrt(t)
    */
   def setStepSize(stepSize: Double): this.type = {
@@ -171,8 +195,11 @@ class FMWithSGD(private var stepSize: Double,
 
 
   /**
-   * v : numFeatures * numFactors + w : numFeatures + w0 : 1
-   * @return
+   * Encode the FMModel to a dense vector, with its first numFeatures * numFactors elements representing the
+   * factorization matrix v, sequential numFeaturs elements representing the one-way interactions weights w if k1 is
+   * set to true, and the last element representing the intercept w0 if k0 is set to true.
+   * The factorization matrix v is initialized by Gaussinan(0, initStd).
+   * v : numFeatures * numFactors + w : [numFeatures] + w0 : [1]
    */
   private def generateInitWeights(): Vector = {
     (k0, k1) match {
@@ -193,6 +220,10 @@ class FMWithSGD(private var stepSize: Double,
     }
   }
 
+
+  /**
+   * Create a FMModle from vector.
+   */
   private def createModel(weights: Vector): FMModel = {
 
     val values = weights.toArray
@@ -208,6 +239,11 @@ class FMWithSGD(private var stepSize: Double,
     new FMModel(v, w, w0)
   }
 
+
+  /**
+   * Run the algorithm with the configured parameters on an input RDD
+   * of LabeledPoint entries.
+   */
   def run(input: RDD[LabeledPoint]): FMModel = {
 
     if (input.getStorageLevel == StorageLevel.NONE) {
@@ -249,6 +285,12 @@ class FMWithSGD(private var stepSize: Double,
 }
 
 
+/**
+ * :: DeveloperApi ::
+ * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
+ * For the detailed mathematical derivation, see the reference at
+ * http://doi.acm.org/10.1145/2168752.2168771
+ */
 class FMGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
                  val numFeatures: Int, val min: Double, val max: Double) extends Gradient {
 
@@ -290,8 +332,9 @@ class FMGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
       case vec: DenseVector =>
         val cumValues = vec.values
 
-        if (k0)
+        if (k0) {
           cumValues(cumValues.length - 1) += diff
+        }
 
         if (k1) {
           val pos = numFeatures * k2
@@ -331,7 +374,12 @@ class FMGradient(val k0: Boolean, val k1: Boolean, val k2: Int,
   }
 }
 
-
+/**
+ * :: DeveloperApi ::
+ * Updater for L2 regularized problems.
+ *          R(w) = 1/2 ||w||^2
+ * Uses a step-size decreasing with the square root of the number of iterations.
+ */
 class FMUpdater(val k0: Boolean, val k1: Boolean, val k2: Int,
                 val r0: Double, val r1: Double, val r2: Double,
                 val numFeatures: Int) extends Updater {
@@ -367,6 +415,9 @@ class FMUpdater(val k0: Boolean, val k1: Boolean, val k2: Int,
 }
 
 
+/**
+ * Factorization Machine model.
+ */
 class FMModel(val factorMatrix: Matrix,
               val weightVector: Option[Vector],
               val intercept: Double) extends Serializable with Saveable {
@@ -423,7 +474,7 @@ object FMModel extends Loader[FMModel] {
 
     def thisFormatVersion = "1.0"
 
-    def thisClassName = this.getClass.getName
+    def thisClassName = "org.apache.spark.mllib.regression.FMModel"
 
     /** Model data for model import/export */
     case class Data(factorMatrix: Matrix, weightVector: Option[Vector], intercept: Double)
