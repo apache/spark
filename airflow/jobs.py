@@ -175,6 +175,24 @@ class BaseJob(Base):
 
 
 class MasterJob(BaseJob):
+    """
+    This MasterJob runs indifinetly and constantly schedules the job that
+    are ready to run. It figures out the latest runs for each task
+    and see if the dependencies for the next schedules are met. If
+    so it triggers the task instance. It does this for each
+    task in each DAG and repeats.
+
+    :param dag_id: to run the scheduler for a single specific DAG
+    :type dag_id: string
+    :param subdir: to search for DAG under a certain folder only
+    :type subdir: string
+    :param test_mode: used for unit testing this class only, runs a single
+        schedule run
+    :type test_mode: bool
+    :param refresh_dags_every: force refresh the DAG definition every N
+        runs, as specified here
+    :type refresh_dags_every: int
+    """
 
     __mapper_args__ = {
         'polymorphic_identity': 'MasterJob'
@@ -185,10 +203,12 @@ class MasterJob(BaseJob):
             dag_id=None,
             subdir=None,
             test_mode=False,
+            refresh_dags_every=10,
             *args, **kwargs):
         self.dag_id = dag_id
         self.subdir = subdir
         self.test_mode = test_mode
+        self.refresh_dags_every = refresh_dags_every
         super(MasterJob, self).__init__(*args, **kwargs)
 
         self.heartrate = conf.getint('master', 'MASTER_HEARTBEAT_SEC')
@@ -285,7 +305,10 @@ class MasterJob(BaseJob):
         i = 0
         while (not self.test_mode) or i < 1:
             i += 1
-            dagbag.collect_dags(only_if_updated=True)
+            if i % self.refresh_dags_every == 0:
+                dagbag.collect_dags(only_if_updated=False)
+            else:
+                dagbag.collect_dags(only_if_updated=True)
             if dag_id:
                 dags = [dagbag.dags[dag_id]]
             else:
