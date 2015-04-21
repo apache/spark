@@ -52,7 +52,7 @@ class Node (
 
   override def toString: String = {
     "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
-      "impurity =  " + impurity + "split = " + split + ", stats = " + stats
+      "impurity =  " + impurity + ", split = " + split + ", stats = " + stats
   }
 
   /**
