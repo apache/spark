@@ -47,7 +47,6 @@ public enum ByteUnit {
   public long toPiB(long d) { return convert(d, PiB); }
   
   long multiplier = 0;
-  
   static final long MAX = Long.MAX_VALUE;
 
   /**
@@ -61,8 +60,4 @@ public enum ByteUnit {
     if (d < -over) return Long.MIN_VALUE;
     return d * m;
   }
-  
-  
-
-
 }
