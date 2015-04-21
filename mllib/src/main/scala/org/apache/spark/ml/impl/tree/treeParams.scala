@@ -117,7 +117,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this.asInstanceOf[this.type]
+    this
   }
 
   /** @group getParam */
