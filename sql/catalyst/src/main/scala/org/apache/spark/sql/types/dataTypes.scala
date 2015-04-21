@@ -1025,6 +1025,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
@@ -1047,6 +1048,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
+  }
+
+  /**
+   * Returns index of a given field
+   */
+  def fieldIndex(name: String): Int = {
+    nameToIndex.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   protected[sql] def toAttributes: Seq[AttributeReference] =

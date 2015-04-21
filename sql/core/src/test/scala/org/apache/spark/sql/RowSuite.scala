@@ -62,4 +62,14 @@ class RowSuite extends FunSuite {
     val de = instance.deserialize(ser).asInstanceOf[Row]
     assert(de === row)
   }
+
+  test("get values by field name on Row created via .toDF") {
+    val row = Seq((1, Seq(1))).toDF("a", "b").first()
+    assert(row.getAs[Int]("a") === 1)
+    assert(row.getAs[Seq[Int]]("b") === Seq(1))
+
+    intercept[IllegalArgumentException]{
+      row.getAs[Int]("c")
+    }
+  }
 }
