@@ -19,11 +19,13 @@ package org.apache.spark
 
 import java.util.concurrent.{TimeUnit, Executors}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.{Try, Random}
 
 import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
 
 class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
@@ -222,6 +224,26 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
   }
 
+  test("akka deprecated configs") {
+    val conf = new SparkConf()
+
+    assert(!conf.contains("spark.rpc.num.retries"))
+    assert(!conf.contains("spark.rpc.retry.wait"))
+    assert(!conf.contains("spark.rpc.askTimeout"))
+    assert(!conf.contains("spark.rpc.lookupTimeout"))
+
+    conf.set("spark.akka.num.retries", "1")
+    assert(RpcUtils.numRetries(conf) === 1)
+
+    conf.set("spark.akka.retry.wait", "2")
+    assert(RpcUtils.retryWaitMs(conf) === 2L)
+
+    conf.set("spark.akka.askTimeout", "3")
+    assert(RpcUtils.askTimeout(conf) === (3 seconds))
+
+    conf.set("spark.akka.lookupTimeout", "4")
+    assert(RpcUtils.lookupTimeout(conf) === (4 seconds))
+  }
 }
 
 class Class1 {}
