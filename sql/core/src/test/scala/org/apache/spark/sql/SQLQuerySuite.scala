@@ -1238,6 +1238,27 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
   }
 
+  test("SPARK-7026: Fix bug when there are non equal join predicates for left semi join") {
+    checkAnswer(
+      sql("""
+            |SELECT * FROM testData2 x
+            |LEFT SEMI JOIN testData2 y
+            |ON x.b = y.b
+            |AND x.a >= y.a + 2""".stripMargin),
+      Seq(Row(3,1), Row(3,2))
+    )
+
+    checkAnswer(
+      sql("""
+            |SELECT * FROM testData2 x
+            |LEFT SEMI JOIN testData2 y
+            |ON x.b = y.b
+            |AND x.a >= y.a + 2
+            |AND x.a >= y.a + 1""".stripMargin),
+      Seq(Row(3,1), Row(3,2))
+    )
+  }
+
   test("SPARK-6145: special cases") {
     jsonRDD(sparkContext.makeRDD(
       """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
