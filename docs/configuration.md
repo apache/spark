@@ -986,7 +986,8 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
   <td>3</td>
-    How many times for an RPC ask operation to retry before giving up.
+    Number of times to retry before an RPC task gives up.
+    An RPC task will run at most times of this number.
   <td>
   </td>
 </tr>
@@ -994,20 +995,20 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rpc.retry.wait</code></td>
   <td>3s</td>
   <td>
-    How long for an RPC ask operation to wait before starting the next retry.
+    Duration for an RPC ask operation to wait before retrying.
   </td>
 </tr>
 <tr>
   <td><code>spark.rpc.askTimeout</code></td>
   <td>30s</td>
   <td>
-    How long for an RPC ask operation to wait before timing out.
+    Duration for an RPC ask operation to wait before timing out.
   </td>
 </tr>
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>30s</td>
-    How long for an RPC remote endpoint lookup operation to wait before timing out.
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   <td>
   </td>
 </tr>
