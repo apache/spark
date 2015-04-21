@@ -988,6 +988,7 @@ private[spark] object SerDe extends Serializable {
       val isTransposed = if (m.isTransposed) 1 else 0
       ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
 
+      out.write(Opcodes.MARK)
       out.write(Opcodes.BININT)
       out.write(PickleUtils.integer_to_bytes(m.numRows))
       out.write(Opcodes.BININT)
@@ -1008,7 +1009,7 @@ private[spark] object SerDe extends Serializable {
       val n = bytes.length / 8
       val values = new Array[Double](n)
       val order = ByteOrder.nativeOrder()
-      val isTransposed = args(3).asInstanceOf[Boolean]
+      val isTransposed = if (args(3).asInstanceOf[Int] == 1) true else false
       ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
       new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values, isTransposed)
     }

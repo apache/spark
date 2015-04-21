@@ -671,7 +671,8 @@ class DenseMatrix(Matrix):
 
     def __reduce__(self):
         return DenseMatrix, (
-            self.numRows, self.numCols, self.values.tostring(), self.isTransposed)
+            self.numRows, self.numCols, self.values.tostring(),
+            int(self.isTransposed))
 
     def toArray(self):
         """
