@@ -59,6 +59,8 @@ public class SparkSubmitCommandBuilderSuite {
   @Test
   public void testCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
+      parser.CLASS,
+      "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       parser.MASTER,
       "local",
       parser.DRIVER_MEMORY,
@@ -135,6 +137,7 @@ public class SparkSubmitCommandBuilderSuite {
   @Test
   public void testPySparkFallback() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
+      "pyspark-shell-main",
       "--master=foo",
       "--deploy-mode=bar",
       "script.py",
