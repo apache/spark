@@ -43,7 +43,7 @@ class HiveStatsCollectionOperator(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'HiveStatsCollectionOperator'
     }
-    template_fields = ('table', 'partition', 'ds')
+    template_fields = ('table', 'partition', 'ds', 'dttm')
     ui_color = '#aff7a6'
 
     @apply_defaults
@@ -140,7 +140,7 @@ class HiveStatsCollectionOperator(BaseOperator):
         WHERE
             table_name='{self.table}' AND
             partition_repr='{part_json}' AND
-            ds='{self.ds}';
+            dttm='{self.dttm}';
         """.format(**locals())
         mysql.run(sql)
 
