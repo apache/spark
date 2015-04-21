@@ -310,7 +310,7 @@ class ListTests(MLlibTestCase):
 
         rf_model = RandomForest.trainClassifier(
             rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=10,
-            maxBins=4)
+            maxBins=4, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
