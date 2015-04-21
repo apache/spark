@@ -41,7 +41,7 @@ public abstract class RecordReader<T> implements Closeable {
   public abstract T get() throws InterruptedException, IOException;
 
   /**
-   * Returns the progress of the iterator, as a number between 0.0 and 1.0.
+   * Returns the progress of the reader, as a number between 0.0 and 1.0.
    */
   public abstract double getProgress();
 

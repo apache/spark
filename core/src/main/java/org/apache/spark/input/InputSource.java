@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental;
 
 /**
  * An input source for Spark that specifies how the input is partitioned and how data can be read.
+ * Implementations of this class must be serializable.
  *
  * An {@link InputSource} is described by:
  * <ul>
