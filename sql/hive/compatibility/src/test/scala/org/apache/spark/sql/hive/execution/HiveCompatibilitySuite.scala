@@ -240,7 +240,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // It has a bug and it has been fixed by
     // https://issues.apache.org/jira/browse/HIVE-7673 (in Hive 0.14 and trunk).
-    "input46"
+    "input46",
+
+    // It contains the window function
+    "subquery_in",
+    "subquery_notin"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -994,5 +998,5 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view",
     "view_cast",
     "view_inputs"
-  )
+  ) ++ HiveShim.compatibilityWhiteList
 }

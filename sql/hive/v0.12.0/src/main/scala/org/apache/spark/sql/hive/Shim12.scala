@@ -223,6 +223,8 @@ private[hive] object HiveShim {
     "udf_concat"
   )
 
+  def compatibilityWhiteList = Seq()
+
   def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
     tbl.setDataLocation(new Path(crtTbl.getLocation()).toUri())
   }

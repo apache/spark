@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.plans.LeftSemiType
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -32,7 +34,8 @@ case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
+    right: SparkPlan,
+    jt: LeftSemiType) extends BinaryNode with HashJoin {
 
   override val buildSide: BuildSide = BuildRight
 
@@ -59,9 +62,15 @@ case class BroadcastLeftSemiJoinHash(
 
     streamedPlan.execute().mapPartitions { streamIter =>
       val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && broadcastedRelation.value.contains(joinKeys.currentValue)
-      })
+      if (jt.exists) {
+        streamIter.filter(current => {
+          !joinKeys(current).anyNull && broadcastedRelation.value.contains(joinKeys.currentValue)
+        })
+      } else {
+        streamIter.filter(current => {
+          joinKeys(current).anyNull || !broadcastedRelation.value.contains(joinKeys.currentValue)
+        })
+      }
     }
   }
 }

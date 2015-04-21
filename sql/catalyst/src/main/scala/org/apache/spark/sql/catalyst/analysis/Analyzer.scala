@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.plans.{LeftSemiExist, LeftSemiNotExist}
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -55,6 +55,7 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
+      RewriteWhereClause ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
@@ -198,6 +199,58 @@ class Analyzer(
             table = EliminateSubQueries(getTable(u, cteRelations)))
         case u: UnresolvedRelation =>
           getTable(u, cteRelations)
+      }
+    }
+  }
+
+  /**
+   * Rewrite the [[Exists]] with left semi join
+   */
+  object RewriteWhereClause extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      // TODO we don't support [EXIST subquery] combined with other conjunctions now
+      // e.g. from a where exists (select _ from b where a.v = b.v) AND value > '112'
+      case e @ Exists(
+                 SubqueryConjunction(left, None, None),
+                 Project(_, Filter(condition, right)),
+                 positive) =>
+        if (positive) {
+          Join(left, right, LeftSemiExist, Some(condition))
+        } else {
+          Join(left, right, LeftSemiNotExist, Some(condition))
+        }
+
+      // TODO we don't support [IN subquery] combined with other conjunctions now
+      // e.g. where key in (select key from src_b) AND value > '112'
+      case e @ InSubquery(
+                 SubqueryConjunction(left, Some(key), None),
+                 Project(projectList, Filter(condition, right)),
+                 positive) if e.left.resolved && projectList.length == 1 =>
+          // possible correlated (subquery references its parent attribute)
+          // convert the filter as part of the join condition
+          // and even if it's not correlated, that will not harmful if we
+          // pop up the filter into the left semi join, cause the optimizer
+          // will push it back (even down) again.
+          createSemiJoinForInSubquery(
+            left, right, And(condition, EqualTo(projectList(0), key)), positive)
+
+      case e @ InSubquery(
+                 SubqueryConjunction(left, Some(key), None),
+                 Project(projectList, child),
+                 positive) if e.left.resolved && projectList.length == 1 =>
+          // it's unrelated
+          createSemiJoinForInSubquery(left, e.right, EqualTo(projectList(0), key), positive)
+    }
+
+    def createSemiJoinForInSubquery(
+        left: LogicalPlan,
+        right: LogicalPlan,
+        condition: Expression,
+        positive: Boolean): Join = {
+      if (positive) {
+        Join(left, right, LeftSemiExist, Some(condition))
+      } else {
+        Join(left, right, LeftSemiNotExist, Some(condition))
       }
     }
   }

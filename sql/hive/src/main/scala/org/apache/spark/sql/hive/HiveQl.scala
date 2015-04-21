@@ -641,10 +641,39 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case Some(f) => nodeToRelation(f)
           case None => OneRowRelation
         }
- 
+
         val withWhere = whereClause.map { whereNode =>
-          val Seq(whereExpr) = whereNode.getChildren.toSeq
-          Filter(nodeToExpr(whereExpr), relations)
+          val Seq(clause) = whereNode.getChildren.toSeq
+          clause match {
+            case Token(NOT(),
+                   Token("TOK_SUBQUERY_EXPR",
+                     Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
+                     subquery :: Nil) :: Nil) =>
+              Exists(SubqueryConjunction(relations), nodeToPlan(subquery), false)
+            case Token("TOK_SUBQUERY_EXPR",
+                   Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
+                   subquery :: Nil) =>
+              Exists(SubqueryConjunction(relations), nodeToPlan(subquery), true)
+            case Token(NOT(),
+                   Token("TOK_SUBQUERY_EXPR",
+                     Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) ::
+                       subquery ::
+                       expr :: Nil) :: Nil) =>
+              InSubquery(
+                SubqueryConjunction(relations, key = Some(nodeToExpr(expr))),
+                nodeToPlan(subquery),
+                false)
+            case Token("TOK_SUBQUERY_EXPR",
+                   Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) ::
+                   subquery ::
+                   expr :: Nil) =>
+              InSubquery(
+                SubqueryConjunction(relations, key = Some(nodeToExpr(expr))),
+                nodeToPlan(subquery),
+                true)
+            case whereExpr =>
+              Filter(nodeToExpr(whereExpr), relations)
+          }
         }.getOrElse(relations)
 
         val select =
@@ -1092,8 +1121,22 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
   val SQRT = "(?i)SQRT".r
+  val EXISTS = "(?i)EXISTS".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
+    case Token(NOT(),
+           Token("TOK_SUBQUERY_EXPR", _)) =>
+      // TODO
+      throw new NotImplementedError(
+        s"""Subquery combines filter is not supported yet.
+            | ${node.getName}: text: ${node}
+         """.stripMargin)
+    case Token("TOK_SUBQUERY_EXPR", _) =>
+      // TODO
+      throw new NotImplementedError(
+        s"""Subquery combines filter is not supported yet.
+            | ${node.getName}: text: ${node}
+         """.stripMargin)
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>

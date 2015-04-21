@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.{LeftSemiType, LeftSemiNotExist, LeftSemiExist}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -68,6 +70,9 @@ trait CheckAnalysis {
         }
 
         operator match {
+          case f @ SubqueryConjunction(_, _, Some(condition)) =>
+            failAnalysis(s"WHERE EXISTS/IS can not be combined with conjunctions, ${condition}")
+
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.prettyString}' " +
@@ -110,6 +115,13 @@ trait CheckAnalysis {
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
+
+          // We assume the `[NOT] EXISTS` only support the equi-join
+          // TODO can we support the non-equi-join as well? performance concern?
+          case o @ Join(_, _, LeftSemiExist | LeftSemiNotExist, _)
+            if ExtractEquiJoinKeys.unapply(o).isEmpty =>
+            failAnalysis(
+              s"condition $o doens't contain any equi-join key")
 
           case _ => // Analysis successful!
         }

@@ -350,6 +350,10 @@ private[hive] object HiveShim {
 
   def compatibilityBlackList = Seq()
 
+  def compatibilityWhiteList = Seq(
+    "subquery_notexists",
+    "subquery_exists")
+
   def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
     tbl.setDataLocation(new Path(crtTbl.getLocation()))
   }
