@@ -95,7 +95,7 @@ def clean_up():
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -339,6 +339,8 @@ def standardize_jira_ref(text):
     return clean_text
 
 def main():
+    global original_head
+    
     os.chdir(SPARK_HOME)
     original_head = run_cmd("git rev-parse HEAD")[:8]
     
@@ -407,7 +409,7 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(pr_num, target_ref)
+    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
