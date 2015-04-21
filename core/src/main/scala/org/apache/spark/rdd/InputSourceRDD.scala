@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, TaskContext, Partition, SparkContext}
-import org.apache.spark.input.{InputPartition, InputSource}
+import org.apache.spark.io.{InputPartition, InputSource}
 
 
 private final class InputSourcePartition(val underlying: InputPartition, override val index: Int)
