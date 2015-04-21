@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -46,6 +47,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
+
+  private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
@@ -83,7 +86,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
-        val ser = env.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
