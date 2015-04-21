@@ -125,8 +125,8 @@ def initdb():
             KET.know_event_type == 'Natural Disaster').first():
         session.add(KET(know_event_type='Natural Disaster'))
     if not session.query(KET).filter(
-            KET.know_event_type == 'Marketing Campain').first():
-        session.add(KET(know_event_type='Marketing Campain'))
+            KET.know_event_type == 'Marketing Campaign').first():
+        session.add(KET(know_event_type='Marketing Campaign'))
     session.commit()
     session.close()
 
@@ -317,7 +317,7 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
     This is used in the context of ``operators`` and ``hooks`` and
     silence the import errors for when libraries are missing. It makes
     for a clean package abstracting the underlying modules and only
-    brings funcitonal operators to those namespaces.
+    brings functional operators to those namespaces.
     '''
     imported_attrs = []
     for mod, attrs in module_attrs_dict.items():

@@ -8,7 +8,8 @@ from airflow.utils import apply_defaults
 
 class Hive2SambaOperator(BaseOperator):
     """
-    Executes hql code in a specific Hive database.
+    Executes hql code in a specific Hive database and loads the
+    results of the query as a csv to a Samba location.
 
     :param hql: the hql to be exported
     :type hql: string

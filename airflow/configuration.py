@@ -153,7 +153,7 @@ else:
 
 if not os.path.isfile(AIRFLOW_CONFIG):
     '''
-    These configuration are used to generate a default configuration when
+    These configuration options are used to generate a default configuration when
     it is missing. The right way to change your configuration is to alter your
     configuration file, not this code.
     '''

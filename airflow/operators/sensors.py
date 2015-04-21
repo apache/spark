@@ -288,7 +288,7 @@ class S3PrefixSensor(BaseSensorOperator):
     SQL LIKE 'airfl%'. There is the possibility to precise a delimiter to
     indicate the hierarchy or keys, meaning that the match will stop at that
     delimiter. Current code accepts sane delimiters, i.e. characters that
-    are NOT special characters in python regex engine.
+    are NOT special characters in the Python regex engine.
 
 
     :param prefix: The key being waited on. Supports full s3:// style url or
