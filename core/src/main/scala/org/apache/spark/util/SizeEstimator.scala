@@ -179,7 +179,7 @@ private[spark] object SizeEstimator extends Logging {
   }
 
   // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
-  private val ARRAY_SIZE_FOR_SAMPLING = 200
+  private val ARRAY_SIZE_FOR_SAMPLING = 400
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
   private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
@@ -204,22 +204,36 @@ private[spark] object SizeEstimator extends Logging {
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
-        var size = 0.0
+        var s1 = 0l
+        var s2 = 0l
         val rand = new Random(42)
-        val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
-        var numElementsDrawn = 0
-        while (numElementsDrawn < ARRAY_SAMPLE_SIZE) {
+        val drawn = new OpenHashSet[Int](2*ARRAY_SAMPLE_SIZE)
+        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+           var index = 0
+           do {
+             index = rand.nextInt(length)
+          } while (drawn.contains(index))
+          drawn.add(index)
+          val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
+          if(null != obj) {
+            s1 += SizeEstimator.estimate(obj, state.visited).toLong
+          }
+        }
+        
+        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
           var index = 0
           do {
             index = rand.nextInt(length)
           } while (drawn.contains(index))
           drawn.add(index)
-          val elem = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
-          size += SizeEstimator.estimate(elem, state.visited)
-          numElementsDrawn += 1
+          val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
+          if(null != obj) {
+            s2 += SizeEstimator.estimate(obj, state.visited).toLong
+          }
         }
-        state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
-      }
+
+        val size = math.min(s1, s2)
+        state.size += math.max(s1, s2) + (size * (length / (ARRAY_SAMPLE_SIZE))).toLong      }
     }
   }
 
