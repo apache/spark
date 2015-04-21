@@ -298,7 +298,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
   
-  test("SPARK-7026 make LeftSemiJoin work when it has equal condition and not equal condition") {
+  test("SPARK-7026 make LeftSemiJoin work when it has both equal condition and not equal condition") {
     checkAnswer(
       sql("""
             |SELECT * FROM testData2 x
