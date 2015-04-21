@@ -106,6 +106,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsMb("1023k") === 0)
     assert(Utils.byteStringAsMb("1024k") === 1)
     assert(Utils.byteStringAsMb("3645k") === 3)
+    assert(Utils.byteStringAsMb("1024gb") === 1048576)
     assert(Utils.byteStringAsMb("1g") === ByteUnit.GiB.toMiB(1))
     assert(Utils.byteStringAsMb("1t") === ByteUnit.TiB.toMiB(1))
     assert(Utils.byteStringAsMb("1p") === ByteUnit.PiB.toMiB(1))
