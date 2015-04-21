@@ -474,21 +474,7 @@ private[spark] object SparkConf extends Logging {
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
         "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
-        "Please use spark.{driver,executor}.userClassPathFirst instead."),
-      DeprecatedConfig("spark.reducer.maxMbInFlight", "1.4",
-        "Please use spark.reducer.maxSizeInFlight instead."),
-      DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
-        "Please use spark.kryoserializer.buffer instead."),
-      DeprecatedConfig("spark.kryoserializer.buffer.max.mb", "1.4",
-        "Please use spark.kryoserializer.buffer.max instead."),
-      DeprecatedConfig("spark.shuffle.file.buffer.kb", "1.4",
-        "Please use spark.shuffle.file.buffer instead."),
-      DeprecatedConfig("spark.executor.logs.rolling.size.maxBytes", "1.4",
-        "Please use spark.executor.logs.rolling.maxSize instead."),
-      DeprecatedConfig("spark.io.compression.snappy.block.size", "1.4",
-        "Please use spark.io.compression.snappy.blockSize instead."),
-      DeprecatedConfig("spark.io.compression.lz4.block.size", "1.4",
-        "Please use spark.io.compression.lz4.blockSize instead."))
+        "Please use spark.{driver,executor}.userClassPathFirst instead."))
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
   }

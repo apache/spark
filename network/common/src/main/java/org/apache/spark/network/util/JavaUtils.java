@@ -126,7 +126,7 @@ public class JavaUtils {
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
-  private static ImmutableMap<String, TimeUnit> timeSuffixes = 
+  private static final ImmutableMap<String, TimeUnit> timeSuffixes = 
     ImmutableMap.<String, TimeUnit>builder()
       .put("us", TimeUnit.MICROSECONDS)
       .put("ms", TimeUnit.MILLISECONDS)
@@ -137,14 +137,19 @@ public class JavaUtils {
       .put("d", TimeUnit.DAYS)
       .build();
 
-  private static ImmutableMap<String, ByteUnit> byteSuffixes =
+  private static final ImmutableMap<String, ByteUnit> byteSuffixes =
     ImmutableMap.<String, ByteUnit>builder()
       .put("b", ByteUnit.BYTE)
       .put("k", ByteUnit.KiB)
+      .put("kb", ByteUnit.KiB)
       .put("m", ByteUnit.MiB)
+      .put("mb", ByteUnit.MiB)
       .put("g", ByteUnit.GiB)
+      .put("gb", ByteUnit.GiB)
       .put("t", ByteUnit.TiB)
+      .put("tb", ByteUnit.TiB)
       .put("p", ByteUnit.PiB)
+      .put("pb", ByteUnit.PiB)
       .build();
 
   /**
@@ -155,15 +160,13 @@ public class JavaUtils {
     String lower = str.toLowerCase().trim();
     
     try {
-      String suffix;
-      long val;
       Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
-      if (m.matches()) {
-        val = Long.parseLong(m.group(1));
-        suffix = m.group(2);
-      } else {
+      if (!m.matches()) {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
+      
+      long val = Long.parseLong(m.group(1));
+      String suffix = m.group(2);
       
       // Check for invalid suffixes
       if (suffix != null && !timeSuffixes.containsKey(suffix)) {
@@ -206,27 +209,24 @@ public class JavaUtils {
     String lower = str.toLowerCase().trim();
 
     try {
-      String suffix;
-      long val;
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      if (m.matches()) {
-        val = Long.parseLong(m.group(1));
-        suffix = m.group(2);
-      } else {
+      if (!m.matches()) {
         throw new NumberFormatException("Failed to parse byte string: " + str);
       }
-
+      
+      long val = Long.parseLong(m.group(1));
+      String suffix = m.group(2);
+      
       // Check for invalid suffixes
       if (suffix != null && !byteSuffixes.containsKey(suffix)) {
         throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
       }
 
       // If suffix is valid use that, otherwise none was provided and use the default passed
-      return new Double(
-        unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit)).longValue();
+      return unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
-        "kibibytes (kb), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
+        "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
         "E.g. 50b, 100k, or 250m.";
 
       throw new NumberFormatException(timeError + "\n" + e.getMessage());

@@ -79,7 +79,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       blockManager,
       blocksByAddress,
       serializer,
-      // Note: we use getSizeAsMb to assume Mb when no suffix is provided
+      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024) 
     val itr = blockFetcherItr.flatMap(unpackBlock)
 

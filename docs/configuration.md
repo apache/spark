@@ -53,11 +53,11 @@ Properties that specify a byte size should be configured with a unit of size.
 The following format is accepted:
 
     1b (bytes)
-    1k (kibibytes = 1024 bytes)
-    1m (mebibytes = 1024 kibibytes)
-    1g (gibibytes = 1024 mebibytes)
-    1t (tebibytes = 1024 gibibytes)
-    1p (pebibytes = 1024 tebibytes)
+    1k or 1kb (kibibytes = 1024 bytes)
+    1m or 1mb (mebibytes = 1024 kibibytes)
+    1g or 1gb (gibibytes = 1024 mebibytes)
+    1t or 1tb (tebibytes = 1024 gibibytes)
+    1p or 1pb (pebibytes = 1024 tebibytes)
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For

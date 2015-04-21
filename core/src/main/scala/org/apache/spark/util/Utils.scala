@@ -1037,8 +1037,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for
-   * internal use.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in bytes.
    */
@@ -1047,8 +1046,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for
-   * internal use.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to kibibytes for internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in kibibytes.
    */
@@ -1057,8 +1055,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for
-   * internal use.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in mebibytes.
    */
@@ -1067,8 +1064,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100k, or 250m, 500g) to gibibytes for
-   * internal use.
+   * Convert a passed byte string (e.g. 50b, 100k, or 250m, 500g) to gibibytes for internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in gibibytes.
    */
@@ -1082,7 +1078,7 @@ private[spark] object Utils extends Logging {
   def memoryStringToMb(str: String): Int = {
     // Convert to bytes, rather than directly to MB, because when no units are specified the unit
     // is assumed to be bytes
-    (JavaUtils.byteStringAsBytes(str) / 1048576.0).toInt
+    (JavaUtils.byteStringAsBytes(str) / 1024.0d / 1024.0d).toInt
   }
 
   /**
