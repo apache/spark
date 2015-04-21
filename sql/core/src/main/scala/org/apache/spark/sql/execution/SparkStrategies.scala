@@ -47,6 +47,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val semiJoin = joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+        if !canEvaluate(condition.getOrElse(Literal(true)), left) =>
+        val hashJoin = joins.ShuffledHashJoin(
+          leftKeys, rightKeys, joins.BuildRight, planLater(left), planLater(right))
+        condition
+          .map(cond => Project(left.output, Filter(cond, hashJoin)))
+          .getOrElse(Project(left.output, hashJoin)) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
         joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
