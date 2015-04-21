@@ -359,9 +359,11 @@ private[spark] class ExternalSorter[K, V, C](
         // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
         // createTempShuffleBlock here; see SPARK-3426 for more context.
         val (blockId, file) = diskBlockManager.createTempShuffleBlock()
-        val writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize,
-          curWriteMetrics)
-        writer.open()
+        // We purposely don't call open() on the disk writer in order to avoid writing compression
+        // headers into empty files, but we still need to create the file because the read code
+        // expects it to exist:
+        file.createNewFile()
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, curWriteMetrics)
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, and can take a long time in aggregate when we open many files, so should be
