@@ -432,12 +432,13 @@ class Word2VecModel private[mllib] (
     model: Map[String, Array[Float]]) extends Serializable with Saveable {
 
   // wordList: Ordered list of words obtained from model.
-  // wordIndex: Maps each word to an index, which can retrieve the corresponding
-  //            vector from wordVectors (see below)
-  // vectorSize: Dimension of each vector.
-  // numWords: Number of words.
   private val wordList: Array[String] = model.keys.toArray
+
+  // wordIndex: Maps each word to an index, which can retrieve the corresponding
+  //            vector from wordVectors (see below).
   private val wordIndex: Map[String, Int] = wordList.zip(0 until model.size).toMap
+
+  // vectorSize: Dimension of each word's vector.
   private val vectorSize = model.head._2.size
   private val numWords = wordIndex.size
 
@@ -447,11 +448,12 @@ class Word2VecModel private[mllib] (
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
   private val (wordVectors: Array[Float], wordVecNorms: Array[Double]) = {
-    val wordVectors = wordList.flatMap(word => model.get(word).get).toArray
+    val wordVectors = new Array[Float](vectorSize * numWords)
     val wordVecNorms = new Array[Double](numWords)
     var i = 0
     while (i < numWords) {
       val vec = model.get(wordList(i)).get
+      Array.copy(vec, 0, wordVectors, i * vectorSize, vectorSize)
       wordVecNorms(i) = blas.snrm2(vectorSize, vec, 1)
       i += 1
     }
