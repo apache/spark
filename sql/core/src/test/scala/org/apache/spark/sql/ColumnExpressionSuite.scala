@@ -447,11 +447,11 @@ class ColumnExpressionSuite extends QueryTest {
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
     )
 
-    val nonNull = nullInts.collect().toSeq.filter(r => r.get(0) != null)
+    val nonNull = nullDoubles.collect().toSeq.filter(r => r.get(0) != null)
 
     checkAnswer(
-      nullInts.select(c('a, 'a)).orderBy('a.asc),
-      Row(null) +: nonNull.map(r => Row(f(r.getInt(0), r.getInt(0))))
+      nullDoubles.select(c('a, 'a)).orderBy('a.asc),
+      Row(null) +: nonNull.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
   }
 
