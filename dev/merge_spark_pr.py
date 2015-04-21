@@ -354,17 +354,21 @@ def main():
     url = pr["url"]
 
     # Decide whether to use the modified title or not
-    print "I've re-written the title as follows to match the standard format:"
-    print "Original: %s" % pr["title"]
-    print "Modified: %s" % standardize_jira_ref(pr["title"])
-    result = raw_input("Would you like to use the modified title? (y/n): ")
-    if result.lower() == "y":
-        title = standardize_jira_ref(pr["title"])
-        print "Using modified title:"
+    modified_title = standardize_jira_ref(pr["title"])
+    if modified_title != pr["title"]:
+        print "I've re-written the title as follows to match the standard format:"
+        print "Original: %s" % pr["title"]
+        print "Modified: %s" % modified_title
+        result = raw_input("Would you like to use the modified title? (y/n): ")
+        if result.lower() == "y":
+            title = modified_title
+            print "Using modified title:"
+        else:
+            title = pr["title"]
+            print "Using original title:"
+        print title
     else:
         title = pr["title"]
-        print "Using original title:"
-    print title
 
     body = pr["body"]
     target_ref = pr["base"]["ref"]
