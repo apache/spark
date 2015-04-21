@@ -81,8 +81,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
-  override protected[sql] def executePlan(plan: LogicalPlan): QueryExecution =
-    new QueryExecution(this, plan)
+  override protected[sql] def executePlan(plan: LogicalPlan): HiveQueryExecution =
+    new HiveQueryExecution(this, plan)
 
   @transient
   protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
