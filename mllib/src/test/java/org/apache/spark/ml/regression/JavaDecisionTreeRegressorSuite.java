@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.regression;
 
-import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +31,6 @@ import org.apache.spark.ml.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.util.Utils;
 
 
 public class JavaDecisionTreeRegressorSuite implements Serializable {

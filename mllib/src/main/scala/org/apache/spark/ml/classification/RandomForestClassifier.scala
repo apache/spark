@@ -19,11 +19,10 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
 import org.apache.spark.ml.impl.tree._
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Params, ParamMap}
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
@@ -100,11 +99,10 @@ final class RandomForestClassifier
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
-  override private[ml] def getOldStrategy(
+  private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
-    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
-      getSubsamplingRate)
+    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
   }
 }
 
@@ -123,10 +121,11 @@ object RandomForestClassifier {
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  * @param trees  Decision trees in the ensemble.
+ *               Warning: These have null parents.
  */
 @AlphaComponent
 final class RandomForestClassificationModel private[ml] (
-    override val parent: DecisionTreeClassifier,
+    override val parent: RandomForestClassifier,
     override val fittingParamMap: ParamMap,
     val trees: Array[DecisionTreeClassificationModel])
   extends PredictionModel[Vector, RandomForestClassificationModel]
@@ -140,6 +139,8 @@ final class RandomForestClassificationModel private[ml] (
   override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def predict(features: Vector): Double = {
+    // TODO: Override transform() to broadcast model.
+    // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
@@ -150,33 +151,37 @@ final class RandomForestClassificationModel private[ml] (
     votes.maxBy(_._2)._1
   }
 
+  override protected def copy(): RandomForestClassificationModel = {
+    val m = new RandomForestClassificationModel(parent, fittingParamMap, trees)
+    Params.inheritValues(this.extractParamMap(), this, m)
+    m
+  }
+
   override def toString: String = {
     s"RandomForestClassificationModel with $numTrees trees"
   }
 
-  override def save(sc: SparkContext, path: String): Unit = {
-    this.toOld.save(sc, path)
-  }
-
-  override protected def formatVersion: String = OldRandomForestModel.formatVersion
-
-  /** Convert to a model in the old API */
+  /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
     new OldRandomForestModel(OldAlgo.Classification, trees.map(_.toOld))
   }
 }
 
-object RandomForestClassificationModel
-  extends Loader[RandomForestClassificationModel] {
+private[ml] object RandomForestClassificationModel {
 
-  override def load(sc: SparkContext, path: String): RandomForestClassificationModel = {
-    RandomForestClassificationModel.fromOld(OldRandomForestModel.load(sc, path))
-  }
-
-  private[ml] def fromOld(oldModel: OldRandomForestModel): RandomForestClassificationModel = {
+  /** (private[ml]) Convert a model from the old API */
+  def fromOld(
+      oldModel: OldRandomForestModel,
+      parent: RandomForestClassifier,
+      fittingParamMap: ParamMap,
+      categoricalFeatures: Map[Int, Int]): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification RandomForestModel (old API) to" +
         s" RandomForestClassificationModel (new API).  Algo is: ${oldModel.algo}")
-    new RandomForestClassificationModel(oldModel.trees.map(DecisionTreeClassificationModel.fromOld))
+    val trees = oldModel.trees.map { tree =>
+      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      DecisionTreeClassificationModel.fromOld(tree, null, null, categoricalFeatures)
+    }
+    new RandomForestClassificationModel(parent, fittingParamMap, trees)
   }
 }

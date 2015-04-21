@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.classification
+package org.apache.spark.ml.classification
 
 import org.scalatest.FunSuite
-import org.apache.spark.mllib.impl.TreeTests
+
+import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
-import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDecisionTreeSuite,
-  RandomForest => OldRandomForest}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
+import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.DataFrame
 
 
 /**
@@ -74,7 +72,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Binary classification with continuous features and node Id cache:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()
-      .setCacheNodeIds(cacheNodeIds = true)
+      .setCacheNodeIds(true)
     binaryClassificationTestWithContinuousFeatures(rf)
   }
 
@@ -105,7 +103,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val rf1 = new RandomForestClassifier()
       .setImpurity("Gini")
       .setMaxDepth(2)
-      .setCacheNodeIds(cacheNodeIds = true)
+      .setCacheNodeIds(true)
       .setNumTrees(3)
       .setFeaturesPerNode("auto")
       .setSeed(123)
@@ -119,6 +117,8 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
+  // TODO: Reinstate test once save/load are implemented
+  /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
@@ -137,6 +137,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
       Utils.deleteRecursively(tempDir)
     }
   }
+  */
 }
 
 private object RandomForestClassifierSuite extends FunSuite {
@@ -153,8 +154,11 @@ private object RandomForestClassifierSuite extends FunSuite {
     val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
     val oldModel = OldRandomForest.trainClassifier(
       data, oldStrategy, rf.getNumTrees, rf.getFeaturesPerNodeStr, rf.getSeed.toInt)
-    val newModel = rf.run(data, categoricalFeatures, numClasses)
-    val oldModelAsNew = RandomForestClassificationModel.fromOld(oldModel)
+    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+    val newModel = rf.fit(newData)
+    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    val oldModelAsNew = RandomForestClassificationModel.fromOld(oldModel, newModel.parent,
+      newModel.fittingParamMap, categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

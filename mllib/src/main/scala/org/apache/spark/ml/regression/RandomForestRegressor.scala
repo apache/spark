@@ -15,90 +15,86 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.ml.regression
 
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
+import org.apache.spark.ml.impl.tree.{RandomForestParams, TreeRegressorParams}
+import org.apache.spark.ml.param.{Params, ParamMap}
+import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
-class RandomForestRegressor
-  extends TreeRegressor[RandomForestRegressionModel]
-  with RandomForestParams[RandomForestRegressor]
-  with TreeRegressorParams[RandomForestRegressor] {
+@AlphaComponent
+final class RandomForestRegressor
+  extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
+  with RandomForestParams with TreeRegressorParams {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
 
-  override def setMaxDepth(maxDepth: Int): RandomForestRegressor = super.setMaxDepth(maxDepth)
+  override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
-  override def setMaxBins(maxBins: Int): RandomForestRegressor = super.setMaxBins(maxBins)
+  override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
-  override def setMinInstancesPerNode(minInstancesPerNode: Int): RandomForestRegressor =
-    super.setMinInstancesPerNode(minInstancesPerNode)
+  override def setMinInstancesPerNode(value: Int): this.type =
+    super.setMinInstancesPerNode(value)
 
-  override def setMinInfoGain(minInfoGain: Double): RandomForestRegressor =
-    super.setMinInfoGain(minInfoGain)
+  override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
-  override def setMaxMemoryInMB(maxMemoryInMB: Int): RandomForestRegressor =
-    super.setMaxMemoryInMB(maxMemoryInMB)
+  override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
-  override def setCacheNodeIds(cacheNodeIds: Boolean): RandomForestRegressor =
-    super.setCacheNodeIds(cacheNodeIds)
+  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(checkpointInterval: Int): RandomForestRegressor =
-    super.setCheckpointInterval(checkpointInterval)
+  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
-  override def setImpurity(impurity: String): RandomForestRegressor =
-    super.setImpurity(impurity)
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
 
-  override def setSubsamplingRate(subsamplingRate: Double): RandomForestRegressor =
-    super.setSubsamplingRate(subsamplingRate)
+  override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
-  override def setSeed(seed: Long): RandomForestRegressor = super.setSeed(seed)
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from RandomForestParams:
 
-  override def setNumTrees(numTrees: Int): RandomForestRegressor = super.setNumTrees(numTrees)
+  override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
 
-  override def setFeaturesPerNode(featuresPerNode: String): RandomForestRegressor =
-    super.setFeaturesPerNode(featuresPerNode)
+  override def setFeaturesPerNode(value: String): this.type = super.setFeaturesPerNode(value)
 
-  override def run(
-      input: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int]): RandomForestRegressionModel = {
+  override protected def train(
+      dataset: DataFrame,
+      paramMap: ParamMap): RandomForestRegressionModel = {
+    val categoricalFeatures: Map[Int, Int] =
+      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy = getOldStrategy(categoricalFeatures)
     val oldModel = OldRandomForest.trainRegressor(
-      input, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
-    RandomForestRegressionModel.fromOld(oldModel)
+      oldDataset, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
+    RandomForestRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 
-  /**
-   * Create a Strategy instance to use with the old API.
-   * TODO: Make this protected once we deprecate the old API.
-   */
-  private[mllib] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
-    strategy.algo = OldAlgo.Regression
-    strategy.impurity = getOldImpurity
-    strategy
+  /** (private[ml]) Create a Strategy instance to use with the old API. */
+  private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
+    super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
   }
 }
 
 object RandomForestRegressor {
-
   /** Accessor for supported impurity settings */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 
@@ -107,51 +103,66 @@ object RandomForestRegressor {
 }
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
  * @param trees  Decision trees in the ensemble.
  */
-class RandomForestRegressionModel(val trees: Array[DecisionTreeRegressionModel])
-  extends TreeEnsembleModel with Serializable with Saveable {
+@AlphaComponent
+final class RandomForestRegressionModel private[ml] (
+    override val parent: RandomForestRegressor,
+    override val fittingParamMap: ParamMap,
+    val trees: Array[DecisionTreeRegressionModel])
+  extends PredictionModel[Vector, RandomForestRegressionModel]
+  with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
+  // Note: We may add support for weights (based on tree performance) later on.
   override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def predict(features: Vector): Double = {
+    // TODO: Override transform() to broadcast model.
+    // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
     trees.map(_.predict(features)).sum / numTrees
+  }
+
+  override protected def copy(): RandomForestRegressionModel = {
+    val m = new RandomForestRegressionModel(parent, fittingParamMap, trees)
+    Params.inheritValues(this.extractParamMap(), this, m)
+    m
   }
 
   override def toString: String = {
     s"RandomForestRegressionModel with $numTrees trees"
   }
 
-  override def save(sc: SparkContext, path: String): Unit = {
-    this.toOld.save(sc, path)
-  }
-
-  override protected def formatVersion: String = OldRandomForestModel.formatVersion
-
-  /** Convert to a model in the old API */
-  private[mllib] def toOld: OldRandomForestModel = {
+  /** (private[ml]) Convert to a model in the old API */
+  private[ml] def toOld: OldRandomForestModel = {
     new OldRandomForestModel(OldAlgo.Regression, trees.map(_.toOld))
   }
 }
 
-object RandomForestRegressionModel extends Loader[RandomForestRegressionModel] {
+private[ml] object RandomForestRegressionModel {
 
-  override def load(sc: SparkContext, path: String): RandomForestRegressionModel = {
-    RandomForestRegressionModel.fromOld(OldRandomForestModel.load(sc, path))
-  }
-
-  private[mllib] def fromOld(oldModel: OldRandomForestModel): RandomForestRegressionModel = {
+  /** (private[ml]) Convert a model from the old API */
+  def fromOld(
+      oldModel: OldRandomForestModel,
+      parent: RandomForestRegressor,
+      fittingParamMap: ParamMap,
+      categoricalFeatures: Map[Int, Int]): RandomForestRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression RandomForestModel (old API) to" +
         s" RandomForestRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    new RandomForestRegressionModel(oldModel.trees.map(DecisionTreeRegressionModel.fromOld))
+    val trees = oldModel.trees.map { tree =>
+      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
+    }
+    new RandomForestRegressionModel(parent, fittingParamMap, trees)
   }
 }

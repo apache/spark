@@ -352,12 +352,12 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
    * Create a Strategy instance to use with the old API.
    * NOTE: The caller should set impurity and seed.
    */
-  override private[ml] def getOldStrategy(
+  private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses)
-    strategy.setSubsamplingRate(getSubsamplingRate)
-    strategy
+      numClasses: Int,
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity): OldStrategy = {
+    super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo, oldImpurity, getSubsamplingRate)
   }
 }
 

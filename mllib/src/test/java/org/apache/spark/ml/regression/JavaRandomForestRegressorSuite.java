@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression;
+package org.apache.spark.ml.regression;
 
-import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,11 +27,10 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.mllib.impl.TreeTests;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.util.Utils;
+import org.apache.spark.ml.impl.TreeTests;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.sql.DataFrame;
 
 
 public class JavaRandomForestRegressorSuite implements Serializable {
@@ -58,13 +56,10 @@ public class JavaRandomForestRegressorSuite implements Serializable {
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
         LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
-    JavaRDD<Vector> featureRDD = data.map(new Function<LabeledPoint, Vector>() {
-      @Override
-      public Vector call(LabeledPoint lp) throws Exception {
-        return lp.features();
-      }
-    });
+    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
+    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
+    // This tests setters. Training with various options is tested in Scala.
     RandomForestRegressor rf = new RandomForestRegressor()
         .setMaxDepth(2)
         .setMaxBins(10)
@@ -83,17 +78,16 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (int i = 0; i < RandomForestRegressor.supportedFeaturesPerNode().length; ++i) {
       rf.setFeaturesPerNode(RandomForestRegressor.supportedFeaturesPerNode()[i]);
     }
-    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    RandomForestRegressionModel model1 = rf.run(data);
-    RandomForestRegressionModel model2 = rf.run(data, categoricalFeatures);
+    RandomForestRegressionModel model = rf.fit(dataFrame);
 
-    model1.predict(featureRDD);
-    model2.predict(featureRDD.take(1).get(0));
-    model2.totalNumNodes();
-    model2.toDebugString();
-    model2.getTrees();
-    model2.getTreeWeights();
+    model.transform(dataFrame);
+    model.totalNumNodes();
+    model.toDebugString();
+    model.getTrees();
+    model.getTreeWeights();
 
+    /*
+    // TODO: Add test once save/load are implemented.
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
@@ -103,5 +97,6 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     } finally {
       Utils.deleteRecursively(tempDir);
     }
+    */
   }
 }

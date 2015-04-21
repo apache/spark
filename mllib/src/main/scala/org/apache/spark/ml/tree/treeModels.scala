@@ -72,7 +72,7 @@ trait TreeEnsembleModel {
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
 
-  /** Trees in this ensemble */
+  /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def getTrees: Array[DecisionTreeModel]
 
   /** Weights for each tree, zippable with [[getTrees]] */

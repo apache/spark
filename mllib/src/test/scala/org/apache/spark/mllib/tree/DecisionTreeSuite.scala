@@ -1008,7 +1008,7 @@ object DecisionTreeSuite extends FunSuite {
    * Create a tree model.  This is deterministic and contains a variety of node and feature types.
    * TODO: Update this to be a correct tree (with matching probabilities, impurities, etc.)
    */
-  private[mllib] def createModel(algo: Algo): DecisionTreeModel = {
+  private[spark] def createModel(algo: Algo): DecisionTreeModel = {
     val topNode = createInternalNode(id = 1, Continuous)
     val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
     val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))
