@@ -176,7 +176,7 @@ class Airflow(BaseView):
     @expose('/chart_data')
     @data_profiling_required
     @wwwutils.gzipped
-    @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
+    #@cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
