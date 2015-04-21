@@ -71,5 +71,10 @@ public final class NioManagedBuffer extends ManagedBuffer {
       .add("buf", buf)
       .toString();
   }
+
+  @Override
+  public boolean isDirect() {
+    return buf.isDirect();
+  }
 }
 

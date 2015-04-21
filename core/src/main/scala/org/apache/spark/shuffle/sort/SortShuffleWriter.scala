@@ -54,6 +54,10 @@ private[spark] class SortShuffleWriter[K, V, C](
       sorter = new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
       sorter.insertAll(records)
+    } else if (dep.keyOrdering.isDefined) {
+      sorter = new ExternalSorter[K, V, V](
+        None, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+      sorter.insertAll(records)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
