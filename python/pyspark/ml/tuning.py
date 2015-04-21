@@ -21,6 +21,30 @@ __all__ = ['ParamGridBuilder']
 class ParamGridBuilder(object):
     """
     Builder for a param grid used in grid search-based model selection.
+
+    >>> from classification import LogisticRegression
+    >>> lr = LogisticRegression()
+    >>> output = ParamGridBuilder().baseOn({lr.labelCol: 'l'}) \
+            .baseOn([lr.predictionCol, 'p']) \
+            .addGrid(lr.regParam, [1.0, 2.0, 3.0]) \
+            .addGrid(lr.maxIter, [1, 5]) \
+            .addGrid(lr.featuresCol, ['f']) \
+            .build()
+    >>> expected = [ \
+{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
+{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
+{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
+{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
+{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
+{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
+    >>> fail_count = 0
+    >>> for e in expected:
+    ...     if e not in output:
+    ...         fail_count += 1
+    >>> if len(expected) != len(output):
+    ...     fail_count += 1
+    >>> fail_count
+    0
     """
 
     def __init__(self):
@@ -32,6 +56,8 @@ class ParamGridBuilder(object):
         """
         self._param_grid[param] = values
 
+        return self
+
     def baseOn(self, *args):
         """
         Sets the given parameters in this grid to fixed values.
@@ -42,6 +68,8 @@ class ParamGridBuilder(object):
         else:
             for (param, value) in args:
                 self.addGrid(param, [value])
+
+        return self
 
     def build(self):
         """
@@ -62,23 +90,5 @@ class ParamGridBuilder(object):
 
 
 if __name__ == "__main__":
-    grid_test = ParamGridBuilder()
-    from classification import LogisticRegression
-    lr = LogisticRegression()
-    grid_test.addGrid(lr.regParam, [1.0, 2.0, 3.0])
-    grid_test.addGrid(lr.maxIter, [1, 5])
-    grid_test.addGrid(lr.inputCol, ['f'])
-    grid_test.baseOn({lr.labelCol: 'l'})
-    grid_test.baseOn([lr.outputCol, 'p'])
-    grid = grid_test.build()
-    expected = [
-        {lr.regParam: 1.0, lr.inputCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.outputCol: 'p'},
-        {lr.regParam: 2.0, lr.inputCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.outputCol: 'p'},
-        {lr.regParam: 3.0, lr.inputCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.outputCol: 'p'},
-        {lr.regParam: 1.0, lr.inputCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.outputCol: 'p'},
-        {lr.regParam: 2.0, lr.inputCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.outputCol: 'p'},
-        {lr.regParam: 3.0, lr.inputCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.outputCol: 'p'}]
-
-    for a, b in zip(grid, expected):
-        if a != b:
-            exit(-1)
+    import doctest
+    doctest.testmod()
