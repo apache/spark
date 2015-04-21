@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.tree
+package org.apache.spark.ml.prediction.tree
 
 import org.apache.spark.annotation.AlphaComponent
 

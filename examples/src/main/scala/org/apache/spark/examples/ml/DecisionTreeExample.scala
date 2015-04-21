@@ -22,7 +22,7 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.ml.tree.DecisionTreeModel
+import org.apache.spark.ml.prediction.tree.DecisionTreeModel
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
@@ -43,6 +43,13 @@ import org.apache.spark.sql.{SQLContext, DataFrame}
  * An example runner for decision trees. Run with
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
+ * }}}
+ * Note that Decision Trees can take a large amount of memory.  If the run-example command above
+ * fails, try running via spark-submit and specifying the amount of memory as at least 1g.
+ * For local mode, run
+ * {{{
+ * ./bin/spark-submit --class org.apache.spark.examples.ml.DecisionTreeExample --driver-memory 1g
+ *   [examples JAR path] [options]
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */

@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl.estimator
+package org.apache.spark.ml.prediction.impl
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
+import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.{DataFrame, Row}
 
 
 /**
