@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.input;
+package org.apache.spark.io;
 
 import java.io.IOException;
 
