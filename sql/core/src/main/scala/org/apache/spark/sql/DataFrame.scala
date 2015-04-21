@@ -140,9 +140,11 @@ class DataFrame private[sql](
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
     case _ : Command =>
-      LocalRelation(
-        queryExecution.analyzed.output,
-        queryExecution.sparkPlan.executeCollect())
+      val analyzedPlan = queryExecution.analyzed
+      val data = queryExecution.sparkPlan.executeCollect().map { row =>
+        CatalystTypeConverters.convertToCatalyst(row, analyzedPlan.schema).asInstanceOf[Row]
+      }
+      LocalRelation(analyzedPlan.output, data)
     case _: InsertIntoTable |
          _: CreateTableAsSelect[_] |
          _: CreateTableUsingAsSelect |
