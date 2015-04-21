@@ -218,7 +218,13 @@ private[hive] object HiveShim {
       TypeInfoFactory.voidTypeInfo, null)
 
   def getStringWritable(value: Any): hadoopIo.Text =
-    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[UTF8String].toString)
+    if (value == null) {
+      null
+    } else if (value.isInstanceOf[String]) {
+      new hadoopIo.Text(value.asInstanceOf[String])
+    } else {
+      new hadoopIo.Text(value.asInstanceOf[UTF8String].toString)
+    }
 
   def getIntWritable(value: Any): hadoopIo.IntWritable =
     if (value == null) null else new hadoopIo.IntWritable(value.asInstanceOf[Int])
