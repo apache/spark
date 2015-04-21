@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{SQLConf, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
@@ -1134,3 +1134,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
 // for SPARK-2180 test
 case class HavingRow(key: Int, value: String, attr: Int)
+
+class HiveQuerySuite2 extends HiveQuerySuite {
+  override def beforeAll() {
+    super.beforeAll()
+    TestHive.setConf(SQLConf.AGGREGATE_2, "true")
+  }
+
+  override def afterAll() {
+    TestHive.setConf(SQLConf.AGGREGATE_2, "false")
+    super.afterAll()
+  }
+}

@@ -1007,3 +1007,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view_inputs"
   )
 }
+
+class HiveCompatibilitySuite2 extends HiveCompatibilitySuite {
+  override def beforeAll() {
+    super.beforeAll()
+    TestHive.setConf(SQLConf.AGGREGATE_2, "true")
+  }
+
+  override def afterAll() {
+    TestHive.setConf(SQLConf.AGGREGATE_2, "false")
+    super.afterAll()
+  }
+}

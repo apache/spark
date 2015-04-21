@@ -1365,3 +1365,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     }
   }
 }
+
+class SQLQuerySuite2 extends SQLQuerySuite {
+  override def beforeAll() {
+    super.beforeAll()
+    sqlCtx.setConf(SQLConf.AGGREGATE_2, "true")
+  }
+
+  override def afterAll() {
+    sqlCtx.setConf(SQLConf.AGGREGATE_2, "false")
+    super.afterAll()
+  }
+}
