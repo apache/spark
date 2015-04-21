@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.types.StructType
 
 object Row {
   /**
@@ -121,6 +121,11 @@ trait Row extends Serializable {
 
   /** Number of elements in the Row. */
   def length: Int
+
+  /**
+   * Schema for the row.
+   */
+  def schema: StructType = null
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -252,6 +257,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
+  // TODO(davies): This is not the right default implementation, we use Int as Date internally
   def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**

@@ -19,11 +19,11 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 
 
@@ -31,8 +31,10 @@ import org.apache.spark.storage.StorageLevel
  * Params for logistic regression.
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
-  with HasRegParam with HasMaxIter with HasThreshold
+  with HasRegParam with HasMaxIter with HasFitIntercept with HasThreshold {
 
+  setDefault(regParam -> 0.1, maxIter -> 100, threshold -> 0.5)
+}
 
 /**
  * :: AlphaComponent ::
@@ -45,12 +47,16 @@ class LogisticRegression
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  setRegParam(0.1)
-  setMaxIter(100)
-  setThreshold(0.5)
-
+  /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
@@ -62,7 +68,8 @@ class LogisticRegression
     }
 
     // Train model
-    val lr = new LogisticRegressionWithLBFGS
+    val lr = new LogisticRegressionWithLBFGS()
+      .setIntercept(paramMap(fitIntercept))
     lr.optimizer
       .setRegParam(paramMap(regParam))
       .setNumIterations(paramMap(maxIter))
@@ -91,8 +98,7 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  setThreshold(0.5)
-
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {
@@ -113,7 +119,7 @@ class LogisticRegressionModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
 
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -124,44 +130,39 @@ class LogisticRegressionModel private[ml] (
     var numColsOutput = 0
     if (map(rawPredictionCol) != "") {
       val features2raw: Vector => Vector = (features) => predictRaw(features)
-      tmpData = tmpData.select($"*",
-        callUDF(features2raw, new VectorUDT, col(map(featuresCol))).as(map(rawPredictionCol)))
+      tmpData = tmpData.withColumn(map(rawPredictionCol),
+        callUDF(features2raw, new VectorUDT, col(map(featuresCol))))
       numColsOutput += 1
     }
     if (map(probabilityCol) != "") {
       if (map(rawPredictionCol) != "") {
-        val raw2prob: Vector => Vector = { (rawPreds: Vector) =>
+        val raw2prob = udf { (rawPreds: Vector) =>
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          Vectors.dense(1.0 - prob1, prob1)
+          Vectors.dense(1.0 - prob1, prob1): Vector
         }
-        tmpData = tmpData.select($"*",
-          callUDF(raw2prob, new VectorUDT, col(map(rawPredictionCol))).as(map(probabilityCol)))
+        tmpData = tmpData.withColumn(map(probabilityCol), raw2prob(col(map(rawPredictionCol))))
       } else {
-        val features2prob: Vector => Vector = (features: Vector) => predictProbabilities(features)
-        tmpData = tmpData.select($"*",
-          callUDF(features2prob, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+        val features2prob = udf { (features: Vector) => predictProbabilities(features) : Vector }
+        tmpData = tmpData.withColumn(map(probabilityCol), features2prob(col(map(featuresCol))))
       }
       numColsOutput += 1
     }
     if (map(predictionCol) != "") {
       val t = map(threshold)
       if (map(probabilityCol) != "") {
-        val predict: Vector => Double = { probs: Vector =>
+        val predict = udf { probs: Vector =>
           if (probs(1) > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(probabilityCol))).as(map(predictionCol)))
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(probabilityCol))))
       } else if (map(rawPredictionCol) != "") {
-        val predict: Vector => Double = { rawPreds: Vector =>
+        val predict = udf { rawPreds: Vector =>
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           if (prob1 > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(rawPredictionCol))).as(map(predictionCol)))
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(rawPredictionCol))))
       } else {
-        val predict: Vector => Double = (features: Vector) => this.predict(features)
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
+        val predict = udf { features: Vector => this.predict(features) }
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(featuresCol))))
       }
       numColsOutput += 1
     }
@@ -179,8 +180,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override protected def predict(features: Vector): Double = {
-    println(s"LR.predict with threshold: ${paramMap(threshold)}")
-    if (score(features) > paramMap(threshold)) 1 else 0
+    if (score(features) > getThreshold) 1 else 0
   }
 
   override protected def predictProbabilities(features: Vector): Vector = {
@@ -195,7 +195,7 @@ class LogisticRegressionModel private[ml] (
 
   override protected def copy(): LogisticRegressionModel = {
     val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
 }

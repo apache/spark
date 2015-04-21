@@ -31,10 +31,9 @@ import org.scalatest.concurrent.PatienceConfiguration
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
-import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -54,8 +53,9 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
     val selectedInput = if (index < input.size) input(index) else Seq[T]()
 
     // lets us test cases where RDDs are not created
-    if (selectedInput == null)
+    if (selectedInput == null) {
       return None
+    }
 
     val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
     logInfo("Created RDD " + rdd.id + " with " + selectedInput)
@@ -105,7 +105,9 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
     output.clear()
   }
 
-  def toTestOutputStream = new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+  def toTestOutputStream: TestOutputStream[T] = {
+    new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+  }
 }
 
 /**
@@ -149,34 +151,34 @@ class BatchCounter(ssc: StreamingContext) {
 trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
-  def framework = this.getClass.getSimpleName
+  def framework: String = this.getClass.getSimpleName
 
   // Master for Spark context
-  def master = "local[2]"
+  def master: String = "local[2]"
 
   // Batch duration
-  def batchDuration = Seconds(1)
+  def batchDuration: Duration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  lazy val checkpointDir = {
+  lazy val checkpointDir: String = {
     val dir = Utils.createTempDir()
     logDebug(s"checkpointDir: $dir")
     dir.toString
   }
 
   // Number of partitions of the input parallel collections created for testing
-  def numInputPartitions = 2
+  def numInputPartitions: Int = 2
 
   // Maximum time to wait before the test times out
-  def maxWaitTimeMillis = 10000
+  def maxWaitTimeMillis: Int = 10000
 
   // Whether to use manual clock or not
-  def useManualClock = true
+  def useManualClock: Boolean = true
 
   // Whether to actually wait in real time before changing manual clock
-  def actuallyWait = false
+  def actuallyWait: Boolean = false
 
-  //// A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
+  // A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
@@ -189,10 +191,10 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def beforeFunction() {
     if (useManualClock) {
       logInfo("Using manual clock")
-      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+      conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
     } else {
       logInfo("Using real clock")
-      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+      conf.set("spark.streaming.clock", "org.apache.spark.util.SystemClock")
     }
   }
 
@@ -333,23 +335,24 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
       // Advance manual clock
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      logInfo("Manual clock before advancing = " + clock.currentTime())
+      logInfo("Manual clock before advancing = " + clock.getTimeMillis())
       if (actuallyWait) {
         for (i <- 1 to numBatches) {
           logInfo("Actually waiting for " + batchDuration)
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           Thread.sleep(batchDuration.milliseconds)
         }
       } else {
-        clock.addToTime(numBatches * batchDuration.milliseconds)
+        clock.advance(numBatches * batchDuration.milliseconds)
       }
-      logInfo("Manual clock after advancing = " + clock.currentTime())
+      logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()
-      while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+      while (output.size < numExpectedOutput &&
+        System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        ssc.awaitTermination(50)
+        ssc.awaitTerminationOrTimeout(50)
       }
       val timeTaken = System.currentTimeMillis() - startTime
       logInfo("Output generated in " + timeTaken + " milliseconds")

@@ -22,8 +22,9 @@ import scala.annotation.varargs
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -62,7 +63,10 @@ abstract class Transformer extends PipelineStage with Params {
 private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
+  /** @group setParam */
   def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]
+
+  /** @group setParam */
   def setOutputCol(value: String): T = set(outputCol, value).asInstanceOf[T]
 
   /**
@@ -83,7 +87,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
   protected def validateInputType(inputType: DataType): Unit = {}
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputType = schema(map(inputCol)).dataType
     validateInputType(inputType)
     if (schema.fieldNames.contains(map(outputCol))) {
@@ -96,8 +100,8 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
-    dataset.select($"*", callUDF(
-      this.createTransformFunc(map), outputDataType, dataset(map(inputCol))).as(map(outputCol)))
+    val map = extractParamMap(paramMap)
+    dataset.withColumn(map(outputCol),
+      callUDF(this.createTransformFunc(map), outputDataType, dataset(map(inputCol))))
   }
 }

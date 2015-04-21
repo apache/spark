@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Literal, Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -30,10 +30,22 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
   val caseInsensitiveCatalog = new SimpleCatalog(false)
-  val caseSensitiveAnalyze =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
-  val caseInsensitiveAnalyze =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+
+  val caseSensitiveAnalyzer =
+    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
+  val caseInsensitiveAnalyzer =
+    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false) {
+      override val extendedResolutionRules = EliminateSubQueries :: Nil
+    }
+
+
+  def caseSensitiveAnalyze(plan: LogicalPlan): Unit =
+    caseSensitiveAnalyzer.checkAnalysis(caseSensitiveAnalyzer(plan))
+
+  def caseInsensitiveAnalyze(plan: LogicalPlan): Unit =
+    caseInsensitiveAnalyzer.checkAnalysis(caseInsensitiveAnalyzer(plan))
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
   val testRelation2 = LocalRelation(
@@ -42,6 +54,21 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("c", DoubleType)(),
     AttributeReference("d", DecimalType.Unlimited)(),
     AttributeReference("e", ShortType)())
+
+  val nestedRelation = LocalRelation(
+    AttributeReference("top", StructType(
+      StructField("duplicateField", StringType) ::
+      StructField("duplicateField", StringType) ::
+      StructField("differentCase", StringType) ::
+      StructField("differentcase", StringType) :: Nil
+    ))())
+
+  val nestedRelation2 = LocalRelation(
+    AttributeReference("top", StructType(
+      StructField("aField", StringType) ::
+      StructField("bField", StringType) ::
+      StructField("cField", StringType) :: Nil
+    ))())
 
   before {
     caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
@@ -55,16 +82,27 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
         a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
       }
 
-    assert(caseInsensitiveAnalyze(plan).resolved)
+    assert(caseInsensitiveAnalyzer(plan).resolved)
+  }
+
+  test("check project's resolved") {
+    assert(Project(testRelation.output, testRelation).resolved)
+
+    assert(!Project(Seq(UnresolvedAttribute("a")), testRelation).resolved)
+
+    val explode = Explode(Nil, AttributeReference("a", IntegerType, nullable = true)())
+    assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
+
+    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {
     assert(
-      caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
+      caseSensitiveAnalyzer(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseSensitiveAnalyze(
+      caseSensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
@@ -77,13 +115,13 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(e.getMessage().toLowerCase.contains("cannot resolve"))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("tBl.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
@@ -96,23 +134,20 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
-      caseSensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
-        testRelation)
+      caseSensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("tAbLe"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
   }
 
   def errorTest(
       name: String,
       plan: LogicalPlan,
       errorMessages: Seq[String],
-      caseSensitive: Boolean = true) = {
+      caseSensitive: Boolean = true): Unit = {
     test(name) {
       val error = intercept[AnalysisException] {
         if(caseSensitive) {
@@ -147,9 +182,27 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     "'b'" :: "group by" :: Nil
   )
 
+  errorTest(
+    "ambiguous field",
+    nestedRelation.select($"top.duplicateField"),
+    "Ambiguous reference to fields" :: "duplicateField" :: Nil,
+    caseSensitive = false)
+
+  errorTest(
+    "ambiguous field due to case insensitivity",
+    nestedRelation.select($"top.differentCase"),
+    "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
+    caseSensitive = false)
+
+  errorTest(
+    "missing field",
+    nestedRelation2.select($"top.c"),
+    "No such struct field" :: "aField" :: "bField" :: "cField" :: Nil,
+    caseSensitive = false)
+
   case class UnresolvedTestPlan() extends LeafNode {
     override lazy val resolved = false
-    override def output = Nil
+    override def output: Seq[Attribute] = Nil
   }
 
   errorTest(
@@ -166,7 +219,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
-    val plan = caseInsensitiveAnalyze(
+    val plan = caseInsensitiveAnalyzer(
       testRelation2.select(
         'a / Literal(2) as 'div1,
         'a / 'b as 'div2,
@@ -180,5 +233,23 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DecimalType.Unlimited)
     assert(pl(4).dataType == DoubleType)
+  }
+
+  test("SPARK-6452 regression test") {
+    // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
+    val plan =
+      Aggregate(
+        Nil,
+        Alias(Sum(AttributeReference("a", StringType)(exprId = ExprId(1))), "b")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", StringType)(exprId = ExprId(2))))
+
+    assert(plan.resolved)
+
+    val message = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan)
+    }.getMessage
+
+    assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
   }
 }

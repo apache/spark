@@ -16,31 +16,31 @@
 #
 
 import sys
-import itertools
 import warnings
 import random
-import os
-from tempfile import NamedTemporaryFile
-from itertools import imap
+
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+else:
+    from itertools import imap as map
 
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD, _prepare_for_python_RDD
-from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
-    UTF8Deserializer
+from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import *
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 
 
-__all__ = ["DataFrame", "GroupedData", "Column", "Dsl", "SchemaRDD"]
+__all__ = ["DataFrame", "GroupedData", "Column", "SchemaRDD", "DataFrameNaFunctions"]
 
 
 class DataFrame(object):
-
-    """A collection of rows that have the same columns.
+    """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
     and can be created using various functions in :class:`SQLContext`::
@@ -53,13 +53,6 @@ class DataFrame(object):
     To select a column from the data frame, use the apply method::
 
         ageCol = people.age
-
-    Note that the :class:`Column` type can also be manipulated
-    through its various functions::
-
-        # The following creates a new column that increases everybody's age by 10.
-        people.age + 10
-
 
     A more concrete example::
 
@@ -76,46 +69,55 @@ class DataFrame(object):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
+        self._schema = None  # initialized lazily
+        self._lazy_rdd = None
 
     @property
     def rdd(self):
+        """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
         """
-        Return the content of the :class:`DataFrame` as an :class:`RDD`
-        of :class:`Row` s.
-        """
-        if not hasattr(self, '_lazy_rdd'):
+        if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
             rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
-            schema = self.schema()
+            schema = self.schema
 
             def applySchema(it):
                 cls = _create_cls(schema)
-                return itertools.imap(cls, it)
+                return map(cls, it)
 
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
         return self._lazy_rdd
 
-    def toJSON(self, use_unicode=False):
-        """Convert a DataFrame into a MappedRDD of JSON documents; one document per row.
+    @property
+    def na(self):
+        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+        """
+        return DataFrameNaFunctions(self)
+
+    @ignore_unicode_prefix
+    def toJSON(self, use_unicode=True):
+        """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+
+        Each row is turned into a JSON document as one element in the returned RDD.
 
         >>> df.toJSON().first()
-        '{"age":2,"name":"Alice"}'
+        u'{"age":2,"name":"Alice"}'
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def saveAsParquetFile(self, path):
-        """Save the contents as a Parquet file, preserving the schema.
+        """Saves the contents as a Parquet file, preserving the schema.
 
         Files that are written out using this method can be read back in as
-        a DataFrame using the L{SQLContext.parquetFile} method.
+        a :class:`DataFrame` using :func:`SQLContext.parquetFile`.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
         >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlCtx.parquetFile(parquetFile)
+        >>> df2 = sqlContext.parquetFile(parquetFile)
         >>> sorted(df2.collect()) == sorted(df.collect())
         True
         """
@@ -124,23 +126,23 @@ class DataFrame(object):
     def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
-        The lifetime of this temporary table is tied to the L{SQLContext}
-        that was used to create this DataFrame.
+        The lifetime of this temporary table is tied to the :class:`SQLContext`
+        that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
-        >>> df2 = sqlCtx.sql("select * from people")
+        >>> df2 = sqlContext.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
         self._jdf.registerTempTable(name)
 
     def registerAsTable(self, name):
-        """DEPRECATED: use registerTempTable() instead"""
+        """DEPRECATED: use :func:`registerTempTable` instead"""
         warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
-        """Inserts the contents of this DataFrame into the specified table.
+        """Inserts the contents of this :class:`DataFrame` into the specified table.
 
         Optionally overwriting any existing data.
         """
@@ -165,22 +167,20 @@ class DataFrame(object):
                 "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
         return jmode
 
-    def saveAsTable(self, tableName, source=None, mode="append", **options):
-        """Saves the contents of the DataFrame to a data source as a table.
+    def saveAsTable(self, tableName, source=None, mode="error", **options):
+        """Saves the contents of this :class:`DataFrame` to a data source as a table.
 
-        The data source is specified by the `source` and a set of `options`.
-        If `source` is not specified, the default data source configured by
-        spark.sql.sources.default will be used.
+        The data source is specified by the ``source`` and a set of ``options``.
+        If ``source`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
 
         Additionally, mode is used to specify the behavior of the saveAsTable operation when
         table already exists in the data source. There are four modes:
 
-        * append: Contents of this DataFrame are expected to be appended to existing table.
-        * overwrite: Data in the existing table is expected to be overwritten by the contents of \
-            this DataFrame.
-        * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and \
-            to not change the existing table.
+        * `append`: Append contents of this :class:`DataFrame` to existing data.
+        * `overwrite`: Overwrite existing data.
+        * `error`: Throw an exception if data already exists.
+        * `ignore`: Silently ignore this operation if data already exists.
         """
         if source is None:
             source = self.sql_ctx.getConf("spark.sql.sources.default",
@@ -190,21 +190,20 @@ class DataFrame(object):
                                           self.sql_ctx._sc._gateway._gateway_client)
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
 
-    def save(self, path=None, source=None, mode="append", **options):
-        """Saves the contents of the DataFrame to a data source.
+    def save(self, path=None, source=None, mode="error", **options):
+        """Saves the contents of the :class:`DataFrame` to a data source.
 
-        The data source is specified by the `source` and a set of `options`.
-        If `source` is not specified, the default data source configured by
-        spark.sql.sources.default will be used.
+        The data source is specified by the ``source`` and a set of ``options``.
+        If ``source`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
 
         Additionally, mode is used to specify the behavior of the save operation when
         data already exists in the data source. There are four modes:
 
-        * append: Contents of this DataFrame are expected to be appended to existing data.
-        * overwrite: Existing data is expected to be overwritten by the contents of this DataFrame.
-        * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and \
-            to not change the existing data.
+        * `append`: Append contents of this :class:`DataFrame` to existing data.
+        * `overwrite`: Overwrite existing data.
+        * `error`: Throw an exception if data already exists.
+        * `ignore`: Silently ignore this operation if data already exists.
         """
         if path is not None:
             options["path"] = path
@@ -216,14 +215,16 @@ class DataFrame(object):
                                           self._sc._gateway._gateway_client)
         self._jdf.save(source, jmode, joptions)
 
+    @property
     def schema(self):
-        """Returns the schema of this DataFrame (represented by
-        a L{StructType}).
+        """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
 
-        >>> df.schema()
+        >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
         """
-        return _parse_datatype_json_string(self._jdf.schema().json())
+        if self._schema is None:
+            self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+        return self._schema
 
     def printSchema(self):
         """Prints out the schema in the tree format.
@@ -234,61 +235,77 @@ class DataFrame(object):
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
-        print (self._jdf.schema().treeString())
+        print(self._jdf.schema().treeString())
 
-    def show(self):
+    def explain(self, extended=False):
+        """Prints the (logical and physical) plans to the console for debugging purpose.
+
+        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+
+        >>> df.explain()
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+
+        >>> df.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        == RDD ==
         """
-        Print the first 20 rows.
+        if extended:
+            print(self._jdf.queryExecution().toString())
+        else:
+            print(self._jdf.queryExecution().executedPlan().toString())
 
+    def isLocal(self):
+        """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
+        (without any Spark executors).
+        """
+        return self._jdf.isLocal()
+
+    def show(self, n=20):
+        """Prints the first ``n`` rows to the console.
+
+        >>> df
+        DataFrame[age: int, name: string]
         >>> df.show()
         age name
         2   Alice
         5   Bob
-        >>> df
-        age name
-        2   Alice
-        5   Bob
         """
-        print (self)
+        print(self._jdf.showString(n))
 
     def __repr__(self):
-        return self._jdf.showString()
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def count(self):
-        """Return the number of elements in this RDD.
-
-        Unlike the base RDD implementation of count, this implementation
-        leverages the query optimizer to compute the count on the DataFrame,
-        which supports features such as filter pushdown.
+        """Returns the number of rows in this :class:`DataFrame`.
 
         >>> df.count()
-        2L
+        2
         """
-        return self._jdf.count()
+        return int(self._jdf.count())
 
+    @ignore_unicode_prefix
     def collect(self):
-        """Return a list that contains all of the rows.
-
-        Each object in the list is a Row, the fields can be accessed as
-        attributes.
+        """Returns all the records as a list of :class:`Row`.
 
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            bytesInJava = self._jdf.javaToPython().collect().iterator()
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
-        tempFile.close()
-        self._sc._writeToFile(bytesInJava, tempFile.name)
-        # Read the data into Python and deserialize it:
-        with open(tempFile.name, 'rb') as tempFile:
-            rs = list(BatchedSerializer(PickleSerializer()).load_stream(tempFile))
-        os.unlink(tempFile.name)
-        cls = _create_cls(self.schema())
+            port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
+        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
+    @ignore_unicode_prefix
     def limit(self, num):
-        """Limit the result count to the number specified.
+        """Limits the result count to the number specified.
 
         >>> df.limit(1).collect()
         [Row(age=2, name=u'Alice')]
@@ -298,29 +315,42 @@ class DataFrame(object):
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def take(self, num):
-        """Take the first num rows of the RDD.
-
-        Each object in the list is a Row, the fields can be accessed as
-        attributes.
+        """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         return self.limit(num).collect()
 
+    @ignore_unicode_prefix
     def map(self, f):
-        """ Return a new RDD by applying a function to each Row, it's a
-        shorthand for df.rdd.map()
+        """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
+
+        This is a shorthand for ``df.rdd.map()``.
 
         >>> df.map(lambda p: p.name).collect()
         [u'Alice', u'Bob']
         """
         return self.rdd.map(f)
 
-    def mapPartitions(self, f, preservesPartitioning=False):
+    @ignore_unicode_prefix
+    def flatMap(self, f):
+        """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
+        and then flattening the results.
+
+        This is a shorthand for ``df.rdd.flatMap()``.
+
+        >>> df.flatMap(lambda p: p.name).collect()
+        [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
         """
-        Return a new RDD by applying a function to each partition.
+        return self.rdd.flatMap(f)
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
+
+        This is a shorthand for ``df.rdd.mapPartitions()``.
 
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(iterator): yield 1
@@ -329,15 +359,38 @@ class DataFrame(object):
         """
         return self.rdd.mapPartitions(f, preservesPartitioning)
 
+    def foreach(self, f):
+        """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
+
+        This is a shorthand for ``df.rdd.foreach()``.
+
+        >>> def f(person):
+        ...     print(person.name)
+        >>> df.foreach(f)
+        """
+        return self.rdd.foreach(f)
+
+    def foreachPartition(self, f):
+        """Applies the ``f`` function to each partition of this :class:`DataFrame`.
+
+        This a shorthand for ``df.rdd.foreachPartition()``.
+
+        >>> def f(people):
+        ...     for person in people:
+        ...         print(person.name)
+        >>> df.foreachPartition(f)
+        """
+        return self.rdd.foreachPartition(f)
+
     def cache(self):
-        """ Persist with the default storage level (C{MEMORY_ONLY_SER}).
+        """ Persists with the default storage level (C{MEMORY_ONLY_SER}).
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
-        """ Set the storage level to persist its values across operations
+        """Sets the storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
@@ -348,7 +401,7 @@ class DataFrame(object):
         return self
 
     def unpersist(self, blocking=True):
-        """ Mark it as non-persistent, and remove all blocks for it from
+        """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
         """
         self.is_cached = False
@@ -360,68 +413,64 @@ class DataFrame(object):
     #     return DataFrame(rdd, self.sql_ctx)
 
     def repartition(self, numPartitions):
-        """ Return a new :class:`DataFrame` that has exactly `numPartitions`
-        partitions.
+        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
+
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
         """
-        rdd = self._jdf.repartition(numPartitions, None)
-        return DataFrame(rdd, self.sql_ctx)
+        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
+
+    def distinct(self):
+        """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
+
+        >>> df.distinct().count()
+        2
+        """
+        return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
     def sample(self, withReplacement, fraction, seed=None):
-        """
-        Return a sampled subset of this DataFrame.
+        """Returns a sampled subset of this :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 97).count()
-        1L
+        1
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
-    # def takeSample(self, withReplacement, num, seed=None):
-    #     """Return a fixed-size sampled subset of this DataFrame.
-    #
-    #     >>> df = sqlCtx.inferSchema(rdd)
-    #     >>> df.takeSample(False, 2, 97)
-    #     [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
-    #     """
-    #     seed = seed if seed is not None else random.randint(0, sys.maxint)
-    #     with SCCallSiteSync(self.context) as css:
-    #         bytesInJava = self._jdf \
-    #             .takeSampleToPython(withReplacement, num, long(seed)) \
-    #             .iterator()
-    #     cls = _create_cls(self.schema())
-    #     return map(cls, self._collect_iterator_through_file(bytesInJava))
-
     @property
     def dtypes(self):
-        """Return all column names and their data types as a list.
+        """Returns all column names and their data types as a list.
 
         >>> df.dtypes
         [('age', 'int'), ('name', 'string')]
         """
-        return [(str(f.name), f.dataType.simpleString()) for f in self.schema().fields]
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
+    @ignore_unicode_prefix
     def columns(self):
-        """ Return all column names as a list.
+        """Returns all column names as a list.
 
         >>> df.columns
         [u'age', u'name']
         """
-        return [f.name for f in self.schema().fields]
+        return [f.name for f in self.schema.fields]
 
+    @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
-        """
-        Join with another DataFrame, using the given join expression.
-        The following performs a full outer join between `df1` and `df2`::
+        """Joins with another :class:`DataFrame`, using the given join expression.
+
+        The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
         :param joinExprs: Join expression
-        :param joinType: One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+        :param joinType: str, default 'inner'.
+            One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
-        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
+        [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
         """
 
         if joinExprs is None:
@@ -435,27 +484,84 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
         return DataFrame(jdf, self.sql_ctx)
 
-    def sort(self, *cols):
-        """ Return a new :class:`DataFrame` sorted by the specified column.
+    @ignore_unicode_prefix
+    def sort(self, *cols, **kwargs):
+        """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
-        :param cols: The columns or expressions used for sorting
+        :param cols: list of :class:`Column` or column names to sort by.
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
-        >>> df.sortBy(df.age.desc()).collect()
+        >>> df.sort("age", ascending=False).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.orderBy(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> from pyspark.sql.functions import *
+        >>> df.sort(asc("age")).collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df.orderBy(desc("age"), "name").collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
             raise ValueError("should sort by at least one column")
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        jcols = [_to_java_column(c) for c in cols]
+        ascending = kwargs.get('ascending', True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                jcols = [jc.desc() for jc in jcols]
+        elif isinstance(ascending, list):
+            jcols = [jc if asc else jc.desc()
+                     for asc, jc in zip(ascending, jcols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+
+        jdf = self._jdf.sort(self._jseq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
-    sortBy = sort
+    orderBy = sort
 
+    def _jseq(self, cols, converter=None):
+        """Return a JVM Seq of Columns from a list of Column or names"""
+        return _to_seq(self.sql_ctx._sc, cols, converter)
+
+    def _jcols(self, *cols):
+        """Return a JVM Seq of Columns from a list of Column or column names
+
+        If `cols` has only one list in it, cols[0] will be used as the list.
+        """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        return self._jseq(cols, _to_java_column)
+
+    def describe(self, *cols):
+        """Computes statistics for numeric columns.
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical columns.
+
+        >>> df.describe().show()
+        summary age
+        count   2
+        mean    3.5
+        stddev  1.5
+        min     2
+        max     5
+        """
+        jdf = self._jdf.describe(self._jseq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
     def head(self, n=None):
-        """ Return the first `n` rows or the first row if n is None.
+        """
+        Returns the first ``n`` rows as a list of :class:`Row`,
+        or the first :class:`Row` if ``n`` is ``None.``
 
         >>> df.head()
         Row(age=2, name=u'Alice')
@@ -467,50 +573,62 @@ class DataFrame(object):
             return rs[0] if rs else None
         return self.take(n)
 
+    @ignore_unicode_prefix
     def first(self):
-        """ Return the first row.
+        """Returns the first row as a :class:`Row`.
 
         >>> df.first()
         Row(age=2, name=u'Alice')
         """
         return self.head()
 
+    @ignore_unicode_prefix
     def __getitem__(self, item):
-        """ Return the column by given name
+        """Returns the column as a :class:`Column`.
 
-        >>> df['age'].collect()
+        >>> df.select(df['age']).collect()
         [Row(age=2), Row(age=5)]
         >>> df[ ["name", "age"]].collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
         >>> df[ df.age > 3 ].collect()
         [Row(age=5, name=u'Bob')]
+        >>> df[df[0] > 3].collect()
+        [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
+            if item not in self.columns:
+                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
-            return Column(jc, self.sql_ctx)
+            return Column(jc)
         elif isinstance(item, Column):
             return self.filter(item)
-        elif isinstance(item, list):
+        elif isinstance(item, (list, tuple)):
             return self.select(*item)
+        elif isinstance(item, int):
+            jc = self._jdf.apply(self.columns[item])
+            return Column(jc)
         else:
-            raise IndexError("unexpected index: %s" % item)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def __getattr__(self, name):
-        """ Return the column by given name
+        """Returns the :class:`Column` denoted by ``name``.
 
-        >>> df.age.collect()
+        >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
-        if name.startswith("__"):
-            raise AttributeError(name)
+        if name not in self.columns:
+            raise AttributeError("No such column: %s" % name)
         jc = self._jdf.apply(name)
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
 
+    @ignore_unicode_prefix
     def select(self, *cols):
-        """ Selecting a set of expressions.
+        """Projects a set of expressions and returns a new :class:`DataFrame`.
 
-        >>> df.select().collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        :param cols: list of column names (string) or expressions (:class:`Column`).
+            If one of the column names is '*', that column is expanded to include all columns
+            in the current DataFrame.
+
         >>> df.select('*').collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('name', 'age').collect()
@@ -518,30 +636,30 @@ class DataFrame(object):
         >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
-        if not cols:
-            cols = ["*"]
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.select(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sql_ctx)
 
     def selectExpr(self, *expr):
-        """
-        Selects a set of SQL expressions. This is a variant of
-        `select` that accepts SQL expressions.
+        """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
+
+        This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
         [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
         """
-        jexpr = ListConverter().convert(expr, self._sc._gateway._gateway_client)
-        jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]
+        jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sql_ctx)
 
+    @ignore_unicode_prefix
     def filter(self, condition):
-        """ Filtering rows using the given condition, which could be
-        Column expression or string of SQL expression.
+        """Filters rows using the given condition.
 
-        where() is an alias for filter().
+        :func:`where` is an alias for :func:`filter`.
+
+        :param condition: a :class:`Column` of :class:`types.BooleanType`
+            or a string of SQL expression.
 
         >>> df.filter(df.age > 3).collect()
         [Row(age=5, name=u'Bob')]
@@ -563,37 +681,45 @@ class DataFrame(object):
 
     where = filter
 
+    @ignore_unicode_prefix
     def groupBy(self, *cols):
-        """ Group the :class:`DataFrame` using the specified columns,
+        """Groups the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
 
+        :func:`groupby` is an alias for :func:`groupBy`.
+
+        :param cols: list of columns to group by.
+            Each element should be a column name (string) or an expression (:class:`Column`).
+
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        >>> df.groupBy(['name', df.age]).count().collect()
+        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        self._sc._gateway._gateway_client)
-        jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        jdf = self._jdf.groupBy(self._jcols(*cols))
         return GroupedData(jdf, self.sql_ctx)
+
+    groupby = groupBy
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
-        (shorthand for df.groupBy.agg()).
+        (shorthand for ``df.groupBy.agg()``).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age#0)=5)]
-        >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.min(df.age)).collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MAX(age)=5)]
+        >>> from pyspark.sql import functions as F
+        >>> df.agg(F.min(df.age)).collect()
+        [Row(MIN(age)=2)]
         """
         return self.groupBy().agg(*exprs)
 
     def unionAll(self, other):
-        """ Return a new DataFrame containing union of rows in this
+        """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
 
         This is equivalent to `UNION ALL` in SQL.
@@ -616,30 +742,128 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
-    def addColumn(self, colName, col):
-        """ Return a new :class:`DataFrame` by adding a column.
+    def dropna(self, how='any', thresh=None, subset=None):
+        """Returns a new :class:`DataFrame` omitting rows with null values.
 
-        >>> df.addColumn('age2', df.age + 2).collect()
+        This is an alias for ``na.drop()``.
+
+        :param how: 'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        :param thresh: int, default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        :param subset: optional list of column names to consider.
+
+        >>> df4.dropna().show()
+        age height name
+        10  80     Alice
+
+        >>> df4.na.drop().show()
+        age height name
+        10  80     Alice
+        """
+        if how is not None and how not in ['any', 'all']:
+            raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if subset is None:
+            subset = self.columns
+        elif isinstance(subset, basestring):
+            subset = [subset]
+        elif not isinstance(subset, (list, tuple)):
+            raise ValueError("subset should be a list or tuple of column names")
+
+        if thresh is None:
+            thresh = len(subset) if how == 'any' else 1
+
+        return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sql_ctx)
+
+    def fillna(self, value, subset=None):
+        """Replace null values, alias for ``na.fill()``.
+
+        :param value: int, long, float, string, or dict.
+            Value to replace null values with.
+            If the value is a dict, then `subset` is ignored and `value` must be a mapping
+            from column name (string) to replacement value. The replacement value must be
+            an int, long, float, or string.
+        :param subset: optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and subset contains a non-string column,
+            then the non-string column is simply ignored.
+
+        >>> df4.fillna(50).show()
+        age height name
+        10  80     Alice
+        5   50     Bob
+        50  50     Tom
+        50  50     null
+
+        >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
+        age height name
+        10  80     Alice
+        5   null   Bob
+        50  null   Tom
+        50  null   unknown
+
+        >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
+        age height name
+        10  80     Alice
+        5   null   Bob
+        50  null   Tom
+        50  null   unknown
+        """
+        if not isinstance(value, (float, int, long, basestring, dict)):
+            raise ValueError("value should be a float, int, long, string, or dict")
+
+        if isinstance(value, (int, long)):
+            value = float(value)
+
+        if isinstance(value, dict):
+            value = MapConverter().convert(value, self.sql_ctx._sc._gateway._gateway_client)
+            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        elif subset is None:
+            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+        else:
+            if isinstance(subset, basestring):
+                subset = [subset]
+            elif not isinstance(subset, (list, tuple)):
+                raise ValueError("subset should be a list or tuple of column names")
+
+            return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
+
+    @ignore_unicode_prefix
+    def withColumn(self, colName, col):
+        """Returns a new :class:`DataFrame` by adding a column.
+
+        :param colName: string, name of the new column.
+        :param col: a :class:`Column` expression for the new column.
+
+        >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
         return self.select('*', col.alias(colName))
 
-    def renameColumn(self, existing, new):
-        """ Rename an existing column to a new name
+    @ignore_unicode_prefix
+    def withColumnRenamed(self, existing, new):
+        """REturns a new :class:`DataFrame` by renaming an existing column.
 
-        >>> df.renameColumn('age', 'age2').collect()
+        :param existing: string, name of the existing column to rename.
+        :param col: string, new name of the column.
+
+        >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c), self.sql_ctx).alias(new)
+        cols = [Column(_to_java_column(c)).alias(new)
                 if c == existing else c
                 for c in self.columns]
         return self.select(*cols)
 
-    def to_pandas(self):
-        """
-        Collect all the rows and return a `pandas.DataFrame`.
+    def toPandas(self):
+        """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
-        >>> df.to_pandas()  # doctest: +SKIP
+        This is only available if Pandas is installed and available.
+
+        >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
         1    5    Bob
@@ -650,8 +874,7 @@ class DataFrame(object):
 
 # Having SchemaRDD for backward compatibility (for docs)
 class SchemaRDD(DataFrame):
-    """
-    SchemaRDD is deprecated, please use DataFrame
+    """SchemaRDD is deprecated, please use :class:`DataFrame`.
     """
 
 
@@ -665,33 +888,47 @@ def dfapi(f):
     return _api
 
 
-class GroupedData(object):
+def df_varargs_api(f):
+    def _api(self, *args):
+        name = f.__name__
+        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        return DataFrame(jdf, self.sql_ctx)
+    _api.__name__ = f.__name__
+    _api.__doc__ = f.__doc__
+    return _api
 
+
+class GroupedData(object):
     """
     A set of methods for aggregations on a :class:`DataFrame`,
-    created by DataFrame.groupBy().
+    created by :func:`DataFrame.groupBy`.
     """
 
     def __init__(self, jdf, sql_ctx):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
 
+    @ignore_unicode_prefix
     def agg(self, *exprs):
-        """ Compute aggregates by specifying a map from column name
-        to aggregate methods.
+        """Compute aggregates and returns the result as a :class:`DataFrame`.
 
-        The available aggregate methods are `avg`, `max`, `min`,
-        `sum`, `count`.
+        The available aggregate functions are `avg`, `max`, `min`, `sum`, `count`.
 
-        :param exprs: list or aggregate columns or a map from column
-                      name to aggregate methods.
+        If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
+        is the column to perform aggregation on, and the value is the aggregate function.
+
+        Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
+
+        :param exprs: a dict mapping from column name (string) to aggregate functions (string),
+            or a list of :class:`Column`.
 
         >>> gdf = df.groupBy(df.name)
-        >>> gdf.agg({"age": "max"}).collect()
-        [Row(name=u'Bob', MAX(age#0)=5), Row(name=u'Alice', MAX(age#0)=2)]
-        >>> from pyspark.sql import Dsl
-        >>> gdf.agg(Dsl.min(df.age)).collect()
-        [Row(MIN(age#0)=5), Row(MIN(age#0)=2)]
+        >>> gdf.agg({"*": "count"}).collect()
+        [Row(name=u'Alice', COUNT(1)=1), Row(name=u'Bob', COUNT(1)=1)]
+
+        >>> from pyspark.sql import functions as F
+        >>> gdf.agg(F.min(df.age)).collect()
+        [Row(MIN(age)=2), Row(MIN(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -701,53 +938,89 @@ class GroupedData(object):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jcols = ListConverter().convert([c._jc for c in exprs[1:]],
-                                            self.sql_ctx._sc._gateway._gateway_client)
-            jdf = self._jdf.agg(exprs[0]._jc, self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+            jdf = self._jdf.agg(exprs[0]._jc,
+                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
     def count(self):
-        """ Count the number of rows for each group.
+        """Counts the number of records for each group.
 
         >>> df.groupBy(df.age).count().collect()
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
-    @dfapi
-    def mean(self):
-        """Compute the average value for each numeric columns
-        for each group. This is an alias for `avg`."""
+    @df_varargs_api
+    def mean(self, *cols):
+        """Computes average values for each numeric columns for each group.
 
-    @dfapi
-    def avg(self):
-        """Compute the average value for each numeric columns
-        for each group."""
+        :func:`mean` is an alias for :func:`avg`.
 
-    @dfapi
-    def max(self):
-        """Compute the max value for each numeric columns for
-        each group. """
+        :param cols: list of column names (string). Non-numeric columns are ignored.
 
-    @dfapi
-    def min(self):
-        """Compute the min value for each numeric column for
-        each group."""
+        >>> df.groupBy().mean('age').collect()
+        [Row(AVG(age)=3.5)]
+        >>> df3.groupBy().mean('age', 'height').collect()
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        """
 
-    @dfapi
-    def sum(self):
-        """Compute the sum for each numeric columns for each
-        group."""
+    @df_varargs_api
+    def avg(self, *cols):
+        """Computes average values for each numeric columns for each group.
+
+        :func:`mean` is an alias for :func:`avg`.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().avg('age').collect()
+        [Row(AVG(age)=3.5)]
+        >>> df3.groupBy().avg('age', 'height').collect()
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
+        """
+
+    @df_varargs_api
+    def max(self, *cols):
+        """Computes the max value for each numeric columns for each group.
+
+        >>> df.groupBy().max('age').collect()
+        [Row(MAX(age)=5)]
+        >>> df3.groupBy().max('age', 'height').collect()
+        [Row(MAX(age)=5, MAX(height)=85)]
+        """
+
+    @df_varargs_api
+    def min(self, *cols):
+        """Computes the min value for each numeric column for each group.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().min('age').collect()
+        [Row(MIN(age)=2)]
+        >>> df3.groupBy().min('age', 'height').collect()
+        [Row(MIN(age)=2, MIN(height)=80)]
+        """
+
+    @df_varargs_api
+    def sum(self, *cols):
+        """Compute the sum for each numeric columns for each group.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().sum('age').collect()
+        [Row(SUM(age)=7)]
+        >>> df3.groupBy().sum('age', 'height').collect()
+        [Row(SUM(age)=7, SUM(height)=165)]
+        """
 
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
-    return sc._jvm.Dsl.lit(literal)
+    return sc._jvm.functions.lit(literal)
 
 
 def _create_column_from_name(name):
     sc = SparkContext._active_spark_context
-    return sc._jvm.Dsl.col(name)
+    return sc._jvm.functions.col(name)
 
 
 def _to_java_column(col):
@@ -758,19 +1031,33 @@ def _to_java_column(col):
     return jcol
 
 
+def _to_seq(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM Seq of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
+    if converter:
+        cols = [converter(c) for c in cols]
+    jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
+    return sc._jvm.PythonUtils.toSeq(jcols)
+
+
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
         jc = getattr(self._jc, name)()
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
 
-def _dsl_op(name, doc=''):
+def _func_op(name, doc=''):
     def _(self):
-        jc = getattr(self._sc._jvm.Dsl, name)(self._jc)
-        return Column(jc, self.sql_ctx)
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)(self._jc)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
@@ -781,7 +1068,7 @@ def _bin_op(name, doc="binary operator"):
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
         njc = getattr(self._jc, name)(jc)
-        return Column(njc, self.sql_ctx)
+        return Column(njc)
     _.__doc__ = doc
     return _
 
@@ -792,19 +1079,20 @@ def _reverse_op(name, doc="binary operator"):
     def _(self, other):
         jother = _create_column_from_literal(other)
         jc = getattr(jother, name)(self._jc)
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
 
-class Column(DataFrame):
+class Column(object):
 
     """
     A column in a DataFrame.
 
-    `Column` instances can be created by::
+    :class:`Column` instances can be created by::
 
         # 1. Select a column out of a DataFrame
+
         df.colName
         df["colName"]
 
@@ -813,21 +1101,22 @@ class Column(DataFrame):
         1 / df.colName
     """
 
-    def __init__(self, jc, sql_ctx=None):
+    def __init__(self, jc):
         self._jc = jc
-        super(Column, self).__init__(jc, sql_ctx)
 
     # arithmetic operators
-    __neg__ = _dsl_op("negate")
+    __neg__ = _func_op("negate")
     __add__ = _bin_op("plus")
     __sub__ = _bin_op("minus")
     __mul__ = _bin_op("multiply")
     __div__ = _bin_op("divide")
+    __truediv__ = _bin_op("divide")
     __mod__ = _bin_op("mod")
     __radd__ = _bin_op("plus")
     __rsub__ = _reverse_op("minus")
     __rmul__ = _bin_op("multiply")
     __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
 
     # logistic operators
@@ -842,14 +1131,46 @@ class Column(DataFrame):
     # so use bitwise operators as boolean operators
     __and__ = _bin_op('and')
     __or__ = _bin_op('or')
-    __invert__ = _dsl_op('not')
+    __invert__ = _func_op('not')
     __rand__ = _bin_op("and")
     __ror__ = _bin_op("or")
 
     # container operators
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
-    getField = _bin_op("getField", "An expression that gets a field by name in a StructField.")
+
+    def getItem(self, key):
+        """An expression that gets an item at position `ordinal` out of a list,
+         or gets an item by key out of a dict.
+
+        >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
+        >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
+        l[0] d[key]
+        1    value
+        >>> df.select(df.l[0], df.d["key"]).show()
+        l[0] d[key]
+        1    value
+        """
+        return self[key]
+
+    def getField(self, name):
+        """An expression that gets a field by name in a StructField.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
+        >>> df.select(df.r.getField("b")).show()
+        r.b
+        b
+        >>> df.select(df.r.a).show()
+        r.a
+        1
+        """
+        return Column(self._jc.getField(name))
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self.getField(item)
 
     # string methods
     rlike = _bin_op("rlike")
@@ -857,14 +1178,15 @@ class Column(DataFrame):
     startswith = _bin_op("startsWith")
     endswith = _bin_op("endsWith")
 
+    @ignore_unicode_prefix
     def substr(self, startPos, length):
         """
-        Return a Column which is a substring of the column
+        Return a :class:`Column` which is a substring of the column
 
         :param startPos: start position (int or Column)
         :param length:  length of the substring (int or Column)
 
-        >>> df.name.substr(1, 3).collect()
+        >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col=u'Ali'), Row(col=u'Bob')]
         """
         if type(startPos) != type(length):
@@ -875,13 +1197,32 @@ class Column(DataFrame):
             jc = self._jc.substr(startPos._jc, length._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
 
     __getslice__ = substr
 
+    @ignore_unicode_prefix
+    def inSet(self, *cols):
+        """ A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.inSet("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.inSet([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cols[0]
+        cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+        sc = SparkContext._active_spark_context
+        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
+        return Column(jc)
+
     # order
-    asc = _unary_op("asc")
-    desc = _unary_op("desc")
+    asc = _unary_op("asc", "Returns a sort expression based on the"
+                           " ascending order of the given column name.")
+    desc = _unary_op("desc", "Returns a sort expression based on the"
+                             " descending order of the given column name.")
 
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
@@ -889,11 +1230,12 @@ class Column(DataFrame):
     def alias(self, alias):
         """Return a alias for this column
 
-        >>> df.age.alias("age2").collect()
+        >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
-        return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
+        return Column(getattr(self._jc, "as")(alias))
 
+    @ignore_unicode_prefix
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
@@ -902,153 +1244,37 @@ class Column(DataFrame):
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         """
-        if self.sql_ctx is None:
-            sc = SparkContext._active_spark_context
-            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
-        else:
-            ssql_ctx = self.sql_ctx._ssql_ctx
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
+            sc = SparkContext._active_spark_context
+            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
             jdt = ssql_ctx.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
-        return Column(jc, self.sql_ctx)
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
+        return Column(jc)
 
     def __repr__(self):
-        if self._jdf.isComputable():
-            return self._jdf.samples()
-        else:
-            return 'Column<%s>' % self._jdf.toString()
-
-    def to_pandas(self):
-        """
-        Return a pandas.Series from the column
-
-        >>> df.age.to_pandas()  # doctest: +SKIP
-        0    2
-        1    5
-        dtype: int64
-        """
-        import pandas as pd
-        data = [c for c, in self.collect()]
-        return pd.Series(data)
+        return 'Column<%s>' % self._jc.toString().encode('utf8')
 
 
-def _aggregate_func(name, doc=""):
-    """ Create a function for aggregator by name"""
-    def _(col):
-        sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.Dsl, name)(_to_java_column(col))
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = doc
-    return staticmethod(_)
-
-
-class UserDefinedFunction(object):
-    def __init__(self, func, returnType):
-        self.func = func
-        self.returnType = returnType
-        self._broadcast = None
-        self._judf = self._create_judf()
-
-    def _create_judf(self):
-        f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
-        command = (func, None, ser, ser)
-        sc = SparkContext._active_spark_context
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
-        ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
-        jdt = ssql_ctx.parseDataType(self.returnType.json())
-        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
-                                                 includes, sc.pythonExec, broadcast_vars,
-                                                 sc._javaAccumulator, jdt)
-        return judf
-
-    def __del__(self):
-        if self._broadcast is not None:
-            self._broadcast.unpersist()
-            self._broadcast = None
-
-    def __call__(self, *cols):
-        sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
-        return Column(jc)
-
-
-class Dsl(object):
+class DataFrameNaFunctions(object):
+    """Functionality for working with missing data in :class:`DataFrame`.
     """
-    A collections of builtin aggregators
-    """
-    DSLS = {
-        'lit': 'Creates a :class:`Column` of literal value.',
-        'col': 'Returns a :class:`Column` based on the given column name.',
-        'column': 'Returns a :class:`Column` based on the given column name.',
-        'upper': 'Converts a string expression to upper case.',
-        'lower': 'Converts a string expression to upper case.',
-        'sqrt': 'Computes the square root of the specified float value.',
-        'abs': 'Computes the absolutle value.',
 
-        'max': 'Aggregate function: returns the maximum value of the expression in a group.',
-        'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-        'first': 'Aggregate function: returns the first value in a group.',
-        'last': 'Aggregate function: returns the last value in a group.',
-        'count': 'Aggregate function: returns the number of items in a group.',
-        'sum': 'Aggregate function: returns the sum of all values in the expression.',
-        'avg': 'Aggregate function: returns the average of the values in a group.',
-        'mean': 'Aggregate function: returns the average of the values in a group.',
-        'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
-    }
+    def __init__(self, df):
+        self.df = df
 
-    for _name, _doc in DSLS.items():
-        locals()[_name] = _aggregate_func(_name, _doc)
-    del _name, _doc
+    def drop(self, how='any', thresh=None, subset=None):
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
 
-    @staticmethod
-    def countDistinct(col, *cols):
-        """ Return a new Column for distinct count of (col, *cols)
+    drop.__doc__ = DataFrame.dropna.__doc__
 
-        >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
-        [Row(c=2)]
+    def fill(self, value, subset=None):
+        return self.df.fillna(value=value, subset=subset)
 
-        >>> df.agg(Dsl.countDistinct("age", "name").alias('c')).collect()
-        [Row(c=2)]
-        """
-        sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = sc._jvm.Dsl.countDistinct(_to_java_column(col),
-                                       sc._jvm.PythonUtils.toSeq(jcols))
-        return Column(jc)
-
-    @staticmethod
-    def approxCountDistinct(col, rsd=None):
-        """ Return a new Column for approxiate distinct count of (col, *cols)
-
-        >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.approxCountDistinct(df.age).alias('c')).collect()
-        [Row(c=2)]
-        """
-        sc = SparkContext._active_spark_context
-        if rsd is None:
-            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col))
-        else:
-            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col), rsd)
-        return Column(jc)
-
-    @staticmethod
-    def udf(f, returnType=StringType()):
-        """Create a user defined function (UDF)
-
-        >>> slen = Dsl.udf(lambda s: len(s), IntegerType())
-        >>> df.select(slen(df.name).alias('slen')).collect()
-        [Row(slen=5), Row(slen=3)]
-        """
-        return UserDefinedFunction(f, returnType)
+    fill.__doc__ = DataFrame.fillna.__doc__
 
 
 def _test():
@@ -1059,14 +1285,22 @@ def _test():
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
-    rdd2 = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)])
-    rdd3 = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)])
-    globs['df'] = sqlCtx.inferSchema(rdd2)
-    globs['df2'] = sqlCtx.inferSchema(rdd3)
+    globs['sqlContext'] = SQLContext(sc)
+    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
+        .toDF(StructType([StructField('age', IntegerType()),
+                          StructField('name', StringType())]))
+    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
+    globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
+                                  Row(name='Bob', age=5, height=85)]).toDF()
+
+    globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
+                                  Row(name='Bob', age=5, height=None),
+                                  Row(name='Tom', age=None, height=None),
+                                  Row(name=None, age=None, height=None)]).toDF()
+
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

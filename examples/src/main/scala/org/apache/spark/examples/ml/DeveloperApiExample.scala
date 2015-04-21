@@ -58,7 +58,7 @@ object DeveloperApiExample {
     lr.setMaxIter(10)
 
     // Learn a LogisticRegression model.  This uses the parameters stored in lr.
-    val model = lr.fit(training)
+    val model = lr.fit(training.toDF())
 
     // Prepare test data.
     val test = sc.parallelize(Seq(
@@ -67,7 +67,7 @@ object DeveloperApiExample {
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
     // Make predictions on test data.
-    val sumPredictions: Double = model.transform(test)
+    val sumPredictions: Double = model.transform(test.toDF())
       .select("features", "label", "prediction")
       .collect()
       .map { case Row(features: Vector, label: Double, prediction: Double) =>
@@ -99,7 +99,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-  def getMaxIter: Int = get(maxIter)
+  def getMaxIter: Int = getOrDefault(maxIter)
 }
 
 /**
@@ -174,11 +174,11 @@ private class MyLogisticRegressionModel(
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
    *
-   * This is used for the defaul implementation of [[transform()]].
+   * This is used for the default implementation of [[transform()]].
    */
   override protected def copy(): MyLogisticRegressionModel = {
     val m = new MyLogisticRegressionModel(parent, fittingParamMap, weights)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(extractParamMap(), this, m)
     m
   }
 }

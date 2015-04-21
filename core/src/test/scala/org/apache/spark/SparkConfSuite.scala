@@ -197,16 +197,29 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     serializer.newInstance().serialize(new StringBuffer())
   }
 
-  test("deprecated config keys") {
+  test("deprecated configs") {
     val conf = new SparkConf()
-      .set("spark.files.userClassPathFirst", "true")
-      .set("spark.yarn.user.classpath.first", "true")
-    assert(conf.contains("spark.files.userClassPathFirst"))
-    assert(conf.contains("spark.executor.userClassPathFirst"))
-    assert(conf.contains("spark.yarn.user.classpath.first"))
-    assert(conf.getBoolean("spark.files.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.executor.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.yarn.user.classpath.first", false))
+    val newName = "spark.history.fs.update.interval"
+
+    assert(!conf.contains(newName))
+
+    conf.set("spark.history.updateInterval", "1")
+    assert(conf.get(newName) === "1")
+
+    conf.set("spark.history.fs.updateInterval", "2")
+    assert(conf.get(newName) === "2")
+
+    conf.set("spark.history.fs.update.interval.seconds", "3")
+    assert(conf.get(newName) === "3")
+
+    conf.set(newName, "4")
+    assert(conf.get(newName) === "4")
+
+    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    assert(count === 4)
+
+    conf.set("spark.yarn.applicationMaster.waitTries", "42")
+    assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
   }
 
 }

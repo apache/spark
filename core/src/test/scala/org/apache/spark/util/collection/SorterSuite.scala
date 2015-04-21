@@ -65,6 +65,13 @@ class SorterSuite extends FunSuite {
     }
   }
 
+  // http://www.envisage-project.eu/timsort-specification-and-verification/
+  test("SPARK-5984 TimSort bug") {
+    val data = TestTimSort.getTimSortBugTestSet(67108864)
+    new Sorter(new IntArraySortDataFormat).sort(data, 0, data.length, Ordering.Int)
+    (0 to data.length - 2).foreach(i => assert(data(i) <= data(i + 1)))
+  }
+
   /** Runs an experiment several times. */
   def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
     if (skip) {

@@ -18,12 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
+import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
-
 
 /**
  * Params for probabilistic classification.
@@ -37,8 +38,8 @@ private[classification] trait ProbabilisticClassifierParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
-    val map = this.paramMap ++ paramMap
-    addOutputColumn(parentSchema, map(probabilityCol), new VectorUDT)
+    val map = extractParamMap(paramMap)
+    SchemaUtils.appendColumn(parentSchema, map(probabilityCol), new VectorUDT)
   }
 }
 
@@ -61,6 +62,7 @@ private[spark] abstract class ProbabilisticClassifier[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends Classifier[FeaturesType, E, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): E = set(probabilityCol, value).asInstanceOf[E]
 }
 
@@ -82,6 +84,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 
   /**
@@ -100,7 +103,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {
@@ -120,8 +123,8 @@ private[spark] abstract class ProbabilisticClassificationModel[
       val features2probs: FeaturesType => Vector = (features) => {
         tmpModel.predictProbabilities(features)
       }
-      outputData.select($"*",
-        callUDF(features2probs, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+      outputData.withColumn(map(probabilityCol),
+        callUDF(features2probs, new VectorUDT, col(map(featuresCol))))
     } else {
       if (numColsOutput == 0) {
         this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +

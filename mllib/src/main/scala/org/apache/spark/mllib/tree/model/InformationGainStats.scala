@@ -38,23 +38,32 @@ class InformationGainStats(
     val leftPredict: Predict,
     val rightPredict: Predict) extends Serializable {
 
-  override def toString = {
+  override def toString: String = {
     "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
       .format(gain, impurity, leftImpurity, rightImpurity)
   }
 
-  override def equals(o: Any) =
-    o match {
-      case other: InformationGainStats => {
-        gain == other.gain &&
-        impurity == other.impurity &&
-        leftImpurity == other.leftImpurity &&
-        rightImpurity == other.rightImpurity &&
-        leftPredict == other.leftPredict &&
-        rightPredict == other.rightPredict
-      }
-      case _ => false
-    }
+  override def equals(o: Any): Boolean = o match {
+    case other: InformationGainStats =>
+      gain == other.gain &&
+      impurity == other.impurity &&
+      leftImpurity == other.leftImpurity &&
+      rightImpurity == other.rightImpurity &&
+      leftPredict == other.leftPredict &&
+      rightPredict == other.rightPredict
+
+    case _ => false
+  }
+
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(
+      gain: java.lang.Double,
+      impurity: java.lang.Double,
+      leftImpurity: java.lang.Double,
+      rightImpurity: java.lang.Double,
+      leftPredict,
+      rightPredict)
+  }
 }
 
 

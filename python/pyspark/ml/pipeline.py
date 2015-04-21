@@ -18,7 +18,8 @@
 from abc import ABCMeta, abstractmethod
 
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import inherit_doc
+from pyspark.ml.util import keyword_only
+from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel']
@@ -38,7 +39,7 @@ class Estimator(Params):
         Fits a model to the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: fitted model
@@ -61,7 +62,7 @@ class Transformer(Params):
         Transforms the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: transformed dataset
@@ -89,10 +90,16 @@ class Pipeline(Estimator):
     identity transformer.
     """
 
-    def __init__(self):
+    @keyword_only
+    def __init__(self, stages=[]):
+        """
+        __init__(self, stages=[])
+        """
         super(Pipeline, self).__init__()
         #: Param for pipeline stages.
         self.stages = Param(self, "stages", "pipeline stages")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
 
     def setStages(self, value):
         """
@@ -110,13 +117,22 @@ class Pipeline(Estimator):
         if self.stages in self.paramMap:
             return self.paramMap[self.stages]
 
+    @keyword_only
+    def setParams(self, stages=[]):
+        """
+        setParams(self, stages=[])
+        Sets params for Pipeline.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
     def fit(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         stages = paramMap[self.stages]
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise ValueError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
+                raise TypeError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage))
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):
@@ -148,7 +164,7 @@ class PipelineModel(Transformer):
         self.transformers = transformers
 
     def transform(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         for t in self.transformers:
             dataset = t.transform(dataset, paramMap)
         return dataset

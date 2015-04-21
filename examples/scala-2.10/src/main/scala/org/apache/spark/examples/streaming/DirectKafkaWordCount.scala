@@ -30,7 +30,8 @@ import org.apache.spark.SparkConf
  *   <topics> is a list of one or more kafka topics to consume from
  *
  * Example:
- *    $ bin/run-example streaming.KafkaWordCount broker1-host:port,broker2-host:port topic1,topic2
+ *    $ bin/run-example streaming.DirectKafkaWordCount broker1-host:port,broker2-host:port \
+ *    topic1,topic2
  */
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
@@ -40,7 +41,7 @@ object DirectKafkaWordCount {
         |  <brokers> is a list of one or more Kafka brokers
         |  <topics> is a list of one or more kafka topics to consume from
         |
-        """".stripMargin)
+        """.stripMargin)
       System.exit(1)
     }
 

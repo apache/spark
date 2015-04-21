@@ -173,7 +173,9 @@ object LDAExample {
       stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
 
     // Get dataset of document texts
-    // One document per line in each text file.
+    // One document per line in each text file. If the input consists of many small files,
+    // this can result in a large number of small partitions, which can degrade performance.
+    // In this case, consider using coalesce() to create fewer, larger partitions.
     val textRDD: RDD[String] = sc.textFile(paths.mkString(","))
 
     // Split text into words

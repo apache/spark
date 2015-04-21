@@ -32,7 +32,7 @@ private[regression] object GLMRegressionModel {
 
   object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Model data for model import/export */
     case class Data(weights: Vector, intercept: Double)
@@ -58,7 +58,7 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }

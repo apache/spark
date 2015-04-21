@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.sources
 
+import scala.language.existentials
+import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -32,7 +34,9 @@ import org.apache.spark.util.Utils
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
+private[sql] class DDLParser(
+    parseQuery: String => LogicalPlan)
+  extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
   def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
     try {
@@ -41,14 +45,6 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
       case ddlException: DDLException => throw ddlException
       case _ if !exceptionOnError => None
       case x: Throwable => throw x
-    }
-  }
-
-  def parseType(input: String): DataType = {
-    lexical.initialize(reservedWords)
-    phrase(dataType)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => throw new DDLException(s"Unsupported dataType: $x")
     }
   }
 
@@ -66,26 +62,9 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val EXTENDED = Keyword("EXTENDED")
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
+  protected val REFRESH = Keyword("REFRESH")
 
-  // Data types.
-  protected val STRING = Keyword("STRING")
-  protected val BINARY = Keyword("BINARY")
-  protected val BOOLEAN = Keyword("BOOLEAN")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val INT = Keyword("INT")
-  protected val BIGINT = Keyword("BIGINT")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val DECIMAL = Keyword("DECIMAL")
-  protected val DATE = Keyword("DATE")
-  protected val TIMESTAMP = Keyword("TIMESTAMP")
-  protected val VARCHAR = Keyword("VARCHAR")
-  protected val ARRAY = Keyword("ARRAY")
-  protected val MAP = Keyword("MAP")
-  protected val STRUCT = Keyword("STRUCT")
-
-  protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable | refreshTable
 
   protected def start: Parser[LogicalPlan] = ddl
 
@@ -104,9 +83,9 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
    * AS SELECT ...
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-  (
-    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
-      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
+    // TODO: Support database.table.
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident ~
+      tableCols.? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
         if (temp.isDefined && allowExisting.isDefined) {
           throw new DDLException(
@@ -128,12 +107,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             SaveMode.ErrorIfExists
           }
 
+          val queryPlan = parseQuery(query.get)
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
             mode,
             options,
-            query.get)
+            queryPlan)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
           CreateTableUsing(
@@ -145,8 +125,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             allowExisting.isDefined,
             managedIfNoPath = false)
         }
-      }
-  )
+    }
 
   protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
 
@@ -166,72 +145,41 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
         DescribeCommand(UnresolvedRelation(tblIdentifier, None), e.isDefined)
    }
 
+  protected lazy val refreshTable: Parser[LogicalPlan] =
+    REFRESH ~> TABLE ~> (ident <~ ".").? ~ ident ^^ {
+      case maybeDatabaseName ~ tableName =>
+        RefreshTable(maybeDatabaseName.getOrElse("default"), tableName)
+    }
+
   protected lazy val options: Parser[Map[String, String]] =
     "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
-  protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
+  override implicit def regexToParser(regex: Regex): Parser[String] = acceptMatch(
+    s"identifier matching regex ${regex}", {
+      case lexical.Identifier(str) if regex.unapplySeq(str).isDefined => str
+      case lexical.Keyword(str) if regex.unapplySeq(str).isDefined => str
+    }
+  )
+
+  protected lazy val optionName: Parser[String] = "[_a-zA-Z][a-zA-Z0-9]*".r ^^ {
+    case name => name
+  }
+
+  protected lazy val pair: Parser[(String, String)] =
+    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
       val meta = cm match {
         case Some(comment) =>
-          new MetadataBuilder().putString(COMMENT.str.toLowerCase(), comment).build()
+          new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
         case None => Metadata.empty
       }
-      StructField(columnName, typ, true, meta)
+
+      StructField(columnName, typ, nullable = true, meta)
     }
-
-  protected lazy val primitiveType: Parser[DataType] =
-    STRING ^^^ StringType |
-    BINARY ^^^ BinaryType |
-    BOOLEAN ^^^ BooleanType |
-    TINYINT ^^^ ByteType |
-    SMALLINT ^^^ ShortType |
-    INT ^^^ IntegerType |
-    BIGINT ^^^ LongType |
-    FLOAT ^^^ FloatType |
-    DOUBLE ^^^ DoubleType |
-    fixedDecimalType |                   // decimal with precision/scale
-    DECIMAL ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
-    DATE ^^^ DateType |
-    TIMESTAMP ^^^ TimestampType |
-    VARCHAR ~ "(" ~ numericLit ~ ")" ^^^ StringType
-
-  protected lazy val fixedDecimalType: Parser[DataType] =
-    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
-      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
-    }
-
-  protected lazy val arrayType: Parser[DataType] =
-    ARRAY ~> "<" ~> dataType <~ ">" ^^ {
-      case tpe => ArrayType(tpe)
-    }
-
-  protected lazy val mapType: Parser[DataType] =
-    MAP ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
-    }
-
-  protected lazy val structField: Parser[StructField] =
-    ident ~ ":" ~ dataType ^^ {
-      case fieldName ~ _ ~ tpe => StructField(fieldName, tpe, nullable = true)
-    }
-
-  protected lazy val structType: Parser[DataType] =
-    (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-    case fields => StructType(fields)
-    }) |
-    (STRUCT ~> "<>" ^^ {
-      case fields => StructType(Nil)
-    })
-
-  private[sql] lazy val dataType: Parser[DataType] =
-    arrayType |
-    mapType |
-    structType |
-    primitiveType
 }
 
 private[sql] object ResolvedDataSource {
@@ -269,19 +217,25 @@ private[sql] object ResolvedDataSource {
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
+    def className: String = clazz.getCanonicalName
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-          sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
+          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+        case _ =>
+          throw new AnalysisException(s"$className is not a RelationProvider.")
       }
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-          sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
+          throw new AnalysisException(
+            s"A schema needs to be specified when using $className.")
+        case _ =>
+          throw new AnalysisException(s"$className is not a RelationProvider.")
       }
     }
     new ResolvedDataSource(clazz, relation)
@@ -318,24 +272,18 @@ private[sql] case class DescribeCommand(
     isExtended: Boolean) extends Command {
   override val output = Seq(
     // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false, 
+    AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false, 
+    AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false, 
+    AttributeReference("comment", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "comment of the column").build())())
 }
 
 /**
   * Used to represent the operation of create table using a data source.
-  * @param tableName
-  * @param userSpecifiedSchema
-  * @param provider
-  * @param temporary
-  * @param options
   * @param allowExisting If it is true, we will do nothing when the table already exists.
- *                      If it is false, an exception will be thrown
-  * @param managedIfNoPath
+  *                      If it is false, an exception will be thrown
   */
 private[sql] case class CreateTableUsing(
     tableName: String,
@@ -346,50 +294,61 @@ private[sql] case class CreateTableUsing(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends Command
 
+/**
+ * A node used to support CTAS statements and saveAsTable for the data source API.
+ * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
+ * can analyze the logical plan that will be used to populate the table.
+ * So, [[PreWriteCheck]] can detect cases that are not allowed.
+ */
 private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
     mode: SaveMode,
     options: Map[String, String],
-    query: String) extends Command
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  // TODO: Override resolved after we support databaseName.
+  // override lazy val resolved = databaseName != None && childrenResolved
+}
 
-private[sql] case class CreateTableUsingAsLogicalPlan(
-    tableName: String,
-    provider: String,
-    temporary: Boolean,
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends Command
-
-private [sql] case class CreateTempTableUsing(
+private[sql] case class CreateTempTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext) = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-    sqlContext.registerRDDAsTable(
+    sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
   }
 }
 
-private [sql] case class CreateTempTableUsingAsSelect(
+private[sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext) = {
+  def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
-    sqlContext.registerRDDAsTable(
+    sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
     Seq.empty
+  }
+}
+
+private[sql] case class RefreshTable(databaseName: String, tableName: String)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.refreshTable(databaseName, tableName)
+    Seq.empty[Row]
   }
 }
 
@@ -408,7 +367,7 @@ protected[sql] class CaseInsensitiveMap(map: Map[String, String]) extends Map[St
 
   override def iterator: Iterator[(String, String)] = baseMap.iterator
 
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase()
+  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
 }
 
 /**

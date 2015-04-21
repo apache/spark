@@ -20,7 +20,7 @@ package org.apache.spark.mllib.util
 import scala.collection.JavaConversions._
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
@@ -72,11 +72,10 @@ object LinearDataGenerator {
       eps: Double = 0.1): Seq[LabeledPoint] = {
 
     val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
     val y = x.map { xi =>
-      new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
+      blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
     }
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
@@ -100,9 +99,9 @@ object LinearDataGenerator {
       eps: Double,
       nparts: Int = 2,
       intercept: Double = 0.0) : RDD[LabeledPoint] = {
-    org.jblas.util.Random.seed(42)
+    val random = new Random(42)
     // Random values distributed uniformly in [-0.5, 0.5]
-    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
+    val w = Array.fill(nfeatures)(random.nextDouble() - 0.5)
 
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
       val seed = 42 + p
