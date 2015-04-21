@@ -45,6 +45,7 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
     (sparkContext
       .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i")))
+      .toDF()
       .registerTempTable(s"orc_temp_table")
 
     sql(s"""

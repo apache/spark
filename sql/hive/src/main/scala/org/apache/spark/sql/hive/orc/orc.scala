@@ -111,7 +111,8 @@ class DefaultSource
 case class OrcRelation
     (path: String, parameters: Map[String, String], maybeSchema: Option[StructType] = None)
     (@transient val sqlContext: SQLContext)
-  extends CatalystScan
+  extends BaseRelation
+  with CatalystScan
   with InsertableRelation
   with SparkHadoopMapRedUtil
   with HiveInspectors
@@ -120,7 +121,7 @@ case class OrcRelation
   def sparkContext: SparkContext = sqlContext.sparkContext
 
   // todo: Should calculate per scan size
-  override val sizeInBytes = {
+  override def sizeInBytes: Long = {
     val fs = FileSystem.get(new java.net.URI(path), sparkContext.hadoopConfiguration)
     val fileStatus = fs.getFileStatus(fs.makeQualified(new Path(path)))
     val leaves = SparkHadoopUtil.get.listLeafStatuses(fs, fileStatus.getPath).filter { f =>
@@ -203,7 +204,12 @@ case class OrcRelation
           serde.initialize(null, prop)
           serde
         }
-        HadoopTableReader.fillObject(iter.map(_._2), deserializer, attrsWithIndex, mutableRow)
+        HadoopTableReader.fillObject(
+          iter.map(_._2),
+          deserializer,
+          attrsWithIndex,
+          mutableRow,
+          deserializer)
       }
     rowRdd
   }
