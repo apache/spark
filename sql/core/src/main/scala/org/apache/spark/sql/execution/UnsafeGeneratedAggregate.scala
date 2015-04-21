@@ -259,7 +259,7 @@ case class UnsafeGeneratedAggregate(
         Iterator(resultProjection(buffer))
       } else {
         // TODO: if we knew how many groups to expect, we could size this hashmap appropriately
-        val buffers = new BytesToBytesMap(MemoryAllocator.HEAP, 128)
+        val buffers = new BytesToBytesMap(MemoryAllocator.UNSAFE, 128)
 
         // Set up the mutable "pointers" that we'll re-use when pointing to key and value rows
         val currentBuffer: UnsafeRow = new UnsafeRow()
