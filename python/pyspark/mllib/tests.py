@@ -195,6 +195,22 @@ class VectorTests(PySparkTestCase):
                 self.assertEquals(expected[i][j], sm1t[i, j])
         self.assertTrue(array_equal(sm1t.toArray(), expected))
 
+    def test_dense_matrix_is_transposed(self):
+        mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
+        mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
+        self.assertEquals(mat1, mat)
+
+        expected = [[0, 4], [1, 6], [3, 9]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat1[i, j], expected[i][j])
+        self.assertTrue(array_equal(mat1.toArray(), expected))
+
+        sm = mat1.toSparse()
+        self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
+        self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
+        self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
+
 
 class ListTests(PySparkTestCase):
 
