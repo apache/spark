@@ -38,21 +38,21 @@ object RpcUtils {
 
   /** Returns the configured number of times to retry connecting */
   def numRetries(conf: SparkConf): Int = {
-    conf.getInt("spark.rpc.num.retries", 3)
+    conf.getInt("spark.rpc.numRetries", 3)
   }
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Long = {
-    conf.getLong("spark.rpc.retry.wait", 3000)
+    conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
   }
 
-  /** Returns the default Spark timeout to use for Rpc ask operations. */
+  /** Returns the default Spark timeout to use for RPC ask operations. */
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getLong("spark.rpc.askTimeout", 30) seconds
+    conf.getTimeAsSeconds("spark.rpc.askTimeout", "30s") seconds
   }
 
-  /** Returns the default Spark timeout to use for Rpc remote endpoint lookup. */
+  /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getLong("spark.rpc.lookupTimeout", 30) seconds
+    conf.getTimeAsSeconds("spark.rpc.lookupTimeout", "30s") seconds
   }
 }

@@ -19,11 +19,13 @@ package org.apache.spark
 
 import java.util.concurrent.{TimeUnit, Executors}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.{Try, Random}
 
 import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
 
 class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
@@ -231,16 +233,16 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     assert(!conf.contains("spark.rpc.lookupTimeout"))
 
     conf.set("spark.akka.num.retries", "1")
-    assert(conf.get("spark.rpc.num.retries") === "1")
+    assert(RpcUtils.numRetries(conf) === 1)
 
     conf.set("spark.akka.retry.wait", "2")
-    assert(conf.get("spark.rpc.retry.wait") === "2")
+    assert(RpcUtils.retryWaitMs(conf) === 2L)
 
     conf.set("spark.akka.askTimeout", "3")
-    assert(conf.get("spark.rpc.askTimeout") === "3")
+    assert(RpcUtils.askTimeout(conf) === (3 seconds))
 
     conf.set("spark.akka.lookupTimeout", "4")
-    assert(conf.get("spark.rpc.lookupTimeout") === "4")
+    assert(RpcUtils.lookupTimeout(conf) === (4 seconds))
   }
 }
 
