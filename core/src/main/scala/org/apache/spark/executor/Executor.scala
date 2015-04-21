@@ -89,10 +89,7 @@ private[spark] class Executor(
     ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst: Boolean = {
-    conf.getBoolean("spark.executor.userClassPathFirst",
-      conf.getBoolean("spark.files.userClassPathFirst", false))
-  }
+  private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager

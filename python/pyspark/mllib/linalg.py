@@ -145,7 +145,7 @@ class VectorUDT(UserDefinedType):
             values = [float(v) for v in obj]
             return (1, None, None, values)
         else:
-            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+            raise TypeError("cannot serialize %r of type %r" % (obj, type(obj)))
 
     def deserialize(self, datum):
         assert len(datum) == 4, \
@@ -561,7 +561,7 @@ class SparseVector(Vector):
         inds = self.indices
         vals = self.values
         if not isinstance(index, int):
-            raise ValueError(
+            raise TypeError(
                 "Indices must be of type integer, got type %s" % type(index))
         if index < 0:
             index += self.size

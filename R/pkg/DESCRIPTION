@@ -19,7 +19,7 @@ Collate:
     'jobj.R'
     'RDD.R'
     'pairRDD.R'
-    'SQLTypes.R'
+    'schema.R'
     'column.R'
     'group.R'
     'DataFrame.R'

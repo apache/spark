@@ -44,14 +44,25 @@ test_that("infer types", {
   expect_equal(infer_type(list(1L, 2L)),
                list(type = 'array', elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(a = 1L, b = "2")),
-               list(type = "struct",
-                    fields = list(list(name = "a", type = "integer", nullable = TRUE),
-                                  list(name = "b", type = "string", nullable = TRUE))))
+               structType(structField(x = "a", type = "integer", nullable = TRUE),
+                          structField(x = "b", type = "string", nullable = TRUE)))
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e),
                list(type = "map", keyType = "string", valueType = "integer",
                     valueContainsNull = TRUE))
+})
+
+test_that("structType and structField", {
+  testField <- structField("a", "string")
+  expect_true(inherits(testField, "structField"))
+  expect_true(testField$name() == "a")
+  expect_true(testField$nullable())
+  
+  testSchema <- structType(testField, structField("b", "integer"))
+  expect_true(inherits(testSchema, "structType"))
+  expect_true(inherits(testSchema$fields()[[2]], "structField"))
+  expect_true(testSchema$fields()[[1]]$dataType.toString() == "StringType")
 })
 
 test_that("create DataFrame from RDD", {
@@ -66,9 +77,8 @@ test_that("create DataFrame from RDD", {
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("_1", "_2"))
 
-  fields <- list(list(name = "a", type = "integer", nullable = TRUE),
-                 list(name = "b", type = "string", nullable = TRUE))
-  schema <- list(type = "struct", fields = fields)
+  schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
+                        structField(x = "b", type = "string", nullable = TRUE))
   df <- createDataFrame(sqlCtx, rdd, schema)
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("a", "b"))
@@ -94,9 +104,8 @@ test_that("toDF", {
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("_1", "_2"))
 
-  fields <- list(list(name = "a", type = "integer", nullable = TRUE),
-                 list(name = "b", type = "string", nullable = TRUE))
-  schema <- list(type = "struct", fields = fields)
+  schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
+                        structField(x = "b", type = "string", nullable = TRUE))
   df <- toDF(rdd, schema)
   expect_true(inherits(df, "DataFrame"))
   expect_equal(columns(df), c("a", "b"))
@@ -635,7 +644,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
+test_that("unionAll(), except(), and intersect() on a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -650,10 +659,10 @@ test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
   expect_true(count(unioned) == 6)
   expect_true(first(unioned)$name == "Michael")
 
-  subtracted <- sortDF(subtract(df, df2), desc(df$age))
+  excepted <- sortDF(except(df, df2), desc(df$age))
   expect_true(inherits(unioned, "DataFrame"))
-  expect_true(count(subtracted) == 2)
-  expect_true(first(subtracted)$name == "Justin")
+  expect_true(count(excepted) == 2)
+  expect_true(first(excepted)$name == "Justin")
 
   intersected <- sortDF(intersect(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
