@@ -357,6 +357,7 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {
       // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
       val df = DataFrame(sqlContext, logicalPlan)
       // Uncache the logicalPlan.
       sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
