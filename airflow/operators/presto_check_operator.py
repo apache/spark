@@ -11,8 +11,8 @@ class PrestoCheckOperator(BaseOperator):
 
     :param sql: the sql to be executed
     :type sql: string
-    :param presto_dbid: reference to the Presto database
-    :type presto_dbid: string
+    :param presto_conn_id: reference to the Presto database
+    :type presto_conn_id: string
     """
 
     __mapper_args__ = {
@@ -66,8 +66,8 @@ class PrestoValueCheckOperator(BaseOperator):
 
     :param sql: the sql to be executed
     :type sql: string
-    :param presto_dbid: reference to the Presto database
-    :type presto_dbid: string
+    :param presto_conn_id: reference to the Presto database
+    :type presto_conn_id: string
     """
 
     __mapper_args__ = {
@@ -130,8 +130,8 @@ class PrestoIntervalCheckOperator(BaseOperator):
     :type days_back: int
     :param metrics_threshold: a dictionary of ratios indexed by metrics
     :type metrics_threshold: dict
-    :param presto_dbid: reference to the Presto database
-    :type presto_dbid: string
+    :param presto_conn_id: reference to the Presto database
+    :type presto_conn_id: string
     """
 
     __mapper_args__ = {

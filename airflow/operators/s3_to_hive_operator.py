@@ -14,7 +14,7 @@ class S3ToHiveTransfer(BaseOperator):
     a ``CREATE TABLE`` and ``DROP TABLE`` statements are generated.
     Hive data types are inferred from the cursors's metadata from.
 
-    Note that the table genearted in Hive uses ``STORED AS textfile``
+    Note that the table generated in Hive uses ``STORED AS textfile``
     which isn't the most efficient serialization format. If a
     large amount of data is loaded and/or if the tables gets
     queried considerably, you may want to use this operator only to

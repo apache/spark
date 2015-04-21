@@ -176,11 +176,11 @@ class BaseJob(Base):
 
 class MasterJob(BaseJob):
     """
-    This MasterJob runs indifinetly and constantly schedules the job that
-    are ready to run. It figures out the latest runs for each task
-    and see if the dependencies for the next schedules are met. If
-    so it triggers the task instance. It does this for each
-    task in each DAG and repeats.
+    This MasterJob runs indefinetly and constantly schedules the jobs
+    that are ready to run. It figures out the latest runs for each
+    task and see if the dependencies for the next schedules are met.
+    If so it triggers the task instance. It does this for each task
+    in each DAG and repeats.
 
     :param dag_id: to run the scheduler for a single specific DAG
     :type dag_id: string

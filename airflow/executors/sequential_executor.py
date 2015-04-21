@@ -10,7 +10,7 @@ class SequentialExecutor(BaseExecutor):
     for debugging. It is also the only executor that can be used with sqlite
     since sqlite doesn't support multiple connections.
 
-    Since we want airflow to work out of the box, it default to this
+    Since we want airflow to work out of the box, it defaults to this
     SequentialExecutor alongside sqlite as you first install it.
     """
     def __init__(self):

@@ -125,7 +125,7 @@ def run(args):
                 'Pickled dag {dag} '
                 'as pickle_id:{pickle_id}').format(**locals())
         except Exception as e:
-            print('Couldn not pickle the DAG')
+            print('Could not pickle the DAG')
             print(e)
             pickle_id = None
 
@@ -308,9 +308,9 @@ def get_parser():
         "-t", "--task_regex",
         help="The regex to filter specific task_ids to backfill (optional)")
     parser_backfill.add_argument(
-        "-s", "--start_date", help="Overide start_date YYYY-MM-DD")
+        "-s", "--start_date", help="Override start_date YYYY-MM-DD")
     parser_backfill.add_argument(
-        "-e", "--end_date", help="Overide end_date YYYY-MM-DD")
+        "-e", "--end_date", help="Override end_date YYYY-MM-DD")
     parser_backfill.add_argument(
         "-m", "--mark_success",
         help=mark_success_help, action="store_true")

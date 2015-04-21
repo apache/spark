@@ -18,4 +18,5 @@ initdb.py
 logs
 MANIFEST
 secrets.py
+sftp-config.json
 unittests.cfg

@@ -274,7 +274,7 @@ class DagPickle(Base):
 class TaskInstance(Base):
     """
     Task instances store the state of a task instance. This table is the
-    autorithy and single source of truth around what tasks have run and the
+    authority and single source of truth around what tasks have run and the
     state they are in.
 
     The SqlAchemy model doesn't have a SqlAlchemy foreign key to the task or
@@ -481,7 +481,7 @@ class TaskInstance(Base):
     def are_dependencies_met(self, main_session=None):
         """
         Returns a boolean on whether the upstream tasks are in a SUCCESS state
-        and considers depends_on_past and the previous' run state.
+        and considers depends_on_past and the previous run's state.
         """
         TI = TaskInstance
 
@@ -903,7 +903,7 @@ class BaseOperator(Base):
     def schedule_interval(self):
         """
         The schedule interval of the DAG always wins over individual tasks so
-        that tasks whitin a DAG always line up. The task still needs a
+        that tasks within a DAG always line up. The task still needs a
         schedule_interval as it may not be attached to a DAG.
         """
         if hasattr(self, 'dag') and self.dag:
@@ -924,7 +924,7 @@ class BaseOperator(Base):
         '''
         Override this method to cleanup subprocesses when a task instance
         gets killed. Any use of the threading, subprocess or multiprocessing
-        module whithin an operator needs to be cleaned up or it will leave
+        module within an operator needs to be cleaned up or it will leave
         ghost processes behind.
         '''
         pass
@@ -944,7 +944,7 @@ class BaseOperator(Base):
 
     def prepare_template(self):
         '''
-        Hook that is trigerred after the templated fields get replaced
+        Hook that is triggered after the templated fields get replaced
         by their content. If you need your operator to alter the
         content of the file before the template is rendered,
         it should override this method to do so.
@@ -978,7 +978,7 @@ class BaseOperator(Base):
             self, start_date=None, end_date=None,
             upstream=False, downstream=False):
         """
-        Clears the state of task instances associated with the task, follwing
+        Clears the state of task instances associated with the task, following
         the parameters specified.
         """
         session = settings.Session()
@@ -1134,7 +1134,7 @@ class DAG(Base):
     :type dag_id: string
     :param schedule_interval: Defines how often that DAG runs
     :type schedule_interval: datetime.timedelta
-    :param start_date: The timestamp from which the sceduler will
+    :param start_date: The timestamp from which the scheduler will
         attempt to backfill
     :type start_date: datetime.datetime
     :param end_date: A date beyond which your DAG won't run, leave to None
@@ -1151,7 +1151,7 @@ class DAG(Base):
         as constructor keyword parameters when initialising operators.
         Note that operators have the same hook, and precede those defined
         here, meaning that if your dict contains `'depends_on_past': True`
-        here and `'depends_on_past': False` in te operator's call
+        here and `'depends_on_past': False` in the operator's call
         `default_args`, the actual value will be `False`.
     :type default_args: dict
     """
@@ -1378,7 +1378,7 @@ class DAG(Base):
         """
         Returns a subset of the current dag as a deep copy of the current dag
         based on a regex that should match one or many tasks, and includes
-        upstream and downstream neighboors based on the flag passed.
+        upstream and downstream neighbours based on the flag passed.
         """
 
         dag = copy.deepcopy(self)

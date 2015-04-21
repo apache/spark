@@ -5,23 +5,23 @@ Operators
 ---------
 Operators allows to generate a certain type of task that become a node in
 the DAG when instantiated. All operators derive from BaseOperator and
-inherit a whole lot of attributes and method that way. Refer to the 
+inherit a whole lot of attributes and method that way. Refer to the
 BaseOperator documentation for more details.
 
 There are 3 main types of operators:
 
-- Operators that performs an **action**, or tells another system to 
+- Operators that performs an **action**, or tells another system to
   perform an action
 - **Transfer** operators move data from a system to another
 - **Sensors** are a certain type of operators that will keep running until a
   certain criteria is met. Things like a specific file landing in HDFS or
-  S3, a partition appearing in Hive, or a specific time of the day. Sensors 
+  S3, a partition appearing in Hive, or a specific time of the day. Sensors
   are derived from ``BaseSensorOperator`` and run a poke
   method at a specified ``poke_interval`` until it returns ``True``.
 
 .. automodule:: airflow.operators
     :show-inheritance:
-    :members: 
+    :members:
         BashOperator,
         DummyOperator,
         EmailOperator,
@@ -32,11 +32,12 @@ There are 3 main types of operators:
         HivePartitionSensor,
         MySqlOperator,
         MySqlToHiveTransfer,
-        PostgresOperator, 
+        PostgresOperator,
         PrestoCheckOperator,
         PrestoIntervalCheckOperator,
         PrestoValueCheckOperator,
         PythonOperator,
+        S3ToHiveTransfer,
         SqlSensor,
         SubDagOperator,
         TimeSensor
@@ -73,7 +74,7 @@ Variable                            Description
 =================================   ====================================
 
 Note that you can access the objects attributes and methods with simple
-dot notation. Here are some examples of what is possible: 
+dot notation. Here are some examples of what is possible:
 ``{{ task.owner }}``, ``{{ task.task_id }}``, ``{{ ti.hostname }}``, ...
 Refer to the models documentation for more information on the objects
 attributes and methods.
@@ -83,11 +84,11 @@ Macros
 These macros live under the ``macros`` namespace in your templates.
 
 .. automodule:: airflow.macros
-    :show-inheritance: 
+    :show-inheritance:
     :members:
 
 .. automodule:: airflow.macros.hive
-    :show-inheritance: 
+    :show-inheritance:
     :members:
 
 .. _models_ref:
@@ -107,12 +108,12 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook
+    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, S3Hook
 
 Executors
 ---------
-Executors are the mechanism by which task instances get run. 
+Executors are the mechanism by which task instances get run.
 
 .. automodule:: airflow.executors
-    :show-inheritance: 
+    :show-inheritance:
     :members: LocalExecutor, CeleryExecutor, SequentialExecutor
