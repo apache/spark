@@ -48,7 +48,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
 
-  private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
+  // This is a thread-local in case we ever decide to change this to a non-thread-safe RpcEndpoint
+  private[this] val ser: ThreadLocal[SerializerInstance] = new ThreadLocal[SerializerInstance] {
+    override def initialValue: SerializerInstance = env.closureSerializer.newInstance()
+  }
 
   override def onStart() {
     import scala.concurrent.ExecutionContext.Implicits.global
@@ -86,7 +89,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
-        val taskDesc = ser.deserialize[TaskDescription](data.value)
+        val taskDesc = ser.get().deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
           taskDesc.name, taskDesc.serializedTask)
