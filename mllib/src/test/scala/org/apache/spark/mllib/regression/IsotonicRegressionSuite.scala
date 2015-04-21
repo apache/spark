@@ -88,7 +88,7 @@ class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with M
       val sameModel = IsotonicRegressionModel.load(sc, path)
       assert(model.boundaries === sameModel.boundaries)
       assert(model.predictions === sameModel.predictions)
-      assert(model.isotonic == model.isotonic)
+      assert(model.isotonic === model.isotonic)
     } finally {
       Utils.deleteRecursively(tempDir)
     }

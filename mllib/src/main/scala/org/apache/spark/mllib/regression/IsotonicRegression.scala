@@ -160,15 +160,15 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
         predictions: Array[Double], 
         isotonic: Boolean): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
-      sqlContext.createDataFrame(boundaries.toSeq.zip(predictions)
-        .map { case (b, p) => Data(b, p) }).saveAsParquetFile(dataPath(path))
+      sqlContext.createDataFrame(
+        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
+      ).saveAsParquetFile(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
@@ -177,8 +177,9 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
-      val (boundaries, predictions) = dataArray.map {
-        x => (x.getDouble(0), x.getDouble(1)) }.toList.sortBy(_._1).unzip
+      val (boundaries, predictions) = dataArray.map { x =>
+        (x.getDouble(0), x.getDouble(1))
+      }.toList.sortBy(_._1).unzip
       (boundaries.toArray, predictions.toArray)
     }
   }
