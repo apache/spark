@@ -120,6 +120,18 @@ class HivePrestoTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_hive_to_mysql(self):
+        t = operators.HiveToMySqlTransfer(
+            task_id='hive_to_mysql_check',
+            sql="""
+            SELECT name, count(*) as ccount
+            FROM airflow.static_babynames
+            GROUP BY name
+            """,
+            mysql_table='test_static_babynames',
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
 
 class CoreTest(unittest.TestCase):
 
