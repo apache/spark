@@ -61,8 +61,12 @@ class CeleryExecutor(BaseExecutor):
             if self.last_state[key] != async.state:
                 if async.state == celery_states.SUCCESS:
                     self.change_state(key, State.SUCCESS)
+                    del self.tasks[key]
+                    del self.last_state[key]
                 elif async.state == celery_states.FAILURE:
                     self.change_state(key, State.FAILED)
+                    del self.tasks[key]
+                    del self.last_state[key]
                 self.last_state[key] = async.state
 
     def end(self):
