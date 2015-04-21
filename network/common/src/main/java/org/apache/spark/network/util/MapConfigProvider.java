@@ -15,23 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.scheduler
+package org.apache.spark.network.util;
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rpc.RpcEndpointRef
+import com.google.common.collect.Maps;
 
-/**
- * :: DeveloperApi ::
- * Class having information about a receiver
- */
-@DeveloperApi
-case class ReceiverInfo(
-    streamId: Int,
-    name: String,
-    private[streaming] val endpoint: RpcEndpointRef,
-    active: Boolean,
-    location: String,
-    lastErrorMessage: String = "",
-    lastError: String = ""
-   ) {
+import java.util.Map;
+import java.util.NoSuchElementException;
+
+/** ConfigProvider based on a Map (copied in the constructor). */
+public class MapConfigProvider extends ConfigProvider {
+  private final Map<String, String> config;
+
+  public MapConfigProvider(Map<String, String> config) {
+    this.config = Maps.newHashMap(config);
+  }
+
+  @Override
+  public String get(String name) {
+    String value = config.get(name);
+    if (value == null) {
+      throw new NoSuchElementException(name);
+    }
+    return value;
+  }
 }

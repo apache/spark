@@ -513,9 +513,17 @@ private[spark] object SparkConf extends Logging {
     "spark.io.compression.snappy.blockSize" -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     "spark.io.compression.lz4.blockSize" -> Seq(
-      AlternateConfig("spark.io.compression.lz4.block.size", "1.4"))
-  )
-  
+      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
+    "spark.rpc.numRetries" -> Seq(
+      AlternateConfig("spark.akka.num.retries", "1.4")),
+    "spark.rpc.retry.wait" -> Seq(
+      AlternateConfig("spark.akka.retry.wait", "1.4")),
+    "spark.rpc.askTimeout" -> Seq(
+      AlternateConfig("spark.akka.askTimeout", "1.4")),
+    "spark.rpc.lookupTimeout" -> Seq(
+      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+    )
+
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
    * config keys.

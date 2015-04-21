@@ -173,7 +173,8 @@ object DecisionTreeExample {
     val splits: Array[RDD[LabeledPoint]] = if (testInput != "") {
       // Load testInput.
       val numFeatures = origExamples.take(1)(0).features.size
-      val origTestExamples: RDD[LabeledPoint] = loadData(sc, input, dataFormat, Some(numFeatures))
+      val origTestExamples: RDD[LabeledPoint] =
+        loadData(sc, testInput, dataFormat, Some(numFeatures))
       Array(origExamples, origTestExamples)
     } else {
       // Split input into training, test.

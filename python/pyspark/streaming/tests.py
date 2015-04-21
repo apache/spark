@@ -24,8 +24,6 @@ import tempfile
 import struct
 from functools import reduce
 
-from py4j.java_collections import MapConverter
-
 from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
@@ -581,11 +579,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         """Test the Python Kafka stream API."""
         topic = "topic1"
         sendData = {"a": 3, "b": 5, "c": 10}
-        jSendData = MapConverter().convert(sendData,
-                                           self.ssc.sparkContext._gateway._gateway_client)
 
         self._kafkaTestUtils.createTopic(topic)
-        self._kafkaTestUtils.sendMessages(topic, jSendData)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},

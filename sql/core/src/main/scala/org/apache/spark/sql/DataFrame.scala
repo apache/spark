@@ -747,7 +747,19 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] by adding a column.
    * @group dfops
    */
-  def withColumn(colName: String, col: Column): DataFrame = select(Column("*"), col.as(colName))
+  def withColumn(colName: String, col: Column): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName) else Column(name)
+      }
+      select(colNames :_*)
+    } else {
+      select(Column("*"), col.as(colName))
+    }
+  }
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.

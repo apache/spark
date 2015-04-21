@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import datetime
 
 import py4j
 
@@ -463,6 +464,16 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(2**31), LongType())
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
+
+    def test_filter_with_datetime(self):
+        time = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000)
+        date = time.date()
+        row = Row(date=date, time=time)
+        df = self.sqlCtx.createDataFrame([row])
+        self.assertEqual(1, df.filter(df.date == date).count())
+        self.assertEqual(1, df.filter(df.time == time).count())
+        self.assertEqual(0, df.filter(df.date > date).count())
+        self.assertEqual(0, df.filter(df.time > time).count())
 
     def test_dropna(self):
         schema = StructType([
