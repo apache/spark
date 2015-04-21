@@ -51,7 +51,7 @@ class Node (
     var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
-    "impurity =  " + impurity + "split = " + split + ", stats = " + stats
+    "impurity =  " + impurity + ", split = " + split + ", stats = " + stats
 
   /**
    * build the left node and right nodes if not leaf
