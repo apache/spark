@@ -224,7 +224,7 @@ public class JavaUtils {
         // If suffix is valid use that, otherwise none was provided and use the default passed
         return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
       } else if (fractionMatcher.matches()) {
-        double val = Long.parseLong(m.group(1));
+        double val = Double.parseDouble(fractionMatcher.group(1));
 
         throw new NumberFormatException("Fractional values are not supported. Input was: " + val);
       } else {
