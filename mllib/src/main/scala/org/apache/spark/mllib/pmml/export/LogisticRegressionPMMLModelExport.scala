@@ -17,19 +17,10 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.dmg.pmml.DataDictionary
-import org.dmg.pmml.DataField
-import org.dmg.pmml.DataType
-import org.dmg.pmml.FieldName
-import org.dmg.pmml.FieldUsageType
-import org.dmg.pmml.MiningField
-import org.dmg.pmml.MiningFunctionType
-import org.dmg.pmml.MiningSchema
-import org.dmg.pmml.NumericPredictor
-import org.dmg.pmml.OpType
-import org.dmg.pmml.RegressionModel
-import org.dmg.pmml.RegressionTable
-import org.dmg.pmml.RegressionNormalizationMethodType
+import scala.{Array => SArray}
+
+import org.dmg.pmml._
+
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 
 /**
@@ -40,62 +31,46 @@ private[mllib] class LogisticRegressionPMMLModelExport(
     description : String) 
   extends PMMLModelExport{
 
+  populateLogisticRegressionPMML(model)
+
   /**
    * Export the input LogisticRegressionModel model to PMML format
    */
-  populateLogisticRegressionPMML(model)
-  
   private def populateLogisticRegressionPMML(model : LogisticRegressionModel): Unit = {
+     pmml.getHeader.setDescription(description)
 
-     pmml.getHeader().setDescription(description) 
-     
-     if(model.weights.size > 0){
-       
-       val fields = new Array[FieldName](model.weights.size)
-       
-       val dataDictionary = new DataDictionary()
-       
-       val miningSchema = new MiningSchema()
-       
-       val regressionTableYES = new RegressionTable(model.intercept)
-       .withTargetCategory("1")
-       
-       val regressionTableNO = new RegressionTable(0.0)
-       .withTargetCategory("0")
-       
-       val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.CLASSIFICATION)
-        .withModelName(description)
-        .withNormalizationMethod(RegressionNormalizationMethodType.LOGIT)
-        .withRegressionTables(regressionTableYES, regressionTableNO)
-        
-       for ( i <- 0 until model.weights.size) {
+     if (model.weights.size > 0) {
+       val fields = new SArray[FieldName](model.weights.size)
+       val dataDictionary = new DataDictionary
+       val miningSchema = new MiningSchema
+       val regressionTableYES = new RegressionTable(model.intercept).withTargetCategory("1")
+       val regressionTableNO = new RegressionTable(0.0).withTargetCategory("0")
+       val regressionModel = new RegressionModel(miningSchema, MiningFunctionType.CLASSIFICATION)
+         .withModelName(description)
+         .withNormalizationMethod(RegressionNormalizationMethodType.LOGIT)
+         .withRegressionTables(regressionTableYES, regressionTableNO)
+
+       for (i <- 0 until model.weights.size) {
          fields(i) = FieldName.create("field_" + i)
-         dataDictionary
-            .withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
          miningSchema
-            .withMiningFields(new MiningField(fields(i))
-            .withUsageType(FieldUsageType.ACTIVE))
-         regressionTableYES
-            .withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
+           .withMiningFields(new MiningField(fields(i))
+           .withUsageType(FieldUsageType.ACTIVE))
+         regressionTableYES.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
        }
        
        // add target field
-       val targetField = FieldName.create("target");
+       val targetField = FieldName.create("target")
        dataDictionary
-        .withDataFields(
-            new DataField(targetField, OpType.CATEGORICAL, DataType.STRING)
-        )
-        miningSchema
+         .withDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.STRING))
+       miningSchema
          .withMiningFields(new MiningField(targetField)
          .withUsageType(FieldUsageType.TARGET))
        
-       dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size())
+       dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
        
        pmml.setDataDictionary(dataDictionary)
        pmml.withModels(regressionModel)
-       
      }
- 
   }
-  
 }
