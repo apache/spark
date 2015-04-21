@@ -85,15 +85,11 @@ table.sortable td {
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
 
-span.kill-link {
+a.kill-link {
   margin-right: 2px;
   margin-left: 20px;
   color: gray;
   float: right;
-}
-
-span.kill-link a {
-  color: gray;
 }
 
 span.expand-details {
@@ -101,6 +97,12 @@ span.expand-details {
   cursor: pointer;
   color: grey;
   float: right;
+}
+
+span.rest-uri {
+  font-size: 10pt;
+  font-style: italic;
+  color: gray;
 }
 
 pre {
@@ -190,7 +192,7 @@ span.additional-metric-title {
 
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .deserialization_time, .fetch_wait_time, .serialization_time,
-.getting_result_time {
+.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
+.serialization_time, .getting_result_time {
   display: none;
 }

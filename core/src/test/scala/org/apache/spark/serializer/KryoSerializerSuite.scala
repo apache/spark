@@ -23,9 +23,10 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, SharedSparkContext}
+import org.apache.spark.{SharedSparkContext, SparkConf}
+import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
-
+import org.apache.spark.storage.BlockManagerId
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -105,7 +106,9 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
     check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
-    check(List(mutable.HashMap("one" -> 1, "two" -> 2),mutable.HashMap(1->"one",2->"two",3->"three")))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1->"one",2->"two",3->"three")))
   }
 
   test("ranges") {
@@ -168,7 +171,10 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("kryo with collect") {
     val control = 1 :: 2 :: Nil
-    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    val result = sc.parallelize(control, 2)
+      .map(new ClassWithoutNoArgConstructor(_))
+      .collect()
+      .map(_.x)
     assert(control === result.toSeq)
   }
 
@@ -236,11 +242,43 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
     // Set a special, broken ClassLoader and make sure we get an exception on deserialization
     ser.setDefaultClassLoader(new ClassLoader() {
-      override def loadClass(name: String) = throw new UnsupportedOperationException
+      override def loadClass(name: String): Class[_] = throw new UnsupportedOperationException
     })
     intercept[UnsupportedOperationException] {
       ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
     }
+  }
+
+  test("registration of HighlyCompressedMapStatus") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    // these cases require knowing the internals of RoaringBitmap a little.  Blocks span 2^16
+    // values, and they use a bitmap (dense) if they have more than 4096 values, and an
+    // array (sparse) if they use less.  So we just create two cases, one sparse and one dense.
+    // and we use a roaring bitmap for the empty blocks, so we trigger the dense case w/ mostly
+    // empty blocks
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val denseBlockSizes = new Array[Long](5000)
+    val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
+    Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
+      ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
+    }
+  }
+
+  test("serialization buffer overflow reporting") {
+    import org.apache.spark.SparkException
+    val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max.mb"
+
+    val largeObject = (1 to 1000000).toArray
+
+    val conf = new SparkConf(false)
+    conf.set(kryoBufferMaxProperty, "1")
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val thrown = intercept[SparkException](ser.serialize(largeObject))
+    assert(thrown.getMessage.contains(kryoBufferMaxProperty))
   }
 }
 
@@ -254,14 +292,14 @@ object KryoTest {
 
   class ClassWithNoArgConstructor {
     var x: Int = 0
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithNoArgConstructor => x == c.x
       case _ => false
     }
   }
 
   class ClassWithoutNoArgConstructor(val x: Int) {
-    override def equals(other: Any) = other match {
+    override def equals(other: Any): Boolean = other match {
       case c: ClassWithoutNoArgConstructor => x == c.x
       case _ => false
     }

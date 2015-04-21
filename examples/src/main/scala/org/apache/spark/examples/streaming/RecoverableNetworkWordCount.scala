@@ -55,7 +55,8 @@ import org.apache.spark.util.IntParam
  */
 object RecoverableNetworkWordCount {
 
-  def createContext(ip: String, port: Int, outputPath: String, checkpointDirectory: String) = {
+  def createContext(ip: String, port: Int, outputPath: String, checkpointDirectory: String)
+    : StreamingContext = {
 
     // If you do not see this printed, that means the StreamingContext has been loaded
     // from the new checkpoint

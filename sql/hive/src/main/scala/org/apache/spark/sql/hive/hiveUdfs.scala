@@ -33,8 +33,11 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils.getContextOrSparkClassLoader
+import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -42,7 +45,7 @@ import scala.collection.JavaConversions._
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {
 
-  def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
+  def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
@@ -75,7 +78,7 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
   type EvaluatedType = Any
   type UDFType = UDF
 
-  def nullable = true
+  override def nullable: Boolean = true
 
   @transient
   lazy val function = funcWrapper.createFunction[UDFType]()
@@ -93,7 +96,7 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
     udfType != null && udfType.deterministic()
   }
 
-  override def foldable = isUDFDeterministic && children.forall(_.foldable)
+  override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
 
   // Create parameter converters
   @transient
@@ -107,7 +110,7 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
     method.getGenericReturnType(), ObjectInspectorOptions.JAVA)
 
   @transient
-  protected lazy val cached = new Array[AnyRef](children.length)
+  protected lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
@@ -117,17 +120,19 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
       returnInspector)
   }
 
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String = {
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  }
 }
 
 // Adapter from Catalyst ExpressionResult to Hive DeferredObject
 private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
   extends DeferredObject with HiveInspectors {
   private var func: () => Any = _
-  def set(func: () => Any) {
+  def set(func: () => Any): Unit = {
     this.func = func
   }
-  override def prepare(i: Int) = {}
+  override def prepare(i: Int): Unit = {}
   override def get(): AnyRef = wrap(func(), oi)
 }
 
@@ -136,7 +141,7 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
   type UDFType = GenericUDF
   type EvaluatedType = Any
 
-  def nullable = true
+  override def nullable: Boolean = true
 
   @transient
   lazy val function = funcWrapper.createFunction[UDFType]()
@@ -155,7 +160,7 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     (udfType != null && udfType.deterministic())
   }
 
-  override def foldable =
+  override def foldable: Boolean =
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
@@ -179,7 +184,9 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     unwrap(function.evaluate(deferedObjects), returnInspector)
   }
 
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String = {
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  }
 }
 
 private[hive] case class HiveGenericUdaf(
@@ -206,9 +213,11 @@ private[hive] case class HiveGenericUdaf(
 
   def nullable: Boolean = true
 
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String = {
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  }
 
-  def newInstance() = new HiveUdafFunction(funcWrapper, children, this)
+  def newInstance(): HiveUdafFunction = new HiveUdafFunction(funcWrapper, children, this)
 }
 
 /** It is used as a wrapper for the hive functions which uses UDAF interface */
@@ -237,10 +246,11 @@ private[hive] case class HiveUdaf(
 
   def nullable: Boolean = true
 
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String = {
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  }
 
-  def newInstance() =
-    new HiveUdafFunction(funcWrapper, children, this, true)
+  def newInstance(): HiveUdafFunction = new HiveUdafFunction(funcWrapper, children, this, true)
 }
 
 /**
@@ -311,14 +321,32 @@ private[hive] case class HiveGenericUdtf(
       collected += unwrap(input, outputInspector).asInstanceOf[Row]
     }
 
-    def collectRows() = {
+    def collectRows(): Seq[Row] = {
       val toCollect = collected
       collected = new ArrayBuffer[Row]
       toCollect
     }
   }
 
-  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  override def toString: String = {
+    s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+  }
+}
+
+/**
+ * Resolve Udtfs Alias.
+ */
+private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(projectList, _)
+      if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
+      throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
+
+    case Project(Seq(Alias(udtf @ HiveGenericUdtf(_, _, _), name)), child) =>
+        Generate(udtf.copy(aliasNames = Seq(name)), join = false, outer = false, None, child)
+    case Project(Seq(MultiAlias(udtf @ HiveGenericUdtf(_, _, _), names)), child) =>
+        Generate(udtf.copy(aliasNames = names), join = false, outer = false, None, child)
+  }
 }
 
 private[hive] case class HiveUdafFunction(
@@ -347,9 +375,8 @@ private[hive] case class HiveUdafFunction(
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
-  // Cast required to avoid type inference selecting a deprecated Hive API.
   private val buffer =
-    function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+    function.getNewAggregationBuffer
 
   override def eval(input: Row): Any = unwrap(function.evaluate(buffer), returnInspector)
 

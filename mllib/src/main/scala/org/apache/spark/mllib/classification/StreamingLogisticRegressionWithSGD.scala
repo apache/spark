@@ -35,12 +35,13 @@ import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
  * Use a builder pattern to construct a streaming logistic regression
  * analysis in an application, like:
  *
+ * {{{
  *  val model = new StreamingLogisticRegressionWithSGD()
  *    .setStepSize(0.5)
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
- *
+ * }}}
  */
 @Experimental
 class StreamingLogisticRegressionWithSGD private[mllib] (
@@ -59,8 +60,10 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
    */
   def this() = this(0.1, 50, 1.0, 0.0)
 
-  val algorithm = new LogisticRegressionWithSGD(
+  protected val algorithm = new LogisticRegressionWithSGD(
     stepSize, numIterations, regParam, miniBatchFraction)
+
+  protected var model: Option[LogisticRegressionModel] = None
 
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {

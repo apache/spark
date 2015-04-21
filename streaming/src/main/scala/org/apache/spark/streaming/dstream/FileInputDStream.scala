@@ -18,14 +18,15 @@
 package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
+import org.apache.spark.SerializableWritable
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.util.{TimeStampedHashMap, Utils}
@@ -68,12 +69,16 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *   processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
+class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true)
+    newFilesOnly: Boolean = true,
+    conf: Option[Configuration] = None)
+    (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
+
+  private val serializableConfOpt = conf.map(new SerializableWritable(_))
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
@@ -83,7 +88,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   // Initial ignore threshold based on which old, existing files in the directory (at the time of
   // starting the streaming application) will be ignored or considered
-  private val initialModTimeIgnoreThreshold = if (newFilesOnly) clock.currentTime() else 0L
+  private val initialModTimeIgnoreThreshold = if (newFilesOnly) clock.getTimeMillis() else 0L
 
   /*
    * Make sure that the information of files selected in the last few batches are remembered.
@@ -156,7 +161,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
-      lastNewFileFindingTime = clock.currentTime()
+      lastNewFileFindingTime = clock.getTimeMillis()
 
       // Calculate ignore threshold
       val modTimeIgnoreThreshold = math.max(
@@ -169,7 +174,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
       val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
-      val timeTaken = clock.currentTime() - lastNewFileFindingTime
+      val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {
@@ -237,7 +242,15 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
-      val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file)
+      val rdd = serializableConfOpt.map(_.value) match {
+        case Some(config) => context.sparkContext.newAPIHadoopFile(
+          file,
+          fm.runtimeClass.asInstanceOf[Class[F]],
+          km.runtimeClass.asInstanceOf[Class[K]],
+          vm.runtimeClass.asInstanceOf[Class[V]],
+          config)
+        case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
+      }
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
@@ -285,7 +298,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private[streaming]
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
 
-    def hadoopFiles = data.asInstanceOf[mutable.HashMap[Time, Array[String]]]
+    private def hadoopFiles = data.asInstanceOf[mutable.HashMap[Time, Array[String]]]
 
     override def update(time: Time) {
       hadoopFiles.clear()
@@ -307,7 +320,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       }
     }
 
-    override def toString() = {
+    override def toString: String = {
       "[\n" + hadoopFiles.size + " file sets\n" +
         hadoopFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n") + "\n]"
     }

@@ -17,34 +17,102 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.{Logging, SparkException}
+import org.json4s.JsonDSL._
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
+ * :: Experimental ::
+ *
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
- * @param assignments an RDD of (vertexID, clusterID) pairs
+ * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
  */
+@Experimental
 class PowerIterationClusteringModel(
     val k: Int,
-    val assignments: RDD[(Long, Int)]) extends Serializable
+    val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object PowerIterationClusteringModel extends Loader[PowerIterationClusteringModel] {
+  override def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
+    PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
+  }
+
+  private[clustering]
+  object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    private[clustering]
+    val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
+
+    def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      val dataRDD = model.assignments.toDF()
+      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
+      implicit val formats = DefaultFormats
+      val sqlContext = new SQLContext(sc)
+
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+
+      val k = (metadata \ "k").extract[Int]
+      val assignments = sqlContext.parquetFile(Loader.dataPath(path))
+      Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
+
+      val assignmentsRDD = assignments.map {
+        case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
+      }
+
+      new PowerIterationClusteringModel(k, assignmentsRDD)
+    }
+  }
+}
 
 /**
- * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by Lin and
- * Cohen (see http://www.icml2010.org/papers/387.pdf). From the abstract: PIC finds a very
+ * :: Experimental ::
+ *
+ * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
+ * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
  * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
  * similarity matrix of the data.
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
  * @param initMode Initialization mode.
+ *
+ * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
+@Experimental
 class PowerIterationClustering private[clustering] (
     private var k: Int,
     private var maxIterations: Int,
@@ -88,11 +156,12 @@ class PowerIterationClustering private[clustering] (
   /**
    * Run the PIC algorithm.
    *
-   * @param similarities an RDD of (i, j, s_ij_) tuples representing the affinity matrix, which is
-   *                     the matrix A in the PIC paper. The similarity s_ij_ must be nonnegative.
-   *                     This is a symmetric matrix and hence s_ij_ = s_ji_. For any (i, j) with
-   *                     nonzero similarity, there should be either (i, j, s_ij_) or (j, i, s_ji_)
-   *                     in the input. Tuples with i = j are ignored, because we assume s_ij_ = 0.0.
+   * @param similarities an RDD of (i, j, s,,ij,,) tuples representing the affinity matrix, which is
+   *                     the matrix A in the PIC paper. The similarity s,,ij,, must be nonnegative.
+   *                     This is a symmetric matrix and hence s,,ij,, = s,,ji,,. For any (i, j) with
+   *                     nonzero similarity, there should be either (i, j, s,,ij,,) or
+   *                     (j, i, s,,ji,,) in the input. Tuples with i = j are ignored, because we
+   *                     assume s,,ij,, = 0.0.
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
@@ -106,24 +175,49 @@ class PowerIterationClustering private[clustering] (
   }
 
   /**
+   * A Java-friendly version of [[PowerIterationClustering.run]].
+   */
+  def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])
+    : PowerIterationClusteringModel = {
+    run(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
+  }
+
+  /**
    * Runs the PIC algorithm.
    *
    * @param w The normalized affinity matrix, which is the matrix W in the PIC paper with
-   *          w_ij_ = a_ij_ / d_ii_ as its edge properties and the initial vector of the power
+   *          w,,ij,, = a,,ij,, / d,,ii,, as its edge properties and the initial vector of the power
    *          iteration as its vertex properties.
    */
   private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
     val v = powerIter(w, maxIterations)
-    val assignments = kMeans(v, k)
+    val assignments = kMeans(v, k).mapPartitions({ iter =>
+      iter.map { case (id, cluster) =>
+        Assignment(id, cluster)
+      }
+    }, preservesPartitioning = true)
     new PowerIterationClusteringModel(k, assignments)
   }
 }
 
-private[clustering] object PowerIterationClustering extends Logging {
+@Experimental
+object PowerIterationClustering extends Logging {
+
+  /**
+   * :: Experimental ::
+   * Cluster assignment.
+   * @param id node id
+   * @param cluster assigned cluster id
+   */
+  @Experimental
+  case class Assignment(id: Long, cluster: Int)
+
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
    */
-  def normalize(similarities: RDD[(Long, Long, Double)]): Graph[Double, Double] = {
+  private[clustering]
+  def normalize(similarities: RDD[(Long, Long, Double)])
+    : Graph[Double, Double] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (s < 0.0) {
         throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
@@ -154,6 +248,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @return a graph with edges representing W and vertices representing a random vector
    *         with unit 1-norm
    */
+  private[clustering]
   def randomInit(g: Graph[Double, Double]): Graph[Double, Double] = {
     val r = g.vertices.mapPartitionsWithIndex(
       (part, iter) => {
@@ -175,6 +270,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing the degree vector
    */
+  private[clustering]
   def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
     val sum = g.vertices.values.sum()
     val v0 = g.vertices.mapValues(_ / sum)
@@ -188,6 +284,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param maxIterations maximum number of iterations
    * @return a [[VertexRDD]] representing the pseudo-eigenvector
    */
+  private[clustering]
   def powerIter(
       g: Graph[Double, Double],
       maxIterations: Int): VertexRDD[Double] = {
@@ -227,6 +324,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param k number of clusters
    * @return a [[VertexRDD]] representing the clustering assignments
    */
+  private[clustering]
   def kMeans(v: VertexRDD[Double], k: Int): VertexRDD[Int] = {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()

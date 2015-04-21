@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -42,7 +43,7 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
-  override def execute() = attachTree(this, "execute") {
+  override def execute(): RDD[Row] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // TODO Move out projection objects creation and transfer to
       // workers via closure. However we can't assume the Projection
@@ -55,7 +56,7 @@ case class Expand(
         private[this] var idx = -1  // -1 means the initial state
         private[this] var input: Row = _
 
-        override final def hasNext = (-1 < idx && idx < groups.length) || iter.hasNext
+        override final def hasNext: Boolean = (-1 < idx && idx < groups.length) || iter.hasNext
 
         override final def next(): Row = {
           if (idx <= 0) {

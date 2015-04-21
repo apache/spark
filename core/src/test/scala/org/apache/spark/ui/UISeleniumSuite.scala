@@ -17,37 +17,53 @@
 
 package org.apache.spark.ui
 
-import scala.collection.JavaConversions._
+import java.net.{HttpURLConnection, URL}
+import javax.servlet.http.HttpServletRequest
 
-import org.openqa.selenium.{By, WebDriver}
+import scala.collection.JavaConversions._
+import scala.xml.Node
+
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
+import org.openqa.selenium.{By, WebDriver}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.shuffle.FetchFailedException
 
+
 /**
- * Selenium tests for the Spark Web UI.  These tests are not run by default
- * because they're slow.
+ * Selenium tests for the Spark Web UI.
  */
-@DoNotDiscover
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
-  implicit val webDriver: WebDriver = new HtmlUnitDriver
+class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+
+  implicit var webDriver: WebDriver = _
+
+  override def beforeAll(): Unit = {
+    webDriver = new HtmlUnitDriver
+  }
+
+  override def afterAll(): Unit = {
+    if (webDriver != null) {
+      webDriver.quit()
+    }
+  }
 
   /**
    * Create a test SparkContext with the SparkUI enabled.
    * It is safe to `get` the SparkUI directly from the SparkContext returned here.
    */
-  private def newSparkContext(): SparkContext = {
+  private def newSparkContext(killEnabled: Boolean = true): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
       .set("spark.ui.enabled", "true")
+      .set("spark.ui.port", "0")
+      .set("spark.ui.killEnabled", killEnabled.toString)
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -93,7 +109,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
-        find(id("active")).get.text should be("Active Stages (0)")
+        find(id("active")) should be(None)  // Since we hide empty tables
         find(id("failed")).get.text should be("Failed Stages (1)")
       }
 
@@ -105,7 +121,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
-        find(id("active")).get.text should be("Active Stages (0)")
+        find(id("active")) should be(None)  // Since we hide empty tables
         // The failure occurs before the stage becomes active, hence we should still show only one
         // failed stage, not two:
         find(id("failed")).get.text should be("Failed Stages (1)")
@@ -114,21 +130,12 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
   }
 
   test("spark.ui.killEnabled should properly control kill button display") {
-    def getSparkContext(killEnabled: Boolean): SparkContext = {
-      val conf = new SparkConf()
-        .setMaster("local")
-        .setAppName("test")
-        .set("spark.ui.enabled", "true")
-        .set("spark.ui.killEnabled", killEnabled.toString)
-      new SparkContext(conf)
-    }
-
-    def hasKillLink = find(className("kill-link")).isDefined
+    def hasKillLink: Boolean = find(className("kill-link")).isDefined
     def runSlowJob(sc: SparkContext) {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }
 
-    withSpark(getSparkContext(killEnabled = true)) { sc =>
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
@@ -136,7 +143,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
     }
 
-    withSpark(getSparkContext(killEnabled = false)) { sc =>
+    withSpark(newSparkContext(killEnabled = false)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
@@ -167,13 +174,14 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
 
   test("job progress bars should handle stage / task failures") {
     withSpark(newSparkContext()) { sc =>
-      val data = sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity)
+      val data = sc.parallelize(Seq(1, 2, 3), 1).map(identity).groupBy(identity)
       val shuffleHandle =
         data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       // Simulate fetch failures:
       val mappedData = data.map { x =>
         val taskContext = TaskContext.get
-        if (taskContext.attemptNumber == 0) {  // Cause this stage to fail on its first attempt.
+        if (taskContext.taskAttemptId() == 1) {
+          // Cause the post-shuffle stage to fail on its first attempt with a single task failure
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
@@ -218,7 +226,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
         // because someone could change the error message and cause this test to pass by accident.
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
-          val link = row.underlying.findElement(By.xpath(".//a"))
+          val link = row.underlying.findElement(By.xpath("./td/div/a"))
           link.getAttribute("href") should include ("stage")
         }
       }
@@ -296,6 +304,69 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
           link.text.toLowerCase should include ("count")
           link.text.toLowerCase should not include "unknown"
         }
+      }
+    }
+  }
+
+  test("attaching and detaching a new tab") {
+    withSpark(newSparkContext()) { sc =>
+      val sparkUI = sc.ui.get
+
+      val newTab = new WebUITab(sparkUI, "foo") {
+        attachPage(new WebUIPage("") {
+          def render(request: HttpServletRequest): Seq[Node] = {
+            <b>"html magic"</b>
+          }
+        })
+      }
+      sparkUI.attachTab(newTab)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/"))
+        find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="storage"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="foo"]""")) should not be(None)
+      }
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        // check whether new page exists
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/foo")
+        find(cssSelector("b")).get.text should include ("html magic")
+      }
+      sparkUI.detachTab(newTab)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/"))
+        find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="storage"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
+        find(cssSelector("""ul li a[href*="foo"]""")) should be(None)
+      }
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        // check new page not exist
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/foo")
+        find(cssSelector("b")) should be(None)
+      }
+    }
+  }
+
+  test("kill stage is POST only") {
+    def getResponseCode(url: URL, method: String): Int = {
+      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+      connection.setRequestMethod(method)
+      connection.connect()
+      val code = connection.getResponseCode()
+      connection.disconnect()
+      code
+    }
+
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+        getResponseCode(url, "GET") should be (405)
+        getResponseCode(url, "POST") should be (200)
       }
     }
   }

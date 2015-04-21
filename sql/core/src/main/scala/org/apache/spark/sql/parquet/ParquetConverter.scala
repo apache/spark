@@ -66,6 +66,11 @@ private[sql] object CatalystConverter {
   // Using a different value will result in Parquet silently dropping columns.
   val ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME = "bag"
   val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
+  // SPARK-4520: Thrift generated parquet files have different array element
+  // schema names than avro. Thrift parquet uses array_schema_name + "_tuple"
+  // as opposed to "array" used by default. For more information, check
+  // TestThriftSchemaConverter.java in parquet.thrift.
+  val THRIFT_ARRAY_ELEMENTS_SCHEMA_NAME_SUFFIX = "_tuple"
   val MAP_KEY_SCHEMA_NAME = "key"
   val MAP_VALUE_SCHEMA_NAME = "value"
   val MAP_SCHEMA_NAME = "map"
@@ -120,6 +125,12 @@ private[sql] object CatalystConverter {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
             parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
+        }
+      }
+      case DateType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addInt(value: Int): Unit =
+            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
         }
       }
       case d: DecimalType => {
@@ -187,6 +198,9 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
     updateField(fieldIndex, value)
 
+  protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
+    updateField(fieldIndex, value)
+
   protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     updateField(fieldIndex, value)
 
@@ -205,8 +219,8 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, value.getBytes)
 
-  protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    updateField(fieldIndex, value)
+  protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    updateField(fieldIndex, UTF8String(value))
 
   protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, readTimestamp(value))
@@ -383,6 +397,9 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
     current.setInt(fieldIndex, value)
 
+  override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
+    current.update(fieldIndex, value)
+
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
 
@@ -401,8 +418,8 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, value.getBytes)
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    current.setString(fieldIndex, value)
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    current.update(fieldIndex, UTF8String(value))
 
   override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, readTimestamp(value))
@@ -458,19 +475,18 @@ private[parquet] class CatalystPrimitiveConverter(
 private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
   extends CatalystPrimitiveConverter(parent, fieldIndex) {
 
-  private[this] var dict: Array[String] = null
+  private[this] var dict: Array[Array[Byte]] = null
 
   override def hasDictionarySupport: Boolean = true
 
   override def setDictionary(dictionary: Dictionary):Unit =
-    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
-
+    dict = Array.tabulate(dictionary.getMaxId + 1) { dictionary.decodeToBinary(_).getBytes }
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
     parent.updateString(fieldIndex, dict(dictionaryId))
 
   override def addBinary(value: Binary): Unit =
-    parent.updateString(fieldIndex, value.toStringUsingUTF8)
+    parent.updateString(fieldIndex, value.getBytes)
 }
 
 private[parquet] object CatalystArrayConverter {
@@ -483,7 +499,7 @@ private[parquet] object CatalystTimestampConverter {
   // Also we use NanoTime and Int96Values from parquet-examples.
   // We utilize jodd to convert between NanoTime and Timestamp
   val parquetTsCalendar = new ThreadLocal[Calendar]
-  def getCalendar = {
+  def getCalendar: Calendar = {
     // this is a cache for the calendar instance.
     if (parquetTsCalendar.get == null) {
       parquetTsCalendar.set(Calendar.getInstance(TimeZone.getTimeZone("GMT")))
@@ -697,9 +713,9 @@ private[parquet] class CatalystNativeArrayConverter(
     elements += 1
   }
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit = {
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
+    buffer(elements) = UTF8String(value).asInstanceOf[NativeType]
     elements += 1
   }
 

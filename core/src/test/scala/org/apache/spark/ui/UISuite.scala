@@ -18,7 +18,6 @@
 package org.apache.spark.ui
 
 import java.net.ServerSocket
-import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
@@ -28,9 +27,8 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.LocalSparkContext._
-import scala.xml.Node
+import org.apache.spark.{SparkConf, SparkContext}
 
 class UISuite extends FunSuite {
 
@@ -68,40 +66,6 @@ class UISuite extends FunSuite {
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         val html = Source.fromURL("http://localhost:4040").mkString
         assert(html.toLowerCase.contains("stages"))
-      }
-    }
-  }
-
-  ignore("attaching a new tab") {
-    withSpark(newSparkContext()) { sc =>
-      val sparkUI = sc.ui.get
-
-      val newTab = new WebUITab(sparkUI, "foo") {
-        attachPage(new WebUIPage("") {
-          def render(request: HttpServletRequest): Seq[Node] = {
-            <b>"html magic"</b>
-          }
-        })
-      }
-      sparkUI.attachTab(newTab)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sparkUI.appUIAddress).mkString
-        assert(!html.contains("random data that should not be present"))
-
-        // check whether new page exists
-        assert(html.toLowerCase.contains("foo"))
-
-        // check whether other pages still exist
-        assert(html.toLowerCase.contains("stages"))
-        assert(html.toLowerCase.contains("storage"))
-        assert(html.toLowerCase.contains("environment"))
-        assert(html.toLowerCase.contains("executors"))
-      }
-
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sparkUI.appUIAddress.stripSuffix("/") + "/foo").mkString
-        // check whether new page exists
-        assert(html.contains("magic"))
       }
     }
   }

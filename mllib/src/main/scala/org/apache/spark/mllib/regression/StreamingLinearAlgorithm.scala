@@ -21,7 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
 /**
@@ -39,14 +41,14 @@ import org.apache.spark.streaming.dstream.DStream
  *
  * For example usage, see `StreamingLinearRegressionWithSGD`.
  *
- * NOTE(Freeman): In some use cases, the order in which trainOn and predictOn
+ * NOTE: In some use cases, the order in which trainOn and predictOn
  * are called in an application will affect the results. When called on
  * the same DStream, if trainOn is called before predictOn, when new data
  * arrive the model will update and the prediction will be based on the new
  * model. Whereas if predictOn is called first, the prediction will use the model
  * from the previous update.
  *
- * NOTE(Freeman): It is ok to call predictOn repeatedly on multiple streams; this
+ * NOTE: It is ok to call predictOn repeatedly on multiple streams; this
  * will generate predictions for each one all using the current model.
  * It is also ok to call trainOn on different streams; this will update
  * the model using each of the different sources, in sequence.
@@ -58,7 +60,7 @@ abstract class StreamingLinearAlgorithm[
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  protected var model: Option[M] = None
+  protected var model: Option[M]
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
@@ -76,7 +78,7 @@ abstract class StreamingLinearAlgorithm[
    *
    * @param data DStream containing labeled data
    */
-  def trainOn(data: DStream[LabeledPoint]) {
+  def trainOn(data: DStream[LabeledPoint]): Unit = {
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
@@ -99,6 +101,9 @@ abstract class StreamingLinearAlgorithm[
     }
   }
 
+  /** Java-friendly version of `trainOn`. */
+  def trainOn(data: JavaDStream[LabeledPoint]): Unit = trainOn(data.dstream)
+
   /**
    * Use the model to make predictions on batches of data from a DStream
    *
@@ -109,7 +114,12 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction.")
     }
-    data.map(model.get.predict)
+    data.map{x => model.get.predict(x)}
+  }
+
+  /** Java-friendly version of `predictOn`. */
+  def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Double] = {
+    JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Double]])
   }
 
   /**
@@ -122,6 +132,14 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction")
     }
-    data.mapValues(model.get.predict)
+    data.mapValues{x => model.get.predict(x)}
+  }
+
+
+  /** Java-friendly version of `predictOnValues`. */
+  def predictOnValues[K](data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Double] = {
+    implicit val tag = fakeClassTag[K]
+    JavaPairDStream.fromPairDStream(
+      predictOnValues(data.dstream).asInstanceOf[DStream[(K, java.lang.Double)]])
   }
 }

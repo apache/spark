@@ -203,6 +203,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
    * @param numProductBlocks number of product blocks to partition products into
    * @param negativeFactors whether the generated user/product factors can have negative entries
    */
+  // scalastyle:off
   def testALS(
       users: Int,
       products: Int,
@@ -216,6 +217,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
       negativeFactors: Boolean = true) {
+    // scalastyle:on
+
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
 

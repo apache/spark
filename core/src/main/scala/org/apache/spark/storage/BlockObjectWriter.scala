@@ -23,13 +23,15 @@ import java.nio.channels.FileChannel
 import org.apache.spark.Logging
 import org.apache.spark.serializer.{SerializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.util.Utils
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
  * appending data to an existing block, and can guarantee atomicity in the case of faults
  * as it allows the caller to revert partial writes.
  *
- * This interface does not support concurrent writes.
+ * This interface does not support concurrent writes. Also, once the writer has
+ * been opened, it cannot be reopened again.
  */
 private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
@@ -81,11 +83,13 @@ private[spark] class DiskBlockObjectWriter(
 {
   /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
   private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
-    def write(i: Int): Unit = callWithTiming(out.write(i))
-    override def write(b: Array[Byte]) = callWithTiming(out.write(b))
-    override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
-    override def close() = out.close()
-    override def flush() = out.flush()
+    override def write(i: Int): Unit = callWithTiming(out.write(i))
+    override def write(b: Array[Byte]): Unit = callWithTiming(out.write(b))
+    override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+      callWithTiming(out.write(b, off, len))
+    }
+    override def close(): Unit = out.close()
+    override def flush(): Unit = out.flush()
   }
 
   /** The file channel, used for repositioning / truncating the file. */
@@ -95,6 +99,7 @@ private[spark] class DiskBlockObjectWriter(
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
+  private var hasBeenClosed = false
 
   /**
    * Cursors used to represent positions in the file.
@@ -115,11 +120,16 @@ private[spark] class DiskBlockObjectWriter(
   private var finalPosition: Long = -1
   private var reportedPosition = initialPosition
 
-  /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
-    * only call it every N writes */
-  private var writesSinceMetricsUpdate = 0
+  /**
+   * Keep track of number of records written and also use this to periodically
+   * output bytes written since the latter is expensive to do for each record.
+   */
+  private var numRecordsWritten = 0
 
   override def open(): BlockObjectWriter = {
+    if (hasBeenClosed) {
+      throw new IllegalStateException("Writer already closed. Cannot be reopened.")
+    }
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
@@ -131,13 +141,17 @@ private[spark] class DiskBlockObjectWriter(
 
   override def close() {
     if (initialized) {
-      if (syncWrites) {
-        // Force outstanding writes to disk and track how long it takes
-        objOut.flush()
-        def sync = fos.getFD.sync()
-        callWithTiming(sync)
+      Utils.tryWithSafeFinally {
+        if (syncWrites) {
+          // Force outstanding writes to disk and track how long it takes
+          objOut.flush()
+          callWithTiming {
+            fos.getFD.sync()
+          }
+        }
+      } {
+        objOut.close()
       }
-      objOut.close()
 
       channel = null
       bs = null
@@ -145,6 +159,7 @@ private[spark] class DiskBlockObjectWriter(
       ts = null
       objOut = null
       initialized = false
+      hasBeenClosed = true
     }
   }
 
@@ -168,6 +183,7 @@ private[spark] class DiskBlockObjectWriter(
   override def revertPartialWritesAndClose() {
     try {
       writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+      writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
 
       if (initialized) {
         objOut.flush()
@@ -193,12 +209,11 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     objOut.writeObject(value)
+    numRecordsWritten += 1
+    writeMetrics.incShuffleRecordsWritten(1)
 
-    if (writesSinceMetricsUpdate == 32) {
-      writesSinceMetricsUpdate = 0
+    if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
-    } else {
-      writesSinceMetricsUpdate += 1
     }
   }
 

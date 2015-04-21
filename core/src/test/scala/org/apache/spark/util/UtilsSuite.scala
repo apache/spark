@@ -23,16 +23,63 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
+  
+  test("timeConversion") {
+    // Test -1
+    assert(Utils.timeStringAsSeconds("-1") === -1)
+    
+    // Test zero
+    assert(Utils.timeStringAsSeconds("0") === 0)
+    
+    assert(Utils.timeStringAsSeconds("1") === 1)
+    assert(Utils.timeStringAsSeconds("1s") === 1)
+    assert(Utils.timeStringAsSeconds("1000ms") === 1)
+    assert(Utils.timeStringAsSeconds("1000000us") === 1)
+    assert(Utils.timeStringAsSeconds("1m") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1min") === TimeUnit.MINUTES.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1h") === TimeUnit.HOURS.toSeconds(1))
+    assert(Utils.timeStringAsSeconds("1d") === TimeUnit.DAYS.toSeconds(1))
+    
+    assert(Utils.timeStringAsMs("1") === 1)
+    assert(Utils.timeStringAsMs("1ms") === 1)
+    assert(Utils.timeStringAsMs("1000us") === 1)
+    assert(Utils.timeStringAsMs("1s") === TimeUnit.SECONDS.toMillis(1))
+    assert(Utils.timeStringAsMs("1m") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1min") === TimeUnit.MINUTES.toMillis(1))
+    assert(Utils.timeStringAsMs("1h") === TimeUnit.HOURS.toMillis(1))
+    assert(Utils.timeStringAsMs("1d") === TimeUnit.DAYS.toMillis(1))
+    
+    // Test invalid strings
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600s")
+    }
 
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This breaks 600ds")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("600s This breaks")
+    }
+
+    intercept[NumberFormatException] {
+      Utils.timeStringAsMs("This 123s breaks")
+    }
+  }
+  
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
@@ -103,7 +150,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val second = 1000
     val minute = second * 60
     val hour = minute * 60
-    def str = Utils.msDurationToString(_)
+    def str: (Long) => String = Utils.msDurationToString(_)
 
     val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
 
@@ -119,7 +166,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes of a file") {
     val tmpDir2 = Utils.createTempDir()
-    tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
     f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
@@ -148,7 +194,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
-    tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), UTF_8)
     Files.write("abcdefghij", files(1), UTF_8)
@@ -198,25 +243,26 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
   test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
-    val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
+    // The parent directory has two child directories
+    val child1: File = Utils.createTempDir(parent.getCanonicalPath)
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
     val child3: File = Utils.createTempDir(child1.getCanonicalPath)
     // set the last modified time of child1 to 30 secs old
     child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
     // although child1 is old, child2 is still new so return true
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child2.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     parent.setLastModified(System.currentTimeMillis - (1000 * 30))
     // although parent and its immediate children are new, child3 is still old
     // we expect a full recursive search for new files.
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child3.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
   }
 
   test("resolveURI") {
@@ -336,25 +382,26 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(!tempDir1.exists())
 
     val tempDir2 = Utils.createTempDir()
-    val tempFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(tempFile1)
-    assert(tempFile1.exists())
-    Utils.deleteRecursively(tempFile1)
-    assert(!tempFile1.exists())
+    val sourceFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(sourceFile1)
+    assert(sourceFile1.exists())
+    Utils.deleteRecursively(sourceFile1)
+    assert(!sourceFile1.exists())
 
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
-    val tempFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(tempFile2)
-    assert(tempFile2.exists())
+    val sourceFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(sourceFile2)
+    assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
     assert(!tempDir3.exists())
-    assert(!tempFile2.exists())
+    assert(!sourceFile2.exists())
   }
 
   test("loading properties from file") {
-    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    val tmpDir = Utils.createTempDir()
+    val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
@@ -367,7 +414,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     } finally {
-      outFile.delete()
+      Utils.deleteRecursively(tmpDir)
     }
   }
 
@@ -380,5 +427,43 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
     require(time < 500, "preparation time should not count")
+  }
+
+  test("fetch hcfs dir") {
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "source-dir")
+    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
+    val targetDir = new File(tempDir, "target-dir")
+    Files.write("some text", sourceFile, UTF_8)
+
+    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val conf = new Configuration()
+    val fs = Utils.getHadoopFileSystem(path.toString, conf)
+
+    assert(!targetDir.isDirectory())
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+    assert(targetDir.isDirectory())
+
+    // Copy again to make sure it doesn't error if the dir already exists.
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+
+    val destDir = new File(targetDir, sourceDir.getName())
+    assert(destDir.isDirectory())
+
+    val destInnerDir = new File(destDir, innerSourceDir.getName)
+    assert(destInnerDir.isDirectory())
+
+    val destInnerFile = new File(destInnerDir, sourceFile.getName)
+    assert(destInnerFile.isFile())
+
+    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val testFileDir = new File(tempDir, "test-filename")
+    val testFileName = "testFName"
+    val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
+    Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
+                        conf, false, Some(testFileName))
+    val newFileName = new File(testFileDir, testFileName)
+    assert(newFileName.isFile())
   }
 }

@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer
-from pyspark.ml.util import inherit_doc
+from pyspark.mllib.common import inherit_doc
 
 
 def _jvm():
@@ -64,7 +64,7 @@ class JavaWrapper(Params):
         :param params: additional params (overwriting embedded values)
         :param java_obj: Java object to receive the params
         """
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         for param in self.params:
             if param in paramMap:
                 java_obj.set(param.name, paramMap[param])
@@ -102,7 +102,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         """
         Fits a Java model to the input dataset.
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
         :return: fitted Java model
         """

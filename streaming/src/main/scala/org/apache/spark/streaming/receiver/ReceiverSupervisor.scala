@@ -162,13 +162,13 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStarted() = {
+  def isReceiverStarted(): Boolean = {
     logDebug("state = " + receiverState)
     receiverState == Started
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStopped() = {
+  def isReceiverStopped(): Boolean = {
     logDebug("state = " + receiverState)
     receiverState == Stopped
   }

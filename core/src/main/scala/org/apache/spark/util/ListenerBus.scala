@@ -19,16 +19,20 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
+import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
+import org.apache.spark.scheduler.SparkListener
 
 /**
  * An event bus which posts events to its listeners.
  */
 private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
-  private val listeners = new CopyOnWriteArrayList[L]
+  // Marked `private[spark]` for access in tests.
+  private[spark] val listeners = new CopyOnWriteArrayList[L]
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
@@ -62,5 +66,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread.
    */
   def onPostEvent(listener: L, event: E): Unit
+
+  private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
+    val c = implicitly[ClassTag[T]].runtimeClass
+    listeners.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+  }
 
 }

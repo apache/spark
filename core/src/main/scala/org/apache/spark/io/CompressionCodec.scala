@@ -26,7 +26,6 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
-import org.apache.spark.Logging
 
 /**
  * :: DeveloperApi ::
@@ -53,8 +52,12 @@ private[spark] object CompressionCodec {
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
+  def getCodecName(conf: SparkConf): String = {
+    conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
+  }
+
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get(configKey, DEFAULT_COMPRESSION_CODEC))
+    createCodec(conf, getCodecName(conf))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
@@ -69,6 +72,20 @@ private[spark] object CompressionCodec {
     }
     codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
+  }
+
+  /**
+   * Return the short version of the given codec name.
+   * If it is already a short name, just return it.
+   */
+  def getShortName(codecName: String): String = {
+    if (shortCompressionCodecNames.contains(codecName)) {
+      codecName
+    } else {
+      shortCompressionCodecNames
+        .collectFirst { case (k, v) if v == codecName => k }
+        .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
+    }
   }
 
   val FALLBACK_COMPRESSION_CODEC = "lzf"

@@ -55,7 +55,7 @@ class NNLSSuite extends FunSuite {
 
     for (k <- 0 until 100) {
       val (ata, atb) = genOnesData(n, rand)
-      val x = new DoubleMatrix(NNLS.solve(ata, atb, ws))
+      val x = new DoubleMatrix(NNLS.solve(ata.data, atb.data, ws))
       assert(x.length === n)
       val answer = DoubleMatrix.ones(n, 1)
       SimpleBlas.axpy(-1.0, answer, x)
@@ -79,7 +79,7 @@ class NNLSSuite extends FunSuite {
     val goodx = Array(0.13025, 0.54506, 0.2874, 0.0, 0.028628)
 
     val ws = NNLS.createWorkspace(n)
-    val x = NNLS.solve(ata, atb, ws)
+    val x = NNLS.solve(ata.data, atb.data, ws)
     for (i <- 0 until n) {
       assert(x(i) ~== goodx(i) absTol 1E-3)
       assert(x(i) >= 0)
@@ -104,7 +104,7 @@ class NNLSSuite extends FunSuite {
 
 
     val ws = NNLS.createWorkspace(n)
-    val x = new DoubleMatrix(NNLS.solve(ata, atb, ws))
+    val x = new DoubleMatrix(NNLS.solve(ata.data, atb.data, ws))
     val obj = computeObjectiveValue(ata, atb, x)
 
     assert(obj < refObj + 1E-5)

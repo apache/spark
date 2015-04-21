@@ -23,10 +23,20 @@ import java.util.Arrays.binarySearch
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
+ * :: Experimental ::
+ *
  * Regression model for isotonic regression.
  *
  * @param boundaries Array of boundaries for which predictions are known.
@@ -35,10 +45,11 @@ import org.apache.spark.rdd.RDD
  *                    Results of isotonic regression and therefore monotone.
  * @param isotonic indicates whether this is isotonic or antitonic.
  */
+@Experimental
 class IsotonicRegressionModel (
     val boundaries: Array[Double],
     val predictions: Array[Double],
-    val isotonic: Boolean) extends Serializable {
+    val isotonic: Boolean) extends Serializable with Saveable {
 
   private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
 
@@ -120,9 +131,80 @@ class IsotonicRegressionModel (
       predictions(foundIndex)
     }
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
+
+  import org.apache.spark.mllib.util.Loader._
+
+  private object SaveLoadV1_0 {
+
+    def thisFormatVersion: String = "1.0"
+
+    /** Hard-code class name string in case it changes in the future */
+    def thisClassName: String = "org.apache.spark.mllib.regression.IsotonicRegressionModel"
+
+    /** Model data for model import/export */
+    case class Data(boundary: Double, prediction: Double)
+
+    def save(
+        sc: SparkContext, 
+        path: String, 
+        boundaries: Array[Double], 
+        predictions: Array[Double], 
+        isotonic: Boolean): Unit = {
+      val sqlContext = new SQLContext(sc)
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
+          ("isotonic" -> isotonic)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+
+      sqlContext.createDataFrame(
+        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
+      ).saveAsParquetFile(dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
+      val sqlContext = new SQLContext(sc)
+      val dataRDD = sqlContext.parquetFile(dataPath(path))
+
+      checkSchema[Data](dataRDD.schema)
+      val dataArray = dataRDD.select("boundary", "prediction").collect()
+      val (boundaries, predictions) = dataArray.map { x =>
+        (x.getDouble(0), x.getDouble(1))
+      }.toList.sortBy(_._1).unzip
+      (boundaries.toArray, predictions.toArray)
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
+    implicit val formats = DefaultFormats
+    val (loadedClassName, version, metadata) = loadMetadata(sc, path)
+    val isotonic =  (metadata \ "isotonic").extract[Boolean]
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val (boundaries, predictions) = SaveLoadV1_0.load(sc, path)
+        new IsotonicRegressionModel(boundaries, predictions, isotonic)
+      case _ => throw new Exception(
+        s"IsotonicRegressionModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)"
+      )
+    }
+  }
 }
 
 /**
+ * :: Experimental ::
+ *
  * Isotonic regression.
  * Currently implemented using parallelized pool adjacent violators algorithm.
  * Only univariate (single feature) algorithm supported.
@@ -130,14 +212,17 @@ class IsotonicRegressionModel (
  * Sequential PAV implementation based on:
  * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
  *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
- *   Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+ *   Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
  *
  * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
  *   "An approach to parallelizing isotonic regression."
  *   Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
- *   Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
+ *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
+ *
+ * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
  */
+@Experimental
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**

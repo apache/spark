@@ -71,8 +71,8 @@ public class JavaMatricesSuite implements Serializable {
         Matrix sm = Matrices.diag(sv);
         DenseMatrix d = DenseMatrix.diag(v);
         DenseMatrix sd = DenseMatrix.diag(sv);
-        SparseMatrix s = SparseMatrix.diag(v);
-        SparseMatrix ss = SparseMatrix.diag(sv);
+        SparseMatrix s = SparseMatrix.spdiag(v);
+        SparseMatrix ss = SparseMatrix.spdiag(sv);
 
         assertArrayEquals(m.toArray(), sm.toArray(), 0.0);
         assertArrayEquals(d.toArray(), sm.toArray(), 0.0);

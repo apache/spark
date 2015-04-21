@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Security
+displayTitle: Spark Security
+title: Security
 ---
 
 Spark currently supports authentication via a shared secret. Authentication can be configured to be on via the `spark.authenticate` configuration parameter. This parameter controls whether the Spark communication protocols do authentication using the shared secret. This authentication is a basic handshake to make sure both sides have the same shared secret and are allowed to communicate. If the shared secret is not identical they will not be allowed to communicate. The shared secret is created as follows:

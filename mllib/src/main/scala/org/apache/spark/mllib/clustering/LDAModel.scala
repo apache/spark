@@ -130,7 +130,7 @@ abstract class LDAModel private[clustering] {
 
   /* TODO
    * Compute the estimated topic distribution for each document.
-   * This is often called “theta” in the literature.
+   * This is often called 'theta' in the literature.
    *
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
@@ -335,7 +335,7 @@ class DistributedLDAModel private (
 
   /**
    * For each document in the training set, return the distribution over topics for that document
-   * (i.e., "theta_doc").
+   * ("theta_doc").
    *
    * @return  RDD of (document ID, topic distribution) pairs
    */
