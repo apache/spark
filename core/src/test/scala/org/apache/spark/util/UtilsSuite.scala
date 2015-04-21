@@ -125,6 +125,16 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
+    // Test fractional string
+    intercept[NumberFormatException] {
+      Utils.byteStringAsMb("0.064")
+    }
+    
+    // Test fractional string
+    intercept[NumberFormatException] {
+      Utils.byteStringAsMb("0.064m")
+    }
+    
     // Test invalid strings
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("500ub")

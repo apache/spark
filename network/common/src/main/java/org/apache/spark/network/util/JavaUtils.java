@@ -210,20 +210,27 @@ public class JavaUtils {
 
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      if (!m.matches()) {
-        throw new NumberFormatException("Failed to parse byte string: " + str);
-      }
+      Matcher fractionMatcher = Pattern.compile("([0-9]*\\.[0-9]*)([a-z]+)?").matcher(lower);
       
-      long val = Long.parseLong(m.group(1));
-      String suffix = m.group(2);
-      
-      // Check for invalid suffixes
-      if (suffix != null && !byteSuffixes.containsKey(suffix)) {
-        throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
-      }
+      if(m.matches()) {
+        long val = Long.parseLong(m.group(1));
+        String suffix = m.group(2);
 
-      // If suffix is valid use that, otherwise none was provided and use the default passed
-      return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);
+        // Check for invalid suffixes
+        if (suffix != null && !byteSuffixes.containsKey(suffix)) {
+          throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
+        }
+
+        // If suffix is valid use that, otherwise none was provided and use the default passed
+        return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
+      } else if (fractionMatcher.matches()) {
+        double val = Long.parseLong(m.group(1));
+
+        throw new NumberFormatException("Fractional values are not supported. Input was: " + val);
+      } else {
+        throw new NumberFormatException("Failed to parse byte string: " + str);  
+      }
+      
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
         "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +

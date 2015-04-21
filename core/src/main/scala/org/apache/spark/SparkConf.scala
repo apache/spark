@@ -474,7 +474,12 @@ private[spark] object SparkConf extends Logging {
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
         "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
-        "Please use spark.{driver,executor}.userClassPathFirst instead."))
+        "Please use spark.{driver,executor}.userClassPathFirst instead."),
+      DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
+        "Please use spark.kryoserializer.buffer instead. The default value for " +
+          "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
+          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+    )
     
     Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
   }

@@ -49,13 +49,13 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer", "64k")
+  private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
   
-  if (bufferSizeMb >= 2048) {
+  if (bufferSizeKb >= 2048) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
-      s"2048 mb, got: + $bufferSizeMb mb.")
+      s"2048 mb, got: + $bufferSizeKb mb.")
   }
-  private val bufferSize = (bufferSizeMb * 1024 * 1024).toInt
+  private val bufferSize = (bufferSizeKb * 1024).toInt
 
   val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
   if (maxBufferSizeMb >= 2048) {
