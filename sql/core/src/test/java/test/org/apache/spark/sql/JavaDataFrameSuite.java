@@ -19,6 +19,7 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
@@ -112,6 +113,7 @@ public class JavaDataFrameSuite {
     private double a = 0.0;
     private Integer[] b = new Integer[]{0, 1};
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
+    private List<String> d = Arrays.asList("floppy", "disk");
 
     public double getA() {
       return a;
@@ -123,6 +125,10 @@ public class JavaDataFrameSuite {
 
     public Map<String, int[]> getC() {
       return c;
+    }
+
+    public List<String> getD() {
+      return d;
     }
   }
 
@@ -142,7 +148,10 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(
       new StructField("c", mapType, true, Metadata.empty()),
       schema.apply("c"));
-    Row first = df.select("a", "b", "c").first();
+    Assert.assertEquals(
+      new StructField("d", new ArrayType(DataTypes.StringType, true), true, Metadata.empty()),
+      schema.apply("d"));
+    Row first = df.select("a", "b", "c", "d").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converetd to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -155,6 +164,11 @@ public class JavaDataFrameSuite {
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
       Ints.toArray(JavaConversions.asJavaList(outputBuffer)));
+    Seq<String> d = first.getAs(3);
+    Assert.assertEquals(bean.getD().size(), d.length());
+    for (int i = 0; i < d.length(); i++) {
+      Assert.assertEquals(bean.getD().get(i), d.apply(i));
+    }
   }
 
 }

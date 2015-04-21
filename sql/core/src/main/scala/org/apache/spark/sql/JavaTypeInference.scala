@@ -75,6 +75,10 @@ private [sql] object JavaTypeInference {
         val (dataType, nullable) = inferDataType(typeToken.getComponentType)
         (ArrayType(dataType, nullable), true)
 
+      case _ if iterableType.isAssignableFrom(typeToken) =>
+        val (dataType, nullable) = inferDataType(elementType(typeToken))
+        (ArrayType(dataType, nullable), true)
+
       case _ if mapType.isAssignableFrom(typeToken) =>
         val typeToken2 = typeToken.asInstanceOf[TypeToken[_ <: JMap[_, _]]]
         val mapSupertype = typeToken2.getSupertype(classOf[JMap[_, _]])
