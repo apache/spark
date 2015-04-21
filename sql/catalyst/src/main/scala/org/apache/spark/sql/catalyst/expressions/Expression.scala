@@ -89,6 +89,12 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def toString: String = s"($left $symbol $right)"
 }
 
+abstract class BinaryFunctionExpression extends Expression with trees.BinaryNode[Expression] {
+  self: Product =>
+
+  override def foldable: Boolean = left.foldable && right.foldable
+}
+
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
   self: Product =>
 }

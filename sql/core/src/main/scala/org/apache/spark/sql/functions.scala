@@ -338,7 +338,7 @@ object functions {
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
   /**
-   * Computes the absolutle value.
+   * Computes the absolute value.
    *
    * @group normal_funcs
    */
