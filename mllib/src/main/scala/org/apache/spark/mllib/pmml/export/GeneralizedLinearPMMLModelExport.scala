@@ -27,9 +27,9 @@ import org.apache.spark.mllib.regression.GeneralizedLinearModel
  * PMML Model Export for GeneralizedLinearModel abstract class
  */
 private[mllib] class GeneralizedLinearPMMLModelExport(
-    model : GeneralizedLinearModel, 
-    description : String) 
-  extends PMMLModelExport{
+    model: GeneralizedLinearModel,
+    description: String)
+  extends PMMLModelExport {
 
   populateGeneralizedLinearPMML(model)
 
@@ -37,37 +37,37 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
    * Export the input GeneralizedLinearModel model to PMML format.
    */
   private def populateGeneralizedLinearPMML(model: GeneralizedLinearModel): Unit = {
-     pmml.getHeader.setDescription(description)
+    pmml.getHeader.setDescription(description)
 
-     if(model.weights.size > 0){
-       val fields = new SArray[FieldName](model.weights.size)
-       val dataDictionary = new DataDictionary
-       val miningSchema = new MiningSchema
-       val regressionTable = new RegressionTable(model.intercept)
-       val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.REGRESSION)
-         .withModelName(description)
-         .withRegressionTables(regressionTable)
+    if (model.weights.size > 0) {
+      val fields = new SArray[FieldName](model.weights.size)
+      val dataDictionary = new DataDictionary
+      val miningSchema = new MiningSchema
+      val regressionTable = new RegressionTable(model.intercept)
+      val regressionModel = new RegressionModel(miningSchema, MiningFunctionType.REGRESSION)
+        .withModelName(description)
+        .withRegressionTables(regressionTable)
 
-       for (i <- 0 until model.weights.size) {
-         fields(i) = FieldName.create("field_" + i)
-         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
-         miningSchema
-           .withMiningFields(new MiningField(fields(i))
-           .withUsageType(FieldUsageType.ACTIVE))
-         regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
-       }
-       
-       // for completeness add target field
-       val targetField = FieldName.create("target")
-       dataDictionary.withDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
-       miningSchema
-         .withMiningFields(new MiningField(targetField)
-         .withUsageType(FieldUsageType.TARGET))
+      for (i <- 0 until model.weights.size) {
+        fields(i) = FieldName.create("field_" + i)
+        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+        miningSchema
+          .withMiningFields(new MiningField(fields(i))
+          .withUsageType(FieldUsageType.ACTIVE))
+        regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
+      }
 
-       dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
+      // for completeness add target field
+      val targetField = FieldName.create("target")
+      dataDictionary.withDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
+      miningSchema
+        .withMiningFields(new MiningField(targetField)
+        .withUsageType(FieldUsageType.TARGET))
 
-       pmml.setDataDictionary(dataDictionary)
-       pmml.withModels(regressionModel)
-     }
+      dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
+
+      pmml.setDataDictionary(dataDictionary)
+      pmml.withModels(regressionModel)
+    }
   }
 }

@@ -21,9 +21,7 @@ import org.dmg.pmml.RegressionModel
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.SVMModel
-import org.apache.spark.mllib.regression.LassoModel
-import org.apache.spark.mllib.regression.LinearRegressionModel
-import org.apache.spark.mllib.regression.RidgeRegressionModel
+import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
@@ -87,7 +85,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite {
   test("svm pmml export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
-    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)         
+    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
     // assert that the PMML format is as expected
     assert(svmModelExport.isInstanceOf[PMMLModelExport])
     val pmml = svmModelExport.getPmml
