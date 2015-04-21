@@ -44,10 +44,13 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
       val comparisonMeasure = new ComparisonMeasure()
         .withKind(ComparisonMeasure.Kind.DISTANCE)
         .withMeasure(new SquaredEuclidean())
-      val clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure,
-          MiningFunctionType.CLUSTERING, ClusteringModel.ModelClass.CENTER_BASED,
-          model.clusterCenters.length)
+      val clusteringModel = new ClusteringModel()
         .withModelName("k-means")
+        .withMiningSchema(miningSchema)
+        .withComparisonMeasure(comparisonMeasure)
+        .withFunctionName(MiningFunctionType.CLUSTERING)
+        .withModelClass(ClusteringModel.ModelClass.CENTER_BASED)
+        .withNumberOfClusters(model.clusterCenters.length)
 
       for (i <- 0 until clusterCenter.size) {
         fields(i) = FieldName.create("field_" + i)

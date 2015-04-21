@@ -45,7 +45,9 @@ private[mllib] class LogisticRegressionPMMLModelExport(
        val miningSchema = new MiningSchema
        val regressionTableYES = new RegressionTable(model.intercept).withTargetCategory("1")
        val regressionTableNO = new RegressionTable(0.0).withTargetCategory("0")
-       val regressionModel = new RegressionModel(miningSchema, MiningFunctionType.CLASSIFICATION)
+       val regressionModel = new RegressionModel()
+         .withFunctionName(MiningFunctionType.CLASSIFICATION)
+         .withMiningSchema(miningSchema)
          .withModelName(description)
          .withNormalizationMethod(RegressionNormalizationMethodType.LOGIT)
          .withRegressionTables(regressionTableYES, regressionTableNO)

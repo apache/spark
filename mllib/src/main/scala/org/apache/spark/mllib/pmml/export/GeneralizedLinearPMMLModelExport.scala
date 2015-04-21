@@ -44,7 +44,9 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
       val dataDictionary = new DataDictionary
       val miningSchema = new MiningSchema
       val regressionTable = new RegressionTable(model.intercept)
-      val regressionModel = new RegressionModel(miningSchema, MiningFunctionType.REGRESSION)
+      val regressionModel = new RegressionModel()
+        .withFunctionName(MiningFunctionType.REGRESSION)
+        .withMiningSchema(miningSchema)
         .withModelName(description)
         .withRegressionTables(regressionTable)
 
