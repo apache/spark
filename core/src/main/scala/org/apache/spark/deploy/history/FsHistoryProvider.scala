@@ -293,6 +293,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             fs.delete(path, true)
           }
         } catch {
+          case e: AccessControlException =>
+            logInfo(s"No permission to delete ${info.logPath}, ignoring.")
           case t: IOException =>
             logError(s"IOException in cleaning logs of ${info.logPath}", t)
             leftToClean += info
