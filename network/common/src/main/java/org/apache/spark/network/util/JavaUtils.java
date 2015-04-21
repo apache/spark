@@ -223,7 +223,7 @@ public class JavaUtils {
       }
 
       // If suffix is valid use that, otherwise none was provided and use the default passed
-      return unit.convert(val, suffix != null ? byteSuffixes.get(suffix) : unit);
+      return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
         "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +

@@ -28,9 +28,18 @@ public enum ByteUnit {
     this.multiplier = multiplier;
   }
 
-  public long convert(long d, ByteUnit u) { return toBytes(d) / u.multiplier; }
+  // Interpret the provided number (d) with suffix (u) as this unit type.
+  // E.g. KiB.interpret(1, MiB) interprets 1MiB as its KiB representation = 1024k
+  public long interpret(long d, ByteUnit u) {
+    return u.toBytes(d) / multiplier;  
+  }
+  
+  // Convert the provided number (d) interpreted as this unit type to unit type (u). 
+  public long convert(long d, ByteUnit u) {
+    return toBytes(d) / u.multiplier;
+  }
 
-  public long toBytes(long d) { return multiplier * d; }
+  public long toBytes(long d) { return x(d, multiplier); }
   public long toKiB(long d) { return convert(d, KiB); }
   public long toMiB(long d) { return convert(d, MiB); }
   public long toGiB(long d) { return convert(d, GiB); }
@@ -46,6 +55,7 @@ public enum ByteUnit {
    * This has a short name to make above code more readable.
    */
   static long x(long d, long m) {
+    if (d == 0) { return 0; }
     long over = MAX / d;
     if (d >  over) return Long.MAX_VALUE;
     if (d < -over) return Long.MIN_VALUE;
