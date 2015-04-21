@@ -438,13 +438,13 @@ class ColumnExpressionSuite extends QueryTest {
       c: (Column, Column) => Column,
       f: (Double, Double) => Double): Unit = {
     checkAnswer(
-      testData2.select(c('a, 'a)).orderBy('a.asc),
-      testData2.collect().toSeq.map(r => Row(f(r.getInt(0), r.getInt(0))))
+      nnDoubleData.select(c('a, 'a)).orderBy('a.asc),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
 
     checkAnswer(
-      testData2.select(c('a, 'b)).orderBy('a.asc),
-      testData2.collect().toSeq.map(r => Row(f(r.getInt(0), r.getInt(1))))
+      nnDoubleData.select(c('a, 'b)).orderBy('a.asc),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
     )
 
     val nonNull = nullInts.collect().toSeq.filter(r => r.get(0) != null)

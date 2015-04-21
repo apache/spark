@@ -62,6 +62,10 @@ object TestData {
     (1 to 100).map(i => DoubleData(i * 0.02 - 1, i * -0.02 + 1))).toDF()
   doubleData.registerTempTable("doubleData")
 
+  val nnDoubleData = TestSQLContext.sparkContext.parallelize(
+    (1 to 100).map(i => DoubleData(i * 0.01, i * -0.01))).toDF()
+  nnDoubleData.registerTempTable("nnDoubleData")
+
   case class DecimalData(a: BigDecimal, b: BigDecimal)
 
   val decimalData =
