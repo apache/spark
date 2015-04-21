@@ -297,6 +297,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Row(3,1), Row(3,2))
     )
   }
+  
+  test("SPARK-7026 make LeftSemiJoin work when it has equal condition and not equal condition") {
+    checkAnswer(
+      sql("""
+            |SELECT * FROM testData2 x
+            |LEFT SEMI JOIN testData2 y
+            |ON x.b = y.b
+            |AND x.a >= y.a + 2""".stripMargin),
+      Seq(Row(3,1), Row(3,2))
+    )
+  }
 
   test("index into array of arrays") {
     checkAnswer(
