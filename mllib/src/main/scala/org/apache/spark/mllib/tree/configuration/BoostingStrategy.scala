@@ -89,14 +89,14 @@ object BoostingStrategy {
    * @return Configuration for boosting algorithm
    */
   def defaultParams(algo: Algo): BoostingStrategy = {
-    val treeStragtegy = Strategy.defaultStategy(algo)
-    treeStragtegy.maxDepth = 3
+    val treeStrategy = Strategy.defaultStategy(algo)
+    treeStrategy.maxDepth = 3
     algo match {
       case Algo.Classification =>
-        treeStragtegy.numClasses = 2
-        new BoostingStrategy(treeStragtegy, LogLoss)
+        treeStrategy.numClasses = 2
+        new BoostingStrategy(treeStrategy, LogLoss)
       case Algo.Regression =>
-        new BoostingStrategy(treeStragtegy, SquaredError)
+        new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }

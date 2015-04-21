@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils,
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
@@ -144,6 +144,9 @@ private[hive] object SparkSQLCLIDriver {
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
+
+    // use the specified database if specified
+    cli.processSelectDatabase(sessionState);
 
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
@@ -264,7 +267,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
 
       if (proc != null) {
-        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
+        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
+          proc.isInstanceOf[AddResourceProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()

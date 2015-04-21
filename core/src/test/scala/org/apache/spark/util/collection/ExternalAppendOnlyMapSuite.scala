@@ -185,7 +185,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
 
     // reduceByKey
     val rdd = sc.parallelize(1 to 10).map(i => (i%2, 1))
-    val result1 = rdd.reduceByKey(_+_).collect()
+    val result1 = rdd.reduceByKey(_ + _).collect()
     assert(result1.toSet === Set[(Int, Int)]((0, 5), (1, 5)))
 
     // groupByKey

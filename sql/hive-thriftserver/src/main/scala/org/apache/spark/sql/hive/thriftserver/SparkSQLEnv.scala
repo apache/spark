@@ -22,6 +22,7 @@ import scala.collection.JavaConversions._
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.{HiveShim, HiveContext}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
@@ -37,7 +38,7 @@ private[hive] object SparkSQLEnv extends Logging {
       val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
 
       sparkConf
-        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}")
+        .setAppName(s"SparkSQL::${Utils.localHostName()}")
         .set("spark.sql.hive.version", HiveShim.version)
         .set(
           "spark.serializer",

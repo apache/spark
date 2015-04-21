@@ -37,7 +37,8 @@ import org.apache.spark.sql.hive.test.TestHive._
 case class TestData(a: Int, b: String)
 
 /**
- * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
+ * A set of test cases expressed in Hive QL that are not covered by the tests
+ * included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
@@ -237,7 +238,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   createQueryTest("modulus",
-    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), (101 / 2) % 10 FROM src LIMIT 1")
+    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
+      "(101 / 2) % 10 FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
@@ -309,7 +311,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
   createQueryTest("small.cartesian",
-    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN (SELECT key FROM src WHERE key = 2) b")
+    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
+      "(SELECT key FROM src WHERE key = 2) b")
 
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
@@ -457,6 +460,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("lateral view3",
     "FROM src SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX")
 
+  // scalastyle:off
   createQueryTest("lateral view4",
     """
       |create table src_lv1 (key string, value string);
@@ -466,6 +470,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |insert overwrite table src_lv1 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
       |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
     """.stripMargin)
+  // scalastyle:on
 
   createQueryTest("lateral view5",
     "FROM src SELECT explode(array(key+3, key+4))")
@@ -537,6 +542,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  createQueryTest("CTE feature #1",
+    "with q1 as (select key from src) select * from q1 where key = 5")
+
+  createQueryTest("CTE feature #2",
+    """with q1 as (select * from src where key= 5),
+      |q2 as (select * from src s2 where key = 4)
+      |select value from q1 union all select value from q2
+    """.stripMargin)
+
+  createQueryTest("CTE feature #3",
+    """with q1 as (select key from src)
+      |from q1
+      |select * where key = 4
+    """.stripMargin)
+
   test("predicates contains an empty AttributeSet() references") {
     sql(
       """
@@ -584,7 +604,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
-  def isExplanation(result: DataFrame) = {
+  def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.contains("== Physical Plan ==")
   }
@@ -791,6 +811,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         """.stripMargin)
     }
     sql("DROP TABLE alter1")
+  }
+
+  test("ADD JAR command 2") {
+    // this is a test case from mapjoin_addjar.q
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    if (HiveShim.version == "0.13.1") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """CREATE TABLE t1(a string, b string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+      sql("select * from src join t1 on src.key = t1.a")
+      sql("DROP TABLE t1")
+    }
   }
 
   test("ADD FILE command") {

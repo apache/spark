@@ -10,7 +10,7 @@ Module contents
     :show-inheritance:
 
 pyspark.streaming.kafka module
-----------------------------
+------------------------------
 .. automodule:: pyspark.streaming.kafka
     :members:
     :undoc-members:

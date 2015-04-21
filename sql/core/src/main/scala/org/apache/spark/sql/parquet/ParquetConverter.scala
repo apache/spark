@@ -219,8 +219,8 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, value.getBytes)
 
-  protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    updateField(fieldIndex, value)
+  protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    updateField(fieldIndex, UTF8String(value))
 
   protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, readTimestamp(value))
@@ -418,8 +418,8 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, value.getBytes)
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
-    current.setString(fieldIndex, value)
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
+    current.update(fieldIndex, UTF8String(value))
 
   override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, readTimestamp(value))
@@ -475,19 +475,18 @@ private[parquet] class CatalystPrimitiveConverter(
 private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
   extends CatalystPrimitiveConverter(parent, fieldIndex) {
 
-  private[this] var dict: Array[String] = null
+  private[this] var dict: Array[Array[Byte]] = null
 
   override def hasDictionarySupport: Boolean = true
 
   override def setDictionary(dictionary: Dictionary):Unit =
-    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
-
+    dict = Array.tabulate(dictionary.getMaxId + 1) { dictionary.decodeToBinary(_).getBytes }
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
     parent.updateString(fieldIndex, dict(dictionaryId))
 
   override def addBinary(value: Binary): Unit =
-    parent.updateString(fieldIndex, value.toStringUsingUTF8)
+    parent.updateString(fieldIndex, value.getBytes)
 }
 
 private[parquet] object CatalystArrayConverter {
@@ -714,9 +713,9 @@ private[parquet] class CatalystNativeArrayConverter(
     elements += 1
   }
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit = {
+  override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[NativeType]
+    buffer(elements) = UTF8String(value).asInstanceOf[NativeType]
     elements += 1
   }
 

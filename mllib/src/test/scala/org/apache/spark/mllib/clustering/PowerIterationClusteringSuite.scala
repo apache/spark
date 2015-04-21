@@ -18,12 +18,15 @@
 package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable
+import scala.util.Random
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkContext
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -109,5 +112,36 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
     v1.foreach { case (i, x) =>
       assert(x ~== u1(i.toInt) absTol 1e-14)
     }
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    val model = PowerIterationClusteringSuite.createModel(sc, 3, 10)
+    try {
+      model.save(sc, path)
+      val sameModel = PowerIterationClusteringModel.load(sc, path)
+      PowerIterationClusteringSuite.checkEqual(model, sameModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+}
+
+object PowerIterationClusteringSuite extends FunSuite {
+  def createModel(sc: SparkContext, k: Int, nPoints: Int): PowerIterationClusteringModel = {
+    val assignments = sc.parallelize(
+      (0 until nPoints).map(p => PowerIterationClustering.Assignment(p, Random.nextInt(k))))
+    new PowerIterationClusteringModel(k, assignments)
+  }
+
+  def checkEqual(a: PowerIterationClusteringModel, b: PowerIterationClusteringModel): Unit = {
+    assert(a.k === b.k)
+
+    val aAssignments = a.assignments.map(x => (x.id, x.cluster))
+    val bAssignments = b.assignments.map(x => (x.id, x.cluster))
+    val unequalElements = aAssignments.join(bAssignments).filter {
+      case (id, (c1, c2)) => c1 != c2 }.count()
+    assert(unequalElements === 0L)
   }
 }
