@@ -35,8 +35,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  *
  * To run on your local machine using the two directories `trainingDir` and `testDir`,
  * with updates every 5 seconds, and 2 features per data point, call:
- *    $ bin/run-example \
- *        org.apache.spark.examples.mllib.StreamingLinearRegression trainingDir testDir 5 2
+ *    $ bin/run-example mllib.StreamingLinearRegression trainingDir testDir 5 2
  *
  * As you add text files to `trainingDir` the model will continuously update.
  * Anytime you add text files to `testDir`, you'll see predictions from the current model.

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
+import org.apache.spark.sql.types._
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -43,9 +43,9 @@ abstract class Generator extends Expression {
   override type EvaluatedType = TraversableOnce[Row]
 
   override lazy val dataType =
-    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
+    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
 
-  override def nullable = false
+  override def nullable: Boolean = false
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -71,6 +71,28 @@ abstract class Generator extends Expression {
     copy._output = _output
     copy
   }
+}
+
+/**
+ * A generator that produces its output using the provided lambda function.
+ */
+case class UserDefinedGenerator(
+    schema: Seq[Attribute],
+    function: Row => TraversableOnce[Row],
+    children: Seq[Expression])
+  extends Generator{
+
+  override protected def makeOutput(): Seq[Attribute] = schema
+
+  override def eval(input: Row): TraversableOnce[Row] = {
+    // TODO(davies): improve this
+    // Convert the objects into Scala Type before calling function, we need schema to support UDT
+    val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+    val inputRow = new InterpretedProjection(children)
+    function(CatalystTypeConverters.convertToScala(inputRow(input), inputSchema).asInstanceOf[Row])
+  }
+
+  override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 }
 
 /**
@@ -111,5 +133,5 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     }
   }
 
-  override def toString() = s"explode($child)"
+  override def toString: String = s"explode($child)"
 }

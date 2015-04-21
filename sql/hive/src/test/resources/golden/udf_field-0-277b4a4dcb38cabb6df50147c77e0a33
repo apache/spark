@@ -1,1 +1,0 @@
-field(str, str1, str2, ...) - returns the index of str in the str1,str2,... list or 0 if not found

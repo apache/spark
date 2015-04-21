@@ -28,7 +28,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 
 class JsonProtocolSuite extends FunSuite {
 
@@ -68,7 +68,8 @@ class JsonProtocolSuite extends FunSuite {
     val completedApps = Array[ApplicationInfo]()
     val activeDrivers = Array(createDriverInfo())
     val completedDrivers = Array(createDriverInfo())
-    val stateResponse = new MasterStateResponse("host", 8080, workers, activeApps, completedApps,
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
       activeDrivers, completedDrivers, RecoveryState.ALIVE)
     val output = JsonProtocol.writeMasterState(stateResponse)
     assertValidJson(output)
@@ -99,13 +100,13 @@ class JsonProtocolSuite extends FunSuite {
     appInfo
   }
 
-  def createDriverCommand() = new Command(
+  def createDriverCommand(): Command = new Command(
     "org.apache.spark.FakeClass", Seq("some arg --and-some options -g foo"),
     Map(("K1", "V1"), ("K2", "V2")), Seq("cp1", "cp2"), Seq("lp1", "lp2"), Seq("-Dfoo")
   )
 
-  def createDriverDesc() = new DriverDescription("hdfs://some-dir/some.jar", 100, 3,
-    false, createDriverCommand())
+  def createDriverDesc(): DriverDescription =
+    new DriverDescription("hdfs://some-dir/some.jar", 100, 3, false, createDriverCommand())
 
   def createDriverInfo(): DriverInfo = new DriverInfo(3, "driver-3",
     createDriverDesc(), new Date())
@@ -117,14 +118,15 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createExecutorRunner(): ExecutorRunner = {
-    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"), "akka://worker",
-      new SparkConf, ExecutorState.RUNNING)
+    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host", 123,
+      "publicAddress", new File("sparkHome"), new File("workDir"), "akka://worker",
+      new SparkConf, Seq("localDir"), ExecutorState.RUNNING)
   }
 
   def createDriverRunner(): DriverRunner = {
-    new DriverRunner(new SparkConf(), "driverId", new File("workDir"), new File("sparkHome"),
-      createDriverDesc(), null, "akka://worker")
+    val conf = new SparkConf()
+    new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      createDriverDesc(), null, "akka://worker", new SecurityManager(conf))
   }
 
   def assertValidJson(json: JValue) {

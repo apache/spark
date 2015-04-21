@@ -58,15 +58,11 @@ private[spark] class ResultTask[T, U](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
 
     metrics = Some(context.taskMetrics)
-    try {
-      func(context, rdd.iterator(partition, context))
-    } finally {
-      context.markTaskCompleted()
-    }
+    func(context, rdd.iterator(partition, context))
   }
 
   // This is only callable on the driver side.
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
-  override def toString = "ResultTask(" + stageId + ", " + partitionId + ")"
+  override def toString: String = "ResultTask(" + stageId + ", " + partitionId + ")"
 }

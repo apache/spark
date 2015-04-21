@@ -1,7 +1,7 @@
 create table tab_bool(a boolean);
 
 -- insert some data
-LOAD DATA LOCAL INPATH "../data/files/bool.txt" INTO TABLE tab_bool;
+LOAD DATA LOCAL INPATH "../../data/files/bool.txt" INTO TABLE tab_bool;
 
 select count(*) from tab_bool;
 

@@ -23,8 +23,8 @@ insert overwrite table nzhang_part2 partition(ds='2008-12-31', hr) select key, v
 show partitions nzhang_part1;
 show partitions nzhang_part2;
 
-select * from nzhang_part1 where ds is not null and hr is not null;
-select * from nzhang_part2 where ds is not null and hr is not null;
+select * from nzhang_part1 where ds is not null and hr is not null order by ds, hr, key;
+select * from nzhang_part2 where ds is not null and hr is not null order by ds, hr, key;
 
 
 

@@ -4,17 +4,17 @@
 create table result (key string, value string);
 create table loader (key string, value string);
 
-load data local inpath '../data/files/kv1.txt' into table loader;
+load data local inpath '../../data/files/kv1.txt' into table loader;
 
 load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
 show table extended like result;
 
-load data local inpath '../data/files/kv1.txt' into table loader;
+load data local inpath '../../data/files/kv1.txt' into table loader;
 
 load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
 show table extended like result;
 
-load data local inpath '../data/files/kv1.txt' into table loader;
+load data local inpath '../../data/files/kv1.txt' into table loader;
 
 load data inpath '/build/ql/test/data/warehouse/loader/kv1.txt' into table result;
 show table extended like result;

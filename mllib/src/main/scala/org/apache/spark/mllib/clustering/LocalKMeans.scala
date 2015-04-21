@@ -19,9 +19,9 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, norm => breezeNorm}
-
 import org.apache.spark.Logging
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used
@@ -35,14 +35,14 @@ private[mllib] object LocalKMeans extends Logging {
    */
   def kMeansPlusPlus(
       seed: Int,
-      points: Array[BreezeVectorWithNorm],
+      points: Array[VectorWithNorm],
       weights: Array[Double],
       k: Int,
       maxIterations: Int
-  ): Array[BreezeVectorWithNorm] = {
+  ): Array[VectorWithNorm] = {
     val rand = new Random(seed)
-    val dimensions = points(0).vector.length
-    val centers = new Array[BreezeVectorWithNorm](k)
+    val dimensions = points(0).vector.size
+    val centers = new Array[VectorWithNorm](k)
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
@@ -75,14 +75,12 @@ private[mllib] object LocalKMeans extends Logging {
     while (moved && iteration < maxIterations) {
       moved = false
       val counts = Array.fill(k)(0.0)
-      val sums = Array.fill(k)(
-        BDV.zeros[Double](dimensions).asInstanceOf[BV[Double]]
-      )
+      val sums = Array.fill(k)(Vectors.zeros(dimensions))
       var i = 0
       while (i < points.length) {
         val p = points(i)
         val index = KMeans.findClosest(centers, p)._1
-        breeze.linalg.axpy(weights(i), p.vector, sums(index))
+        axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {
           moved = true
@@ -97,8 +95,8 @@ private[mllib] object LocalKMeans extends Logging {
           // Assign center to a random point
           centers(j) = points(rand.nextInt(points.length)).toDense
         } else {
-          sums(j) /= counts(j)
-          centers(j) = new BreezeVectorWithNorm(sums(j))
+          scal(1.0 / counts(j), sums(j))
+          centers(j) = new VectorWithNorm(sums(j))
         }
         j += 1
       }

@@ -1,19 +1,24 @@
 # col_name            	data_type           	comment             
 	 	 
-key                 	string              	None                
-values              	bigint              	None                
+key                 	string              	                    
+values              	bigint              	                    
 	 	 
 # Detailed Table Information	 	 
 Database:           	default             	 
 Owner:              	marmbrus            	 
-CreateTime:         	Fri Jan 03 19:09:55 PST 2014	 
+CreateTime:         	Tue Oct 21 06:00:02 PDT 2014	 
 LastAccessTime:     	UNKNOWN             	 
 Protect Mode:       	None                	 
 Retention:          	0                   	 
-Location:           	file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse5393816597631538368/outputtbl1	 
+Location:           	file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sparkHiveWarehouse1201055597819413730/outputtbl1	 
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
-	transient_lastDdlTime	1388805002          
+	COLUMN_STATS_ACCURATE	false               
+	numFiles            	1                   
+	numRows             	-1                  
+	rawDataSize         	-1                  
+	totalSize           	72                  
+	transient_lastDdlTime	1413896409          
 	 	 
 # Storage Information	 	 
 SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe	 

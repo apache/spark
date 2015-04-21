@@ -66,8 +66,9 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
       val curMem = threadMemory(threadId)
       val freeMemory = maxMemory - threadMemory.values.sum
 
-      // How much we can grant this thread; don't let it grow to more than 1 / numActiveThreads
-      val maxToGrant = math.min(numBytes, (maxMemory / numActiveThreads) - curMem)
+      // How much we can grant this thread; don't let it grow to more than 1 / numActiveThreads;
+      // don't let it be negative
+      val maxToGrant = math.min(numBytes, math.max(0, (maxMemory / numActiveThreads) - curMem))
 
       if (curMem < maxMemory / (2 * numActiveThreads)) {
         // We want to let each thread get at least 1 / (2 * numActiveThreads) before blocking;

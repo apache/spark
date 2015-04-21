@@ -36,7 +36,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.size).map(i => {
+    (0 until blockIds.length).map(i => {
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
     }).toArray
   }
@@ -83,6 +83,10 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))
     }
+  }
+
+  protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
+    locations_
   }
 }
 

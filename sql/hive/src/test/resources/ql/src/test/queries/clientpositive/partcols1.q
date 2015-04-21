@@ -1,7 +1,7 @@
 
 create table test1(col1 string) partitioned by (partitionId int);
 insert overwrite table test1 partition (partitionId=1)
-  select key from src limit 10;
+  select key from src tablesample (10 rows);
 
  FROM (
  FROM test1

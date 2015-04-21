@@ -32,7 +32,8 @@ import org.apache.spark.mllib.linalg.Vector
  *
  * @param id integer node id, from 1
  * @param predict predicted value at the node
- * @param isLeaf whether the leaf is a node
+ * @param impurity current node impurity
+ * @param isLeaf whether the node is a leaf
  * @param split split to calculate left and right nodes
  * @param leftNode  left child
  * @param rightNode right child
@@ -41,15 +42,18 @@ import org.apache.spark.mllib.linalg.Vector
 @DeveloperApi
 class Node (
     val id: Int,
-    val predict: Double,
-    val isLeaf: Boolean,
-    val split: Option[Split],
+    var predict: Predict,
+    var impurity: Double,
+    var isLeaf: Boolean,
+    var split: Option[Split],
     var leftNode: Option[Node],
     var rightNode: Option[Node],
-    val stats: Option[InformationGainStats]) extends Serializable with Logging {
+    var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
-  override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
-    "split = " + split + ", stats = " + stats
+  override def toString: String = {
+    "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
+      "impurity =  " + impurity + "split = " + split + ", stats = " + stats
+  }
 
   /**
    * build the left node and right nodes if not leaf
@@ -62,6 +66,7 @@ class Node (
     logDebug("id = " + id + ", split = " + split)
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)
+    logDebug("impurity = " + impurity)
     if (!isLeaf) {
       leftNode = Some(nodes(Node.leftChildIndex(id)))
       rightNode = Some(nodes(Node.rightChildIndex(id)))
@@ -77,7 +82,7 @@ class Node (
    */
   def predict(features: Vector) : Double = {
     if (isLeaf) {
-      predict
+      predict.predict
     } else{
       if (split.get.featureType == Continuous) {
         if (features(split.get.feature) <= split.get.threshold) {
@@ -109,7 +114,7 @@ class Node (
     } else {
       Some(rightNode.get.deepCopy())
     }
-    new Node(id, predict, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
+    new Node(id, predict, impurity, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
   }
 
   /**
@@ -154,7 +159,7 @@ class Node (
     }
     val prefix: String = " " * indentFactor
     if (isLeaf) {
-      prefix + s"Predict: $predict\n"
+      prefix + s"Predict: ${predict.predict}\n"
     } else {
       prefix + s"If ${splitToString(split.get, left=true)}\n" +
         leftNode.get.subtreeToString(indentFactor + 1) +
@@ -163,9 +168,39 @@ class Node (
     }
   }
 
+  /** Returns an iterator that traverses (DFS, left to right) the subtree of this node. */
+  private[tree] def subtreeIterator: Iterator[Node] = {
+    Iterator.single(this) ++ leftNode.map(_.subtreeIterator).getOrElse(Iterator.empty) ++
+      rightNode.map(_.subtreeIterator).getOrElse(Iterator.empty)
+  }
 }
 
-private[tree] object Node {
+private[spark] object Node {
+
+  /**
+   * Return a node with the given node id (but nothing else set).
+   */
+  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, new Predict(Double.MinValue), -1.0,
+    false, None, None, None, None)
+
+  /**
+   * Construct a node with nodeIndex, predict, impurity and isLeaf parameters.
+   * This is used in `DecisionTree.findBestSplits` to construct child nodes
+   * after finding the best splits for parent nodes.
+   * Other fields are set at next level.
+   * @param nodeIndex integer node id, from 1
+   * @param predict predicted value at the node
+   * @param impurity current node impurity
+   * @param isLeaf whether the node is a leaf
+   * @return new node instance
+   */
+  def apply(
+      nodeIndex: Int,
+      predict: Predict,
+      impurity: Double,
+      isLeaf: Boolean): Node = {
+    new Node(nodeIndex, predict, impurity, isLeaf, None, None, None, None)
+  }
 
   /**
    * Return the index of the left child of this node.

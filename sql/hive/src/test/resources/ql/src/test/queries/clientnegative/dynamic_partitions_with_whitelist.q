@@ -8,7 +8,7 @@ create table source_table like srcpart;
 
 create table dest_table like srcpart;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE source_table partition(ds='2008-04-08', hr=11);
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE source_table partition(ds='2008-04-08', hr=11);
 
 -- Tests creating dynamic partitions with characters not in the whitelist (i.e. 9)
 -- If the directory is not empty the hook will throw an error, instead the error should come from the metastore

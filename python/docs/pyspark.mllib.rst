@@ -1,16 +1,13 @@
 pyspark.mllib package
 =====================
 
-Submodules
-----------
-
 pyspark.mllib.classification module
 -----------------------------------
 
 .. automodule:: pyspark.mllib.classification
     :members:
     :undoc-members:
-    :show-inheritance:
+    :inherited-members:
 
 pyspark.mllib.clustering module
 -------------------------------
@@ -18,7 +15,28 @@ pyspark.mllib.clustering module
 .. automodule:: pyspark.mllib.clustering
     :members:
     :undoc-members:
+
+pyspark.mllib.evaluation module
+-------------------------------
+
+.. automodule:: pyspark.mllib.evaluation
+      :members:
+      :undoc-members:
+
+pyspark.mllib.feature module
+-------------------------------
+
+.. automodule:: pyspark.mllib.feature
+    :members:
+    :undoc-members:
     :show-inheritance:
+
+pyspark.mllib.fpm module
+------------------------
+
+.. automodule:: pyspark.mllib.fpm
+    :members:
+    :undoc-members:
 
 pyspark.mllib.linalg module
 ---------------------------
@@ -34,7 +52,6 @@ pyspark.mllib.random module
 .. automodule:: pyspark.mllib.random
     :members:
     :undoc-members:
-    :show-inheritance:
 
 pyspark.mllib.recommendation module
 -----------------------------------
@@ -42,7 +59,6 @@ pyspark.mllib.recommendation module
 .. automodule:: pyspark.mllib.recommendation
     :members:
     :undoc-members:
-    :show-inheritance:
 
 pyspark.mllib.regression module
 -------------------------------
@@ -50,7 +66,7 @@ pyspark.mllib.regression module
 .. automodule:: pyspark.mllib.regression
     :members:
     :undoc-members:
-    :show-inheritance:
+    :inherited-members:
 
 pyspark.mllib.stat module
 -------------------------
@@ -58,7 +74,6 @@ pyspark.mllib.stat module
 .. automodule:: pyspark.mllib.stat
     :members:
     :undoc-members:
-    :show-inheritance:
 
 pyspark.mllib.tree module
 -------------------------
@@ -66,7 +81,7 @@ pyspark.mllib.tree module
 .. automodule:: pyspark.mllib.tree
     :members:
     :undoc-members:
-    :show-inheritance:
+    :inherited-members:
 
 pyspark.mllib.util module
 -------------------------
@@ -74,4 +89,3 @@ pyspark.mllib.util module
 .. automodule:: pyspark.mllib.util
     :members:
     :undoc-members:
-    :show-inheritance:

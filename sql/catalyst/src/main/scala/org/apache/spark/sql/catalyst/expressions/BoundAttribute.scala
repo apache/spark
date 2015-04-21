@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 
 /**
@@ -32,7 +32,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   type EvaluatedType = Any
 
-  override def toString = s"input[$ordinal]"
+  override def toString: String = s"input[$ordinal]"
 
   override def eval(input: Row): Any = input(ordinal)
 }

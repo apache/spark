@@ -22,7 +22,8 @@ import java.io.Serializable;
 import scala.Tuple2;
 
 /**
- * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
+ * A function that returns key-value pairs (Tuple2&lt;K, V&gt;), and can be used to
+ * construct PairRDDs.
  */
 public interface PairFunction<T, K, V> extends Serializable {
   public Tuple2<K, V> call(T t) throws Exception;

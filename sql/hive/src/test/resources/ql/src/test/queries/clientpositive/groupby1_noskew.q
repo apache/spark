@@ -9,4 +9,4 @@ FROM src INSERT OVERWRITE TABLE dest_g1 SELECT src.key, sum(substr(src.value,5))
 
 FROM src INSERT OVERWRITE TABLE dest_g1 SELECT src.key, sum(substr(src.value,5)) GROUP BY src.key;
 
-SELECT dest_g1.* FROM dest_g1;
+SELECT dest_g1.* FROM dest_g1 ORDER BY key;

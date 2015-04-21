@@ -10,9 +10,9 @@ create table smb_bucket_1(key int, value string) CLUSTERED BY (key) SORTED BY (k
 create table smb_bucket_2(key int, value string) CLUSTERED BY (key) SORTED BY (key) INTO 1 BUCKETS STORED AS RCFILE; 
 create table smb_bucket_3(key int, value string) CLUSTERED BY (key) SORTED BY (key) INTO 1 BUCKETS STORED AS RCFILE;
 
-load data local inpath '../data/files/smbbucket_1.rc' overwrite into table smb_bucket_1;
-load data local inpath '../data/files/smbbucket_2.rc' overwrite into table smb_bucket_2;
-load data local inpath '../data/files/smbbucket_3.rc' overwrite into table smb_bucket_3;
+load data local inpath '../../data/files/smbbucket_1.rc' overwrite into table smb_bucket_1;
+load data local inpath '../../data/files/smbbucket_2.rc' overwrite into table smb_bucket_2;
+load data local inpath '../../data/files/smbbucket_3.rc' overwrite into table smb_bucket_3;
 
 explain 
 select * from (select a.key from smb_bucket_1 a join smb_bucket_2 b on (a.key = b.key) where a.key = 5) t1 left outer join (select c.key from smb_bucket_2 c join smb_bucket_3 d on (c.key = d.key) where c.key=5) t2 on (t1.key=t2.key) where t2.key=5;

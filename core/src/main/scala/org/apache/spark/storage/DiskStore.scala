@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, FileOutputStream, RandomAccessFile}
+import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
@@ -31,7 +31,8 @@ import org.apache.spark.util.Utils
 private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+  val minMemoryMapBytes = blockManager.conf.getLong(
+    "spark.storage.memoryMapThreshold", 2 * 1024L * 1024L)
 
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
@@ -45,10 +46,13 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val channel = new FileOutputStream(file).getChannel
-    while (bytes.remaining > 0) {
-      channel.write(bytes)
+    Utils.tryWithSafeFinally {
+      while (bytes.remaining > 0) {
+        channel.write(bytes)
+      }
+    } {
+      channel.close()
     }
-    channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
@@ -73,7 +77,21 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
-    blockManager.dataSerializeStream(blockId, outputStream, values)
+    try {
+      Utils.tryWithSafeFinally {
+        blockManager.dataSerializeStream(blockId, outputStream, values)
+      } {
+        // Close outputStream here because it should be closed before file is deleted.
+        outputStream.close()
+      }
+    } catch {
+      case e: Throwable =>
+        if (file.exists()) {
+          file.delete()
+        }
+        throw e
+    }
+
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime
@@ -91,18 +109,23 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
-
-    try {
+    Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map
       if (length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(length.toInt)
-        channel.read(buf, offset)
+        channel.position(offset)
+        while (buf.remaining() != 0) {
+          if (channel.read(buf) == -1) {
+            throw new IOException("Reached EOF before filling buffer\n" +
+              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
+          }
+        }
         buf.flip()
         Some(buf)
       } else {
         Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
-    } finally {
+    } {
       channel.close()
     }
   }

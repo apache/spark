@@ -6,7 +6,7 @@ ALTER TABLE authorization_part SET TBLPROPERTIES ("PARTITION_LEVEL_PRIVILEGE"="T
 set hive.security.authorization.enabled=true;
 
 -- column grant to user
-grant Create on table authorization_part to user hive_test_user;
+grant Create on  authorization_part to user hive_test_user;
 grant Update on table authorization_part to user hive_test_user;
 grant Drop on table authorization_part to user hive_test_user;
 grant select on table src_auth_tmp to user hive_test_user;

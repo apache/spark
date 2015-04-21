@@ -22,7 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+
+import scala.util.Random
 
 class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
@@ -125,6 +126,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
@@ -150,6 +152,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling, bypass merge-sort") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
@@ -550,10 +553,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: String) = ArrayBuffer[String](i)
-    def mergeValue(buffer: ArrayBuffer[String], i: String) = buffer += i
-    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String]) =
-      buffer1 ++= buffer2
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
+    def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
+    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String])
+      : ArrayBuffer[String] = buffer1 ++= buffer2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner _, mergeValue _, mergeCombiners _)
@@ -630,14 +633,17 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: Int) = ArrayBuffer[Int](i)
-    def mergeValue(buffer: ArrayBuffer[Int], i: Int) = buffer += i
-    def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]) = buf1 ++= buf2
+    def createCombiner(i: Int): ArrayBuffer[Int] = ArrayBuffer[Int](i)
+    def mergeValue(buffer: ArrayBuffer[Int], i: Int): ArrayBuffer[Int] = buffer += i
+    def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]): ArrayBuffer[Int] = {
+      buf1 ++= buf2
+    }
 
     val agg = new Aggregator[Int, Int, ArrayBuffer[Int]](createCombiner, mergeValue, mergeCombiners)
     val sorter = new ExternalSorter[Int, Int, ArrayBuffer[Int]](Some(agg), None, None, None)
 
-    sorter.insertAll((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
+    sorter.insertAll(
+      (1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
 
     val it = sorter.iterator
     while (it.hasNext) {
@@ -651,9 +657,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    def createCombiner(i: String) = ArrayBuffer[String](i)
-    def mergeValue(buffer: ArrayBuffer[String], i: String) = buffer += i
-    def mergeCombiners(buf1: ArrayBuffer[String], buf2: ArrayBuffer[String]) = buf1 ++= buf2
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
+    def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
+    def mergeCombiners(buf1: ArrayBuffer[String], buf2: ArrayBuffer[String]): ArrayBuffer[String] =
+      buf1 ++= buf2
 
     val agg = new Aggregator[String, String, ArrayBuffer[String]](
       createCombiner, mergeValue, mergeCombiners)
@@ -707,4 +714,58 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       Some(agg), Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
     assertDidNotBypassMergeSort(sorter4)
   }
+
+  test("sort without breaking sorting contracts") {
+    val conf = createSparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.01")
+    conf.set("spark.shuffle.manager", "sort")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    // Using wrongOrdering to show integer overflow introduced exception.
+    val rand = new Random(100L)
+    val wrongOrdering = new Ordering[String] {
+      override def compare(a: String, b: String): Int = {
+        val h1 = if (a == null) 0 else a.hashCode()
+        val h2 = if (b == null) 0 else b.hashCode()
+        h1 - h2
+      }
+    }
+
+    val testData = Array.tabulate(100000) { _ => rand.nextInt().toString }
+
+    val sorter1 = new ExternalSorter[String, String, String](
+      None, None, Some(wrongOrdering), None)
+    val thrown = intercept[IllegalArgumentException] {
+      sorter1.insertAll(testData.iterator.map(i => (i, i)))
+      sorter1.iterator
+    }
+
+    assert(thrown.getClass() === classOf[IllegalArgumentException])
+    assert(thrown.getMessage().contains("Comparison method violates its general contract"))
+    sorter1.stop()
+
+    // Using aggregation and external spill to make sure ExternalSorter using
+    // partitionKeyComparator.
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer(i)
+    def mergeValue(c: ArrayBuffer[String], i: String): ArrayBuffer[String] = c += i
+    def mergeCombiners(c1: ArrayBuffer[String], c2: ArrayBuffer[String]): ArrayBuffer[String] =
+      c1 ++= c2
+
+    val agg = new Aggregator[String, String, ArrayBuffer[String]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    val sorter2 = new ExternalSorter[String, String, ArrayBuffer[String]](
+      Some(agg), None, None, None)
+    sorter2.insertAll(testData.iterator.map(i => (i, i)))
+
+    // To validate the hash ordering of key
+    var minKey = Int.MinValue
+    sorter2.iterator.foreach { case (k, v) =>
+      val h = k.hashCode()
+      assert(h >= minKey)
+      minKey = h
+    }
+
+    sorter2.stop()
+ }
 }

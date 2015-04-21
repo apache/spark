@@ -8,9 +8,9 @@ drop table gl_src_part1;
 
 
 create table gl_src1 (key int, value string) stored as textfile;
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src1;
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src1;
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src1;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src1;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src1;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src1;
 
 
 
@@ -49,10 +49,10 @@ select key from gl_src2 ORDER BY key ASC limit 10;
 
 -- partition
 create table gl_src_part1 (key int, value string) partitioned by (p string) stored as textfile;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE gl_src_part1 partition(p='11');
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE gl_src_part1 partition(p='11');
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE gl_src_part1 partition(p='12');
 
 select key from gl_src_part1 where p like '1%' ORDER BY key ASC limit 10;
 select key from gl_src_part1 where p='11' ORDER BY key ASC limit 10;

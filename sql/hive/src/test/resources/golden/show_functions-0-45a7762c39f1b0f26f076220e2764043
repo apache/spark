@@ -32,6 +32,7 @@ case
 ceil
 ceiling
 coalesce
+collect_list
 collect_set
 compute_stats
 concat
@@ -45,6 +46,7 @@ covar_pop
 covar_samp
 create_union
 cume_dist
+current_database
 date_add
 date_sub
 datediff
@@ -123,6 +125,7 @@ percentile
 percentile_approx
 pi
 pmod
+posexplode
 positive
 pow
 power

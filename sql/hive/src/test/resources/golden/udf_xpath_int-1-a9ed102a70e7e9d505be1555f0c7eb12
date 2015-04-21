@@ -1,0 +1,1 @@
+xpath_int(xml, xpath) - Returns an integer value that matches the xpath expression

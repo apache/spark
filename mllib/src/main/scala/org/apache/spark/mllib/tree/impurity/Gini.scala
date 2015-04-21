@@ -67,7 +67,7 @@ object Gini extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
-  def instance = this
+  def instance: this.type = this
 
 }
 
@@ -85,12 +85,16 @@ private[tree] class GiniAggregator(numClasses: Int)
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double): Unit = {
+  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
     if (label >= statsSize) {
       throw new IllegalArgumentException(s"GiniAggregator given label $label" +
         s" but requires label < numClasses (= $statsSize).")
     }
-    allStats(offset + label.toInt) += 1
+    if (label < 0) {
+      throw new IllegalArgumentException(s"GiniAggregator given label $label" +
+        s"but requires label is non-negative.")
+    }
+    allStats(offset + label.toInt) += instanceWeight
   }
 
   /**
@@ -143,6 +147,7 @@ private[tree] class GiniCalculator(stats: Array[Double]) extends ImpurityCalcula
     val lbl = label.toInt
     require(lbl < stats.length,
       s"GiniCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
+    require(lbl >= 0, "GiniImpurity does not support negative labels")
     val cnt = count
     if (cnt == 0) {
       0
