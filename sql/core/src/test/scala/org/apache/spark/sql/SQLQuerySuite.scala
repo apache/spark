@@ -174,7 +174,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
         case _ =>
       }
-      if (!hasGeneratedAgg) {
+      if (!hasGeneratedAgg && conf.aggregate2 == false) {
         fail(
           s"""
              |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
