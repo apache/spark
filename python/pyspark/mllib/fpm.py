@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+import numpy
+from numpy import array
+
 from pyspark import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
@@ -35,15 +38,15 @@ class FPGrowthModel(JavaModelWrapper):
     >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = FPGrowth.train(rdd, 0.6, 2)
-    >>> sorted(model.freqItemsets().collect())
-    [([u'a'], 4), ([u'c'], 3), ([u'c', u'a'], 3)]
+    >>> model.freqItemsets().collect()
+    [(array([u'a'], ...), 4), (array([u'c'], ...), 3), (array([u'c', u'a'], ...), 3)]
     """
 
     def freqItemsets(self):
         """
         Get the frequent itemsets of this model
         """
-        return self.call("getFreqItemsets")
+        return self.call("getFreqItemsets").map(lambda x: (numpy.array(x[0]), x[1]))
 
 
 class FPGrowth(object):
