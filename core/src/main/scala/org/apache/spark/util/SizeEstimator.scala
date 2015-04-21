@@ -204,8 +204,8 @@ private[spark] object SizeEstimator extends Logging {
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
-        var s1 = 0l
-        var s2 = 0l
+        var s1 = 0L
+        var s2 = 0L
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](2*ARRAY_SAMPLE_SIZE)
         for (i <- 0 until ARRAY_SAMPLE_SIZE) {
@@ -233,7 +233,8 @@ private[spark] object SizeEstimator extends Logging {
         }
 
         val size = math.min(s1, s2)
-        state.size += math.max(s1, s2) + (size * (length / (ARRAY_SAMPLE_SIZE))).toLong      }
+        state.size += math.max(s1, s2) + (size * (length / (ARRAY_SAMPLE_SIZE))).toLong
+      }
     }
   }
 
