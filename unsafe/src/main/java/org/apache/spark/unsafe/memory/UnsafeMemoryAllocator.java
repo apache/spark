@@ -27,7 +27,6 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
     long address = PlatformDependent.UNSAFE.allocateMemory(size);
-    PlatformDependent.UNSAFE.setMemory(address, size, (byte) 0);
     return new MemoryBlock(null, address, size);
   }
 

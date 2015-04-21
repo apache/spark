@@ -41,6 +41,14 @@ public class MemoryBlock extends MemoryLocation {
   }
 
   /**
+   * Clear the contents of this memory block.  Returns `this` to facilitate chaining.
+   */
+  public MemoryBlock zero() {
+    PlatformDependent.UNSAFE.setMemory(obj, offset, length, (byte) 0);
+    return this;
+  }
+
+  /**
    * Creates a memory block pointing to the memory used by the byte array.
    */
   public static MemoryBlock fromByteArray(final byte[] array) {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
@@ -24,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
@@ -295,8 +296,7 @@ case class UnsafeGeneratedAggregate(
           // Zero out the buffer that's used to hold the current row. This is necessary in order
           // to ensure that rows hash properly, since garbage data from the previous row could
           // otherwise end up as padding in this row.
-          ByteArrayMethods.zeroBytes(
-            unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET, unsafeRowBuffer.length)
+          util.Arrays.fill(unsafeRowBuffer, 0)
           // Grab the next row from our input iterator and compute its group projection.
           // In the long run, it might be nice to use Unsafe rows for this as well, but for now
           // we'll just rely on the existing code paths to compute the projection.

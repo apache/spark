@@ -22,10 +22,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.HeapMemoryAllocator;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
-import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.unsafe.memory.*;
 
 import java.lang.IllegalStateException;
 import java.lang.Long;
@@ -452,7 +449,7 @@ public final class BytesToBytesMap {
   private void allocate(long capacity) {
     capacity = java.lang.Math.max(nextPowerOf2(capacity), 64);
     longArray = new LongArray(allocator.allocate(capacity * 8 * 2));
-    bitset = new BitSet(allocator.allocate(capacity / 8));
+    bitset = new BitSet(allocator.allocate(capacity / 8).zero());
 
     this.growthThreshold = (long) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -524,6 +521,9 @@ public final class BytesToBytesMap {
         }
       }
     }
+
+    // TODO: we should probably have a try-finally block here to make sure that we free the allocated
+    // memory even if an error occurs.
 
     // Deallocate the old data structures.
     allocator.free(oldLongArray.memoryBlock());

@@ -40,15 +40,6 @@ public class ByteArrayMethods {
     }
   }
 
-  public static void zeroBytes(
-      Object baseObject,
-      long baseOffset,
-      long lengthInBytes) {
-    for (int i = 0; i < lengthInBytes; i++) {
-      PlatformDependent.UNSAFE.putByte(baseObject, baseOffset + i, (byte) 0);
-    }
-  }
-
   /**
    * Optimized  equality check for equal-length byte arrays.
    * @return true if the arrays are equal, false otherwise
