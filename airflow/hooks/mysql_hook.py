@@ -64,6 +64,8 @@ class MySqlHook(BaseHook):
         if target_fields:
             target_fields = ", ".join(target_fields)
             target_fields = "({})".format(target_fields)
+        else:
+            target_fields = ''
         conn = self.get_conn()
         cur = conn.cursor()
         for row in rows:
