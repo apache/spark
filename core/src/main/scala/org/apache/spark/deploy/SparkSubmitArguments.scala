@@ -61,7 +61,16 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var pyFiles: String = null
   var isR: Boolean = false
   var action: SparkSubmitAction = null
-  val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+  val sparkProperties: HashMap[String, String] = new HashMap[String, String]() {
+    override def put(k: String, v: String): Option[String] = {
+      if (k.startsWith("spark.")) {
+        super.put(k, v)
+      } else {
+        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
+        Option[String](null)
+      }
+    }
+  }
   var proxyUser: String = null
 
   // Standalone cluster mode only
@@ -77,12 +86,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
       Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
-        if (k.startsWith("spark.")) {
-          defaultProperties(k) = v
-          if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        } else {
-          SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
-        }
+        defaultProperties(k) = v
+        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
       }
     }
     defaultProperties
