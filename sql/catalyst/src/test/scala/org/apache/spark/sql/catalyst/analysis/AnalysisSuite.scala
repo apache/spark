@@ -90,7 +90,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
 
     assert(!Project(Seq(UnresolvedAttribute("a")), testRelation).resolved)
 
-    val explode = Explode(Nil, AttributeReference("a", IntegerType, nullable = true)())
+    val explode = Explode(AttributeReference("a", IntegerType, nullable = true)())
     assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
 
     assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
