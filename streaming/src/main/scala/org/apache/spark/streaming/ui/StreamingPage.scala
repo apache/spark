@@ -356,7 +356,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       if (msg.size > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime =
-      listener.receiverLastErrorTimeo(receiverId).map(UIUtils.formatDate).getOrElse(emptyCell)
+      listener.receiverLastErrorTime(receiverId).map(UIUtils.formatDate).getOrElse(emptyCell)
     val receivedRecords = listener.receivedRecordsWithBatchTime.get(receiverId).getOrElse(Seq())
 
     val timelineForEventRate =

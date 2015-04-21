@@ -169,17 +169,6 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }.toMap
   }
 
-
-  /**
-   * Return event rate for all receivers together in each batch time. These are pairs of
-   * an event rate with a batch time.
-   */
-  def eventRateForAllReceivers: Seq[(Long, Double)] = synchronized {
-    retainedBatches.take(batchInfoLimit).map { batchInfo =>
-      (batchInfo.batchTime.milliseconds, batchInfo.numRecords.toDouble * 1000 / batchDuration)
-    }
-  }
-
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
@@ -195,7 +184,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     receiverInfos.get(receiverId)
   }
 
-  def receiverLastErrorTimeo(receiverId: Int): Option[Long] = synchronized {
+  def receiverLastErrorTime(receiverId: Int): Option[Long] = synchronized {
     receiverLastErrorTime.get(receiverId)
   }
 
