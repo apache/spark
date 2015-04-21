@@ -55,7 +55,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
-      ref.sendWithReply[RegisteredExecutor.type](
+      ref.sendWithReply[RegisteredExecutor](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
     } onComplete {
       case Success(msg) => Utils.tryLogNonFatalError {
@@ -72,17 +72,17 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredExecutor =>
+    case RegisteredExecutor(tokens) =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
-
-    case NewTokens(tokens) =>
-      val inStream = new DataInputStream(new ByteArrayInputStream(tokens.value.array()))
-      val creds = new Credentials()
-      creds.readFields(inStream)
-      inStream.close()
-      UserGroupInformation.getCurrentUser.addCredentials(creds)
+      tokens.foreach { tokenBuffer =>
+        val inStream = new DataInputStream(new ByteArrayInputStream(tokenBuffer.value.array()))
+        val creds = new Credentials()
+        creds.readFields(inStream)
+        inStream.close()
+        UserGroupInformation.getCurrentUser.addCredentials(creds)
+      }
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)

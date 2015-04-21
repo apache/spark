@@ -29,7 +29,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
-import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 

@@ -78,13 +78,14 @@ private[yarn] class AMDelegationTokenRenewer(
       val credentials = UserGroupInformation.getCurrentUser.getCredentials
       val interval = (0.75 * (hadoopUtil.getLatestTokenValidity(credentials) -
         System.currentTimeMillis())).toLong
-      // If only 6 hours left, then force a renewal immediately. This is to avoid tokens with
-      // very less validity being used on AM restart.
-      if ((interval millis).toHours <= 6) {
-        0L
-      } else {
-        interval
-      }
+//      // If only 6 hours left, then force a renewal immediately. This is to avoid tokens with
+//      // very less validity being used on AM restart.
+//      if ((interval millis).toHours <= 6) {
+//        0L
+//      } else {
+//        interval
+//      }
+      interval
     }
 
     def scheduleRenewal(runnable: Runnable): Unit = {
