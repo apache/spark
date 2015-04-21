@@ -17,29 +17,28 @@
 
 package test.org.apache.spark.sql;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.Ints;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.TestData$;
+import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.test.TestSQLContext$;
+import org.apache.spark.sql.types.*;
+import org.junit.*;
+
+import scala.collection.JavaConversions;
+import scala.collection.Seq;
+import scala.collection.mutable.Buffer;
+
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-
-import com.google.common.collect.ImmutableMap;
-import com.google.common.primitives.Ints;
-import scala.collection.JavaConversions;
-import scala.collection.Seq;
-
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSQLContext;
-import org.apache.spark.sql.test.TestSQLContext$;
-import org.apache.spark.sql.types.*;
-import scala.collection.mutable.Buffer;
 
 import static org.apache.spark.sql.functions.*;
 
