@@ -33,7 +33,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{SparkHadoopWriter, SerializableWritable, Logging}
+import org.apache.spark.{SparkContext, SparkHadoopWriter, SerializableWritable, Logging}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive._
@@ -117,7 +117,7 @@ case class OrcRelation
   with HiveInspectors
   with Logging {
 
-  def sparkContext = sqlContext.sparkContext
+  def sparkContext: SparkContext = sqlContext.sparkContext
 
   // todo: Should calculate per scan size
   override val sizeInBytes = {

@@ -176,7 +176,11 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
   }
 
   test("overwrite insert") {
-    sql("insert overwrite table normal_orc_as_source select * from orc_temp_table where intField > 5")
+    sql(
+      """
+        |insert overwrite table normal_orc_as_source
+        |select * from orc_temp_table where intField > 5
+      """.stripMargin)
     checkAnswer(
       sql("select * from normal_orc_as_source"),
       Row(6, "part-6") ::
