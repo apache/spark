@@ -21,7 +21,7 @@ import java.io.File
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, Executors, TimeUnit}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -60,8 +60,6 @@ private[spark] class Executor(
 
   private val conf = env.conf
 
-  @volatile private var isStopped = false
-
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
@@ -91,10 +89,7 @@ private[spark] class Executor(
     ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst: Boolean = {
-    conf.getBoolean("spark.executor.userClassPathFirst",
-      conf.getBoolean("spark.files.userClassPathFirst", false))
-  }
+  private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -113,6 +108,10 @@ private[spark] class Executor(
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
+
+  // Executor for the heartbeat task.
+  private val heartbeater = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("driver-heartbeater"))
 
   startDriverHeartbeater()
 
@@ -138,7 +137,8 @@ private[spark] class Executor(
   def stop(): Unit = {
     env.metricsSystem.report()
     env.rpcEnv.stop(executorEndpoint)
-    isStopped = true
+    heartbeater.shutdown()
+    heartbeater.awaitTermination(10, TimeUnit.SECONDS)
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
@@ -432,23 +432,17 @@ private[spark] class Executor(
   }
 
   /**
-   * Starts a thread to report heartbeat and partial metrics for active tasks to driver.
-   * This thread stops running when the executor is stopped.
+   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
    */
   private def startDriverHeartbeater(): Unit = {
     val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
-    val thread = new Thread() {
-      override def run() {
-        // Sleep a random interval so the heartbeats don't end up in sync
-        Thread.sleep(intervalMs + (math.random * intervalMs).asInstanceOf[Int])
-        while (!isStopped) {
-          reportHeartBeat()
-          Thread.sleep(intervalMs)
-        }
-      }
+
+    // Wait a random interval so the heartbeats don't end up in sync
+    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
+
+    val heartbeatTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
     }
-    thread.setDaemon(true)
-    thread.setName("driver-heartbeater")
-    thread.start()
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }

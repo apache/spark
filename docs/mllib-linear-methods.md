@@ -377,7 +377,7 @@ references.
 Here is an
 [detailed mathematical derivation](http://www.slideshare.net/dbtsai/2014-0620-mlor-36132297).
 
-For multiclass classification problems, the algorithm will outputs a multinomial logistic regression
+For multiclass classification problems, the algorithm will output a multinomial logistic regression
 model, which contains $K - 1$ binary logistic regression models regressed against the first class.
 Given a new data points, $K - 1$ models will be run, and the class with largest probability will be
 chosen as the predicted class.

@@ -30,7 +30,22 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
-private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
+private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
+  
+  /**
+   * False by default. Centers the data with mean before scaling. 
+   * It will build a dense output, so this does not work on sparse input 
+   * and will raise an exception.
+   * @group param
+   */
+  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
+  
+  /**
+   * True by default. Scales the data to unit standard deviation.
+   * @group param
+   */
+  val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
+}
 
 /**
  * :: AlphaComponent ::
@@ -40,18 +55,27 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  setDefault(withMean -> false, withStd -> true)
+  
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
+  
+  /** @group setParam */
+  def setWithMean(value: Boolean): this.type = set(withMean, value)
+  
+  /** @group setParam */
+  def setWithStd(value: Boolean): this.type = set(withStd, value)
+  
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val scaler = new feature.StandardScaler().fit(input)
-    val model = new StandardScalerModel(this, map, scaler)
+    val scaler = new feature.StandardScaler(withMean = map(withMean), withStd = map(withStd))
+    val scalerModel = scaler.fit(input)
+    val model = new StandardScalerModel(this, map, scalerModel)
     Params.inheritValues(map, this, model)
     model
   }

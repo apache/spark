@@ -228,7 +228,7 @@ class VectorIndexerSuite extends FunSuite with MLlibTestSparkContext {
     }
     val attrGroup = new AttributeGroup("features", featureAttributes)
     val densePoints1WithMeta =
-      densePoints1.select(densePoints1("features").as("features", attrGroup.toMetadata))
+      densePoints1.select(densePoints1("features").as("features", attrGroup.toMetadata()))
     val vectorIndexer = getIndexer.setMaxCategories(2)
     val model = vectorIndexer.fit(densePoints1WithMeta)
     // Check that ML metadata are preserved.
