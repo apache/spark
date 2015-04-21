@@ -252,7 +252,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val extBlkFolderName = "spark-" + randomUUID.toString()
   @deprecated("Use extBlkFolderName instead.", "1.4.0")
   val tachyonFolderName = extBlkFolderName
-  conf.set("spark.extBlkStore.folderName", extBlkFolderName)
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
@@ -389,7 +388,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    _conf.set("spark.tachyonStore.folderName", tachyonFolderName)
+    _conf.set("spark.extBlkStore.folderName", extBlkFolderName)
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
