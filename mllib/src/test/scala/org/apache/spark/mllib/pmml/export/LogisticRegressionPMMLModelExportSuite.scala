@@ -23,13 +23,13 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class LogisticRegressionPMMLModelExportSuite extends FunSuite{
+class LogisticRegressionPMMLModelExportSuite extends FunSuite {
 
   test("LogisticRegressionPMMLModelExport generate PMML format") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val logisticRegressionModel =
       new LogisticRegressionModel(linearInput(0).features, linearInput(0).label)
-    
+
     val logisticModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
 
     // assert that the PMML format is as expected
@@ -48,5 +48,5 @@ class LogisticRegressionPMMLModelExportSuite extends FunSuite{
     // verify if there is a second table with target category 0 and no predictors
     assert(pmmlRegressionModel.getRegressionTables.get(1).getTargetCategory === "0")
     assert(pmmlRegressionModel.getRegressionTables.get(1).getNumericPredictors.size === 0)
-   }
+  }
 }

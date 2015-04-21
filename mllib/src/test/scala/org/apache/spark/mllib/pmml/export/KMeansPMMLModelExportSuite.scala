@@ -26,15 +26,14 @@ import org.apache.spark.mllib.linalg.Vectors
 class KMeansPMMLModelExportSuite extends FunSuite {
 
   test("KMeansPMMLModelExport generate PMML format") {
-    // arrange model to test
     val clusterCenters = Array(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0))
     val kmeansModel = new KMeansModel(clusterCenters)
-    
+
     val modelExport = PMMLModelExportFactory.createPMMLModelExport(kmeansModel)
-    
+
     // assert that the PMML format is as expected
     assert(modelExport.isInstanceOf[PMMLModelExport])
     val pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml

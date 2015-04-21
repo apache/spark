@@ -17,9 +17,7 @@
 
 package org.apache.spark.mllib.pmml
 
-import java.io.File
-import java.io.OutputStream
-import java.io.StringWriter
+import java.io.{File, OutputStream, StringWriter}
 import javax.xml.transform.stream.StreamResult
 
 import org.jpmml.model.JAXBUtil
@@ -33,7 +31,7 @@ import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
  * developed by the Data Mining Group (www.dmg.org).
  */
 trait PMMLExportable {
-  
+
   /**
    * Export the model to the stream result in PMML format
    */
@@ -41,14 +39,14 @@ trait PMMLExportable {
     val pmmlModelExport = PMMLModelExportFactory.createPMMLModelExport(this)
     JAXBUtil.marshalPMML(pmmlModelExport.getPmml, streamResult)
   }
-  
+
   /**
    * Export the model to a local file in PMML format
    */
   def toPMML(localPath: String): Unit = {
     toPMML(new StreamResult(new File(localPath)))
   }
-  
+
   /**
    * Export the model to a directory on a distributed file system in PMML format
    */
@@ -56,14 +54,14 @@ trait PMMLExportable {
     val pmml = toPMML()
     sc.parallelize(Array(pmml), 1).saveAsTextFile(path)
   }
-  
+
   /**
    * Export the model to the OutputStream in PMML format
    */
   def toPMML(outputStream: OutputStream): Unit = {
     toPMML(new StreamResult(outputStream))
   }
-  
+
   /**
    * Export the model to a String in PMML format
    */
@@ -72,5 +70,5 @@ trait PMMLExportable {
     toPMML(new StreamResult(writer))
     writer.toString
   }
-  
+
 }

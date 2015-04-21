@@ -29,7 +29,7 @@ import org.apache.spark.mllib.classification.LogisticRegressionModel
 private[mllib] class LogisticRegressionPMMLModelExport(
     model : LogisticRegressionModel, 
     description : String) 
-  extends PMMLModelExport{
+  extends PMMLModelExport {
 
   populateLogisticRegressionPMML(model)
 
