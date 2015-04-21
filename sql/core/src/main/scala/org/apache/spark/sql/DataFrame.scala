@@ -158,7 +158,7 @@ class DataFrame private[sql](
   }
 
   protected[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
+    queryExecution.analyzed.resolve(colName.split("\\."), sqlContext.analyzer.resolver).getOrElse {
       throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
@@ -166,7 +166,7 @@ class DataFrame private[sql](
 
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolve(n.name.split("\\."), sqlContext.analyzer.resolver).get
     }
   }
 
@@ -747,7 +747,19 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] by adding a column.
    * @group dfops
    */
-  def withColumn(colName: String, col: Column): DataFrame = select(Column("*"), col.as(colName))
+  def withColumn(colName: String, col: Column): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName) else Column(name)
+      }
+      select(colNames :_*)
+    } else {
+      select(Column("*"), col.as(colName))
+    }
+  }
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.
@@ -906,6 +918,20 @@ class DataFrame private[sql](
     sqlContext.createDataFrame(
       queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
       schema, needsConversion = false)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   * @group rdd
+   */
+  override def coalesce(numPartitions: Int): DataFrame = {
+    sqlContext.createDataFrame(
+      queryExecution.toRdd.coalesce(numPartitions),
+      schema,
+      needsConversion = false)
   }
 
   /**

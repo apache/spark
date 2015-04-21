@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkException, SecurityManager, SparkConf}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
@@ -38,7 +38,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
-  private[spark] val defaultLookupTimeout = AkkaUtils.lookupTimeout(conf)
+  private[spark] val defaultLookupTimeout = RpcUtils.lookupTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
@@ -258,7 +258,7 @@ private[spark] trait RpcEndpoint {
   final def stop(): Unit = {
     val _self = self
     if (_self != null) {
-      rpcEnv.stop(self)
+      rpcEnv.stop(_self)
     }
   }
 }
@@ -282,9 +282,9 @@ trait ThreadSafeRpcEndpoint extends RpcEndpoint
 private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   extends Serializable with Logging {
 
-  private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
-  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
-  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
+  private[this] val maxRetries = RpcUtils.numRetries(conf)
+  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
+  private[this] val defaultAskTimeout = RpcUtils.askTimeout(conf)
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -304,7 +304,8 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    *
    * This method only sends the message once and never retries.
    */
-  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
+  def sendWithReply[T: ClassTag](message: Any): Future[T] =
+    sendWithReply(message, defaultAskTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
@@ -327,7 +328,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
+  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultAskTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a

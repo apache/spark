@@ -20,11 +20,10 @@ Logistic regression using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
 
-from math import exp
 import sys
 
-import numpy as np
 from pyspark import SparkContext
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithSGD
@@ -42,12 +41,12 @@ def parsePoint(line):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
+        print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
         exit(-1)
     sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).map(parsePoint)
     iterations = int(sys.argv[2])
     model = LogisticRegressionWithSGD.train(points, iterations)
-    print "Final weights: " + str(model.weights)
-    print "Final intercept: " + str(model.intercept)
+    print("Final weights: " + str(model.weights))
+    print("Final intercept: " + str(model.intercept))
     sc.stop()

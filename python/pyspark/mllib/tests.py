@@ -72,11 +72,11 @@ class VectorTests(PySparkTestCase):
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
+        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
         jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(str(self.sc._jvm.SerDe.dumps(jvecs)))
+        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):
@@ -135,8 +135,10 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(sv[-1], 2)
         self.assertEquals(sv[-2], 0)
         self.assertEquals(sv[-4], 0)
-        for ind in [4, -5, 7.8]:
+        for ind in [4, -5]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
+        for ind in [7.8, '1']:
+            self.assertRaises(TypeError, sv.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -192,6 +194,22 @@ class VectorTests(PySparkTestCase):
             for j in range(4):
                 self.assertEquals(expected[i][j], sm1t[i, j])
         self.assertTrue(array_equal(sm1t.toArray(), expected))
+
+    def test_dense_matrix_is_transposed(self):
+        mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
+        mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
+        self.assertEquals(mat1, mat)
+
+        expected = [[0, 4], [1, 6], [3, 9]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat1[i, j], expected[i][j])
+        self.assertTrue(array_equal(mat1.toArray(), expected))
+
+        sm = mat1.toSparse()
+        self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
+        self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
+        self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
 
 class ListTests(PySparkTestCase):
@@ -412,11 +430,11 @@ class StatTests(PySparkTestCase):
         self.assertEqual(10, len(summary.normL1()))
         self.assertEqual(10, len(summary.normL2()))
 
-        data2 = self.sc.parallelize(xrange(10)).map(lambda x: Vectors.dense(x))
+        data2 = self.sc.parallelize(range(10)).map(lambda x: Vectors.dense(x))
         summary2 = Statistics.colStats(data2)
         self.assertEqual(array([45.0]), summary2.normL1())
         import math
-        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, xrange(10))))
+        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, range(10))))
         self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
 
 
@@ -438,11 +456,11 @@ class VectorUDTTests(PySparkTestCase):
     def test_infer_schema(self):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
-        srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema
+        df = rdd.toDF()
+        schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = srdd.map(lambda p: p.features).collect()
+        vectors = df.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -450,7 +468,7 @@ class VectorUDTTests(PySparkTestCase):
             elif isinstance(v, DenseVector):
                 self.assertEqual(v, self.dv1)
             else:
-                raise ValueError("expecting a vector but got %r of type %r" % (v, type(v)))
+                raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
@@ -695,7 +713,7 @@ class ChiSqTestTests(PySparkTestCase):
 
 class SerDeTest(PySparkTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
-        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0L)
+        data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
         self.assertEqual(_to_java_object_rdd(data).count(), 10)
 
 
@@ -771,7 +789,7 @@ class StandardScalerTests(PySparkTestCase):
 
 if __name__ == "__main__":
     if not _have_scipy:
-        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     unittest.main()
     if not _have_scipy:
-        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")

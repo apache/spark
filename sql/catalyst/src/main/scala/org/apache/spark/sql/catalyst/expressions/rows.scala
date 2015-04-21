@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{UTF8String, StructType, NativeType}
-
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, NativeType}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -238,4 +237,11 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     }
     return 0
   }
+}
+
+object RowOrdering {
+  def forSchema(dataTypes: Seq[DataType]): RowOrdering =
+    new RowOrdering(dataTypes.zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
 }
