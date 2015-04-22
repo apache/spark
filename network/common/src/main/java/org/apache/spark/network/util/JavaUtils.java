@@ -210,7 +210,7 @@ public class JavaUtils {
 
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      Matcher fractionMatcher = Pattern.compile("([0-9]*\\.[0-9]*)([a-z]+)?").matcher(lower);
+      Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);
       
       if (m.matches()) {
         long val = Long.parseLong(m.group(1));
@@ -224,9 +224,8 @@ public class JavaUtils {
         // If suffix is valid use that, otherwise none was provided and use the default passed
         return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
       } else if (fractionMatcher.matches()) {
-        double val = Double.parseDouble(fractionMatcher.group(1));
-
-        throw new NumberFormatException("Fractional values are not supported. Input was: " + val);
+        throw new NumberFormatException("Fractional values are not supported. Input was: " 
+          + fractionMatcher.group(1);
       } else {
         throw new NumberFormatException("Failed to parse byte string: " + str);  
       }
