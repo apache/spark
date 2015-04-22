@@ -975,9 +975,11 @@ class DAGScheduler(
    * of failures. 
    * @return An Option that contains the failure reason that caused the abort
    */
+  private[scheduler] 
   def shouldAbortStage(failedStage: Stage, failureReason: String): Option[String] = {
-    if (!stageFailureReasons.contains(failedStage))
+    if (!stageFailureReasons.contains(failedStage)) {
       stageFailureReasons.put(failedStage, new HashSet[StageFailure]())
+    }
     
     val failures = stageFailureReasons.get(failedStage).get
     val failure = StageFailure(failureReason)
