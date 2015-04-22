@@ -15,10 +15,14 @@ from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.cache import Cache
 from flask import request
 import sqlalchemy as sqla
-from wtforms import Form, DateTimeField, SelectField, TextAreaField
+from wtforms import (
+    widgets,
+    Form, DateTimeField, SelectField, TextAreaField, PasswordField)
 
 from pygments import highlight
-from pygments.lexers import PythonLexer, SqlLexer, BashLexer, IniLexer
+from pygments.lexers import (
+    PythonLexer, SqlLexer, BashLexer,
+    IniLexer, YamlLexer, JsonLexer, TextLexer)
 from pygments.formatters import HtmlFormatter
 
 import jinja2
@@ -45,6 +49,14 @@ from functools import wraps
 AUTHENTICATE = conf.getboolean('master', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
+
+
+class VisiblePasswordInput(widgets.PasswordInput):
+    def __init__(self, hide_value=False):
+        self.hide_value = hide_value
+class VisiblePasswordField(PasswordField):
+    widget = VisiblePasswordInput()
+
 
 
 def superuser_required(f):
@@ -86,6 +98,9 @@ CHART_LIMIT = 200000
 special_attrs = {
     'sql': SqlLexer,
     'hql': SqlLexer,
+    'doc_yaml': YamlLexer,
+    'doc_json': JsonLexer,
+    'doc': TextLexer,
     'bash_command': BashLexer,
 }
 
@@ -1105,7 +1120,10 @@ class Airflow(BaseView):
 
         form = DateTimeForm(data={'execution_date': dttm})
 
-        tis = dag.get_task_instances(session, dttm, dttm)
+        tis = [
+            ti
+            for ti in dag.get_task_instances(session, dttm, dttm)
+            if ti.start_date]
         tis = sorted(tis, key=lambda ti: ti.start_date)
         tasks = []
         data = []
@@ -1347,9 +1365,11 @@ mv = TaskInstanceModelView(
 admin.add_view(mv)
 
 
+
 class ConnectionModelView(SuperUserMixin, ModelView):
     column_default_sort = ('conn_id', False)
     column_list = ('conn_id', 'conn_type', 'host', 'port')
+    form_overrides = dict(password=VisiblePasswordField)
     form_choices = {
         'conn_type': [
             ('ftp', 'FTP',),
