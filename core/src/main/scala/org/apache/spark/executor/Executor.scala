@@ -191,7 +191,6 @@ private[spark] class Executor(
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
-        val deserializeEndTime = System.currentTimeMillis()
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
