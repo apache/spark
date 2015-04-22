@@ -100,7 +100,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
   test("Remove the old completed batches when exceeding the limit") {
     val ssc = setupStreams(input, operation)
-    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
+    val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
     val listener = new StreamingJobProgressListener(ssc)
 
     val receivedBlockInfo = Map(
