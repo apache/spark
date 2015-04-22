@@ -58,6 +58,7 @@
       <artifactId>maven-shade-plugin</artifactId>
       <configuration>
         <shadedArtifactAttached>false</shadedArtifactAttached>
+        <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-streaming-kafka-assembly-${project.version}.jar</outputFile>
         <artifactSet>
           <includes>
             <include>*:*</include>
