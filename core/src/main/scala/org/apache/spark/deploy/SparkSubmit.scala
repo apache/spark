@@ -356,6 +356,21 @@ object SparkSubmit {
       }
     }
 
+    if (args.isPython && clusterManager == YARN) {
+      // Zip PySpark from ${SPARK_HOME}/python/pyspark to ${SPARK_HOME}/lib/pyspark.zip
+      // and ship to executors by Yarn.
+      for (sparkHome <- sys.env.get("SPARK_HOME")) {
+        val srcFile = new File(Seq(sparkHome, "python", "pyspark").mkString(File.separator))
+        val archives = new File(Seq(sparkHome, "lib", "pyspark.zip").mkString(File.separator))
+        if (archives.exists() || Utils.createZipArchives(archives, srcFile, "pyspark")) {
+          val py4jPath = Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip")
+            .mkString(File.separator)
+          args.files = mergeFileLists(args.files, Utils.resolveURIs(archives.getAbsolutePath),
+            py4jPath)
+        }
+      }
+    }
+
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
 

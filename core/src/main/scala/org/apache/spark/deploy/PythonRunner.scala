@@ -52,7 +52,6 @@ object PythonRunner {
     pathElements ++= formattedPyFiles
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
-    pathElements += sys.env.getOrElse("PYSPARK_ARCHIVES_PATH", "")
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process

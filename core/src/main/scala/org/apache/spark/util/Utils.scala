@@ -21,6 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
+import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import javax.net.ssl.HttpsURLConnection
@@ -2104,6 +2105,56 @@ private[spark] object Utils extends Logging {
   def getCurrentUserName(): String = {
     Option(System.getenv("SPARK_USER"))
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+  }
+
+  /**
+   * Create zip archives.
+   */
+  def createZipArchives(archives: File, srcFile: File, rootPath: String): Boolean = {
+    var flag = false
+    try {
+      val fileOutStream = new FileOutputStream(archives)
+      val buffOutStream = new BufferedOutputStream(fileOutStream)
+      val zipOutStream = new ZipOutputStream(buffOutStream)
+      flag = doZip(zipOutStream, rootPath, srcFile)
+      zipOutStream.close()
+      buffOutStream.close()
+      fileOutStream.close()
+
+    } catch {
+      case e: FileNotFoundException => logError("File to zip not found")
+    }
+    flag
+  }
+
+  private def doZip(zipOutStream: ZipOutputStream, curPath: String, file: File): Boolean = {
+    var flag = false
+    if (file.isDirectory) {
+      val files = file.listFiles()
+      if (files != null && files.length > 0) {
+        zipOutStream.putNextEntry(new ZipEntry(curPath + File.separator))
+        val nextPath = if (curPath.length == 0) "" else curPath + File.separator
+        for (subFile <- files) {
+          flag = doZip(zipOutStream, nextPath + subFile.getName, subFile)
+        }
+      }
+    } else {
+      zipOutStream.putNextEntry(new ZipEntry(curPath))
+      val fileInStream = new FileInputStream(file)
+      val buffInStream = new BufferedInputStream(fileInStream)
+      val bufSize = 8192
+      val buf = new Array[Byte](bufSize)
+      var len: Int = buffInStream.read(buf, 0, bufSize)
+      while (len != -1) {
+        zipOutStream.write(buf, 0, len)
+        len = buffInStream.read(buf, 0, bufSize)
+      }
+      zipOutStream.flush()
+      flag = true
+      buffInStream.close()
+      fileInStream.close()
+    }
+    flag
   }
 
 }
