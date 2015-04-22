@@ -19,26 +19,21 @@ package org.apache.spark.ml.feature
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseVector, SparseVector}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
 
 class IDFSuite extends FunSuite with MLlibTestSparkContext {
 
-  def getResultFromDF(result: DataFrame): Array[Vector] = {
-    result.select("idf_value").collect().map {
-      case Row(features: Vector) => features
-    }
+  @transient var sqlContext: SQLContext = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext = new SQLContext(sc)
   }
 
-  def assertValues(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
-    assert((lhs, rhs).zipped.forall { (vector1, vector2) =>
-      vector1 ~== vector2 absTol 1E-5
-    }, "The vector value is not correct after IDF.")
-  }
-
-  def getResultFromVector(dataSet: Array[Vector], model: Vector): Array[Vector] = {
+  def scaleDataWithIDF(dataSet: Array[Vector], model: Vector): Array[Vector] = {
     dataSet.map {
       case data: DenseVector =>
         val res = data.toArray.zip(model.toArray).map { case (x, y) => x * y }
@@ -51,7 +46,7 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("Normalization with default parameter") {
+  test("compute IDF with default parameter") {
     val numOfFeatures = 4
     val data = Array(
       Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
@@ -59,23 +54,25 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
     val numOfData = data.size
-
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-    val dataFrame = sc.parallelize(data, 2).map(Tuple1.apply).toDF("features")
-
-    val idfModel = new IDF().setInputCol("features").setOutputCol("idf_value").fit(dataFrame)
-
-    val expectedModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
+    val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       math.log((numOfData + 1.0) / (x + 1.0))
     })
+    val expected = scaleDataWithIDF(data, idf)
 
-    assertValues(
-      getResultFromDF(idfModel.transform(dataFrame)),
-      getResultFromVector(data, expectedModel))
+    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+
+    val idfModel = new IDF()
+      .setInputCol("features")
+      .setOutputCol("idfValue")
+      .fit(df)
+
+    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
+      case Row(x: Vector, y: Vector) =>
+        assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
+    }
   }
 
-  test("Normalization with setter") {
+  test("compute IDF with setter") {
     val numOfFeatures = 4
     val data = Array(
       Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
@@ -83,20 +80,22 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
     val numOfData = data.size
-
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-    val dataFrame = sc.parallelize(data, 2).map(Tuple1.apply).toDF("features")
-
-    val idfModel = new IDF().setInputCol("features").setOutputCol("idf_value").setMinDocFreq(1)
-      .fit(dataFrame)
-
-    val expectedModel = Vectors.dense(Array(0, 3, 1, 2).map { x =>
+    val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if (x > 0) math.log((numOfData + 1.0) / (x + 1.0)) else 0
     })
+    val expected = scaleDataWithIDF(data, idf)
 
-    assertValues(
-      getResultFromDF(idfModel.transform(dataFrame)),
-      getResultFromVector(data, expectedModel))
+    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+
+    val idfModel = new IDF()
+      .setInputCol("features")
+      .setOutputCol("idfValue")
+      .setMinDocFreq(1)
+      .fit(df)
+
+    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
+      case Row(x: Vector, y: Vector) =>
+        assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
+    }
   }
 }
