@@ -221,7 +221,7 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
+          m.incExecutorDeserializeTime(taskStart - deserializeStartTime)
           m.setExecutorRunTime(taskFinish - taskStart)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)

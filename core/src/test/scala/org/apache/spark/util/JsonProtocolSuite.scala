@@ -688,7 +688,7 @@ class JsonProtocolSuite extends FunSuite {
       hasRecords: Boolean = true) = {
     val t = new TaskMetrics
     t.setHostname("localhost")
-    t.setExecutorDeserializeTime(a)
+    t.incExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
     t.setJvmGCTime(d)
