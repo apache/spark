@@ -25,7 +25,6 @@ else:
     from itertools import imap as map
 
 from py4j.protocol import Py4JError
-from py4j.java_collections import MapConverter
 
 from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
@@ -208,7 +207,7 @@ class SQLContext(object):
             raise TypeError("Cannot apply schema to DataFrame")
 
         if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType, but got %s" % schema)
+            raise TypeError("schema should be StructType, but got %s" % type(schema))
 
         return self.createDataFrame(rdd, schema)
 
@@ -281,7 +280,7 @@ class SQLContext(object):
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
             except Exception:
-                raise ValueError("cannot create an RDD from type: %s" % type(data))
+                raise TypeError("cannot create an RDD from type: %s" % type(data))
         else:
             rdd = data
 
@@ -293,8 +292,8 @@ class SQLContext(object):
         if isinstance(schema, (list, tuple)):
             first = rdd.first()
             if not isinstance(first, (list, tuple)):
-                raise ValueError("each row in `rdd` should be list or tuple, "
-                                 "but got %r" % type(first))
+                raise TypeError("each row in `rdd` should be list or tuple, "
+                                "but got %r" % type(first))
             row_cls = Row(*schema)
             schema = self._inferSchema(rdd.map(lambda r: row_cls(*r)), samplingRatio)
 
@@ -442,15 +441,13 @@ class SQLContext(object):
         if source is None:
             source = self.getConf("spark.sql.sources.default",
                                   "org.apache.spark.sql.parquet")
-        joptions = MapConverter().convert(options,
-                                          self._sc._gateway._gateway_client)
         if schema is None:
-            df = self._ssql_ctx.load(source, joptions)
+            df = self._ssql_ctx.load(source, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            df = self._ssql_ctx.load(source, scala_datatype, joptions)
+            df = self._ssql_ctx.load(source, scala_datatype, options)
         return DataFrame(df, self)
 
     def createExternalTable(self, tableName, path=None, source=None,
@@ -471,16 +468,14 @@ class SQLContext(object):
         if source is None:
             source = self.getConf("spark.sql.sources.default",
                                   "org.apache.spark.sql.parquet")
-        joptions = MapConverter().convert(options,
-                                          self._sc._gateway._gateway_client)
         if schema is None:
-            df = self._ssql_ctx.createExternalTable(tableName, source, joptions)
+            df = self._ssql_ctx.createExternalTable(tableName, source, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
             df = self._ssql_ctx.createExternalTable(tableName, source, scala_datatype,
-                                                    joptions)
+                                                    options)
         return DataFrame(df, self)
 
     @ignore_unicode_prefix

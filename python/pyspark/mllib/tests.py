@@ -36,6 +36,7 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices
@@ -47,7 +48,6 @@ from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 _have_scipy = False
 try:
@@ -58,6 +58,12 @@ except:
     pass
 
 ser = PickleSerializer()
+sc = SparkContext('local[4]', "MLlib tests")
+
+
+class MLlibTestCase(unittest.TestCase):
+    def setUp(self):
+        self.sc = sc
 
 
 def _squared_distance(a, b):
@@ -67,7 +73,7 @@ def _squared_distance(a, b):
         return b.squared_distance(a)
 
 
-class VectorTests(PySparkTestCase):
+class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
@@ -135,8 +141,10 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(sv[-1], 2)
         self.assertEquals(sv[-2], 0)
         self.assertEquals(sv[-4], 0)
-        for ind in [4, -5, 7.8]:
+        for ind in [4, -5]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
+        for ind in [7.8, '1']:
+            self.assertRaises(TypeError, sv.__getitem__, ind)
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -193,8 +201,24 @@ class VectorTests(PySparkTestCase):
                 self.assertEquals(expected[i][j], sm1t[i, j])
         self.assertTrue(array_equal(sm1t.toArray(), expected))
 
+    def test_dense_matrix_is_transposed(self):
+        mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
+        mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
+        self.assertEquals(mat1, mat)
 
-class ListTests(PySparkTestCase):
+        expected = [[0, 4], [1, 6], [3, 9]]
+        for i in range(3):
+            for j in range(2):
+                self.assertEquals(mat1[i, j], expected[i][j])
+        self.assertTrue(array_equal(mat1.toArray(), expected))
+
+        sm = mat1.toSparse()
+        self.assertTrue(array_equal(sm.rowIndices, [1, 2, 0, 1, 2]))
+        self.assertTrue(array_equal(sm.colPtrs, [0, 2, 5]))
+        self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
+
+
+class ListTests(MLlibTestCase):
 
     """
     Test MLlib algorithms on plain lists, to make sure they're passed through
@@ -240,7 +264,7 @@ class ListTests(PySparkTestCase):
             [-6, -7],
         ])
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
-                                         maxIterations=100, seed=56)
+                                         maxIterations=10, seed=56)
         labels = clusters.predict(data).collect()
         self.assertEquals(labels[0], labels[1])
         self.assertEquals(labels[2], labels[3])
@@ -251,9 +275,9 @@ class ListTests(PySparkTestCase):
         y = range(0, 100, 10)
         data = self.sc.parallelize([[a, b] for a, b in zip(x, y)])
         clusters1 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                          maxIterations=100, seed=63)
+                                          maxIterations=10, seed=63)
         clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                          maxIterations=100, seed=63)
+                                          maxIterations=10, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
             self.assertEquals(round(c1, 7), round(c2, 7))
 
@@ -272,13 +296,13 @@ class ListTests(PySparkTestCase):
 
         temp_dir = tempfile.mkdtemp()
 
-        lr_model = LogisticRegressionWithSGD.train(rdd)
+        lr_model = LogisticRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
         self.assertTrue(lr_model.predict(features[1]) > 0)
         self.assertTrue(lr_model.predict(features[2]) <= 0)
         self.assertTrue(lr_model.predict(features[3]) > 0)
 
-        svm_model = SVMWithSGD.train(rdd)
+        svm_model = SVMWithSGD.train(rdd, iterations=10)
         self.assertTrue(svm_model.predict(features[0]) <= 0)
         self.assertTrue(svm_model.predict(features[1]) > 0)
         self.assertTrue(svm_model.predict(features[2]) <= 0)
@@ -292,7 +316,7 @@ class ListTests(PySparkTestCase):
 
         categoricalFeaturesInfo = {0: 3}  # feature 0 has 3 categories
         dt_model = DecisionTree.trainClassifier(
-            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, maxBins=4)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
@@ -304,7 +328,8 @@ class ListTests(PySparkTestCase):
         self.assertEqual(same_dt_model.toDebugString(), dt_model.toDebugString())
 
         rf_model = RandomForest.trainClassifier(
-            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=10,
+            maxBins=4, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
@@ -316,7 +341,7 @@ class ListTests(PySparkTestCase):
         self.assertEqual(same_rf_model.toDebugString(), rf_model.toDebugString())
 
         gbt_model = GradientBoostedTrees.trainClassifier(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
@@ -345,19 +370,19 @@ class ListTests(PySparkTestCase):
         rdd = self.sc.parallelize(data)
         features = [p.features.tolist() for p in data]
 
-        lr_model = LinearRegressionWithSGD.train(rdd)
+        lr_model = LinearRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
         self.assertTrue(lr_model.predict(features[1]) > 0)
         self.assertTrue(lr_model.predict(features[2]) <= 0)
         self.assertTrue(lr_model.predict(features[3]) > 0)
 
-        lasso_model = LassoWithSGD.train(rdd)
+        lasso_model = LassoWithSGD.train(rdd, iterations=10)
         self.assertTrue(lasso_model.predict(features[0]) <= 0)
         self.assertTrue(lasso_model.predict(features[1]) > 0)
         self.assertTrue(lasso_model.predict(features[2]) <= 0)
         self.assertTrue(lasso_model.predict(features[3]) > 0)
 
-        rr_model = RidgeRegressionWithSGD.train(rdd)
+        rr_model = RidgeRegressionWithSGD.train(rdd, iterations=10)
         self.assertTrue(rr_model.predict(features[0]) <= 0)
         self.assertTrue(rr_model.predict(features[1]) > 0)
         self.assertTrue(rr_model.predict(features[2]) <= 0)
@@ -365,35 +390,35 @@ class ListTests(PySparkTestCase):
 
         categoricalFeaturesInfo = {0: 2}  # feature 0 has 2 categories
         dt_model = DecisionTree.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, maxBins=4)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
         rf_model = RandomForest.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100, seed=1)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=10, maxBins=4, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
         self.assertTrue(rf_model.predict(features[3]) > 0)
 
         gbt_model = GradientBoostedTrees.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
 
         try:
-            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
-            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
-            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]))
+            LinearRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
+            LassoWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
+            RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
         except ValueError:
             self.fail()
 
 
-class StatTests(PySparkTestCase):
+class StatTests(MLlibTestCase):
     # SPARK-4023
     def test_col_with_different_rdds(self):
         # numpy
@@ -423,7 +448,7 @@ class StatTests(PySparkTestCase):
         self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
 
 
-class VectorUDTTests(PySparkTestCase):
+class VectorUDTTests(MLlibTestCase):
 
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
@@ -453,11 +478,11 @@ class VectorUDTTests(PySparkTestCase):
             elif isinstance(v, DenseVector):
                 self.assertEqual(v, self.dv1)
             else:
-                raise ValueError("expecting a vector but got %r of type %r" % (v, type(v)))
+                raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
-class SciPyTests(PySparkTestCase):
+class SciPyTests(MLlibTestCase):
 
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
@@ -598,7 +623,7 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
-class ChiSqTestTests(PySparkTestCase):
+class ChiSqTestTests(MLlibTestCase):
     def test_goodness_of_fit(self):
         from numpy import inf
 
@@ -696,13 +721,13 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertIsNotNone(chi[1000])
 
 
-class SerDeTest(PySparkTestCase):
+class SerDeTest(MLlibTestCase):
     def test_to_java_object_rdd(self):  # SPARK-6660
         data = RandomRDDs.uniformRDD(self.sc, 10, 5, seed=0)
         self.assertEqual(_to_java_object_rdd(data).count(), 10)
 
 
-class FeatureTest(PySparkTestCase):
+class FeatureTest(MLlibTestCase):
     def test_idf_model(self):
         data = [
             Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
@@ -715,13 +740,8 @@ class FeatureTest(PySparkTestCase):
         self.assertEqual(len(idf), 11)
 
 
-class Word2VecTests(PySparkTestCase):
+class Word2VecTests(MLlibTestCase):
     def test_word2vec_setters(self):
-        data = [
-            ["I", "have", "a", "pen"],
-            ["I", "like", "soccer", "very", "much"],
-            ["I", "live", "in", "Tokyo"]
-        ]
         model = Word2Vec() \
             .setVectorSize(2) \
             .setLearningRate(0.01) \
@@ -750,7 +770,7 @@ class Word2VecTests(PySparkTestCase):
         self.assertEquals(len(model.getVectors()), 3)
 
 
-class StandardScalerTests(PySparkTestCase):
+class StandardScalerTests(MLlibTestCase):
     def test_model_setters(self):
         data = [
             [1.0, 2.0, 3.0],
@@ -778,3 +798,4 @@ if __name__ == "__main__":
     unittest.main()
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
+    sc.stop()
