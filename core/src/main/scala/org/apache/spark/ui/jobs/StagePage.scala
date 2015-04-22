@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.ui.viz.VizGraph
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
@@ -36,13 +37,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val vizListener = parent.vizListener
 
   private def renderViz(stageId: Int): Seq[Node] = {
-    val dot = vizListener.getDotFile(stageId)
-    if (dot.isEmpty) {
-      println("No viz for stage " + stageId)
+    val graph = vizListener.getVizGraph(stageId)
+    if (graph.isEmpty) {
       return Seq.empty
     }
-    println("Rendering viz for stage " + stageId)
-    val viz = <div id="stage-viz">{dot.get}</div>
+    val viz = <div id="stage-viz">{VizGraph.makeDotFile(graph.get)}</div>
     val script = {
       <script type="text/javascript">
         <xml:unparsed>

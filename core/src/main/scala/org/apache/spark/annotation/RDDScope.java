@@ -15,27 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.viz
+package org.apache.spark.annotation;
 
-import scala.collection.mutable
-
-import org.apache.spark.scheduler._
+import java.lang.annotation.*;
 
 /**
- * A SparkListener that...
+ * Blah blah blah blah blah.
+ * This should really be private and not displayed on the docs.
  */
-private[ui] class VisualizationListener extends SparkListener {
-  private val graphsByStageId = new mutable.HashMap[Int, VizGraph] // stage ID -> viz graph
-
-  /**  */
-  def getVizGraph(stageId: Int): Option[VizGraph] = {
-    graphsByStageId.get(stageId)
-  }
-
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
-    val stageId = stageCompleted.stageInfo.stageId
-    val rddInfos = stageCompleted.stageInfo.rddInfos
-    val vizGraph = VizGraph.makeVizGraph(rddInfos)
-    graphsByStageId(stageId) = vizGraph
-  }
-}
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD})
+public @interface RDDScope {}
