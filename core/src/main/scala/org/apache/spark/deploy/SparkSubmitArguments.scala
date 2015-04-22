@@ -61,16 +61,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var pyFiles: String = null
   var isR: Boolean = false
   var action: SparkSubmitAction = null
-  val sparkProperties: HashMap[String, String] = new HashMap[String, String]() {
-    override def put(k: String, v: String): Option[String] = {
-      if (k.startsWith("spark.")) {
-        super.put(k, v)
-      } else {
-        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
-        Option[String](null)
-      }
-    }
-  }
+  val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
 
   // Standalone cluster mode only
@@ -102,6 +93,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
   // Populate `sparkProperties` map from properties file
   mergeDefaultSparkProperties()
+  // Remove keys that don't start with "spark." from `sparkProperties`.
+  ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
 
@@ -118,6 +111,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
         sparkProperties(k) = v
+      }
+    }
+  }
+
+  /**
+   * Remove keys that don't start with "spark." from `sparkProperties`.
+   */
+  private def ignoreNonSparkProperties(): Unit = {
+    sparkProperties.foreach { case (k, v) =>
+      if (!k.startsWith("spark.")) {
+        sparkProperties -= k
+        SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
     }
   }
