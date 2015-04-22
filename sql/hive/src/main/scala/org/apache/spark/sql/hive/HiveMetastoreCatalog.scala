@@ -175,9 +175,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
-  def hiveDefaultTableFilePath(tableIdents: String): String = synchronized {
-    val (databaseName, tblName) = getDBAndTableName(tableIdents.split("."))
-    hiveWarehouse.getTablePath(databaseName, tblName).toString
+  def hiveTableFilePath(tableName: String): String = synchronized {
+    val (databaseName, tblName) = getDBAndTableName(tableName.split("\\."))
+    val db = client.getDatabase(databaseName)
+
+    hiveWarehouse.getTablePath(db, tblName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = synchronized {

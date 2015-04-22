@@ -802,7 +802,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       options: Map[String, String]): DataFrame = {
     val cmd =
       CreateTableUsing(
-        tableName.split("."),
+        tableName.split("\\."),
         userSpecifiedSchema = None,
         source,
         temporary = false,
@@ -845,7 +845,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       options: Map[String, String]): DataFrame = {
     val cmd =
       CreateTableUsing(
-        tableName.split("."),
+        tableName.split("\\."),
         userSpecifiedSchema = Some(schema),
         source,
         temporary = false,
@@ -958,7 +958,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    */
   def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(tableName.split(".")))
+    DataFrame(this, catalog.lookupRelation(tableName.split("\\.")))
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.

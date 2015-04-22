@@ -68,7 +68,7 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(tableName.split("."))
+    hiveContext.catalog.unregisterTable(tableName.split("\\."))
     Seq.empty[Row]
   }
 }
@@ -127,7 +127,7 @@ case class CreateMetastoreDataSource(
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdents))
+          ("path" -> hiveContext.catalog.hiveTableFilePath(tableIdents))
       } else {
         options
       }
@@ -160,7 +160,7 @@ case class CreateMetastoreDataSourceAsSelect(
       if (!options.contains("path")) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
+          ("path" -> hiveContext.catalog.hiveTableFilePath(tableName))
       } else {
         options
       }

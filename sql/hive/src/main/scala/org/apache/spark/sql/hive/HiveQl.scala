@@ -863,7 +863,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       val tableIdent =
         tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
-          case Seq(tableOnly) => Seq(tableOnly)
+          case Seq(tableName) => tableName.split("\\.").toSeq
           case Seq(databaseName, table) => Seq(databaseName, table)
           case other => sys.error("Hive only supports tables names like 'tableName' " +
             s"or 'databaseName.tableName', found '$other'")
