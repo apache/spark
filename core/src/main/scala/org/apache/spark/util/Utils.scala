@@ -2137,7 +2137,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-<<<<<<< HEAD
    * Split the comma delimited string of master URLs into a list.
    * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
    */
@@ -2152,7 +2151,8 @@ private[spark] object Utils extends Logging {
   def responseFromBackup(msg: String): Boolean = {
     msg.startsWith(BACKUP_STANDALONE_MASTER_PREFIX)
   }
-=======
+
+  /**
    * Adds a shutdown hook with default priority.
    *
    * @param hook The code to run during shutdown.
@@ -2248,7 +2248,6 @@ private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
 
   def run(): Unit = hook()
 
->>>>>>> master
 }
 
 /**
