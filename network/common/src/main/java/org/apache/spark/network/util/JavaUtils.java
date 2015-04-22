@@ -212,7 +212,7 @@ public class JavaUtils {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
       Matcher fractionMatcher = Pattern.compile("([0-9]*\\.[0-9]*)([a-z]+)?").matcher(lower);
       
-      if(m.matches()) {
+      if (m.matches()) {
         long val = Long.parseLong(m.group(1));
         String suffix = m.group(2);
 

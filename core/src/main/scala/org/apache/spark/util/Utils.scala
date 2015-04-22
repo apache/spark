@@ -1082,7 +1082,7 @@ private[spark] object Utils extends Logging {
   def memoryStringToMb(str: String): Int = {
     // Convert to bytes, rather than directly to MB, because when no units are specified the unit
     // is assumed to be bytes
-    (JavaUtils.byteStringAsBytes(str) / 1024.0d / 1024.0d).toInt
+    (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
   /**

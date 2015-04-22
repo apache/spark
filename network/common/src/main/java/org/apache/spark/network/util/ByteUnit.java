@@ -18,11 +18,11 @@ package org.apache.spark.network.util;
 
 public enum ByteUnit {
   BYTE (1),
-  KiB (1024l),
-  MiB ((long) Math.pow(1024l, 2l)),
-  GiB ((long) Math.pow(1024l, 3l)),
-  TiB ((long) Math.pow(1024l, 4l)),
-  PiB ((long) Math.pow(1024l, 5l));
+  KiB (1024L),
+  MiB ((long) Math.pow(1024L, 2L)),
+  GiB ((long) Math.pow(1024L, 3L)),
+  TiB ((long) Math.pow(1024L, 4L)),
+  PiB ((long) Math.pow(1024L, 5L));
 
   private ByteUnit(long multiplier) {
     this.multiplier = multiplier;
@@ -39,25 +39,19 @@ public enum ByteUnit {
     return toBytes(d) / u.multiplier;
   }
 
-  public long toBytes(long d) { return x(d, multiplier); }
+  public long toBytes(long d) {
+    if (d == 0) { return 0; }
+    long over = MAX / d;
+    if (d >  over) return Long.MAX_VALUE;
+    if (d < -over) return Long.MIN_VALUE;
+    return d * multiplier; 
+  }
   public long toKiB(long d) { return convert(d, KiB); }
   public long toMiB(long d) { return convert(d, MiB); }
   public long toGiB(long d) { return convert(d, GiB); }
   public long toTiB(long d) { return convert(d, TiB); }
   public long toPiB(long d) { return convert(d, PiB); }
   
-  long multiplier = 0;
+  private long multiplier = 0;
   static final long MAX = Long.MAX_VALUE;
-
-  /**
-   * Scale d by m, checking for overflow.
-   * This has a short name to make above code more readable.
-   */
-  static long x(long d, long m) {
-    if (d == 0) { return 0; }
-    long over = MAX / d;
-    if (d >  over) return Long.MAX_VALUE;
-    if (d < -over) return Long.MIN_VALUE;
-    return d * m;
-  }
 }
