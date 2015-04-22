@@ -32,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 
@@ -99,7 +99,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private val replayExecutor: ExecutorService = {
     if (!conf.contains("spark.testing")) {
-      Executors.newSingleThreadExecutor(Utils.namedThreadFactory("log-replay-executor"))
+      ThreadUtils.newDaemonSingleThreadExecutor("log-replay-executor")
     } else {
       MoreExecutors.sameThreadExecutor()
     }
