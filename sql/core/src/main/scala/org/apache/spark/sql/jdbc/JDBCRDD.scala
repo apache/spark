@@ -60,6 +60,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC       => DecimalType.Unlimited
+      case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
