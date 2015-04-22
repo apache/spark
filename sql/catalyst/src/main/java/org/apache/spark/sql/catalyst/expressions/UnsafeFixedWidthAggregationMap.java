@@ -28,8 +28,7 @@ import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 
 /**
- * Unsafe-based HashMap for performing aggregations in which the aggregated values are
- * fixed-width.  This is NOT threadsafe.
+ * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
  */
 public final class UnsafeFixedWidthAggregationMap {
 
