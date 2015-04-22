@@ -24,9 +24,21 @@ import org.apache.spark.sql.types._
 
 class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
 
+  import UnsafeFixedWidthAggregationMap._
+
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
   private def emptyAggregationBuffer: Row = new GenericRow(Array[Any](0))
+
+  test("supported schemas") {
+    assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
+    assert(supportsGroupKeySchema(StructType(StructField("x", StringType) :: Nil)))
+
+    assert(
+      !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
+    assert(
+      !supportsGroupKeySchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
+  }
 
   test("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(

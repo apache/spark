@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
 import static org.apache.spark.sql.types.DataTypes.*;
 
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -34,7 +35,10 @@ import scala.collection.mutable.ArraySeq;
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 
 // TODO: pick a better name for this class, since this is potentially confusing.
@@ -69,6 +73,34 @@ public final class UnsafeRow implements MutableRow {
 
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields / 64) + ((numFields % 64 == 0 ? 0 : 1))) * 8;
+  }
+
+  /**
+   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
+   */
+  public static final Set<DataType> settableFieldTypes;
+
+  /**
+   * Fields types can be read(but not set (e.g. set() will throw UnsupportedOperationException).
+   */
+  public static final Set<DataType> readableFieldTypes;
+
+  static {
+    settableFieldTypes = new HashSet<DataType>(Arrays.asList(new DataType[] {
+      IntegerType,
+      LongType,
+      DoubleType,
+      BooleanType,
+      ShortType,
+      ByteType,
+      FloatType
+    }));
+
+    // We support get() on a superset of the types for which we support set():
+    readableFieldTypes = new HashSet<DataType>(Arrays.asList(new DataType[] {
+      StringType
+    }));
+    readableFieldTypes.addAll(settableFieldTypes);
   }
 
   public UnsafeRow() { }

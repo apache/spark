@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
@@ -64,6 +65,32 @@ public final class UnsafeFixedWidthAggregationMap {
    * encountered.
    */
   private long[] groupingKeyConversionScratchSpace = new long[1024 / 8];
+
+  /**
+   * @return true if UnsafeFixedWidthAggregationMap supports grouping keys with the given schema,
+   *         false otherwise.
+   */
+  public static boolean supportsGroupKeySchema(StructType schema) {
+    for (StructField field: schema.fields()) {
+      if (!UnsafeRow.readableFieldTypes.contains(field.dataType())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * @return true if UnsafeFixedWidthAggregationMap supports aggregation buffers with the given
+   *         schema, false otherwise.
+   */
+  public static boolean supportsAggregationBufferSchema(StructType schema) {
+    for (StructField field: schema.fields()) {
+      if (!UnsafeRow.settableFieldTypes.contains(field.dataType())) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /**
    * Create a new UnsafeFixedWidthAggregationMap.
