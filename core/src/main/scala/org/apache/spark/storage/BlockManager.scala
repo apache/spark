@@ -50,11 +50,8 @@ private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
-    readMethod: DataReadMethod.Value,
-    bytes: Long) {
-  val inputMetrics = new InputMetrics(readMethod)
-  inputMetrics.incBytesRead(bytes)
-}
+    val readMethod: DataReadMethod.Value,
+    val bytes: Long)
 
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
