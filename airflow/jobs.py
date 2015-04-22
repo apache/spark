@@ -280,7 +280,7 @@ class MasterJob(BaseJob):
                         logging.debug('Queuing next run: ' + str(ti))
                         cmd = ti.command(local=True)
                         executor.queue_command(ti.key, cmd)
-            executor.heartbeat()
+        executor.heartbeat()
         session.close()
 
     def _execute(self):
