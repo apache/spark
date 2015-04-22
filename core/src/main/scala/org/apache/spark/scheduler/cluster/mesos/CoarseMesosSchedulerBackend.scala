@@ -207,7 +207,7 @@ private[spark] class CoarseMesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      val filters = Filters.newBuilder().setRefuseSeconds(-1).build()
+      val filters = Filters.newBuilder().setRefuseSeconds(5).build()
 
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.toString

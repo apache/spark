@@ -103,7 +103,7 @@ class SparkEnv (
     // actorSystem.awaitTermination()
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
-    
+
     // If we only stop sc, but the driver process still run as a services then we need to delete
     // the tmp dir, if not, it will create too many tmp dirs.
     // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
@@ -375,12 +375,6 @@ object SparkEnv extends Logging {
       "."
     }
 
-    // Warn about deprecated spark.cache.class property
-    if (conf.contains("spark.cache.class")) {
-      logWarning("The spark.cache.class property is no longer being used! Specify storage " +
-        "levels using the RDD.persist() method instead.")
-    }
-
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
       new OutputCommitCoordinator(conf)
     }
@@ -406,7 +400,7 @@ object SparkEnv extends Logging {
       shuffleMemoryManager,
       outputCommitCoordinator,
       conf)
-      
+
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.

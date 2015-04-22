@@ -68,6 +68,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
+    logDeprecationWarning(key)
     settings.put(key, value)
     this
   }
@@ -134,13 +135,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set multiple parameters together */
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
-    this.settings.putAll(settings.toMap.asJava)
+    settings.foreach { case (k, v) => set(k, v) }
     this
   }
 
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
-    settings.putIfAbsent(key, value)
+    if (settings.putIfAbsent(key, value) == null) {
+      logDeprecationWarning(key)
+    }
     this
   }
 
@@ -174,9 +177,44 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).getOrElse(defaultValue)
   }
 
+  /**
+   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then seconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsSeconds(key: String): Long = {
+    Utils.timeStringAsSeconds(get(key))
+  }
+
+  /**
+   * Get a time parameter as seconds, falling back to a default if not set. If no
+   * suffix is provided then seconds are assumed.
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /**
+   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then milliseconds are assumed.
+   * @throws NoSuchElementException
+   */
+  def getTimeAsMs(key: String): Long = {
+    Utils.timeStringAsMs(get(key))
+  }
+
+  /**
+   * Get a time parameter as milliseconds, falling back to a default if not set. If no
+   * suffix is provided then milliseconds are assumed.
+   */
+  def getTimeAsMs(key: String, defaultValue: String): Long = {
+    Utils.timeStringAsMs(get(key, defaultValue))
+  }
+
+
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key))
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
   }
 
   /** Get all parameters as a list of pairs */
@@ -343,13 +381,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         }
       }
     }
-
-    // Warn against the use of deprecated configs
-    deprecatedConfigs.values.foreach { dc =>
-      if (contains(dc.oldName)) {
-        dc.warn()
-      }
-    }
   }
 
   /**
@@ -364,19 +395,63 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
 private[spark] object SparkConf extends Logging {
 
+  /**
+   * Maps deprecated config keys to information about the deprecation.
+   *
+   * The extra information is logged as a warning when the config is present in the user's
+   * configuration.
+   */
   private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
-      DeprecatedConfig("spark.files.userClassPathFirst", "spark.executor.userClassPathFirst",
-        "1.3"),
-      DeprecatedConfig("spark.yarn.user.classpath.first", null, "1.3",
-        "Use spark.{driver,executor}.userClassPathFirst instead."),
-      DeprecatedConfig("spark.history.fs.updateInterval",
-        "spark.history.fs.update.interval.seconds",
-        "1.3", "Use spark.history.fs.update.interval.seconds instead"),
-      DeprecatedConfig("spark.history.updateInterval",
-        "spark.history.fs.update.interval.seconds",
-        "1.3", "Use spark.history.fs.update.interval.seconds instead"))
-    configs.map { x => (x.oldName, x) }.toMap
+      DeprecatedConfig("spark.cache.class", "0.8",
+        "The spark.cache.class property is no longer being used! Specify storage levels using " +
+        "the RDD.persist() method instead."),
+      DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
+        "Please use spark.{driver,executor}.userClassPathFirst instead."))
+    Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
+  }
+
+  /**
+   * Maps a current config key to alternate keys that were used in previous version of Spark.
+   *
+   * The alternates are used in the order defined in this map. If deprecated configs are
+   * present in the user's configuration, a warning is logged.
+   */
+  private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
+    "spark.executor.userClassPathFirst" -> Seq(
+      AlternateConfig("spark.files.userClassPathFirst", "1.3")),
+    "spark.history.fs.update.interval" -> Seq(
+      AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
+      AlternateConfig("spark.history.fs.updateInterval", "1.3"),
+      AlternateConfig("spark.history.updateInterval", "1.3")),
+    "spark.history.fs.cleaner.interval" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
+    "spark.history.fs.cleaner.maxAge" -> Seq(
+      AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
+    "spark.yarn.am.waitTime" -> Seq(
+      AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
+        // Translate old value to a duration, with 10s wait time per try.
+        translation = s => s"${s.toLong * 10}s")),
+    "spark.rpc.numRetries" -> Seq(
+      AlternateConfig("spark.akka.num.retries", "1.4")),
+    "spark.rpc.retry.wait" -> Seq(
+      AlternateConfig("spark.akka.retry.wait", "1.4")),
+    "spark.rpc.askTimeout" -> Seq(
+      AlternateConfig("spark.akka.askTimeout", "1.4")),
+    "spark.rpc.lookupTimeout" -> Seq(
+      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+    )
+
+  /**
+   * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
+   * config keys.
+   *
+   * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
+   */
+  private val allAlternatives: Map[String, (String, AlternateConfig)] = {
+    configsWithAlternatives.keys.flatMap { key =>
+      configsWithAlternatives(key).map { cfg => (cfg.key -> (key -> cfg)) }
+    }.toMap
   }
 
   /**
@@ -407,61 +482,57 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Translate the configuration key if it is deprecated and has a replacement, otherwise just
-   * returns the provided key.
-   *
-   * @param userKey Configuration key from the user / caller.
-   * @param warn Whether to print a warning if the key is deprecated. Warnings will be printed
-   *             only once for each key.
+   * Looks for available deprecated keys for the given config option, and return the first
+   * value available.
    */
-  private def translateConfKey(userKey: String, warn: Boolean = false): String = {
-    deprecatedConfigs.get(userKey)
-      .map { deprecatedKey =>
-        if (warn) {
-          deprecatedKey.warn()
-        }
-        deprecatedKey.newName.getOrElse(userKey)
-      }.getOrElse(userKey)
+  def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
+    configsWithAlternatives.get(key).flatMap { alts =>
+      alts.collectFirst { case alt if conf.contains(alt.key) =>
+        val value = conf.get(alt.key)
+        if (alt.translation != null) alt.translation(value) else value
+      }
+    }
   }
 
   /**
-   * Holds information about keys that have been deprecated or renamed.
+   * Logs a warning message if the given config key is deprecated.
+   */
+  def logDeprecationWarning(key: String): Unit = {
+    deprecatedConfigs.get(key).foreach { cfg =>
+      logWarning(
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"may be removed in the future. ${cfg.deprecationMessage}")
+    }
+
+    allAlternatives.get(key).foreach { case (newKey, cfg) =>
+      logWarning(
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"and may be removed in the future. Please use the new key '$newKey' instead.")
+    }
+  }
+
+  /**
+   * Holds information about keys that have been deprecated and do not have a replacement.
    *
-   * @param oldName Old configuration key.
-   * @param newName New configuration key, or `null` if key has no replacement, in which case the
-   *                deprecated key will be used (but the warning message will still be printed).
+   * @param key The deprecated key.
    * @param version Version of Spark where key was deprecated.
-   * @param deprecationMessage Message to include in the deprecation warning; mandatory when
-   *                           `newName` is not provided.
+   * @param deprecationMessage Message to include in the deprecation warning.
    */
   private case class DeprecatedConfig(
-      oldName: String,
-      _newName: String,
+      key: String,
       version: String,
-      deprecationMessage: String = null) {
+      deprecationMessage: String)
 
-    private val warned = new AtomicBoolean(false)
-    val newName = Option(_newName)
+  /**
+   * Information about an alternate configuration key that has been deprecated.
+   *
+   * @param key The deprecated config key.
+   * @param version The Spark version in which the key was deprecated.
+   * @param translation A translation function for converting old config values into new ones.
+   */
+  private case class AlternateConfig(
+      key: String,
+      version: String,
+      translation: String => String = null)
 
-    if (newName == null && (deprecationMessage == null || deprecationMessage.isEmpty())) {
-      throw new IllegalArgumentException("Need new config name or deprecation message.")
-    }
-
-    def warn(): Unit = {
-      if (warned.compareAndSet(false, true)) {
-        if (newName != null) {
-          val message = Option(deprecationMessage).getOrElse(
-            s"Please use the alternative '$newName' instead.")
-          logWarning(
-            s"The configuration option '$oldName' has been replaced as of Spark $version and " +
-            s"may be removed in the future. $message")
-        } else {
-          logWarning(
-            s"The configuration option '$oldName' has been deprecated as of Spark $version and " +
-            s"may be removed in the future. $deprecationMessage")
-        }
-      }
-    }
-
-  }
 }

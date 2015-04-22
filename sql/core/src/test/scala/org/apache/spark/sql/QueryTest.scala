@@ -67,7 +67,7 @@ class QueryTest extends PlanTest {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
-  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
+  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext) {
     test(sqlString) {
       checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
     }
@@ -104,9 +104,12 @@ object QueryTest {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
       // Java's java.math.BigDecimal.compareTo).
+      // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
+      // equality test.
       val converted: Seq[Row] = answer.map { s =>
         Row.fromSeq(s.toSeq.map {
           case d: java.math.BigDecimal => BigDecimal(d)
+          case b: Array[Byte] => b.toSeq
           case o => o
         })
       }

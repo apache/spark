@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
+import java.net.URL
 import java.sql.{Date, DriverManager, Statement}
 
 import scala.collection.mutable.ArrayBuffer
@@ -41,7 +42,7 @@ import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils
 
 object TestData {
-  def getTestDataFilePath(name: String) = {
+  def getTestDataFilePath(name: String): URL = {
     Thread.currentThread().getContextClassLoader.getResource(s"data/files/$name")
   }
 
@@ -50,7 +51,7 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
-  override def mode = ServerMode.binary
+  override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logics below mimics HiveConnection.createBinaryTransport
@@ -337,7 +338,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
-  override def mode = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
     withJdbcStatement { statement =>

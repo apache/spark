@@ -23,7 +23,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.RpcUtils
 
 private[spark]
 class BlockManagerMaster(
@@ -32,7 +32,7 @@ class BlockManagerMaster(
     isDriver: Boolean)
   extends Logging {
 
-  val timeout = AkkaUtils.askTimeout(conf)
+  val timeout = RpcUtils.askTimeout(conf)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {

@@ -41,10 +41,10 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     }
 
 
-  def caseSensitiveAnalyze(plan: LogicalPlan) =
+  def caseSensitiveAnalyze(plan: LogicalPlan): Unit =
     caseSensitiveAnalyzer.checkAnalysis(caseSensitiveAnalyzer(plan))
 
-  def caseInsensitiveAnalyze(plan: LogicalPlan) =
+  def caseInsensitiveAnalyze(plan: LogicalPlan): Unit =
     caseInsensitiveAnalyzer.checkAnalysis(caseInsensitiveAnalyzer(plan))
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
@@ -90,7 +90,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
 
     assert(!Project(Seq(UnresolvedAttribute("a")), testRelation).resolved)
 
-    val explode = Explode(Nil, AttributeReference("a", IntegerType, nullable = true)())
+    val explode = Explode(AttributeReference("a", IntegerType, nullable = true)())
     assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
 
     assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
@@ -147,7 +147,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       name: String,
       plan: LogicalPlan,
       errorMessages: Seq[String],
-      caseSensitive: Boolean = true) = {
+      caseSensitive: Boolean = true): Unit = {
     test(name) {
       val error = intercept[AnalysisException] {
         if(caseSensitive) {
@@ -202,7 +202,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
 
   case class UnresolvedTestPlan() extends LeafNode {
     override lazy val resolved = false
-    override def output = Nil
+    override def output: Seq[Attribute] = Nil
   }
 
   errorTest(

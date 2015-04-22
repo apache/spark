@@ -28,7 +28,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
@@ -45,7 +45,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   private val lostMasters = new HashSet[Address]
   private var activeMasterActor: ActorSelection = null
 
-  val timeout = AkkaUtils.askTimeout(conf)
+  val timeout = RpcUtils.askTimeout(conf)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -190,7 +190,7 @@ object Client {
     if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
       conf.set("spark.akka.logLifecycleEvents", "true")
     }
-    conf.set("spark.akka.askTimeout", "10")
+    conf.set("spark.rpc.askTimeout", "10")
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 

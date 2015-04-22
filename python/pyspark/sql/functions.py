@@ -18,16 +18,16 @@
 """
 A collections of builtin functions
 """
+import sys
 
-from itertools import imap
-
-from py4j.java_collections import ListConverter
+if sys.version < "3":
+    from itertools import imap as map
 
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
-from pyspark.sql.dataframe import Column, _to_java_column
+from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
 __all__ = ['countDistinct', 'approxCountDistinct', 'udf']
@@ -85,8 +85,7 @@ def countDistinct(col, *cols):
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
-    jcols = ListConverter().convert([_to_java_column(c) for c in cols], sc._gateway._gateway_client)
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), sc._jvm.PythonUtils.toSeq(jcols))
+    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -116,7 +115,7 @@ class UserDefinedFunction(object):
 
     def _create_judf(self):
         f = self.func  # put it in closure `func`
-        func = lambda _, it: imap(lambda x: f(*x), it)
+        func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
@@ -136,9 +135,7 @@ class UserDefinedFunction(object):
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
-                                        sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jc)
 
 
@@ -161,7 +158,7 @@ def _test():
     globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,

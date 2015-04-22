@@ -34,10 +34,12 @@ class DataTypeParserSuite extends FunSuite {
   }
 
   checkDataType("int", IntegerType)
+  checkDataType("integer", IntegerType)
   checkDataType("BooLean", BooleanType)
   checkDataType("tinYint", ByteType)
   checkDataType("smallINT", ShortType)
   checkDataType("INT", IntegerType)
+  checkDataType("INTEGER", IntegerType)
   checkDataType("bigint", LongType)
   checkDataType("float", FloatType)
   checkDataType("dOUBle", DoubleType)

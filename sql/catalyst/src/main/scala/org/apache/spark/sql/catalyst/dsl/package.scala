@@ -284,16 +284,17 @@ package object dsl {
         seed: Int = (math.random * 1000).toInt): LogicalPlan =
       Sample(fraction, withReplacement, seed, logicalPlan)
 
+    // TODO specify the output column names
     def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
         alias: Option[String] = None): LogicalPlan =
-      Generate(generator, join, outer, None, logicalPlan)
+      Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
 
     def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
       InsertIntoTable(
-        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
 
     def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer(logicalPlan))
   }

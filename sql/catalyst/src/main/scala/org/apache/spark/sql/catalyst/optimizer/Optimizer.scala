@@ -198,14 +198,19 @@ object LikeSimplification extends Rule[LogicalPlan] {
   val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(l, Literal(startsWith(pattern), StringType)) if !pattern.endsWith("\\") =>
-      StartsWith(l, Literal(pattern))
-    case Like(l, Literal(endsWith(pattern), StringType)) =>
-      EndsWith(l, Literal(pattern))
-    case Like(l, Literal(contains(pattern), StringType)) if !pattern.endsWith("\\") =>
-      Contains(l, Literal(pattern))
-    case Like(l, Literal(equalTo(pattern), StringType)) =>
-      EqualTo(l, Literal(pattern))
+    case Like(l, Literal(utf, StringType)) =>
+      utf.toString match {
+        case startsWith(pattern) if !pattern.endsWith("\\") =>
+          StartsWith(l, Literal(pattern))
+        case endsWith(pattern) =>
+          EndsWith(l, Literal(pattern))
+        case contains(pattern) if !pattern.endsWith("\\") =>
+          Contains(l, Literal(pattern))
+        case equalTo(pattern) =>
+          EqualTo(l, Literal(pattern))
+        case _ =>
+          Like(l, Literal.create(utf, StringType))
+      }
   }
 }
 
@@ -477,16 +482,16 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
 object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition,
-    generate @ Generate(generator, join, outer, alias, grandChild)) =>
+    case filter @ Filter(condition, g: Generate) =>
       // Predicates that reference attributes produced by the `Generate` operator cannot
       // be pushed below the operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
-        conjunct => conjunct.references subsetOf grandChild.outputSet
+        conjunct => conjunct.references subsetOf g.child.outputSet
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
-        val withPushdown = generate.copy(child = Filter(pushDownPredicate, grandChild))
+        val withPushdown = Generate(g.generator, join = g.join, outer = g.outer,
+          g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
         stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter
