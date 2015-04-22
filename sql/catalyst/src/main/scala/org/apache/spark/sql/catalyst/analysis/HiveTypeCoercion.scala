@@ -286,7 +286,7 @@ trait HiveTypeCoercion {
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case i @ In(a, b) if b.exists(_.dataType != StringType) =>
+      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
   }
