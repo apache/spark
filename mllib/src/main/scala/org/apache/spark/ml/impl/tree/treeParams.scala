@@ -464,7 +464,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * (default = 1e-5)
    * @group param
    */
-  //final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
+  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
   // validationTol -> 1e-5
 
   setDefault(maxIter -> 20, learningRate -> 0.1)
