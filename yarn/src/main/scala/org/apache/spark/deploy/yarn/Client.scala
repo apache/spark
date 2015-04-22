@@ -380,7 +380,7 @@ private[spark] class Client(
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
   private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
-  : ContainerLaunchContext = {
+    : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
 
     val appId = newAppResponse.getApplicationId
@@ -695,7 +695,7 @@ object Client extends Logging {
     new Client(args, sparkConf).run()
   }
 
-  // Alias for the Spark assembly jar, the user jar and PySpark archives
+  // Alias for the Spark assembly jar and the user jar
   val SPARK_JAR: String = "__spark__.jar"
   val APP_JAR: String = "__app__.jar"
 
