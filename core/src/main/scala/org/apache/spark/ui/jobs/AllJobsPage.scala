@@ -31,10 +31,21 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val startTime: Option[Long] = parent.sc.map(_.startTime)
   private val listener = parent.listener
 
+  private def getlastStageDescription(job: JobUIData) = {
+    val lastStageInfo = Option(job.stageIds)
+      .filter(_.nonEmpty)
+      .flatMap { ids => listener.stageIdToInfo.get(ids.max)}
+    val lastStageData = lastStageInfo.flatMap { s =>
+      listener.stageIdToData.get((s.stageId, s.attemptId))
+    }
+    lastStageData.flatMap(_.description).getOrElse("")
+  }
+
   private def applicationTimelineView(jobs: Seq[JobUIData], now: Long): Seq[Node] = {
     val jobEventJsonAsStrSeq = jobs.flatMap { jobUIData =>
       val jobId = jobUIData.jobId
       val status = jobUIData.status
+      val jobDescription = getlastStageDescription(jobUIData)
       val submissionTimeOpt = jobUIData.submissionTime
       val completionTimeOpt = jobUIData.completionTime
 
@@ -58,8 +69,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'group': 'jobs',
            |  'start': new Date(${submissionTime}),
            |  'end': new Date(${completionTime}),
-           |  'content': '<div class="application-timeline-content">Job ${jobId}</div>',
-           |  'title': 'Job ${jobId}\\nStatus: ${status}\\n' +
+           |  'content': '<div class="application-timeline-content">${jobDescription} (Job ${jobId})</div>',
+           |  'title': '${jobDescription} (Job ${jobId})\\nStatus: ${status}\\n' +
            |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |    '${
                    if (status != JobExecutionStatus.RUNNING) {
@@ -70,7 +81,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                  }'
            |}
          """.stripMargin
-      Option(jobEventJsonAsStr)
+      Some(jobEventJsonAsStr)
     }
 
     val executorEventJsonAsStrSeq =
@@ -169,7 +180,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
 
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
-      val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
+      val lastStageDescription = getlastStageDescription(job)// lastStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
         job.submissionTime.map { start =>
           val end = job.completionTime.getOrElse(System.currentTimeMillis())

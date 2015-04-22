@@ -36,6 +36,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     val stageEventJsonAsStrSeq = stages.map { stage =>
       val stageId = stage.stageId
       val attemptId = stage.attemptId
+      val name = stage.name
       val status = {
         if (stage.completionTime.isDefined) {
           if (stage.failureReason.isDefined) {
@@ -57,8 +58,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
          |  'group': 'stages',
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
-         |  'content': '<div class="job-timeline-content">Stage ${stageId}.${attemptId}</div>',
-         |  'title': 'Stage ${stageId}.${attemptId}\\nStatus: ${status.toUpperCase}\\n' +
+         |  'content': '<div class="job-timeline-content">${name} (Stage ${stageId}.${attemptId})</div>',
+         |  'title': '${name} (Stage ${stageId}.${attemptId})\\nStatus: ${status.toUpperCase}\\n' +
          |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
          |    '${
                  if (status != "running") {
