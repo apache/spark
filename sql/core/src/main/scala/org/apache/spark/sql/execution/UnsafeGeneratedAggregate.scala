@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import java.util
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
-import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
 // TODO: finish cleaning up documentation instead of just copying it
@@ -258,113 +254,39 @@ case class UnsafeGeneratedAggregate(
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
       } else {
-        // TODO: if we knew how many groups to expect, we could size this hashmap appropriately
-        val buffers = new BytesToBytesMap(MemoryAllocator.UNSAFE, 128)
-
-        // Set up the mutable "pointers" that we'll re-use when pointing to key and value rows
-        val currentBuffer: UnsafeRow = new UnsafeRow()
-
-        // We're going to need to allocate a lot of empty aggregation buffers, so let's do it
-        // once and keep a copy of the serialized buffer and copy it into the hash map when we see
-        // new keys:
-        val emptyAggregationBuffer: Array[Long] = {
-          val javaBuffer: MutableRow = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
-          val fieldTypes = StructType.fromAttributes(computationSchema).map(_.dataType).toArray
-          val converter = new UnsafeRowConverter(fieldTypes)
-          val buffer = new Array[Long](converter.getSizeRequirement(javaBuffer))
-          converter.writeRow(javaBuffer, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
-          buffer
-        }
-
-        val keyToUnsafeRowConverter: UnsafeRowConverter = {
-          new UnsafeRowConverter(groupingExpressions.map(_.dataType).toArray)
-        }
-
         val aggregationBufferSchema = StructType.fromAttributes(computationSchema)
-        val keySchema: StructType = {
+
+        val groupKeySchema: StructType = {
           val fields = groupingExpressions.zipWithIndex.map { case (expr, idx) =>
             StructField(idx.toString, expr.dataType, expr.nullable)
           }
           StructType(fields)
         }
 
-        // Allocate some scratch space for holding the keys that we use to index into the hash map.
-        // 16 MB ought to be enough for anyone (TODO)
-        val unsafeRowBuffer: Array[Long] = new Array[Long](1024 * 16 / 8)
+        val aggregationMap = new UnsafeFixedWidthAggregationMap(
+          newAggregationBuffer(EmptyRow),
+          aggregationBufferSchema,
+          groupKeySchema,
+          MemoryAllocator.UNSAFE,
+          1024
+        )
 
         while (iter.hasNext) {
-          // Zero out the buffer that's used to hold the current row. This is necessary in order
-          // to ensure that rows hash properly, since garbage data from the previous row could
-          // otherwise end up as padding in this row.
-          util.Arrays.fill(unsafeRowBuffer, 0)
-          // Grab the next row from our input iterator and compute its group projection.
-          // In the long run, it might be nice to use Unsafe rows for this as well, but for now
-          // we'll just rely on the existing code paths to compute the projection.
-          val currentJavaRow = iter.next()
-          val currentGroup: Row = groupProjection(currentJavaRow)
-          // Convert the current group into an UnsafeRow so that we can use it as a key for our
-          // aggregation hash map
-          val groupProjectionSize = keyToUnsafeRowConverter.getSizeRequirement(currentGroup)
-          if (groupProjectionSize > unsafeRowBuffer.length) {
-            throw new IllegalStateException("Group projection does not fit into buffer")
-          }
-          val keyLengthInBytes: Int = keyToUnsafeRowConverter.writeRow(
-            currentGroup, unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET).toInt // TODO
-
-          val loc: BytesToBytesMap#Location =
-            buffers.lookup(unsafeRowBuffer, PlatformDependent.LONG_ARRAY_OFFSET, keyLengthInBytes)
-          if (!loc.isDefined) {
-            // This is the first time that we've seen this key, so we'll copy the empty aggregation
-            // buffer row that we created earlier.  TODO: this doesn't work very well for aggregates
-            // where the size of the aggregate buffer is different for different rows (even if the
-            // size of buffers don't grow once created, as is the case for things like grabbing the
-            // first row's value for a string-valued column (or the shortest string)).
-
-            loc.storeKeyAndValue(
-              unsafeRowBuffer,
-              PlatformDependent.LONG_ARRAY_OFFSET,
-              keyLengthInBytes,
-              emptyAggregationBuffer,
-              PlatformDependent.LONG_ARRAY_OFFSET,
-              emptyAggregationBuffer.length
-            )
-          }
-          // Reset our pointer to point to the buffer stored in the hash map
-          val address = loc.getValueAddress
-          currentBuffer.set(
-            address.getBaseObject,
-            address.getBaseOffset,
-            aggregationBufferSchema.length,
-            aggregationBufferSchema
-          )
-          // Target the projection at the current aggregation buffer and then project the updated
-          // values.
-          updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentJavaRow))
+          val currentRow: Row = iter.next()
+          val groupKey: Row = groupProjection(currentRow)
+          val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
+          updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 
         new Iterator[Row] {
-          private[this] val resultIterator = buffers.iterator()
+          private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
-          private[this] val key: UnsafeRow = new UnsafeRow()
-          private[this] val value: UnsafeRow = new UnsafeRow()
 
-          def hasNext: Boolean = resultIterator.hasNext
+          def hasNext: Boolean = mapIterator.hasNext
 
           def next(): Row = {
-            val currentGroup: BytesToBytesMap#Location = resultIterator.next()
-            val keyAddress = currentGroup.getKeyAddress
-            key.set(
-              keyAddress.getBaseObject,
-              keyAddress.getBaseOffset,
-              groupingExpressions.length,
-              keySchema)
-            val valueAddress = currentGroup.getValueAddress
-            value.set(
-              valueAddress.getBaseObject,
-              valueAddress.getBaseOffset,
-              aggregationBufferSchema.length,
-              aggregationBufferSchema)
-            val result = resultProjection(joinedRow(key, value))
+            val entry = mapIterator.next()
+            val result = resultProjection(joinedRow(entry.key, entry.value))
             if (hasNext) {
               result
             } else {
@@ -372,13 +294,9 @@ case class UnsafeGeneratedAggregate(
               // though, we need to make a defensive copy of the result so that we don't return an
               // object that might contain dangling pointers to the freed memory
               val resultCopy = result.copy()
-              buffers.free()
+              aggregationMap.free()
               resultCopy
             }
-          }
-
-          override def finalize(): Unit = {
-            buffers.free()
           }
         }
       }

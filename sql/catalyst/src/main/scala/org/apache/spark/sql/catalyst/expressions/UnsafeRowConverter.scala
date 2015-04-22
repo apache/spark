@@ -154,6 +154,10 @@ private case object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 
 class UnsafeRowConverter(fieldTypes: Array[DataType]) {
 
+  def this(schema: StructType) {
+    this(schema.fields.map(_.dataType))
+  }
+
   private[this] val unsafeRow = new UnsafeRow()
 
   private[this] val writers: Array[UnsafeColumnWriter[Any]] = {
