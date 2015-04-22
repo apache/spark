@@ -253,7 +253,6 @@ private[spark] class MesosClusterScheduler(
       // and remove if they're already launched.
       queuedDrivers
         .filter(d => launchedDrivers.contains(d.submissionId))
-        .toSeq
         .foreach(d => removeFromQueuedDrivers(d.submissionId))
       pendingRetryDriversState.fetchAll[MesosDriverDescription]()
         .foreach(s => pendingRetryDrivers += s)

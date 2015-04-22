@@ -21,11 +21,10 @@ import java.io.File
 import javax.servlet.http.HttpServletResponse
 
 import akka.actor.ActorRef
-
-import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
+import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
  * A server that responds to requests submitted by the [[RestSubmissionClient]].
@@ -176,7 +175,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = AkkaUtils.askTimeout(conf)
+        val askTimeout = RpcUtils.askTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
         val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
