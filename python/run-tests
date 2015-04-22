@@ -21,11 +21,14 @@
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 
+. "$FWDIR"/bin/load-spark-env.sh
+
 # CD into the python directory to find things on the right path
 cd "$FWDIR/python"
 
 FAILED=0
 LOG_FILE=unit-tests.log
+START=$(date +"%s")
 
 rm -f $LOG_FILE
 
@@ -33,8 +36,8 @@ rm -f $LOG_FILE
 rm -rf metastore warehouse
 
 function run_test() {
-    echo "Running test: $1" | tee -a $LOG_FILE
-
+    echo -en "Running test: $1 ... " | tee -a $LOG_FILE
+    start=$(date +"%s")
     SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
@@ -46,6 +49,9 @@ function run_test() {
         echo "Had test failures; see logs."
         echo -en "\033[0m"  # No color
         exit -1
+    else
+        now=$(date +"%s")
+        echo "ok ($(($now - $start))s)"
     fi
 }
 
@@ -57,14 +63,14 @@ function run_core_tests() {
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
     run_test "pyspark/serializers.py"
-    run_test "pyspark/profiler.py" 
+    run_test "pyspark/profiler.py"
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql/types.py"
+    run_test "pyspark/sql/_types.py"
     run_test "pyspark/sql/context.py"
     run_test "pyspark/sql/dataframe.py"
     run_test "pyspark/sql/functions.py"
@@ -77,6 +83,7 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/clustering.py"
     run_test "pyspark/mllib/evaluation.py"
     run_test "pyspark/mllib/feature.py"
+    run_test "pyspark/mllib/fpm.py"
     run_test "pyspark/mllib/linalg.py"
     run_test "pyspark/mllib/rand.py"
     run_test "pyspark/mllib/recommendation.py"
@@ -96,6 +103,21 @@ function run_ml_tests() {
 
 function run_streaming_tests() {
     echo "Run streaming tests ..."
+
+    KAFKA_ASSEMBLY_DIR="$FWDIR"/external/kafka-assembly
+    JAR_PATH="${KAFKA_ASSEMBLY_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+    for f in "${JAR_PATH}"/spark-streaming-kafka-assembly-*.jar; do
+      if [[ ! -e "$f" ]]; then
+        echo "Failed to find Spark Streaming Kafka assembly jar in $KAFKA_ASSEMBLY_DIR" 1>&2
+        echo "You need to build Spark with " \
+             "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or" \
+             "'build/mvn package' before running this program" 1>&2
+        exit 1
+      fi
+      KAFKA_ASSEMBLY_JAR="$f"
+    done
+
+    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
     run_test "pyspark/streaming/util.py"
     run_test "pyspark/streaming/tests.py"
 }
@@ -118,6 +140,19 @@ run_mllib_tests
 run_ml_tests
 run_streaming_tests
 
+# Try to test with Python 3
+if [ $(which python3.4) ]; then
+    export PYSPARK_PYTHON="python3.4"
+    echo "Testing with Python3.4 version:"
+    $PYSPARK_PYTHON --version
+
+    run_core_tests
+    run_sql_tests
+    run_mllib_tests
+    run_ml_tests
+    run_streaming_tests
+fi
+
 # Try to test with PyPy
 if [ $(which pypy) ]; then
     export PYSPARK_PYTHON="pypy"
@@ -130,9 +165,8 @@ if [ $(which pypy) ]; then
 fi
 
 if [[ $FAILED == 0 ]]; then
-    echo -en "\033[32m"  # Green
-    echo "Tests passed."
-    echo -en "\033[0m"  # No color
+    now=$(date +"%s")
+    echo -e "\033[32mTests passed \033[0min $(($now - $START)) seconds"
 fi
 
 # TODO: in the long-run, it would be nice to use a test runner like `nose`.

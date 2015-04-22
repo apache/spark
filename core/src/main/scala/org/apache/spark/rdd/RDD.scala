@@ -316,7 +316,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(): RDD[T] = distinct(partitions.size)
+  def distinct(): RDD[T] = distinct(partitions.length)
 
   /**
    * Return a new RDD that has exactly numPartitions partitions.
@@ -488,7 +488,7 @@ abstract class RDD[T: ClassTag](
   def sortBy[K](
       f: (T) => K,
       ascending: Boolean = true,
-      numPartitions: Int = this.partitions.size)
+      numPartitions: Int = this.partitions.length)
       (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
     this.keyBy[K](f)
         .sortByKey(ascending, numPartitions)
@@ -852,7 +852,7 @@ abstract class RDD[T: ClassTag](
    * RDD will be &lt;= us.
    */
   def subtract(other: RDD[T]): RDD[T] =
-    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.size)))
+    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.length)))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
@@ -986,14 +986,14 @@ abstract class RDD[T: ClassTag](
       combOp: (U, U) => U,
       depth: Int = 2): U = {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
-    if (partitions.size == 0) {
+    if (partitions.length == 0) {
       return Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
     }
     val cleanSeqOp = context.clean(seqOp)
     val cleanCombOp = context.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
     var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
-    var numPartitions = partiallyAggregated.partitions.size
+    var numPartitions = partiallyAggregated.partitions.length
     val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
     // If creating an extra level doesn't help reduce the wall-clock time, we stop tree aggregation.
     while (numPartitions > scale + numPartitions / scale) {
@@ -1026,7 +1026,7 @@ abstract class RDD[T: ClassTag](
       }
       result
     }
-    val evaluator = new CountEvaluator(partitions.size, confidence)
+    val evaluator = new CountEvaluator(partitions.length, confidence)
     sc.runApproximateJob(this, countElements, evaluator, timeout)
   }
 
@@ -1061,7 +1061,7 @@ abstract class RDD[T: ClassTag](
       }
       map
     }
-    val evaluator = new GroupedCountEvaluator[T](partitions.size, confidence)
+    val evaluator = new GroupedCountEvaluator[T](partitions.length, confidence)
     sc.runApproximateJob(this, countPartition, evaluator, timeout)
   }
 
@@ -1140,7 +1140,7 @@ abstract class RDD[T: ClassTag](
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
-    val n = this.partitions.size.toLong
+    val n = this.partitions.length.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
       iter.zipWithIndex.map { case (item, i) =>
         (item, i * n + k)
@@ -1243,7 +1243,7 @@ abstract class RDD[T: ClassTag](
         queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
         Iterator.single(queue)
       }
-      if (mapRDDs.partitions.size == 0) {
+      if (mapRDDs.partitions.length == 0) {
         Array.empty
       } else {
         mapRDDs.reduce { (queue1, queue2) =>
@@ -1489,7 +1489,7 @@ abstract class RDD[T: ClassTag](
     }
     // The first RDD in the dependency stack has no parents, so no need for a +-
     def firstDebugString(rdd: RDD[_]): Seq[String] = {
-      val partitionStr = "(" + rdd.partitions.size + ")"
+      val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
 
@@ -1499,7 +1499,7 @@ abstract class RDD[T: ClassTag](
       } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
-      val partitionStr = "(" + rdd.partitions.size + ")"
+      val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val thisPrefix = prefix.replaceAll("\\|\\s+$", "")
       val nextPrefix = (

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.types._
 
 /**
@@ -81,6 +83,41 @@ trait GetField extends UnaryExpression {
   def field: StructField
 }
 
+object GetField {
+  /**
+   * Returns the resolved `GetField`, and report error if no desired field or over one
+   * desired fields are found.
+   */
+  def apply(
+      expr: Expression,
+      fieldName: String,
+      resolver: Resolver): GetField = {
+    def findField(fields: Array[StructField]): Int = {
+      val checkField = (f: StructField) => resolver(f.name, fieldName)
+      val ordinal = fields.indexWhere(checkField)
+      if (ordinal == -1) {
+        throw new AnalysisException(
+          s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
+        throw new AnalysisException(
+          s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+      } else {
+        ordinal
+      }
+    }
+    expr.dataType match {
+      case StructType(fields) =>
+        val ordinal = findField(fields)
+        StructGetField(expr, fields(ordinal), ordinal)
+      case ArrayType(StructType(fields), containsNull) =>
+        val ordinal = findField(fields)
+        ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
+      case otherType =>
+        throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
+    }
+  }
+}
+
 /**
  * Returns the value of fields in the Struct `child`.
  */
@@ -120,7 +157,7 @@ case class ArrayGetField(child: Expression, field: StructField, ordinal: Int, co
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
   
-  override def foldable: Boolean = !children.exists(!_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable)
   
   lazy val childTypes = children.map(_.dataType).distinct
 
@@ -141,4 +178,31 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def toString: String = s"Array(${children.mkString(",")})"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ * TODO: [[CreateStruct]] does not support codegen.
+ */
+case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
+  override type EvaluatedType = Row
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override lazy val dataType: StructType = {
+    assert(resolved,
+      s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
+    val fields = children.map { child =>
+      StructField(child.name, child.dataType, child.nullable, child.metadata)
+    }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: Row): EvaluatedType = {
+    Row(children.map(_.eval(input)): _*)
+  }
 }

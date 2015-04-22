@@ -47,21 +47,21 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
-    logBaseDir: String,
+    logBaseDir: URI,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
+  def this(appId: String, logBaseDir: URI, sparkConf: SparkConf) =
     this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir), hadoopConf)
+  private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
       Some(CompressionCodec.createCodec(sparkConf))
@@ -259,13 +259,13 @@ private[spark] object EventLoggingListener extends Logging {
    * @return A path which consists of file-system-safe characters.
    */
   def getLogPath(
-      logBaseDir: String,
+      logBaseDir: URI,
       appId: String,
       compressionCodecName: Option[String] = None): String = {
     val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
     // e.g. app_123, app_123.lzf
     val logName = sanitizedAppId + compressionCodecName.map { "." + _ }.getOrElse("")
-    Utils.resolveURI(logBaseDir).toString.stripSuffix("/") + "/" + logName
+    logBaseDir.toString.stripSuffix("/") + "/" + logName
   }
 
   /**

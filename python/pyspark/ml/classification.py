@@ -39,10 +39,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> model = lr.fit(df)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> print model.transform(test0).head().prediction
+    >>> model.transform(test0).head().prediction
     0.0
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
-    >>> print model.transform(test1).head().prediction
+    >>> model.transform(test1).head().prediction
     1.0
     >>> lr.setParams("vector")
     Traceback (most recent call last):
@@ -59,6 +59,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  maxIter=100, regParam=0.1)
         """
         super(LogisticRegression, self).__init__()
+        self._setDefault(maxIter=100, regParam=0.1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -71,7 +72,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Sets params for logistic regression.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
@@ -91,9 +92,9 @@ if __name__ == "__main__":
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.feature tests")
-    sqlCtx = SQLContext(sc)
+    sqlContext = SQLContext(sc)
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx
+    globs['sqlContext'] = sqlContext
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()

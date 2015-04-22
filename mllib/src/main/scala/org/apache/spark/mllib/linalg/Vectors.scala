@@ -227,7 +227,7 @@ object Vectors {
    * @param elements vector elements in (index, value) pairs.
    */
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0)
+    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
 
     val (indices, values) = elements.sortBy(_._1).unzip
     var prev = -1
@@ -235,7 +235,8 @@ object Vectors {
       require(prev < i, s"Found duplicate indices: $i.")
       prev = i
     }
-    require(prev < size)
+    require(prev < size, s"You may not write an element to index $prev because the declared " +
+      s"size of your vector is $size")
 
     new SparseVector(size, indices.toArray, values.toArray)
   }
@@ -309,7 +310,8 @@ object Vectors {
    * @return norm in L^p^ space.
    */
   def norm(vector: Vector, p: Double): Double = {
-    require(p >= 1.0)
+    require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
+      s"You specified p=$p.")
     val values = vector match {
       case DenseVector(vs) => vs
       case SparseVector(n, ids, vs) => vs
@@ -360,7 +362,8 @@ object Vectors {
    * @return squared distance between two Vectors.
    */
   def sqdist(v1: Vector, v2: Vector): Double = {
-    require(v1.size == v2.size, "vector dimension mismatch")
+    require(v1.size == v2.size, s"Vector dimensions do not match: Dim(v1)=${v1.size} and Dim(v2)" +
+      s"=${v2.size}.")
     var squaredDistance = 0.0
     (v1, v2) match {
       case (v1: SparseVector, v2: SparseVector) =>
@@ -518,7 +521,9 @@ class SparseVector(
     val indices: Array[Int],
     val values: Array[Double]) extends Vector {
 
-  require(indices.length == values.length)
+  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
+    s" indices match the dimension of the values. You provided ${indices.size} indices and " +
+    s" ${values.size} values.")
 
   override def toString: String =
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))

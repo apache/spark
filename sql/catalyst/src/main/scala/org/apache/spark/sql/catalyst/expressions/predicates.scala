@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, NativeType}
 
 object InterpretedPredicate {
-  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
-    apply(BindReferences.bindReference(expression, inputSchema))
+  def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    create(BindReferences.bindReference(expression, inputSchema))
 
-  def apply(expression: Expression): (Row => Boolean) = {
+  def create(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
@@ -179,8 +179,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
       val r = right.eval(input)
       if (r == null) null
       else if (left.dataType != BinaryType) l == r
-      else BinaryType.ordering.compare(
-        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 }

@@ -78,5 +78,18 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   puts "cp -r python/docs/_build/html/. docs/api/python"
   cp_r("python/docs/_build/html/.", "docs/api/python")
 
-  cd("..")
+  # Build SparkR API docs
+  puts "Moving to R directory and building roxygen docs."
+  cd("R")
+  puts `./create-docs.sh`
+
+  puts "Moving back into home dir."
+  cd("../")
+
+  puts "Making directory api/R"
+  mkdir_p "docs/api/R"
+
+  puts "cp -r R/pkg/html/. docs/api/R"
+  cp_r("R/pkg/html/.", "docs/api/R")
+
 end

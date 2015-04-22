@@ -20,8 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
@@ -165,7 +164,7 @@ class StreamingKMeansModel(
 class StreamingKMeans(
     var k: Int,
     var decayFactor: Double,
-    var timeUnit: String) extends Logging {
+    var timeUnit: String) extends Logging with Serializable {
 
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
 

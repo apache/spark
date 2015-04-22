@@ -32,7 +32,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 
@@ -223,7 +223,7 @@ private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
+    val askTimeout = RpcUtils.askTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
       DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
     val k = new KillSubmissionResponse
@@ -257,7 +257,7 @@ private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
   }
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
+    val askTimeout = RpcUtils.askTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
       DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
@@ -321,7 +321,7 @@ private[rest] class SubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = AkkaUtils.askTimeout(conf)
+        val askTimeout = RpcUtils.askTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
         val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
