@@ -32,7 +32,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{DeveloperApi, Experimental, RDDScope}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, RDDScoped}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -283,7 +283,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def map[U: ClassTag](f: T => U): RDD[U] = {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
@@ -293,7 +293,7 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  @RDDScope
+  @RDDScoped
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
@@ -302,7 +302,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
-  @RDDScope
+  @RDDScoped
   def filter(f: T => Boolean): RDD[T] = {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[T, T](
@@ -314,14 +314,14 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def distinct(): RDD[T] = distinct(partitions.length)
 
   /**
@@ -333,7 +333,7 @@ abstract class RDD[T: ClassTag](
    * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
    * which can avoid performing a shuffle.
    */
-  @RDDScope
+  @RDDScoped
   def repartition(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = {
     coalesce(numPartitions, shuffle = true)
   }
@@ -358,7 +358,7 @@ abstract class RDD[T: ClassTag](
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
    */
-  @RDDScope
+  @RDDScoped
   def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
       : RDD[T] = {
     if (shuffle) {
@@ -392,7 +392,7 @@ abstract class RDD[T: ClassTag](
    *  with replacement: expected number of times each element is chosen; fraction must be >= 0
    * @param seed seed for the random number generator
    */
-  @RDDScope
+  @RDDScoped
   def sample(
       withReplacement: Boolean,
       fraction: Double,
@@ -413,7 +413,7 @@ abstract class RDD[T: ClassTag](
    *
    * @return split RDDs in an array
    */
-  @RDDScope
+  @RDDScoped
   def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
@@ -431,7 +431,7 @@ abstract class RDD[T: ClassTag](
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
    */
-  @RDDScope
+  @RDDScoped
   def takeSample(
       withReplacement: Boolean,
       num: Int,
@@ -481,7 +481,7 @@ abstract class RDD[T: ClassTag](
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  @RDDScope
+  @RDDScoped
   def union(other: RDD[T]): RDD[T] = {
     if (partitioner.isDefined && other.partitioner == partitioner) {
       new PartitionerAwareUnionRDD(sc, Array(this, other))
@@ -494,13 +494,13 @@ abstract class RDD[T: ClassTag](
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  @RDDScope
+  @RDDScoped
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   /**
    * Return this RDD sorted by the given key function.
    */
-  @RDDScope
+  @RDDScoped
   def sortBy[K](
       f: (T) => K,
       ascending: Boolean = true,
@@ -516,7 +516,7 @@ abstract class RDD[T: ClassTag](
    *
    * Note that this method performs a shuffle internally.
    */
-  @RDDScope
+  @RDDScoped
   def intersection(other: RDD[T]): RDD[T] = {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
         .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
@@ -531,7 +531,7 @@ abstract class RDD[T: ClassTag](
    *
    * @param partitioner Partitioner to use for the resulting RDD
    */
-  @RDDScope
+  @RDDScoped
   def intersection(other: RDD[T], partitioner: Partitioner)(implicit ord: Ordering[T] = null)
       : RDD[T] = {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)), partitioner)
@@ -547,7 +547,7 @@ abstract class RDD[T: ClassTag](
    *
    * @param numPartitions How many partitions to use in the resulting RDD
    */
-  @RDDScope
+  @RDDScoped
   def intersection(other: RDD[T], numPartitions: Int): RDD[T] = {
     intersection(other, new HashPartitioner(numPartitions))
   }
@@ -555,7 +555,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
-  @RDDScope
+  @RDDScoped
   def glom(): RDD[Array[T]] = {
     new MapPartitionsRDD[Array[T], T](this, (context, pid, iter) => Iterator(iter.toArray))
   }
@@ -564,7 +564,7 @@ abstract class RDD[T: ClassTag](
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
    */
-  @RDDScope
+  @RDDScoped
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
 
   /**
@@ -576,7 +576,7 @@ abstract class RDD[T: ClassTag](
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
-  @RDDScope
+  @RDDScoped
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
 
@@ -589,7 +589,7 @@ abstract class RDD[T: ClassTag](
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
-  @RDDScope
+  @RDDScoped
   def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
 
@@ -602,7 +602,7 @@ abstract class RDD[T: ClassTag](
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
-  @RDDScope
+  @RDDScoped
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = {
     val cleanF = sc.clean(f)
@@ -612,13 +612,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  @RDDScope
+  @RDDScoped
   def pipe(command: String): RDD[String] = new PipedRDD(this, command)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  @RDDScope
+  @RDDScoped
   def pipe(command: String, env: Map[String, String]): RDD[String] =
     new PipedRDD(this, command, env)
 
@@ -641,7 +641,7 @@ abstract class RDD[T: ClassTag](
    * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */
-  @RDDScope
+  @RDDScoped
   def pipe(
       command: Seq[String],
       env: Map[String, String] = Map(),
@@ -660,7 +660,7 @@ abstract class RDD[T: ClassTag](
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
-  @RDDScope
+  @RDDScoped
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
     val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter)
@@ -674,7 +674,7 @@ abstract class RDD[T: ClassTag](
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
-  @RDDScope
+  @RDDScoped
   def mapPartitionsWithIndex[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
     val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter)
@@ -690,7 +690,7 @@ abstract class RDD[T: ClassTag](
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
-  @RDDScope
+  @RDDScoped
   @deprecated("use TaskContext.get", "1.2.0")
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
@@ -704,7 +704,7 @@ abstract class RDD[T: ClassTag](
    * of the original partition.
    */
   @deprecated("use mapPartitionsWithIndex", "0.7.0")
-  @RDDScope
+  @RDDScoped
   def mapPartitionsWithSplit[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
     mapPartitionsWithIndex(f, preservesPartitioning)
@@ -716,7 +716,7 @@ abstract class RDD[T: ClassTag](
    * partition with the index of that partition.
    */
   @deprecated("use mapPartitionsWithIndex", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def mapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = {
@@ -732,7 +732,7 @@ abstract class RDD[T: ClassTag](
    * partition with the index of that partition.
    */
   @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def flatMapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = {
@@ -748,7 +748,7 @@ abstract class RDD[T: ClassTag](
    * partition with the index of that partition.
    */
   @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = {
     mapPartitionsWithIndex { (index, iter) =>
       val a = constructA(index)
@@ -762,7 +762,7 @@ abstract class RDD[T: ClassTag](
    * partition with the index of that partition.
    */
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = {
     mapPartitionsWithIndex((index, iter) => {
       val a = constructA(index)
@@ -776,7 +776,7 @@ abstract class RDD[T: ClassTag](
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
    * a map on the other).
    */
-  @RDDScope
+  @RDDScoped
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = {
     zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
@@ -797,37 +797,37 @@ abstract class RDD[T: ClassTag](
    * *same number of partitions*, but does *not* require them to have the same number
    * of elements in each partition.
    */
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B], preservesPartitioning: Boolean)
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
 
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B])
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
     zipPartitions(rdd2, preservesPartitioning = false)(f)
 
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, C: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C], preservesPartitioning: Boolean)
       (f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3, preservesPartitioning)
 
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, C: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C])
       (f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V]): RDD[V] =
     zipPartitions(rdd2, rdd3, preservesPartitioning = false)(f)
 
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D], preservesPartitioning: Boolean)
       (f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4, preservesPartitioning)
 
-  @RDDScope
+  @RDDScoped
   def zipPartitions[B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D])
       (f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] =
@@ -839,7 +839,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Applies a function f to all elements of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def foreach(f: T => Unit): Unit = {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
@@ -848,7 +848,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Applies a function f to each partition of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def foreachPartition(f: Iterator[T] => Unit): Unit = {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
@@ -857,7 +857,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an array that contains all of the elements in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
@@ -868,7 +868,7 @@ abstract class RDD[T: ClassTag](
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def toLocalIterator: Iterator[T] = {
     def collectPartition(p: Int): Array[T] = {
       sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
@@ -880,13 +880,13 @@ abstract class RDD[T: ClassTag](
    * Return an array that contains all of the elements in this RDD.
    */
   @deprecated("use collect", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def toArray(): Array[T] = collect()
 
   /**
    * Return an RDD that contains all matching values by applying `f`.
    */
-  @RDDScope
+  @RDDScoped
   def collect[U: ClassTag](f: PartialFunction[T, U]): RDD[U] = {
     filter(f.isDefinedAt).map(f)
   }
@@ -897,21 +897,21 @@ abstract class RDD[T: ClassTag](
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be &lt;= us.
    */
-  @RDDScope
+  @RDDScoped
   def subtract(other: RDD[T]): RDD[T] =
     subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.length)))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  @RDDScope
+  @RDDScoped
   def subtract(other: RDD[T], numPartitions: Int): RDD[T] =
     subtract(other, new HashPartitioner(numPartitions))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  @RDDScope
+  @RDDScoped
   def subtract(other: RDD[T], p: Partitioner)(implicit ord: Ordering[T] = null): RDD[T] = {
     if (partitioner == Some(p)) {
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
@@ -934,7 +934,7 @@ abstract class RDD[T: ClassTag](
    * Reduces the elements of this RDD using the specified commutative and
    * associative binary operator.
    */
-  @RDDScope
+  @RDDScoped
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
@@ -964,7 +964,7 @@ abstract class RDD[T: ClassTag](
    * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#reduce]]
    */
-  @RDDScope
+  @RDDScoped
   def treeReduce(f: (T, T) => T, depth: Int = 2): T = {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     val cleanF = context.clean(f)
@@ -997,7 +997,7 @@ abstract class RDD[T: ClassTag](
    * modify t1 and return it as its result value to avoid object allocation; however, it should not
    * modify t2.
    */
-  @RDDScope
+  @RDDScoped
   def fold(zeroValue: T)(op: (T, T) => T): T = {
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
@@ -1016,7 +1016,7 @@ abstract class RDD[T: ClassTag](
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    */
-  @RDDScope
+  @RDDScoped
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
@@ -1034,7 +1034,7 @@ abstract class RDD[T: ClassTag](
    * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#aggregate]]
    */
-  @RDDScope
+  @RDDScoped
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
       combOp: (U, U) => U,
@@ -1071,7 +1071,7 @@ abstract class RDD[T: ClassTag](
    * within a timeout, even if not all tasks have finished.
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
       var result = 0L
@@ -1093,7 +1093,7 @@ abstract class RDD[T: ClassTag](
    * To handle very large results, consider using rdd.map(x =&gt; (x, 1L)).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
    */
-  @RDDScope
+  @RDDScoped
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
     map(value => (value, null)).countByKey()
   }
@@ -1103,7 +1103,7 @@ abstract class RDD[T: ClassTag](
    * Approximate version of countByValue().
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] =
@@ -1140,7 +1140,7 @@ abstract class RDD[T: ClassTag](
    *           If `sp` equals 0, the sparse representation is skipped.
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def countApproxDistinct(p: Int, sp: Int): Long = {
     require(p >= 4, s"p ($p) must be at least 4")
     require(sp <= 32, s"sp ($sp) cannot be greater than 32")
@@ -1167,7 +1167,7 @@ abstract class RDD[T: ClassTag](
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
    */
-  @RDDScope
+  @RDDScoped
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
     countApproxDistinct(p, 0)
@@ -1186,7 +1186,7 @@ abstract class RDD[T: ClassTag](
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
-  @RDDScope
+  @RDDScoped
   def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
 
   /**
@@ -1199,7 +1199,7 @@ abstract class RDD[T: ClassTag](
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
-  @RDDScope
+  @RDDScoped
   def zipWithUniqueId(): RDD[(T, Long)] = {
     val n = this.partitions.length.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
@@ -1217,7 +1217,7 @@ abstract class RDD[T: ClassTag](
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
-  @RDDScope
+  @RDDScoped
   def take(num: Int): Array[T] = {
     if (num == 0) {
       return new Array[T](0)
@@ -1257,7 +1257,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the first element in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def first(): T = take(1) match {
     case Array(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
@@ -1278,7 +1278,7 @@ abstract class RDD[T: ClassTag](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  @RDDScope
+  @RDDScoped
   def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
 
   /**
@@ -1297,7 +1297,7 @@ abstract class RDD[T: ClassTag](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  @RDDScope
+  @RDDScoped
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
     if (num == 0) {
       Array.empty
@@ -1323,14 +1323,14 @@ abstract class RDD[T: ClassTag](
    * Returns the max of this RDD as defined by the implicit Ordering[T].
    * @return the maximum element of the RDD
    * */
-  @RDDScope
+  @RDDScoped
   def max()(implicit ord: Ordering[T]): T = this.reduce(ord.max)
 
   /**
    * Returns the min of this RDD as defined by the implicit Ordering[T].
    * @return the minimum element of the RDD
    * */
-  @RDDScope
+  @RDDScoped
   def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
 
   /**
@@ -1341,13 +1341,13 @@ abstract class RDD[T: ClassTag](
    * @return true if and only if the RDD contains no elements at all. Note that an RDD
    *         may be empty even when it has at least 1 partition.
    */
-  @RDDScope
+  @RDDScoped
   def isEmpty(): Boolean = partitions.length == 0 || take(1).length == 0
 
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsTextFile(path: String): Unit = {
     // https://issues.apache.org/jira/browse/SPARK-2075
     //
@@ -1375,7 +1375,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
     // https://issues.apache.org/jira/browse/SPARK-2075
     val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
@@ -1394,7 +1394,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsObjectFile(path: String): Unit = {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
@@ -1404,13 +1404,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
    */
-  @RDDScope
+  @RDDScoped
   def keyBy[K](f: T => K): RDD[(K, T)] = {
     map(x => (f(x), x))
   }
 
   /** A private method for tests, to look at the contents of each partition */
-  @RDDScope
+  @RDDScoped
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
@@ -1451,7 +1451,7 @@ abstract class RDD[T: ClassTag](
   @transient private[spark] val creationSite = sc.getCallSite()
 
   /** Dem scopes. Tis null if de scope is not defined'eh. TODO: Make this private[spark]. */
-  @transient private[spark] val scope = RDD.getScope.orNull
+  @transient private[spark] val scope = RDDScope.getScope.orNull
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 
@@ -1621,81 +1621,6 @@ abstract class RDD[T: ClassTag](
  * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
  */
 object RDD {
-
-  /**
-   *
-   */
-  private[spark] val SCOPE_NESTING_DELIMITER = ";"
-  private[spark] val SCOPE_NAME_DELIMITER = "_"
-
-  /**
-   *
-   */
-  private val classesWithScopeMethods = Set(
-    "org.apache.spark.SparkContext",
-    "org.apache.spark.rdd.RDD",
-    "org.apache.spark.rdd.PairRDDFunctions",
-    "org.apache.spark.rdd.AsyncRDDActions"
-  )
-
-  /**
-   *
-   */
-  private val scopeIdCounter = new AtomicInteger(0)
-
-
-  /**
-   *
-   */
-  private def makeScopeId(name: String): String = {
-    name.replace(SCOPE_NESTING_DELIMITER, "-").replace(SCOPE_NAME_DELIMITER, "-") +
-      SCOPE_NAME_DELIMITER + scopeIdCounter.getAndIncrement
-  }
-
-  /**
-   *
-   */
-  private[spark] def getScope: Option[String] = {
-    val rddScopeNames = Thread.currentThread.getStackTrace
-      // Avoid reflecting on all classes in the stack trace
-      .filter { ste => classesWithScopeMethods.contains(ste.getClassName) }
-      // Return the corresponding method if it has the @RDDScope annotation
-      .flatMap { ste =>
-    // Note that this is an approximation since we match the method only by name
-    // Unfortunate we cannot be more precise because the stack trace does not
-    // include parameter information
-      Class.forName(ste.getClassName).getDeclaredMethods.find { m =>
-        m.getName == ste.getMethodName &&
-          m.getDeclaredAnnotations.exists { a =>
-            a.annotationType() == classOf[RDDScope]
-          }
-      }
-    }
-      // Use the method name as the scope name for now
-      .map { m => m.getName }
-
-    // It is common for such methods to internally invoke other methods with the same name
-    // (e.g. union, reduceByKey). Here we remove adjacent duplicates such that the scope
-    // chain does not capture this (e.g. a, a, b, c, b, c, c => a, b, c, b, c). This is
-    // surprisingly difficult to express even in Scala.
-    var prev: String = null
-    val dedupedRddScopeNames = rddScopeNames.flatMap { n =>
-      if (n != prev) {
-        prev = n
-        Some(n)
-      } else {
-        None
-      }
-    }
-
-    // Chain scope IDs to denote hierarchy, with outermost scope first
-    val rddScopeIds = dedupedRddScopeNames.map(makeScopeId)
-    if (rddScopeIds.nonEmpty) {
-      Some(rddScopeIds.reverse.mkString(SCOPE_NESTING_DELIMITER))
-    } else {
-      None
-    }
-  }
 
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find

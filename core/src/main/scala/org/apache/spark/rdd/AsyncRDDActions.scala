@@ -24,7 +24,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
-import org.apache.spark.annotation.RDDScope
+import org.apache.spark.annotation.RDDScoped
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
@@ -34,7 +34,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   /**
    * Returns a future for counting the number of elements in the RDD.
    */
-  @RDDScope
+  @RDDScoped
   def countAsync(): FutureAction[Long] = {
     val totalCount = new AtomicLong
     self.context.submitJob(
@@ -55,7 +55,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   /**
    * Returns a future for retrieving all elements of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def collectAsync(): FutureAction[Seq[T]] = {
     val results = new Array[Array[T]](self.partitions.length)
     self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),
@@ -65,7 +65,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   /**
    * Returns a future for retrieving the first num elements of the RDD.
    */
-  @RDDScope
+  @RDDScoped
   def takeAsync(num: Int): FutureAction[Seq[T]] = {
     val f = new ComplexFutureAction[Seq[T]]
 
@@ -113,7 +113,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   /**
    * Applies a function f to all elements of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def foreachAsync(f: T => Unit): FutureAction[Unit] = {
     val cleanF = self.context.clean(f)
     self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.length),
@@ -123,7 +123,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   /**
    * Applies a function f to each partition of this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def foreachPartitionAsync(f: Iterator[T] => Unit): FutureAction[Unit] = {
     self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
       (index, data) => Unit, Unit)

@@ -44,7 +44,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, RDDScope}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, RDDScoped}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
@@ -641,7 +641,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note avoid using `parallelize(Seq())` to create an empty `RDD`. Consider `emptyRDD` for an
    * RDD with no partitions, or `parallelize(Seq[T]())` for an RDD of `T` with empty partitions.
    */
-  @RDDScope
+  @RDDScoped
   def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     assertNotStopped()
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
@@ -651,7 +651,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * This method is identical to `parallelize`.
    */
-  @RDDScope
+  @RDDScoped
   def makeRDD[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
   }
@@ -659,7 +659,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Distribute a local Scala collection to form an RDD, with one or more
     * location preferences (hostnames of Spark nodes) for each object.
     * Create a new partition for each collection item. */
-  @RDDScope
+  @RDDScoped
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = {
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
@@ -670,7 +670,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  @RDDScope
+  @RDDScoped
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
@@ -704,7 +704,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  @RDDScope
+  @RDDScoped
   def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
   RDD[(String, String)] = {
     assertNotStopped()
@@ -751,7 +751,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred; very large files may cause bad performance.
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
       RDD[(String, PortableDataStream)] = {
     assertNotStopped()
@@ -780,7 +780,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return An RDD of data with values, represented as byte arrays
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def binaryRecords(path: String, recordLength: Int, conf: Configuration = hadoopConfiguration)
       : RDD[Array[Byte]] = {
     assertNotStopped()
@@ -818,7 +818,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def hadoopRDD[K, V](
       conf: JobConf,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -840,7 +840,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def hadoopFile[K, V](
       path: String,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -876,7 +876,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def hadoopFile[K, V, F <: InputFormat[K, V]]
       (path: String, minPartitions: Int)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
@@ -901,13 +901,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
     hadoopFile[K, V, F](path, defaultMinPartitions)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
-  @RDDScope
+  @RDDScoped
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
       (path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
@@ -928,7 +928,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       path: String,
       fClass: Class[F],
@@ -962,7 +962,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  @RDDScope
+  @RDDScoped
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,
       fClass: Class[F],
@@ -983,7 +983,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
     * copy them using a `map` function.
     */
-  @RDDScope
+  @RDDScoped
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
@@ -1002,7 +1002,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
     * copy them using a `map` function.
     * */
-  @RDDScope
+  @RDDScoped
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] = {
     assertNotStopped()
     sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
@@ -1030,7 +1030,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-   @RDDScope
+   @RDDScoped
    def sequenceFile[K, V]
        (path: String, minPartitions: Int = defaultMinPartitions)
        (implicit km: ClassTag[K], vm: ClassTag[V],
@@ -1054,7 +1054,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * though the nice thing about it is that there's very little effort required to save arbitrary
    * objects.
    */
-  @RDDScope
+  @RDDScoped
   def objectFile[T: ClassTag](
       path: String,
       minPartitions: Int = defaultMinPartitions
@@ -1064,7 +1064,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
   }
 
-  @RDDScope
+  @RDDScoped
   protected[spark] def checkpointFile[T: ClassTag](
       path: String
     ): RDD[T] = {
@@ -1072,7 +1072,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Build the union of a list of RDDs. */
-  @RDDScope
+  @RDDScoped
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
     val partitioners = rdds.flatMap(_.partitioner).toSet
     if (partitioners.size == 1) {
@@ -1083,7 +1083,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
-  @RDDScope
+  @RDDScoped
   def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
     union(Seq(first) ++ rest)
 

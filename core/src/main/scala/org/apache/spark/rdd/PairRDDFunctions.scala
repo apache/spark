@@ -38,7 +38,7 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewO
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
-import org.apache.spark.annotation.{Experimental, RDDScope}
+import org.apache.spark.annotation.{Experimental, RDDScoped}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
@@ -70,7 +70,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  @RDDScope
+  @RDDScoped
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
@@ -106,7 +106,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Simplified version of combineByKey that hash-partitions the output RDD.
    */
-  @RDDScope
+  @RDDScoped
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
@@ -123,7 +123,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * allocation, both of these functions are allowed to modify and return their first argument
    * instead of creating a new U.
    */
-  @RDDScope
+  @RDDScoped
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
@@ -146,7 +146,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * allocation, both of these functions are allowed to modify and return their first argument
    * instead of creating a new U.
    */
-  @RDDScope
+  @RDDScoped
   def aggregateByKey[U: ClassTag](zeroValue: U, numPartitions: Int)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = {
     aggregateByKey(zeroValue, new HashPartitioner(numPartitions))(seqOp, combOp)
@@ -161,7 +161,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * allocation, both of these functions are allowed to modify and return their first argument
    * instead of creating a new U.
    */
-  @RDDScope
+  @RDDScoped
   def aggregateByKey[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = {
     aggregateByKey(zeroValue, defaultPartitioner(self))(seqOp, combOp)
@@ -172,7 +172,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * may be added to the result an arbitrary number of times, and must not change the result
    * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
-  @RDDScope
+  @RDDScoped
   def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
@@ -191,7 +191,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * may be added to the result an arbitrary number of times, and must not change the result
    * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
-  @RDDScope
+  @RDDScoped
   def foldByKey(zeroValue: V, numPartitions: Int)(func: (V, V) => V): RDD[(K, V)] = {
     foldByKey(zeroValue, new HashPartitioner(numPartitions))(func)
   }
@@ -201,7 +201,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * may be added to the result an arbitrary number of times, and must not change the result
    * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
-  @RDDScope
+  @RDDScoped
   def foldByKey(zeroValue: V)(func: (V, V) => V): RDD[(K, V)] = {
     foldByKey(zeroValue, defaultPartitioner(self))(func)
   }
@@ -219,7 +219,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param seed seed for the random number generator
    * @return RDD containing the sampled subset
    */
-  @RDDScope
+  @RDDScoped
   def sampleByKey(withReplacement: Boolean,
       fractions: Map[K, Double],
       seed: Long = Utils.random.nextLong): RDD[(K, V)] = {
@@ -251,7 +251,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @return RDD containing the sampled subset
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def sampleByKeyExact(
       withReplacement: Boolean,
       fractions: Map[K, Double],
@@ -272,7 +272,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
-  @RDDScope
+  @RDDScoped
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, partitioner)
   }
@@ -282,7 +282,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
    */
-  @RDDScope
+  @RDDScoped
   def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
     reduceByKey(new HashPartitioner(numPartitions), func)
   }
@@ -293,7 +293,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
    * parallelism level.
    */
-  @RDDScope
+  @RDDScoped
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
     reduceByKey(defaultPartitioner(self), func)
   }
@@ -303,7 +303,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * immediately to the master as a Map. This will also perform the merging locally on each mapper
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
-  @RDDScope
+  @RDDScoped
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
 
     if (keyClass.isArray) {
@@ -332,7 +332,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /** Alias for reduceByKeyLocally */
   @deprecated("Use reduceByKeyLocally", "1.0.0")
-  @RDDScope
+  @RDDScoped
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
 
   /** 
@@ -343,7 +343,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
    */
-  @RDDScope
+  @RDDScoped
   def countByKey(): Map[K, Long] = self.mapValues(_ => 1L).reduceByKey(_ + _).collect().toMap
 
   /**
@@ -352,7 +352,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * not finish within a timeout.
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = {
     self.map(_._1).countByValueApprox(timeout, confidence)
@@ -378,7 +378,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param partitioner Partitioner to use for the resulting RDD.
    */
   @Experimental
-  @RDDScope
+  @RDDScoped
   def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): RDD[(K, Long)] = {
     require(p >= 4, s"p ($p) must be >= 4")
     require(sp <= 32, s"sp ($sp) must be <= 32")
@@ -411,7 +411,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *                   It must be greater than 0.000017.
    * @param partitioner partitioner of the resulting RDD
    */
-  @RDDScope
+  @RDDScoped
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
     require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
@@ -430,7 +430,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *                   It must be greater than 0.000017.
    * @param numPartitions number of partitions of the resulting RDD
    */
-  @RDDScope
+  @RDDScoped
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
   }
@@ -445,7 +445,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
    */
-  @RDDScope
+  @RDDScoped
   def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
   }
@@ -463,7 +463,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
-  @RDDScope
+  @RDDScoped
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
@@ -488,7 +488,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
-  @RDDScope
+  @RDDScoped
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
   }
@@ -496,7 +496,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
-  @RDDScope
+  @RDDScoped
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
@@ -513,7 +513,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
-  @RDDScope
+  @RDDScoped
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues( pair =>
       for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
@@ -526,7 +526,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-  @RDDScope
+  @RDDScoped
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
       if (pair._2.isEmpty) {
@@ -543,7 +543,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-  @RDDScope
+  @RDDScoped
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
@@ -563,7 +563,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
    * in `this` have key k. Uses the given Partitioner to partition the output RDD.
    */
-  @RDDScope
+  @RDDScoped
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues {
@@ -577,7 +577,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  @RDDScope
+  @RDDScoped
   def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
     : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
@@ -593,7 +593,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
-  @RDDScope
+  @RDDScoped
   def groupByKey(): RDD[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner(self))
   }
@@ -603,7 +603,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  @RDDScope
+  @RDDScoped
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
     join(other, defaultPartitioner(self, other))
   }
@@ -613,7 +613,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  @RDDScope
+  @RDDScoped
   def join[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = {
     join(other, new HashPartitioner(numPartitions))
   }
@@ -624,7 +624,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * using the existing partitioner/parallelism level.
    */
-  @RDDScope
+  @RDDScoped
   def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
     leftOuterJoin(other, defaultPartitioner(self, other))
   }
@@ -635,7 +635,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * into `numPartitions` partitions.
    */
-  @RDDScope
+  @RDDScoped
   def leftOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, Option[W]))] = {
     leftOuterJoin(other, new HashPartitioner(numPartitions))
   }
@@ -646,7 +646,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD using the existing partitioner/parallelism level.
    */
-  @RDDScope
+  @RDDScoped
   def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, defaultPartitioner(self, other))
   }
@@ -657,7 +657,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD into the given number of partitions.
    */
-  @RDDScope
+  @RDDScoped
   def rightOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, new HashPartitioner(numPartitions))
   }
@@ -671,7 +671,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * in `this` have key k. Hash-partitions the resulting RDD using the existing partitioner/
    * parallelism level.
    */
-  @RDDScope
+  @RDDScoped
   def fullOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], Option[W]))] = {
     fullOuterJoin(other, defaultPartitioner(self, other))
   }
@@ -684,7 +684,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
    * in `this` have key k. Hash-partitions the resulting RDD into the given number of partitions.
    */
-  @RDDScope
+  @RDDScoped
   def fullOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], Option[W]))] = {
     fullOuterJoin(other, new HashPartitioner(numPartitions))
   }
@@ -695,7 +695,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
    *          one value per key is preserved in the map returned)
    */
-  @RDDScope
+  @RDDScoped
   def collectAsMap(): Map[K, V] = {
     val data = self.collect()
     val map = new mutable.HashMap[K, V]
@@ -708,7 +708,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  @RDDScope
+  @RDDScoped
   def mapValues[U](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MapPartitionsRDD[(K, U), (K, V)](self,
@@ -720,7 +720,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
-  @RDDScope
+  @RDDScoped
   def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MapPartitionsRDD[(K, U), (K, V)](self,
@@ -735,7 +735,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
       other2: RDD[(K, W2)],
       other3: RDD[(K, W3)],
@@ -757,7 +757,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))]  = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
@@ -773,7 +773,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
@@ -792,7 +792,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
@@ -802,7 +802,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
@@ -811,7 +811,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
@@ -821,7 +821,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, new HashPartitioner(numPartitions))
   }
@@ -830,7 +830,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numPartitions: Int)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, new HashPartitioner(numPartitions))
@@ -841,7 +841,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  @RDDScope
+  @RDDScoped
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
       other2: RDD[(K, W2)],
       other3: RDD[(K, W3)],
@@ -851,20 +851,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /** Alias for cogroup. */
-  @RDDScope
+  @RDDScoped
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
 
   /** Alias for cogroup. */
-  @RDDScope
+  @RDDScoped
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   }
 
   /** Alias for cogroup. */
-  @RDDScope
+  @RDDScoped
   def groupWith[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
@@ -876,17 +876,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  @RDDScope
+  @RDDScoped
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.length)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  @RDDScope
+  @RDDScoped
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
     subtractByKey(other, new HashPartitioner(numPartitions))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  @RDDScope
+  @RDDScoped
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
     new SubtractedRDD[K, V, W](self, other, p)
 
@@ -894,7 +894,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return the list of values in the RDD for key `key`. This operation is done efficiently if the
    * RDD has a known partitioner by only searching the partition that the key maps to.
    */
-  @RDDScope
+  @RDDScoped
   def lookup(key: K): Seq[V] = {
     self.partitioner match {
       case Some(p) =>
@@ -917,7 +917,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
@@ -927,7 +927,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * supporting the key and value types K and V in this RDD. Compress the result with the
    * supplied codec.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
       path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassTag[F]) {
     val runtimeClass = fm.runtimeClass
@@ -938,7 +938,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
     saveAsNewAPIHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
@@ -947,7 +947,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsNewAPIHadoopFile(
       path: String,
       keyClass: Class[_],
@@ -969,7 +969,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress with the supplied codec.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsHadoopFile(
       path: String,
       keyClass: Class[_],
@@ -984,7 +984,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsHadoopFile(
       path: String,
       keyClass: Class[_],
@@ -1024,7 +1024,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsNewAPIHadoopDataset(conf: Configuration) {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
@@ -1092,7 +1092,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  @RDDScope
+  @RDDScoped
   def saveAsHadoopDataset(conf: JobConf) {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf

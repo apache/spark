@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.storage.RDDInfo
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDDScope
 
 /** */
 private[ui] case class VizNode(id: Int, name: String, isCached: Boolean = false)
@@ -35,7 +35,7 @@ private[ui] case class VizEdge(fromId: Int, toId: Int)
 private[ui] class VizScope(val id: String) {
   private val _childrenNodes = new ArrayBuffer[VizNode]
   private val _childrenScopes = new ArrayBuffer[VizScope]
-  val name: String = id.split(RDD.SCOPE_NAME_DELIMITER).head
+  val name: String = id.split(RDDScope.SCOPE_NAME_DELIMITER).head
 
   def childrenNodes: Seq[VizNode] = _childrenNodes.iterator.toSeq
   def childrenScopes: Seq[VizScope] = _childrenScopes.iterator.toSeq
@@ -77,7 +77,7 @@ private[ui] object VizGraph {
       } else {
         // Attach children scopes and nodes to each scope
         var previousScope: VizScope = null
-        val scopeIt = rdd.scope.split(RDD.SCOPE_NESTING_DELIMITER).iterator
+        val scopeIt = rdd.scope.split(RDDScope.SCOPE_NESTING_DELIMITER).iterator
         while (scopeIt.hasNext) {
           val scopeId = scopeIt.next()
           val scope = scopes.getOrElseUpdate(scopeId, new VizScope(scopeId))
