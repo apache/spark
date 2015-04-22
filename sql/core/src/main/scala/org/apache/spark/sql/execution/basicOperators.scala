@@ -65,6 +65,21 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  * :: DeveloperApi ::
  */
 @DeveloperApi
+case class CustomFilter(condition: Expression, child: SparkPlan, out: Seq[Attribute]) 
+  extends UnaryNode {
+  override def output: Seq[Attribute] = out
+
+  @transient lazy val conditionEvaluator: (Row) => Boolean = newPredicate(condition, child.output)
+
+  override def execute(): RDD[Row] = child.execute().mapPartitions { iter =>
+    iter.filter(conditionEvaluator)
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
   extends UnaryNode
 {
