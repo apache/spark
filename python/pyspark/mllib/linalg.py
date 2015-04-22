@@ -638,9 +638,10 @@ class Matrix(object):
     Represents a local matrix.
     """
 
-    def __init__(self, numRows, numCols):
+    def __init__(self, numRows, numCols, isTransposed=False):
         self.numRows = numRows
         self.numCols = numCols
+        self.isTransposed = isTransposed
 
     def toArray(self):
         """
@@ -662,14 +663,16 @@ class DenseMatrix(Matrix):
     """
     Column-major dense matrix.
     """
-    def __init__(self, numRows, numCols, values):
-        Matrix.__init__(self, numRows, numCols)
+    def __init__(self, numRows, numCols, values, isTransposed=False):
+        Matrix.__init__(self, numRows, numCols, isTransposed)
         values = self._convert_to_array(values, np.float64)
         assert len(values) == numRows * numCols
         self.values = values
 
     def __reduce__(self):
-        return DenseMatrix, (self.numRows, self.numCols, self.values.tostring())
+        return DenseMatrix, (
+            self.numRows, self.numCols, self.values.tostring(),
+            int(self.isTransposed))
 
     def toArray(self):
         """
@@ -680,15 +683,23 @@ class DenseMatrix(Matrix):
         array([[ 0.,  2.],
                [ 1.,  3.]])
         """
-        return self.values.reshape((self.numRows, self.numCols), order='F')
+        if self.isTransposed:
+            return np.asfortranarray(
+                self.values.reshape((self.numRows, self.numCols)))
+        else:
+            return self.values.reshape((self.numRows, self.numCols), order='F')
 
     def toSparse(self):
         """Convert to SparseMatrix"""
-        indices = np.nonzero(self.values)[0]
+        if self.isTransposed:
+            values = np.ravel(self.toArray(), order='F')
+        else:
+            values = self.values
+        indices = np.nonzero(values)[0]
         colCounts = np.bincount(indices // self.numRows)
         colPtrs = np.cumsum(np.hstack(
             (0, colCounts, np.zeros(self.numCols - colCounts.size))))
-        values = self.values[indices]
+        values = values[indices]
         rowIndices = indices % self.numRows
 
         return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
@@ -701,21 +712,28 @@ class DenseMatrix(Matrix):
         if j >= self.numCols or j < 0:
             raise ValueError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
-        return self.values[i + j * self.numRows]
+
+        if self.isTransposed:
+            return self.values[i * self.numCols + j]
+        else:
+            return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
-        return (isinstance(other, DenseMatrix) and
-                self.numRows == other.numRows and
-                self.numCols == other.numCols and
-                all(self.values == other.values))
+        if (not isinstance(other, DenseMatrix) or
+                self.numRows != other.numRows or
+                self.numCols != other.numCols):
+            return False
+
+        self_values = np.ravel(self.toArray(), order='F')
+        other_values = np.ravel(other.toArray(), order='F')
+        return all(self_values == other_values)
 
 
 class SparseMatrix(Matrix):
     """Sparse Matrix stored in CSC format."""
     def __init__(self, numRows, numCols, colPtrs, rowIndices, values,
                  isTransposed=False):
-        Matrix.__init__(self, numRows, numCols)
-        self.isTransposed = isTransposed
+        Matrix.__init__(self, numRows, numCols, isTransposed)
         self.colPtrs = self._convert_to_array(colPtrs, np.int32)
         self.rowIndices = self._convert_to_array(rowIndices, np.int32)
         self.values = self._convert_to_array(values, np.float64)
@@ -777,8 +795,7 @@ class SparseMatrix(Matrix):
         return A
 
     def toDense(self):
-        densevals = np.reshape(
-            self.toArray(), (self.numRows * self.numCols), order='F')
+        densevals = np.ravel(self.toArray(), order='F')
         return DenseMatrix(self.numRows, self.numCols, densevals)
 
     # TODO: More efficient implementation:

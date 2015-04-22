@@ -48,11 +48,13 @@ object RpcUtils {
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getTimeAsSeconds("spark.rpc.askTimeout", "30s") seconds
+    conf.getTimeAsSeconds("spark.rpc.askTimeout",
+      conf.get("spark.network.timeout", "120s")) seconds
   }
 
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    conf.getTimeAsSeconds("spark.rpc.lookupTimeout", "30s") seconds
+    conf.getTimeAsSeconds("spark.rpc.lookupTimeout",
+      conf.get("spark.network.timeout", "120s")) seconds
   }
 }

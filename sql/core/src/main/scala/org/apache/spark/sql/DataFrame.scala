@@ -34,7 +34,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, ResolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -711,12 +711,16 @@ class DataFrame private[sql](
    */
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributes = schema.toAttributes
+
+    val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
+    val names = schema.toAttributes.map(_.name)
+
     val rowFunction =
       f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
-    val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
+    val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
-    Generate(generator, join = true, outer = false, None, logicalPlan)
+    Generate(generator, join = true, outer = false,
+      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
   }
 
   /**
@@ -733,12 +737,17 @@ class DataFrame private[sql](
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    // TODO handle the metadata?
+    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable) }
+    val names = attributes.map(_.name)
+
     def rowFunction(row: Row): TraversableOnce[Row] = {
       f(row(0).asInstanceOf[A]).map(o => Row(CatalystTypeConverters.convertToCatalyst(o, dataType)))
     }
-    val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
+    val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
-    Generate(generator, join = true, outer = false, None, logicalPlan)
+    Generate(generator, join = true, outer = false,
+      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
   }
 
   /////////////////////////////////////////////////////////////////////////////
