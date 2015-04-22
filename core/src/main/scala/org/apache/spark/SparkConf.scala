@@ -431,7 +431,15 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.am.waitTime" -> Seq(
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
-        translation = s => s"${s.toLong * 10}s"))
+        translation = s => s"${s.toLong * 10}s")),
+    "spark.rpc.numRetries" -> Seq(
+      AlternateConfig("spark.akka.num.retries", "1.4")),
+    "spark.rpc.retry.wait" -> Seq(
+      AlternateConfig("spark.akka.retry.wait", "1.4")),
+    "spark.rpc.askTimeout" -> Seq(
+      AlternateConfig("spark.akka.askTimeout", "1.4")),
+    "spark.rpc.lookupTimeout" -> Seq(
+      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
     )
 
   /**

@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkException, SecurityManager, SparkConf}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
@@ -38,7 +38,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
-  private[spark] val defaultLookupTimeout = AkkaUtils.lookupTimeout(conf)
+  private[spark] val defaultLookupTimeout = RpcUtils.lookupTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
@@ -282,9 +282,9 @@ trait ThreadSafeRpcEndpoint extends RpcEndpoint
 private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   extends Serializable with Logging {
 
-  private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
-  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
-  private[this] val defaultAskTimeout = conf.getLong("spark.akka.askTimeout", 30) seconds
+  private[this] val maxRetries = RpcUtils.numRetries(conf)
+  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
+  private[this] val defaultAskTimeout = RpcUtils.askTimeout(conf)
 
   /**
    * return the address for the [[RpcEndpointRef]]
