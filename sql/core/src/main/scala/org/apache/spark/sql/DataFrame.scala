@@ -343,6 +343,35 @@ class DataFrame private[sql](
   }
 
   /**
+   * Inner equi-join with another [[DataFrame]] using the column.
+   * {{{
+   *   // Joining df1 and df2 using the column "user_id"
+   *   df1.join(df2, "user_id")
+   * }}}
+   *
+   * Note that if you perform a self-join using this function, you wouldn't be able to reference
+   * any columns after the join, since there is no way to disambiguate which side of the join you
+   * would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumn Name of the column to join on. This column must exists on both sides.
+   * @group dfops
+   */
+  def join(right: DataFrame, usingColumn: String): DataFrame = {
+    val joined = sqlContext.executePlan(
+      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+    val joinedCol = joined.right.resolve(usingColumn)
+    Project(
+      joined.output.filterNot(_ == joinedCol),
+      Join(
+        joined.left,
+        joined.right,
+        joinType = Inner,
+        Some(EqualTo(joined.left.resolve(usingColumn), joined.right.resolve(usingColumn))))
+    )
+  }
+
+  /**
    * Inner join with another [[DataFrame]], using the given join expression.
    *
    * {{{
