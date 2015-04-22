@@ -31,57 +31,34 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
-    val localDoc = Seq(sentence, sentence)
-    val doc = sc.parallelize(localDoc)
-      .map(line => line.split(" "))
-    val docDF = doc.map(text => Tuple1(text)).toDF("text")
+    val numOfWords = sentence.split(" ").size
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(-0.2811822295188904,-0.6356269121170044,-0.3020961284637451),
+      "b" -> Array(1.0309048891067505,-1.29472815990448,0.22276712954044342),
+      "c" -> Array(-0.08456747233867645,0.5137411952018738,0.11731560528278351)
+    )
+
+    val expected = doc.map { sentence =>
+      Vectors.dense(sentence.map(codes.apply).reduce((word1, word2) =>
+        word1.zip(word2).map { case (v1, v2) => v1 + v2 }
+      ).map(_ / numOfWords))
+    }
+
+    val docDF = doc.zip(expected).toDF("text", "expected")
 
     val model = new Word2Vec()
       .setVectorSize(3)
-      .setSeed(42L)
       .setInputCol("text")
-      .setMaxIter(1)
+      .setOutputCol("result")
       .fit(docDF)
 
-    val words = sc.parallelize(Seq("a", "b", "c"))
-    val codes = Map(
-      "a" -> Vectors.dense(-0.2811822295188904,-0.6356269121170044,-0.3020961284637451),
-      "b" -> Vectors.dense(1.0309048891067505,-1.29472815990448,0.22276712954044342),
-      "c" -> Vectors.dense(-0.08456747233867645,0.5137411952018738,0.11731560528278351)
-    )
+    model.transform(docDF).select("result", "expected").collect().foreach {
+      case Row(vector1: Vector, vector2: Vector) =>
+        assert(vector1 ~== vector2 absTol 1E-5, "Transformed vector is different with expected.")
+    }
 
-    val synonyms = Map(
-      "a" -> Map("b" -> 0.3680490553379059),
-      "b" -> Map("a" -> 0.3680490553379059),
-      "c" -> Map("b" -> -0.8148014545440674)
-    )
-    val wordsDF = words.map(word => Tuple3(word, codes(word), synonyms(word)))
-      .toDF("word", "realCode", "realSynonyms")
-
-    val res = model
-      .setInputCol("word")
-      .setCodeCol("code")
-      .setSynonymsCol("syn")
-      .setNumSynonyms(1)
-      .transform(wordsDF)
-
-    assert(
-      res.select("code", "realCode")
-        .map { case Row(c: Vector, rc: Vector) => (c, rc) }
-        .collect()
-        .forall { case (vector1, vector2) =>
-          vector1 ~== vector2 absTol 1E-5
-        }, "The code is not correct after transforming."
-    )
-
-    assert(
-      res.select("syn", "realSynonyms")
-        .map { case Row(s: Map[String, Double], rs: Map[String, Double]) => (s, rs) }
-        .collect()
-        .forall { case (map1, map2) =>
-          map1 == map2
-        }, "The synonyms are not correct after transforming."
-    )
   }
 }
 

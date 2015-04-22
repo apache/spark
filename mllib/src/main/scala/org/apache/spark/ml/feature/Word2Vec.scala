@@ -62,7 +62,7 @@ private[feature] trait Word2VecBase extends Params
    */
   final val seed = new LongParam(this, "seed", "a random seed to random an initial vector")
 
-  setDefault(seed -> Utils.random.nextLong())
+  setDefault(seed -> 42L)
 
   /** @group getParam */
   def getSeed: Long = getOrDefault(seed)
@@ -77,12 +77,15 @@ private[feature] trait Word2VecBase extends Params
   /** @group getParam */
   def getMinCount: Int = getOrDefault(minCount)
 
+  setDefault(stepSize -> 0.025)
+  setDefault(maxIter -> 1)
+
   /**
    * Validate and transform the input schema.
    */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new ArrayType(new StringType, false))
+    SchemaUtils.checkColumnType(schema, map(inputCol), new ArrayType(StringType, true))
     SchemaUtils.appendColumn(schema, map(outputCol), new VectorUDT)
   }
 }
@@ -166,8 +169,14 @@ class Word2VecModel private[ml] (
     val map = extractParamMap(paramMap)
     val bWordVectors = dataset.sqlContext.sparkContext.broadcast(wordVectors)
     val word2Vec = udf { v: Seq[String] =>
-      v.map(bWordVectors.value.transform).foldLeft(Vectors.zeros(map(vectorSize))) { (cum, vec) =>
-        Vectors.dense(cum.toArray.zip(vec.toArray).map(x => x._1 + x._2))
+      if (v.size == 0) {
+        Vectors.zeros(map(vectorSize))
+      } else {
+        Vectors.dense(
+          v.map(bWordVectors.value.getVectors).foldLeft(Array.fill[Double](map(vectorSize))(0)) {
+            (cum, vec) => cum.zip(vec).map(x => x._1 + x._2)
+          }.map(_ / v.size)
+        )
       }
     }
     dataset.withColumn(map(outputCol), word2Vec(col(map(inputCol))))
