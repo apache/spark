@@ -678,7 +678,7 @@ object JavaStreamingContext {
    * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
    *                       file system
    */
-  @deprecated("use getOrCreate without JavaStreamingContextFactor", "1.4.0")
+  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
       checkpointPath: String,
       hadoopConf: Configuration,
@@ -703,7 +703,7 @@ object JavaStreamingContext {
    * @param createOnError  Whether to create a new JavaStreamingContext if there is an
    *                       error in reading checkpoint data.
    */
-  @deprecated("use getOrCreate without JavaStreamingContextFactor", "1.4.0")
+  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
       checkpointPath: String,
       hadoopConf: Configuration,

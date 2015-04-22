@@ -283,7 +283,7 @@ object CheckpointReader extends Logging {
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {
-      throw new SparkException("Failed to read checkpoint from directory " + checkpointPath)
+      throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
     }
     None
   }

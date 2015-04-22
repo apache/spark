@@ -107,11 +107,15 @@ class StreamingContext private[streaming] (
    */
   def this(path: String) = this(path, new Configuration)
 
-
+  /**
+   * Recreate a StreamingContext from a checkpoint file using an existing SparkContext.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   * @param sparkContext Existing SparkContext
+   */
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, new SparkConf(), sparkContext.hadoopConfiguration).get,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
       null)
   }
 
@@ -123,10 +127,8 @@ class StreamingContext private[streaming] (
 
   private[streaming] val isCheckpointPresent = (cp_ != null)
 
-  private[streaming] val isSparkContextPresent = (sc_ != null)
-
   private[streaming] val sc: SparkContext = {
-    if (isSparkContextPresent) {
+    if (sc_ != null) {
       sc_
     } else if (isCheckpointPresent) {
       new SparkContext(cp_.createSparkConf())
