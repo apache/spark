@@ -1153,6 +1153,14 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
+<tr>
+  <td><code>spark.stage.maxFailures</code></td>
+  <td>5</td>
+  <td>
+    Number of individual stage failures before aborting the stage and not retrying it.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+  </td>
+</tr>
 </table>
 
 #### Dynamic Allocation

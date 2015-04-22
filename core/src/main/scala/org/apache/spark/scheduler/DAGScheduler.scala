@@ -97,7 +97,7 @@ class DAGScheduler(
   private[scheduler] val failedStages = new HashSet[Stage]
 
   // The maximum number of times to retry a stage before aborting
-  val maxStageFailures = 5
+  val maxStageFailures = sc.conf.getInt("spark.stage.maxFailures", 5)
   
   // To avoid cyclical stage failures (see SPARK-5945) we limit the number of times that a stage
   // may be retried. However, it only makes sense to limit the number of times that a stage fails
