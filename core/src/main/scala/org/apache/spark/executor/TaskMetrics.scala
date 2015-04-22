@@ -47,7 +47,7 @@ class TaskMetrics extends Serializable {
   /**
    * Time taken on the executor to deserialize this task
    */
-  private var _executorDeserializeTime: Long = 0
+  private var _executorDeserializeTime: Long = _
   def executorDeserializeTime: Long = _executorDeserializeTime
   private[spark] def incExecutorDeserializeTime(value: Long) = _executorDeserializeTime += value
   

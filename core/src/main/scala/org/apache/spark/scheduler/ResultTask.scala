@@ -61,7 +61,12 @@ private[spark] class ResultTask[T, U](
       .incExecutorDeserializeTime(System.currentTimeMillis() - deserializeStartTime)
 
     metrics = Some(context.taskMetrics)
-    func(context, rdd.iterator(partition, context))
+    val startTime = System.currentTimeMillis()
+    try {
+      func(context, rdd.iterator(partition, context))
+    } finally {
+      context.taskMetrics().setExecutorRunTime(System.currentTimeMillis() - startTime)
+    }
   }
 
   // This is only callable on the driver side.

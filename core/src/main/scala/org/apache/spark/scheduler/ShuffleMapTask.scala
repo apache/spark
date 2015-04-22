@@ -66,10 +66,16 @@ private[spark] class ShuffleMapTask(
     metrics = Some(context.taskMetrics)
     var writer: ShuffleWriter[Any, Any] = null
     try {
-      val manager = SparkEnv.get.shuffleManager
-      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      return writer.stop(success = true).get
+      val startTime = System.currentTimeMillis()
+      try {
+        val manager = SparkEnv.get.shuffleManager
+        writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
+        writer.write(
+          rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+        writer.stop(success = true).get
+      } finally {
+        context.taskMetrics().setExecutorRunTime(System.currentTimeMillis() - startTime)
+      }
     } catch {
       case e: Exception =>
         try {
