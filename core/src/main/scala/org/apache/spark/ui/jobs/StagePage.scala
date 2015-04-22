@@ -436,6 +436,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val executorsSet = new HashSet[(String, String)]
 
+      var minLaunchTime = Long.MaxValue
+      var maxFinishTime = Long.MinValue
+      var numEffectiveTasks = 0
       val executorsArrayStr = stageData.taskData.flatMap {
         case (_, taskUIData) =>
           val taskInfo = taskUIData.taskInfo
@@ -464,6 +467,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             val launchTime = taskInfo.launchTime
             val finishTime = if (!isRunning) taskInfo.finishTime else currentTime
             val totalExecutionTime = finishTime - launchTime
+            minLaunchTime = launchTime.min(minLaunchTime)
+            maxFinishTime = launchTime.max(maxFinishTime)
+            numEffectiveTasks += 1
 
             val metricsOpt = taskUIData.taskMetrics
             val shuffleReadTime =
@@ -555,6 +561,20 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           """.stripMargin
       }.mkString("[", ",", "]")
 
+      var maxWindowInSec = ((maxFinishTime - minLaunchTime) / 1000.0).round
+      if (maxWindowInSec <= 0) maxWindowInSec = 1
+      val tasksPerSecond = numEffectiveTasks / maxWindowInSec
+      var maxZoom = {
+        if (tasksPerSecond > 100) {
+          1000L / (tasksPerSecond / 100)
+        }
+        else {
+          24L * 60 * 60 * 1000
+        }
+      }
+
+      if (maxZoom < 0) maxZoom = 1
+
       val content =
         summary ++
         showAdditionalMetrics ++
@@ -570,7 +590,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </div>
         </div> ++
         <script type="text/javascript">
-          {Unparsed(s"drawTaskAssignmentTimeline(${groupArrayStr}, ${executorsArrayStr})")}
+          {Unparsed(s"drawTaskAssignmentTimeline(" +
+            s"${groupArrayStr}, ${executorsArrayStr}, ${minLaunchTime}, ${maxZoom})")}
         </script>
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
