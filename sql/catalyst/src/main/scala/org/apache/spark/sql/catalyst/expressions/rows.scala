@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{StructType, NativeType}
-
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, NativeType}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -37,6 +36,7 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  // TODO(davies): add setDate() and setDecimal()
 }
 
 /**
@@ -114,8 +114,14 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    values(i).asInstanceOf[String]
+    values(i) match {
+      case null => null
+      case s: String => s
+      case utf8: UTF8String => utf8.toString
+    }
   }
+
+  // TODO(davies): add getDate and getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -175,6 +181,8 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
 
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
+
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
@@ -189,8 +197,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
-
+  override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
@@ -224,6 +231,7 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
             n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case n: NativeType if order.direction == Descending =>
             n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case other => sys.error(s"Type $other does not support ordered operations")
         }
         if (comparison != 0) return comparison
       }
@@ -231,4 +239,11 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     }
     return 0
   }
+}
+
+object RowOrdering {
+  def forSchema(dataTypes: Seq[DataType]): RowOrdering =
+    new RowOrdering(dataTypes.zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
 }

@@ -230,13 +230,17 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericRow(newValues)
   }
 
-  override def update(ordinal: Int, value: Any): Unit = {
-    if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
+  override def update(ordinal: Int, value: Any) {
+    if (value == null) {
+      setNullAt(ordinal)
+    } else {
+      values(ordinal).update(value)
+    }
   }
 
-  override def setString(ordinal: Int, value: String): Unit = update(ordinal, value)
+  override def setString(ordinal: Int, value: String): Unit = update(ordinal, UTF8String(value))
 
-  override def getString(ordinal: Int): String = apply(ordinal).asInstanceOf[String]
+  override def getString(ordinal: Int): String = apply(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

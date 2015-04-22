@@ -67,7 +67,7 @@ private[spark] trait ShuffleWriterGroup {
 // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getHashBasedShuffleBlockData().
 private[spark]
 class FileShuffleBlockManager(conf: SparkConf)
-  extends ShuffleBlockManager with Logging {
+  extends ShuffleBlockResolver with Logging {
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
@@ -113,11 +113,12 @@ class FileShuffleBlockManager(conf: SparkConf)
       private var fileGroup: ShuffleFileGroup = null
 
       val openStartTime = System.nanoTime
+      val serializerInstance = serializer.newInstance()
       val writers: Array[BlockObjectWriter] = if (consolidateShuffleFiles) {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize,
+          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
             writeMetrics)
         }
       } else {
@@ -133,7 +134,8 @@ class FileShuffleBlockManager(conf: SparkConf)
               logWarning(s"Failed to remove existing shuffle file $blockFile")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize, writeMetrics)
+          blockManager.getDiskWriter(blockId, blockFile, serializerInstance, bufferSize,
+            writeMetrics)
         }
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
@@ -173,11 +175,6 @@ class FileShuffleBlockManager(conf: SparkConf)
         shuffleState.unusedFileGroups.add(group)
       }
     }
-  }
-
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    val segment = getBlockData(blockId)
-    Some(segment.nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

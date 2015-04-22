@@ -49,15 +49,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val NOT_STARTED = "<Not Started>"
 
   // Interval between each check for event log updates
-  private val UPDATE_INTERVAL_MS = conf.getOption("spark.history.fs.update.interval.seconds")
-    .orElse(conf.getOption("spark.history.fs.updateInterval"))
-    .orElse(conf.getOption("spark.history.updateInterval"))
-    .map(_.toInt)
-    .getOrElse(10) * 1000
+  private val UPDATE_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.update.interval", "10s")
 
   // Interval between each cleaner checks for event logs to delete
-  private val CLEAN_INTERVAL_MS = conf.getLong("spark.history.fs.cleaner.interval.seconds",
-    DEFAULT_SPARK_HISTORY_FS_CLEANER_INTERVAL_S) * 1000
+  private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
 
   private val logDir = conf.getOption("spark.history.fs.logDirectory")
     .map { d => Utils.resolveURI(d).toString }
@@ -118,7 +113,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     if (!fs.exists(path)) {
       var msg = s"Log directory specified does not exist: $logDir."
       if (logDir == DEFAULT_LOG_DIR) {
-        msg += " Did you configure the correct one through spark.fs.history.logDirectory?"
+        msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
       }
       throw new IllegalArgumentException(msg)
     }
@@ -130,13 +125,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     // Disable the background thread during tests.
     if (!conf.contains("spark.testing")) {
       // A task that periodically checks for event log updates on disk.
-      pool.scheduleAtFixedRate(getRunner(checkForLogs), 0, UPDATE_INTERVAL_MS,
-        TimeUnit.MILLISECONDS)
+      pool.scheduleAtFixedRate(getRunner(checkForLogs), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
         // A task that periodically cleans event logs on disk.
-        pool.scheduleAtFixedRate(getRunner(cleanLogs), 0, CLEAN_INTERVAL_MS,
-          TimeUnit.MILLISECONDS)
+        pool.scheduleAtFixedRate(getRunner(cleanLogs), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
     }
   }
@@ -275,8 +268,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     try {
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
-      val maxAge = conf.getLong("spark.history.fs.cleaner.maxAge.seconds",
-        DEFAULT_SPARK_HISTORY_FS_MAXAGE_S) * 1000
+      val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
 
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
@@ -422,12 +414,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
 private object FsHistoryProvider {
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
-
-  // One day
-  val DEFAULT_SPARK_HISTORY_FS_CLEANER_INTERVAL_S = Duration(1, TimeUnit.DAYS).toSeconds
-
-  // One week
-  val DEFAULT_SPARK_HISTORY_FS_MAXAGE_S = Duration(7, TimeUnit.DAYS).toSeconds
 }
 
 private class FsApplicationHistoryInfo(

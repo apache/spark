@@ -1,4 +1,3 @@
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -26,8 +25,10 @@ import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.SaveMode
@@ -390,6 +391,114 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     sql("DROP TABLE ms_convert")
   }
+
+  test("Caching converted data source Parquet Relations") {
+    def checkCached(tableIdentifer: catalog.QualifiedTableName): Unit = {
+      // Converted test_parquet should be cached.
+      catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) match {
+        case null => fail("Converted test_parquet should be cached in the cache.")
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) => // OK
+        case other =>
+          fail(
+            "The cached test_parquet should be a Parquet Relation. " +
+              s"However, $other is returned form the cache.")
+      }
+    }
+
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+    sql("DROP TABLE IF EXISTS test_parquet_partitioned_cache_test")
+
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    var tableIdentifer = catalog.QualifiedTableName("default", "test_insert_parquet")
+
+    // First, make sure the converted test_parquet is not cached.
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    // Table lookup will make the table cached.
+    table("test_insert_parquet")
+    checkCached(tableIdentifer)
+    // For insert into non-partitioned table, we will do the conversion,
+    // so the converted test_insert_parquet should be cached.
+    invalidateTable("test_insert_parquet")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    sql(
+      """
+        |INSERT INTO TABLE test_insert_parquet
+        |select a, b from jt
+      """.stripMargin)
+    checkCached(tableIdentifer)
+    // Make sure we can read the data.
+    checkAnswer(
+      sql("select * from test_insert_parquet"),
+      sql("select a, b from jt").collect())
+    // Invalidate the cache.
+    invalidateTable("test_insert_parquet")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+
+    // Create a partitioned table.
+    sql(
+      """
+        |create table test_parquet_partitioned_cache_test
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (date string)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    tableIdentifer = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    sql(
+      """
+        |INSERT INTO TABLE test_parquet_partitioned_cache_test
+        |PARTITION (date='2015-04-01')
+        |select a, b from jt
+      """.stripMargin)
+    // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
+    // So, we expect it is not cached.
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+    sql(
+      """
+        |INSERT INTO TABLE test_parquet_partitioned_cache_test
+        |PARTITION (date='2015-04-02')
+        |select a, b from jt
+      """.stripMargin)
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+
+    // Make sure we can cache the partitioned table.
+    table("test_parquet_partitioned_cache_test")
+    checkCached(tableIdentifer)
+    // Make sure we can read the data.
+    checkAnswer(
+      sql("select STRINGField, date, intField from test_parquet_partitioned_cache_test"),
+      sql(
+        """
+          |select b, '2015-04-01', a FROM jt
+          |UNION ALL
+          |select b, '2015-04-02', a FROM jt
+        """.stripMargin).collect())
+
+    invalidateTable("test_parquet_partitioned_cache_test")
+    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifer) === null)
+
+    sql("DROP TABLE test_insert_parquet")
+    sql("DROP TABLE test_parquet_partitioned_cache_test")
+  }
 }
 
 class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
@@ -578,6 +687,22 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
     sql("DROP TABLE alwaysNullable")
   }
+
+  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
+    val tempDir = Utils.createTempDir()
+    val filePath = new File(tempDir, "testParquet").getCanonicalPath
+    val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
+
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
+    intercept[RuntimeException](df2.saveAsParquetFile(filePath))
+
+    val df3 = df2.toDF("str", "max_int")
+    df3.saveAsParquetFile(filePath2)
+    val df4 = parquetFile(filePath2)
+    checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
+    assert(df4.columns === Array("str", "max_int"))
+  }
 }
 
 class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
@@ -761,7 +886,11 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
 
     test(s"SPARK-5775 read struct from $table") {
       checkAnswer(
-        sql(s"SELECT p, structField.intStructField, structField.stringStructField FROM $table WHERE p = 1"),
+        sql(
+          s"""
+             |SELECT p, structField.intStructField, structField.stringStructField
+             |FROM $table WHERE p = 1
+           """.stripMargin),
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 

@@ -46,56 +46,6 @@ trait ScalaReflection {
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
-  /**
-   * Converts Scala objects to catalyst rows / types.
-   * Note: This is always called after schemaFor has been called.
-   *       This ordering is important for UDT registration.
-   */
-  def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
-    // Check UDT first since UDTs can override other types
-    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
-    case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
-    case (s: Array[_], arrayType: ArrayType) => if (arrayType.elementType.isPrimitive) {
-      s.toSeq
-    } else {
-      s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
-    }
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
-    }
-    case (p: Product, structType: StructType) =>
-      new GenericRow(
-        p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
-          convertToCatalyst(elem, field.dataType)
-        }.toArray)
-    case (d: BigDecimal, _) => Decimal(d)
-    case (d: java.math.BigDecimal, _) => Decimal(d)
-    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
-    case (other, _) => other
-  }
-
-  /** Converts Catalyst types used internally in rows to standard Scala types */
-  def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
-    // Check UDT first since UDTs can override other types
-    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
-    }
-    case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
-    case (i: Int, DateType) => DateUtils.toJavaDate(i)
-    case (other, _) => other
-  }
-
-  def convertRowToScala(r: Row, schema: StructType): Row = {
-    // TODO: This is very slow!!!
-    new GenericRowWithSchema(
-      r.toSeq.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray, schema)
-  }
-
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
@@ -188,6 +138,7 @@ trait ScalaReflection {
     // The data type can be determined without ambiguity.
     case obj: BooleanType.JvmType => BooleanType
     case obj: BinaryType.JvmType => BinaryType
+    case obj: String => StringType
     case obj: StringType.JvmType => StringType
     case obj: ByteType.JvmType => ByteType
     case obj: ShortType.JvmType => ShortType

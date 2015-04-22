@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -605,4 +605,23 @@ object functions {
   }
 
   // scalastyle:on
+
+  /**
+   * Call an user-defined function.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlContext = df.sqlContext
+   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", callUdf("simpleUdf", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   */
+  def callUdf(udfName: String, cols: Column*): Column = {
+     UnresolvedFunction(udfName, cols.map(_.expr))
+  }
+
 }
