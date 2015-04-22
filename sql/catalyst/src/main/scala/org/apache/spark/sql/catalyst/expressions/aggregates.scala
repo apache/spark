@@ -326,7 +326,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 
   override def asPartial: SplitEvaluation = {
     child.dataType match {
-      case DecimalType.Fixed(_, _) =>
+      case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
         // Turn the child to unlimited decimals for calculation, before going back to fixed
         val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
         val partialCount = Alias(Count(child), "PartialCount")()

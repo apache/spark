@@ -131,8 +131,8 @@ class Pipeline(Estimator):
         stages = paramMap[self.stages]
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise ValueError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
+                raise TypeError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage))
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):

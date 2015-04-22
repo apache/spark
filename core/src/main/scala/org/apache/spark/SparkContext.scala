@@ -23,7 +23,7 @@ import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
 import scala.collection.{Map, Set}
@@ -1908,11 +1908,12 @@ object SparkContext extends Logging {
   private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
 
   /**
-   * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `None`.
+   * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `null`.
    *
-   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
+   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
-  private var activeContext: Option[SparkContext] = None
+  private val activeContext: AtomicReference[SparkContext] = 
+    new AtomicReference[SparkContext](null)
 
   /**
    * Points to a partially-constructed SparkContext if some thread is in the SparkContext
@@ -1947,7 +1948,8 @@ object SparkContext extends Logging {
           logWarning(warnMsg)
         }
 
-        activeContext.foreach { ctx =>
+        if (activeContext.get() != null) {
+          val ctx = activeContext.get()
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
@@ -1960,6 +1962,39 @@ object SparkContext extends Logging {
         }
       }
     }
+  }
+
+  /**
+   * This function may be used to get or instantiate a SparkContext and register it as a 
+   * singleton object. Because we can only have one active SparkContext per JVM, 
+   * this is useful when applications may wish to share a SparkContext. 
+   *
+   * Note: This function cannot be used to create multiple SparkContext instances 
+   * even if multiple contexts are allowed.
+   */
+  def getOrCreate(config: SparkConf): SparkContext = {
+    // Synchronize to ensure that multiple create requests don't trigger an exception
+    // from assertNoOtherContextIsRunning within setActiveContext
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      if (activeContext.get() == null) {
+        setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+      }
+      activeContext.get()
+    }
+  }
+  
+  /**
+   * This function may be used to get or instantiate a SparkContext and register it as a 
+   * singleton object. Because we can only have one active SparkContext per JVM, 
+   * this is useful when applications may wish to share a SparkContext.
+   * 
+   * This method allows not passing a SparkConf (useful if just retrieving).
+   * 
+   * Note: This function cannot be used to create multiple SparkContext instances 
+   * even if multiple contexts are allowed. 
+   */ 
+  def getOrCreate(): SparkContext = {
+    getOrCreate(new SparkConf())
   }
 
   /**
@@ -1988,7 +2023,7 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = None
-      activeContext = Some(sc)
+      activeContext.set(sc)
     }
   }
 
@@ -1999,7 +2034,7 @@ object SparkContext extends Logging {
    */
   private[spark] def clearActiveContext(): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      activeContext = None
+      activeContext.set(null)
     }
   }
 

@@ -181,6 +181,8 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
 
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
+
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {

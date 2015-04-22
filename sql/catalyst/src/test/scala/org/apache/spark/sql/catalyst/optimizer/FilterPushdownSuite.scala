@@ -454,21 +454,21 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: predicate referenced no generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), true, false, Some("arr"))
         .where(('b >= 5) && ('a > 6))
     }
     val optimized = Optimize(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where(('b >= 5) && ('a > 6))
-        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr")).analyze
+        .generate(Explode('c_arr), true, false, Some("arr")).analyze
     }
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("generate: part of conjuncts referenced generated column") {
-    val generator = Explode(Seq("c"), 'c_arr)
+    val generator = Explode('c_arr)
     val originalQuery = {
       testRelationWithArrayType
         .generate(generator, true, false, Some("arr"))
@@ -499,7 +499,7 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: all conjuncts referenced generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), true, false, Some("arr"))
         .where(('c > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize(originalQuery)

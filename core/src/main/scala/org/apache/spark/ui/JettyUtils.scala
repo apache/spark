@@ -114,10 +114,23 @@ private[spark] object JettyUtils extends Logging {
       srcPath: String,
       destPath: String,
       beforeRedirect: HttpServletRequest => Unit = x => (),
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String = "",
+      httpMethod: String = "GET"): ServletContextHandler = {
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
-      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+        httpMethod match {
+          case "GET" => doRequest(request, response)
+          case _ => response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        }
+      }
+      override def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+        httpMethod match {
+          case "POST" => doRequest(request, response)
+          case _ => response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+        }
+      }
+      private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString

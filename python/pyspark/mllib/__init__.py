@@ -18,6 +18,7 @@
 """
 Python bindings for MLlib.
 """
+from __future__ import absolute_import
 
 # MLlib currently needs NumPy 1.4+, so complain if lower
 
@@ -29,7 +30,9 @@ __all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
            'recommendation', 'regression', 'stat', 'tree', 'util']
 
 import sys
-import rand as random
-random.__name__ = 'random'
-random.RandomRDDs.__module__ = __name__ + '.random'
-sys.modules[__name__ + '.random'] = random
+from . import rand as random
+modname = __name__ + '.random'
+random.__name__ = modname
+random.RandomRDDs.__module__ = modname
+sys.modules[modname] = random
+del modname, sys

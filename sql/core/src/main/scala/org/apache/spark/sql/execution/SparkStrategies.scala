@@ -312,8 +312,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Except(planLater(left), planLater(right)) :: Nil
       case logical.Intersect(left, right) =>
         execution.Intersect(planLater(left), planLater(right)) :: Nil
-      case logical.Generate(generator, join, outer, _, child) =>
-        execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
+      case g @ logical.Generate(generator, join, outer, _, _, child) =>
+        execution.Generate(
+          generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
       case logical.OneRowRelation =>
         execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>

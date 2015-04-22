@@ -347,7 +347,24 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Refresh the given table's metadata first.
     sqlContext.catalog.refreshTable(databaseName, tableName)
+
+    // If this table is cached as a InMemoryColumnarRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sqlContext.catalog.lookupRelation(Seq(databaseName, tableName))
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = DataFrame(sqlContext, logicalPlan)
+      // Uncache the logicalPlan.
+      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      // Cache it again.
+      sqlContext.cacheManager.cacheQuery(df, Some(tableName))
+    }
+
     Seq.empty[Row]
   }
 }
