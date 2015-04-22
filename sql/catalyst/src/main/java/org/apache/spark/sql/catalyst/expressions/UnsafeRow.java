@@ -303,6 +303,11 @@ public final class UnsafeRow implements MutableRow {
   }
 
   @Override
+  public <T> scala.collection.immutable.Map<String, T> getValuesMap(Seq<String> fieldNames) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public <K, V> java.util.Map<K, V> getJavaMap(int i) {
     // TODO
     throw new UnsupportedOperationException();
@@ -317,6 +322,16 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public <T> T getAs(int i) {
     // TODO
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public <T> T getAs(String fieldName) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public int fieldIndex(String name) {
     throw new UnsupportedOperationException();
   }
 
