@@ -458,7 +458,8 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       assert(ssc != null, "no context created")
       assert(!newContextCreated, "old context not recovered")
       assert(ssc.sparkContext === sc, "new StreamingContext does not use existing SparkContext")
-      assert(!ssc.conf.contains("someKey"), "recovered StreamingContext unexpectedly has old config")
+      assert(!ssc.conf.contains("someKey"),
+        "recovered StreamingContext unexpectedly has old config")
     }
   }
 
@@ -528,7 +529,8 @@ object TestReceiver {
 }
 
 /** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
-class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int) extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
 
   var receivingThreadOption: Option[Thread] = None
 
