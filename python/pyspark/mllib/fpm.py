@@ -17,6 +17,7 @@
 
 import numpy
 from numpy import array
+from collections import namedtuple
 
 from pyspark import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
@@ -38,15 +39,15 @@ class FPGrowthModel(JavaModelWrapper):
     >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = FPGrowth.train(rdd, 0.6, 2)
-    >>> model.freqItemsets().collect()
-    [(array([u'a'], ...), 4), (array([u'c'], ...), 3), (array([u'c', u'a'], ...), 3)]
+    >>> sorted(model.freqItemsets().collect())
+    [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
     """
 
     def freqItemsets(self):
         """
-        Get the frequent itemsets of this model
+        Returns the frequent itemsets of this model.
         """
-        return self.call("getFreqItemsets").map(lambda x: (numpy.array(x[0]), x[1]))
+        return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
 
 
 class FPGrowth(object):
@@ -69,6 +70,11 @@ class FPGrowth(object):
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
+
+    class FreqItemset(namedtuple("FreqItemset", ["items", "freq"])):
+        """
+        Represents an (items, freq) tuple.
+        """
 
 
 def _test():
