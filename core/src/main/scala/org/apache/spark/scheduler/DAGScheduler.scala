@@ -103,7 +103,7 @@ class DAGScheduler(
   // may be retried. However, it only makes sense to limit the number of times that a stage fails
   // if it's failing for the same reason every time. Therefore, track why a stage fails as well as 
   // how many times it has failed.
-  case class StageFailure(failureReason : String) {
+  private[scheduler] case class StageFailure(failureReason : String) {
     var count = 1
     def fail() = { count += 1 }
     def shouldAbort(): Boolean = { count >= maxStageFailures }
