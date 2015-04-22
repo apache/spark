@@ -36,6 +36,7 @@ import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.types.*;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.mathfunctions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -93,6 +94,14 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
+    
+    // Varargs with mathfunctions
+    DataFrame df2 = context.table("doubleData");
+    df2.select(exp("a"), exp("b"));
+    df2.select(exp(log("a")));
+    df2.select(pow("a", "a"), pow("b", 2.0));
+    df2.select(pow(col("a"), col("b")), exp("b"));
+    df2.select(sin("a"), acos("b"));
   }
 
   @Ignore

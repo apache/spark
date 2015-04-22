@@ -436,6 +436,7 @@ class ColumnExpressionSuite extends QueryTest {
 
   def testTwoToOneMathFunction(
       c: (Column, Column) => Column,
+      d: (Column, Double) => Column,
       f: (Double, Double) => Double): Unit = {
     checkAnswer(
       nnDoubleData.select(c('a, 'a)).orderBy('a.asc),
@@ -447,6 +448,16 @@ class ColumnExpressionSuite extends QueryTest {
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
     )
 
+    checkAnswer(
+      nnDoubleData.select(d('a, 2.0)).orderBy('a.asc),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), 2.0)))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(d('a, -0.5)).orderBy('a.asc),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), -0.5)))
+    )
+
     val nonNull = nullDoubles.collect().toSeq.filter(r => r.get(0) != null)
 
     checkAnswer(
@@ -456,15 +467,15 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("pow") {
-    testTwoToOneMathFunction(pow, math.pow)
+    testTwoToOneMathFunction(pow, pow, math.pow)
   }
 
   test("hypot") {
-    testTwoToOneMathFunction(hypot, math.hypot)
+    testTwoToOneMathFunction(hypot, hypot, math.hypot)
   }
 
   test("atan2") {
-    testTwoToOneMathFunction(atan2, math.atan2)
+    testTwoToOneMathFunction(atan2, atan2, math.atan2)
   }
 
   def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit = {

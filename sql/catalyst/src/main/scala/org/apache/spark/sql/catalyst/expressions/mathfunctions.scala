@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types._
 
-trait MathematicalExpression extends UnaryExpression with Serializable { self: Product =>
+abstract class MathematicalExpression(name: String) extends UnaryExpression with Serializable { 
+  self: Product =>
   type EvaluatedType = Any
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
+  override def toString: String = s"$name($child)"
 
   lazy val numeric = child.dataType match {
     case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
@@ -33,22 +35,22 @@ trait MathematicalExpression extends UnaryExpression with Serializable { self: P
   }
 }
 
-abstract class MathematicalExpressionForDouble(f: Double => Double)
-  extends MathematicalExpression { self: Product =>
-
+abstract class MathematicalExpressionForDouble(f: Double => Double, name: String)
+  extends MathematicalExpression(name) { self: Product =>
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
     } else {
-      f(numeric.toDouble(evalE))
+      val result = f(numeric.toDouble(evalE)) 
+      if (result.isNaN) null
+      else result
     }
   }
 }
 
-abstract class MathematicalExpressionForInt(f: Int => Int)
-  extends MathematicalExpression { self: Product =>
-
+abstract class MathematicalExpressionForInt(f: Int => Int, name: String)
+  extends MathematicalExpression(name) { self: Product =>
   override def dataType: DataType = IntegerType
 
   override def eval(input: Row): Any = {
@@ -61,8 +63,8 @@ abstract class MathematicalExpressionForInt(f: Int => Int)
   }
 }
 
-abstract class MathematicalExpressionForFloat(f: Float => Float)
-  extends MathematicalExpression { self: Product =>
+abstract class MathematicalExpressionForFloat(f: Float => Float, name: String)
+  extends MathematicalExpression(name) { self: Product =>
 
   override def dataType: DataType = FloatType
 
@@ -71,13 +73,15 @@ abstract class MathematicalExpressionForFloat(f: Float => Float)
     if (evalE == null) {
       null
     } else {
-      f(numeric.toFloat(evalE))
+      val result = f(numeric.toFloat(evalE))
+      if (result.isNaN) null
+      else result
     }
   }
 }
 
-abstract class MathematicalExpressionForLong(f: Long => Long)
-  extends MathematicalExpression { self: Product =>
+abstract class MathematicalExpressionForLong(f: Long => Long, name: String)
+  extends MathematicalExpression(name) { self: Product =>
 
   override def dataType: DataType = LongType
 
@@ -91,140 +95,62 @@ abstract class MathematicalExpressionForLong(f: Long => Long)
   }
 }
 
-case class Sin(child: Expression) extends MathematicalExpressionForDouble(math.sin) {
-  override def toString: String = s"SIN($child)"
-}
+case class Sin(child: Expression) extends MathematicalExpressionForDouble(math.sin, "SIN")
 
-case class Asin(child: Expression) extends MathematicalExpressionForDouble(math.asin) {
-  override def toString: String = s"ASIN($child)"
-}
+case class Asin(child: Expression) extends MathematicalExpressionForDouble(math.asin, "ASIN")
 
-case class Sinh(child: Expression) extends MathematicalExpressionForDouble(math.sinh) {
-  override def toString: String = s"SINH($child)"
-}
+case class Sinh(child: Expression) extends MathematicalExpressionForDouble(math.sinh, "SINH")
 
-case class Cos(child: Expression) extends MathematicalExpressionForDouble(math.cos) {
-  override def toString: String = s"COS($child)"
-}
+case class Cos(child: Expression) extends MathematicalExpressionForDouble(math.cos, "COS")
 
-case class Acos(child: Expression) extends MathematicalExpressionForDouble(math.acos) {
-  override def toString: String = s"ACOS($child)"
-}
+case class Acos(child: Expression) extends MathematicalExpressionForDouble(math.acos, "ACOS")
 
-case class Cosh(child: Expression) extends MathematicalExpressionForDouble(math.cosh) {
-  override def toString: String = s"COSH($child)"
-}
+case class Cosh(child: Expression) extends MathematicalExpressionForDouble(math.cosh, "COSH")
 
-case class Tan(child: Expression) extends MathematicalExpressionForDouble(math.tan) {
-  override def toString: String = s"TAN($child)"
-}
+case class Tan(child: Expression) extends MathematicalExpressionForDouble(math.tan, "TAN")
 
-case class Atan(child: Expression) extends MathematicalExpressionForDouble(math.atan) {
-  override def toString: String = s"ATAN($child)"
-}
+case class Atan(child: Expression) extends MathematicalExpressionForDouble(math.atan, "ATAN")
 
-case class Tanh(child: Expression) extends MathematicalExpressionForDouble(math.tanh) {
-  override def toString: String = s"TANH($child)"
-}
+case class Tanh(child: Expression) extends MathematicalExpressionForDouble(math.tanh, "TANH")
 
-case class Ceil(child: Expression) extends MathematicalExpressionForDouble(math.ceil) {
-  override def toString: String = s"CEIL($child)"
-}
+case class Ceil(child: Expression) extends MathematicalExpressionForDouble(math.ceil, "CEIL")
 
-case class Floor(child: Expression) extends MathematicalExpressionForDouble(math.floor) {
-  override def toString: String = s"FLOOR($child)"
-}
+case class Floor(child: Expression) extends MathematicalExpressionForDouble(math.floor, "FLOOR")
 
-case class Rint(child: Expression) extends MathematicalExpressionForDouble(math.rint) {
-  override def toString: String = s"RINT($child)"
-}
+case class Rint(child: Expression) extends MathematicalExpressionForDouble(math.rint, "ROUND")
 
-case class Cbrt(child: Expression) extends MathematicalExpressionForDouble(math.cbrt) {
-  override def toString: String = s"CBRT($child)"
-}
+case class Cbrt(child: Expression) extends MathematicalExpressionForDouble(math.cbrt, "CBRT")
 
-case class Signum(child: Expression) extends MathematicalExpressionForDouble(math.signum) {
-  override def toString: String = s"SIGNUM($child)"
-}
+case class Signum(child: Expression) extends MathematicalExpressionForDouble(math.signum, "SIGNUM")
 
-case class ISignum(child: Expression) extends MathematicalExpressionForInt(math.signum) {
-  override def toString: String = s"ISIGNUM($child)"
-}
+case class ISignum(child: Expression) extends MathematicalExpressionForInt(math.signum, "ISIGNUM")
 
-case class FSignum(child: Expression) extends MathematicalExpressionForFloat(math.signum) {
-  override def toString: String = s"FSIGNUM($child)"
-}
+case class FSignum(child: Expression) extends MathematicalExpressionForFloat(math.signum, "FSIGNUM")
 
-case class LSignum(child: Expression) extends MathematicalExpressionForLong(math.signum) {
-  override def toString: String = s"LSIGNUM($child)"
-}
+case class LSignum(child: Expression) extends MathematicalExpressionForLong(math.signum, "LSIGNUM")
 
-case class ToDegrees(child: Expression) extends MathematicalExpressionForDouble(math.toDegrees) {
-  override def toString: String = s"TODEG($child)"
-}
+case class ToDegrees(child: Expression) 
+  extends MathematicalExpressionForDouble(math.toDegrees, "DEGREES")
 
-case class ToRadians(child: Expression) extends MathematicalExpressionForDouble(math.toRadians) {
-  override def toString: String = s"TORAD($child)"
-}
+case class ToRadians(child: Expression) 
+  extends MathematicalExpressionForDouble(math.toRadians, "RADIANS")
 
-case class Log(child: Expression) extends MathematicalExpressionForDouble(math.log) {
-  override def toString: String = s"LOG($child)"
+case class Log(child: Expression) extends MathematicalExpressionForDouble(math.log, "LOG")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val value = numeric.toDouble(evalE)
-      if (value < 0) null
-      else math.log(value)
-    }
-  }
-}
+case class Log10(child: Expression) extends MathematicalExpressionForDouble(math.log10, "LOG10")
 
-case class Log10(child: Expression) extends MathematicalExpressionForDouble(math.log10) {
-  override def toString: String = s"LOG10($child)"
+case class Log1p(child: Expression) extends MathematicalExpressionForDouble(math.log1p, "LOG1P")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val value = numeric.toDouble(evalE)
-      if (value < 0) null
-      else math.log10(value)
-    }
-  }
-}
+case class Exp(child: Expression) extends MathematicalExpressionForDouble(math.exp, "EXP")
 
-case class Log1p(child: Expression) extends MathematicalExpressionForDouble(math.log1p) {
-  override def toString: String = s"LOG1P($child)"
+case class Expm1(child: Expression) extends MathematicalExpressionForDouble(math.expm1, "EXPM1")
 
-  override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      val value = numeric.toDouble(evalE)
-      if (value < -1) null
-      else math.log1p(value)
-    }
-  }
-}
-
-case class Exp(child: Expression) extends MathematicalExpressionForDouble(math.exp) {
-  override def toString: String = s"EXP($child)"
-}
-
-case class Expm1(child: Expression) extends MathematicalExpressionForDouble(math.expm1) {
-  override def toString: String = s"EXPM1($child)"
-}
-
-abstract class BinaryMathExpression(f: (Double, Double) => Double) 
+abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String) 
   extends BinaryFunctionExpression with Serializable { self: Product =>
   type EvaluatedType = Any
 
   def nullable: Boolean = left.nullable || right.nullable
+  override def toString: String = s"$name($left, $right)"
 
   override lazy val resolved =
     left.resolved && right.resolved &&
@@ -246,27 +172,27 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double)
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
-    if(evalE1 == null) {
+    if (evalE1 == null) {
       null
     } else {
       val evalE2 = right.eval(input)
       if (evalE2 == null) {
         null
       } else {
-        f(numeric.toDouble(evalE1), numeric.toDouble(evalE2))
+        val result = f(numeric.toDouble(evalE1), numeric.toDouble(evalE2)) 
+        if (result.isNaN) null
+        else result
       }
     }
   }
 }
 
-case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow) {
-  override def toString: String = s"POW($left, $right)"
-}
+case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")
 
-case class Hypot(left: Expression, right: Expression) extends BinaryMathExpression(math.hypot) {
-  override def toString: String = s"HYPOT($left, $right)"
-}
+case class Hypot(
+    left: Expression,
+    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
 
-case class Atan2(left: Expression, right: Expression) extends BinaryMathExpression(math.atan2) {
-  override def toString: String = s"ATAN2($left, $right)"
-}
+case class Atan2(
+    left: Expression,
+    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2")

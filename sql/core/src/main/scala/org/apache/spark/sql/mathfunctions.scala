@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.functions.lit
 
 /**
  * :: Experimental ::
@@ -409,6 +410,34 @@ object mathfunctions {
   def pow(leftName: String, rightName: String): Column = pow(Column(leftName), Column(rightName))
 
   /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group double_funcs
+   */
+  def pow(l: Column, r: Double): Column = pow(l, lit(r).expr)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group double_funcs
+   */
+  def pow(leftName: String, r: Double): Column = pow(Column(leftName), r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group double_funcs
+   */
+  def pow(l: Double, r: Column): Column = pow(lit(l).expr, r)
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group double_funcs
+   */
+  def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
    * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
    *
    * @group double_funcs
@@ -436,6 +465,34 @@ object mathfunctions {
    */
   def hypot(leftName: String, rightName: String): Column =
     hypot(Column(leftName), Column(rightName))
+
+  /**
+   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   *
+   * @group double_funcs
+   */
+  def hypot(l: Column, r: Double): Column = hypot(l, lit(r).expr)
+
+  /**
+   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   *
+   * @group double_funcs
+   */
+  def hypot(leftName: String, r: Double): Column = hypot(Column(leftName), r)
+
+  /**
+   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   *
+   * @group double_funcs
+   */
+  def hypot(l: Double, r: Column): Column = hypot(lit(l).expr, r)
+
+  /**
+   * Computes sqrt(a^2^ + b^2^) without intermediate overflow or underflow.
+   *
+   * @group double_funcs
+   */
+  def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
@@ -469,4 +526,36 @@ object mathfunctions {
    */
   def atan2(leftName: String, rightName: String): Column =
     atan2(Column(leftName), Column(rightName))
+
+  /**
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
+   *
+   * @group double_funcs
+   */
+  def atan2(l: Column, r: Double): Column = atan2(l, lit(r).expr)
+
+  /**
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
+   *
+   * @group double_funcs
+   */
+  def atan2(leftName: String, r: Double): Column = atan2(Column(leftName), r)
+
+  /**
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
+   *
+   * @group double_funcs
+   */
+  def atan2(l: Double, r: Column): Column = atan2(lit(l).expr, r)
+
+  /**
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
+   *
+   * @group double_funcs
+   */
+  def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
 }
