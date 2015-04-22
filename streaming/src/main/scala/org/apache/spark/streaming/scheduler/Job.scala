@@ -41,6 +41,9 @@ class Job(val time: Time, func: () => _) {
     _result
   }
 
+  /**
+   * @return the global unique id of this Job.
+   */
   def id: String = {
     if (!isSet) {
       throw new IllegalStateException("Cannot access id before calling setId")
@@ -48,6 +51,9 @@ class Job(val time: Time, func: () => _) {
     _id
   }
 
+  /**
+   * @return the output op id of this Job. Each Job has a unique output op id in the same JobSet.
+   */
   def outputOpId: Int = {
     if (!isSet) {
       throw new IllegalStateException("Cannot access number before calling setId")
@@ -60,7 +66,7 @@ class Job(val time: Time, func: () => _) {
       throw new IllegalStateException("Cannot call setOutputOpId more than once")
     }
     isSet = true
-    _id = "streaming job " + time + "." + outputOpId
+    _id = s"streaming job $time.$outputOpId"
     _outputOpId = outputOpId
   }
 
