@@ -195,4 +195,21 @@ case class Hypot(
 
 case class Atan2(
     left: Expression,
-    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2")
+    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
+        val result = math.atan2(numeric.toDouble(evalE1) + 0.0, numeric.toDouble(evalE2) + 0.0)
+        if (result.isNaN) null
+        else result
+      }
+    }
+  }
+}

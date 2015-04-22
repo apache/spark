@@ -1296,8 +1296,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       }
     } else {
       domain.foreach { case (v1, v2) =>
-        checkEvaluation(c(v1, v2), f(v1, v2), EmptyRow)
-        checkEvaluation(c(v2, v1), f(v2, v1), EmptyRow)
+        checkEvaluation(c(v1, v2), f(v1 + 0.0, v2 + 0.0), EmptyRow)
+        checkEvaluation(c(v2, v1), f(v2 + 0.0, v1 + 0.0), EmptyRow)
       }
     }
     checkEvaluation(c(Literal.create(null, DoubleType), 1.0), null, create_row(null))
