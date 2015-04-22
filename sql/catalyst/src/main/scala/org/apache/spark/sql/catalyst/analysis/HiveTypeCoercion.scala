@@ -69,7 +69,7 @@ trait HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
-    PromoteToStrings ::
+    InConversion ::
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
@@ -222,22 +222,6 @@ trait HiveTypeCoercion {
             b.makeCopy(Array(newLeft, newRight))
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
       }
-
-      // Also widen types for InExpressions.
-      case q: LogicalPlan => q transformExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
-
-        case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-          b.map(_.dataType).foldLeft(None: Option[DataType])((r, c) => r match {
-            case None => Some(c)
-            case Some(dt) => findTightestCommonType(dt, c)
-          }) match {
-            // If there is no applicable conversion, leave expression unchanged.
-            case None => i
-            case Some(dt) => i.makeCopy(Array(Cast(a, dt), b.map(Cast(_, dt))))
-          }
-      }
     }
   }
 
@@ -298,23 +282,12 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Promotes strings that appear in arithmetic expressions.
+   * Convert all expressions in in() list to the left operator type
    */
-  object PromoteToStrings extends Rule[LogicalPlan] {
+  object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // For In we need to promote numeric as strings
-      case i @ In(a, b) if a.dataType == StringType
-        && b.exists(_.dataType.isInstanceOf[NumericType]) =>
-        i.makeCopy(Array(a, b.map(exp => exp.dataType match {
-          case n: NumericType => Cast(exp, StringType)
-          case _ =>
-        })))
-      case i @ In(a, b) if b.exists(_.dataType == StringType)
-        && a.dataType.isInstanceOf[NumericType] =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(exp => exp.dataType match {
-          case n: NumericType => Cast(exp, StringType)
-          case _ =>
-        })))
+      case i @ In(a, b) if b.exists(_.dataType != StringType) =>
+        i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
   }
 
