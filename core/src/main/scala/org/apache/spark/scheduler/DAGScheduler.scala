@@ -105,7 +105,7 @@ class DAGScheduler(
   // how many times it has failed.
   private[scheduler] case class StageFailure(failureReason : String) {
     var count = 1
-    def fail() = { count += 1 }
+    def fail(): Unit = { count += 1 }
     def shouldAbort(): Boolean = { count >= maxStageFailures }
 
     override def equals(other: Any): Boolean =
