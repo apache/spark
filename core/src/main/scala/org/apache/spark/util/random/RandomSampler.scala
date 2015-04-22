@@ -230,13 +230,14 @@ class GapSamplingIterator[T: ClassTag](
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     val interruptibleIteratorClass = classOf[InterruptibleIterator[T]]
     data.getClass match {
-      case `arrayClass` => 
+      case `arrayClass` =>
         (n: Int) => { data = data.drop(n) }
-      case `arrayBufferClass` => 
+      case `arrayBufferClass` =>
         (n: Int) => { data = data.drop(n) }
       case `interruptibleIteratorClass` =>
         (n: Int) => { data = data.drop(n) }
-      case _ => ((n: Int) => {
+      case _ =>
+        (n: Int) => {
           var j = 0
           while (j < n && data.hasNext) {
             data.next()
@@ -286,13 +287,14 @@ class GapSamplingReplacementIterator[T: ClassTag](
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     val interruptibleIteratorClass = classOf[InterruptibleIterator[T]]
     data.getClass match {
-      case `arrayClass` => 
+      case `arrayClass` =>
         (n: Int) => { data = data.drop(n) }
       case `arrayBufferClass` =>
         (n: Int) => { data = data.drop(n) }
-      case `interruptibleIteratorClass` => 
+      case `interruptibleIteratorClass` =>
         (n: Int) => { data = data.drop(n) }
-      case _ => ((n: Int) => {
+      case _ =>
+        (n: Int) => {
           var j = 0
           while (j < n && data.hasNext) {
             data.next()
