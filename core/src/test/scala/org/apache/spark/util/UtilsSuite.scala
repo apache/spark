@@ -241,8 +241,10 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
-    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
+    if (SystemUtils.IS_OS_WINDOWS) {
+      assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+      assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt", testWindows = true)
+    }
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
@@ -268,9 +270,11 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
-    assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4",
-      testWindows = true)
+    if (SystemUtils.IS_OS_WINDOWS) {
+      assertResolves( """hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4",
+        testWindows = true)
+    }
   }
 
   test("nonLocalPaths") {
@@ -285,8 +289,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
-    assert(Utils.nonLocalPaths("hdfs:/path to/spark.jar,path to/a.jar,s3:/path to/smart.jar") ===
-      Array("hdfs:/path to/spark.jar", "s3:/path to/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
@@ -300,11 +304,6 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
       Array("hdfs:/a.jar", "s3:/another.jar"))
-    assert(Utils.nonLocalPaths(
-      "hdfs:/path to/spark.jar,C:\\path to\\a.jar,s3:/path to/smart.jar"
-      , testWindows = true
-    ) ===
-      Array("hdfs:/path to/spark.jar", "s3:/path to/smart.jar"))
     assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
       Array("hdfs:/a.jar", "s3:/another.jar"))
     assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===

@@ -1793,8 +1793,7 @@ private[spark] object Utils extends Logging {
       Array.empty
     } else {
       paths.split(",").filter { p =>
-        val formattedPath = formatPath(p, windows)
-        val uri = new URI(formattedPath)
+        val uri = resolveURI(p, windows)
         Option(uri.getScheme).getOrElse("file") match {
           case windowsDrive(d) if windows => false
           case "local" | "file" => false
