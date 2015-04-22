@@ -762,6 +762,20 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void naturalMax() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.max();
+    Assert.assertTrue(4.0 == max);
+  }
+
+  @Test
+  public void naturalMin() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.min();
+    Assert.assertTrue(1.0 == max);
+  }
+
+  @Test
   public void takeOrdered() {
     JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
     Assert.assertEquals(Arrays.asList(1.0, 2.0), rdd.takeOrdered(2, new DoubleComparator()));

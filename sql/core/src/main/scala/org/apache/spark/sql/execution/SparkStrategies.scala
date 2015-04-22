@@ -90,6 +90,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
+      // If the sort merge join option is set, we want to use sort merge join prior to hashjoin
+      // for now let's support inner join first, then add outer join
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.conf.sortMergeJoinEnabled =>
+        val mergeJoin =
+          joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
@@ -155,7 +163,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def canBeCodeGened(aggs: Seq[AggregateExpression]): Boolean = !aggs.exists {
-      case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
+      case _: CombineSum | _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => false
       // The generated set implementation is pretty limited ATM.
       case CollectHashSet(exprs) if exprs.size == 1  &&
            Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
@@ -211,9 +219,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
         // Note: overwrite=false because otherwise the metadata we just created will be deleted
         InsertIntoParquetTable(relation, planLater(child), overwrite = false) :: Nil
-      case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
+      case logical.InsertIntoTable(
+          table: ParquetRelation, partition, child, overwrite, ifNotExists) =>
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
+        val partitionColNames = relation.partitioningAttributes.map(_.name).toSet
+        val filtersToPush = filters.filter { pred =>
+            val referencedColNames = pred.references.map(_.name).toSet
+            referencedColNames.intersect(partitionColNames).isEmpty
+          }
         val prunePushedDownFilters =
           if (sqlContext.conf.parquetFilterPushDown) {
             (predicates: Seq[Expression]) => {
@@ -225,6 +239,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // "A AND B" in the higher-level filter, not just "B".
               predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
                 case (predicate, None) => predicate
+                // Filter needs to be applied above when it contains partitioning
+                // columns
+                case (predicate, _) if(!predicate.references.map(_.name).toSet
+                  .intersect (partitionColNames).isEmpty) => predicate
               }
             }
           } else {
@@ -237,7 +255,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           ParquetTableScan(
             _,
             relation,
-            if (sqlContext.conf.parquetFilterPushDown) filters else Nil)) :: Nil
+            if (sqlContext.conf.parquetFilterPushDown) filtersToPush else Nil)) :: Nil
 
       case _ => Nil
     }
@@ -294,12 +312,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Except(planLater(left), planLater(right)) :: Nil
       case logical.Intersect(left, right) =>
         execution.Intersect(planLater(left), planLater(right)) :: Nil
-      case logical.Generate(generator, join, outer, _, child) =>
-        execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
+      case g @ logical.Generate(generator, join, outer, _, _, child) =>
+        execution.Generate(
+          generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
       case logical.OneRowRelation =>
         execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
-        execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
+        execution.Exchange(
+          HashPartitioning(expressions, numPartitions), Nil, planLater(child)) :: Nil
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil

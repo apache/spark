@@ -40,34 +40,43 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
+ * @param generator the generator expression
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
- * @param alias when set, this string is applied to the schema of the output of the transformation
- *              as a qualifier.
+ * @param qualifier Qualifier for the attributes of generator(UDTF)
+ * @param generatorOutput The output schema of the Generator.
+ * @param child Children logical plan node
  */
 case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
-    alias: Option[String],
+    qualifier: Option[String],
+    generatorOutput: Seq[Attribute],
     child: LogicalPlan)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] = {
-    val output = alias
-      .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
-      .getOrElse(generator.output)
-    if (join && outer) {
-      output.map(_.withNullability(true))
-    } else {
-      output
-    }
+  override lazy val resolved: Boolean = {
+    generator.resolved &&
+      childrenResolved &&
+      generator.elementTypes.length == generatorOutput.length &&
+      !generatorOutput.exists(!_.resolved)
   }
 
-  override def output: Seq[Attribute] =
-    if (join) child.output ++ generatorOutput else generatorOutput
+  // we don't want the gOutput to be taken as part of the expressions
+  // as that will cause exceptions like unresolved attributes etc.
+  override def expressions: Seq[Expression] = generator :: Nil
+
+  def output: Seq[Attribute] = {
+    val qualified = qualifier.map(q =>
+      // prepend the new qualifier to the existed one
+      generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
+    ).getOrElse(generatorOutput)
+
+    if (join) child.output ++ qualified else qualified
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
@@ -80,7 +89,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved: Boolean =
     childrenResolved &&
-    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+    left.output.zip(right.output).forall { case (l,r) => l.dataType == r.dataType }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
@@ -125,12 +134,14 @@ case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
-    overwrite: Boolean)
+    overwrite: Boolean,
+    ifNotExists: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = child.output
 
+  assert(overwrite || !ifNotExists)
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) =>
       DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
@@ -145,6 +156,18 @@ case class CreateTableAsSelect[T](
     desc: Option[T] = None) extends UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean = databaseName != None && childrenResolved
+}
+
+/**
+ * A container for holding named common table expressions (CTEs) and a query plan.
+ * This operator will be removed during analysis and the relations will be substituted into child.
+ * @param child The final query of this CTE.
+ * @param cteRelations Queries that this CTE defined,
+ *                     key is the alias of the CTE definition,
+ *                     value is the CTE definition.
+ */
+case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
 }
 
 case class WriteToFile(

@@ -19,12 +19,10 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 
-import akka.actor.{ActorRef, Props, Actor}
-
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.{Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -58,7 +56,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => eventActor ! GenerateJobs(new Time(longTime)), "JobGenerator")
+    longTime => eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator")
 
   // This is marked lazy so that this is initialized after checkpoint duration has been set
   // in the context and the generator has been started.
@@ -70,22 +68,26 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     null
   }
 
-  // eventActor is created when generator starts.
+  // eventLoop is created when generator starts.
   // This not being null means the scheduler has been started and not stopped
-  private var eventActor: ActorRef = null
+  private var eventLoop: EventLoop[JobGeneratorEvent] = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Time = null
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
-    if (eventActor != null) return // generator has already been started
+    if (eventLoop != null) return // generator has already been started
 
-    eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
-      override def receive: PartialFunction[Any, Unit] = {
-        case event: JobGeneratorEvent =>  processEvent(event)
+    eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {
+      override protected def onReceive(event: JobGeneratorEvent): Unit = processEvent(event)
+
+      override protected def onError(e: Throwable): Unit = {
+        jobScheduler.reportError("Error in job generator", e)
       }
-    }), "JobGenerator")
+    }
+    eventLoop.start()
+
     if (ssc.isCheckpointPresent) {
       restart()
     } else {
@@ -99,22 +101,20 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * checkpoints written.
    */
   def stop(processReceivedData: Boolean): Unit = synchronized {
-    if (eventActor == null) return // generator has already been stopped
+    if (eventLoop == null) return // generator has already been stopped
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
-      val stopTimeout = conf.getLong(
-        "spark.streaming.gracefulStopTimeout",
-        10 * ssc.graph.batchDuration.milliseconds
-      )
+      val stopTimeoutMs = conf.getTimeAsMs(
+        "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms")
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
       def hasTimedOut: Boolean = {
-        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeout
+        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeoutMs
         if (timedOut) {
-          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeout + ")")
+          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
         }
         timedOut
       }
@@ -148,9 +148,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.stop()
     }
 
-    // Stop the actor and checkpoint writer
+    // Stop the event loop and checkpoint writer
     if (shouldCheckpoint) checkpointWriter.stop()
-    ssc.env.actorSystem.stop(eventActor)
+    eventLoop.stop()
     logInfo("Stopped JobGenerator")
   }
 
@@ -158,7 +158,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * Callback called when a batch has been completely processed.
    */
   def onBatchCompletion(time: Time) {
-    eventActor ! ClearMetadata(time)
+    eventLoop.post(ClearMetadata(time))
   }
 
   /**
@@ -166,7 +166,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    */
   def onCheckpointCompletion(time: Time, clearCheckpointDataLater: Boolean) {
     if (clearCheckpointDataLater) {
-      eventActor ! ClearCheckpointData(time)
+      eventLoop.post(ClearCheckpointData(time))
     }
   }
 
@@ -249,7 +249,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
-    eventActor ! DoCheckpoint(time, clearCheckpointDataLater = false)
+    eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }
 
   /** Clear DStream metadata for the given `time`. */
@@ -259,7 +259,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed
     if (shouldCheckpoint) {
-      eventActor ! DoCheckpoint(time, clearCheckpointDataLater = true)
+      eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = true))
     } else {
       // If checkpointing is not enabled, then delete metadata information about
       // received blocks (block data not saved in any case). Otherwise, wait for

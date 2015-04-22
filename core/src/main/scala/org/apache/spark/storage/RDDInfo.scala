@@ -52,6 +52,6 @@ class RDDInfo(
 private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
+    new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel)
   }
 }

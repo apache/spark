@@ -163,14 +163,16 @@ class DecisionTree(object):
         ...     LabeledPoint(1.0, [3.0])
         ... ]
         >>> model = DecisionTree.trainClassifier(sc.parallelize(data), 2, {})
-        >>> print model,  # it already has newline
+        >>> print(model)
         DecisionTreeModel classifier of depth 1 with 3 nodes
-        >>> print model.toDebugString(),  # it already has newline
+
+        >>> print(model.toDebugString())
         DecisionTreeModel classifier of depth 1 with 3 nodes
           If (feature 0 <= 0.0)
            Predict: 0.0
           Else (feature 0 > 0.0)
            Predict: 1.0
+        <BLANKLINE>
         >>> model.predict(array([1.0]))
         1.0
         >>> model.predict(array([0.0]))
@@ -286,21 +288,18 @@ class RandomForest(object):
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for
                  splits at each node.
-                 Supported: "auto" (default), "all", "sqrt", "log2",
-                  "onethird".
-                 If "auto" is set, this parameter is set based on
-                 numTrees:
-                   if numTrees == 1, set to "all";
-                   if numTrees > 1 (forest) set to "sqrt".
-        :param impurity: Criterion used for information gain
-                 calculation.
+                 Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                 If "auto" is set, this parameter is set based on numTrees:
+                 if numTrees == 1, set to "all";
+                 if numTrees > 1 (forest) set to "sqrt".
+        :param impurity: Criterion used for information gain calculation.
                Supported values: "gini" (recommended) or "entropy".
         :param maxDepth: Maximum depth of the tree.
                  E.g., depth 0 means 1 leaf node; depth 1 means
                  1 internal node + 2 leaf nodes. (default: 4)
         :param maxBins: maximum number of bins used for splitting
                  features
-               (default: 100)
+                 (default: 100)
         :param seed: Random seed for bootstrapping and choosing feature
                  subsets.
         :return: RandomForestModel that can be used for prediction
@@ -321,9 +320,10 @@ class RandomForest(object):
         3
         >>> model.totalNumNodes()
         7
-        >>> print model,
+        >>> print(model)
         TreeEnsembleModel classifier with 3 trees
-        >>> print model.toDebugString(),
+        <BLANKLINE>
+        >>> print(model.toDebugString())
         TreeEnsembleModel classifier with 3 trees
         <BLANKLINE>
           Tree 0:
@@ -338,6 +338,7 @@ class RandomForest(object):
              Predict: 0.0
             Else (feature 0 > 1.0)
              Predict: 1.0
+        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -365,13 +366,10 @@ class RandomForest(object):
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for
                  splits at each node.
-                 Supported: "auto" (default), "all", "sqrt", "log2",
-                   "onethird".
-                 If "auto" is set, this parameter is set based on
-                 numTrees:
-                   if numTrees == 1, set to "all";
-                   if numTrees > 1 (forest) set to "onethird" for
-                     regression.
+                 Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                 If "auto" is set, this parameter is set based on numTrees:
+                 if numTrees == 1, set to "all";
+                 if numTrees > 1 (forest) set to "onethird" for regression.
         :param impurity: Criterion used for information gain
                  calculation.
                  Supported values: "variance".
@@ -484,13 +482,14 @@ class GradientBoostedTrees(object):
         ...     LabeledPoint(1.0, [3.0])
         ... ]
         >>>
-        >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {})
+        >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {}, numIterations=10)
         >>> model.numTrees()
-        100
+        10
         >>> model.totalNumNodes()
-        300
-        >>> print model,  # it already has newline
-        TreeEnsembleModel classifier with 100 trees
+        30
+        >>> print(model)  # it already has newline
+        TreeEnsembleModel classifier with 10 trees
+        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -542,11 +541,12 @@ class GradientBoostedTrees(object):
         ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
         ... ]
         >>>
-        >>> model = GradientBoostedTrees.trainRegressor(sc.parallelize(sparse_data), {})
+        >>> data = sc.parallelize(sparse_data)
+        >>> model = GradientBoostedTrees.trainRegressor(data, {}, numIterations=10)
         >>> model.numTrees()
-        100
+        10
         >>> model.totalNumNodes()
-        102
+        12
         >>> model.predict(SparseVector(2, {1: 1.0}))
         1.0
         >>> model.predict(SparseVector(2, {0: 1.0}))

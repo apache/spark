@@ -190,12 +190,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-    val killLinkUri = s"app/kill?id=${app.id}&terminate=true"
-    val confirm = "return window.confirm(" +
-      s"'Are you sure you want to kill application ${app.id} ?');"
-      <span class="kill-link">
-        (<a href={killLinkUri} onclick={confirm}>kill</a>)
-      </span>
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill application ${app.id} ?')) " +
+          "{ this.parentNode.submit(); return true; } else { return false; }"
+      <form action="app/kill/" method="POST" style="display:inline">
+        <input type="hidden" name="id" value={app.id.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
     }
     <tr>
       <td>
@@ -208,8 +210,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         {app.coresGranted}
       </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
+      <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
+        {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
@@ -223,12 +225,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED ||
         driver.state == DriverState.RELAUNCHING)) {
-    val killLinkUri = s"driver/kill?id=${driver.id}&terminate=true"
-    val confirm = "return window.confirm(" +
-      s"'Are you sure you want to kill driver ${driver.id} ?');"
-      <span class="kill-link">
-        (<a href={killLinkUri} onclick={confirm}>kill</a>)
-      </span>
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill driver ${driver.id} ?')) " +
+          "{ this.parentNode.submit(); return true; } else { return false; }"
+      <form action="driver/kill/" method="POST" style="display:inline">
+        <input type="hidden" name="id" value={driver.id.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
     }
     <tr>
       <td>{driver.id} {killLink}</td>
