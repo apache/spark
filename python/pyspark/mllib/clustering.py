@@ -46,6 +46,10 @@ class KMeansModel(Saveable, Loader):
     True
     >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
     True
+    >>> model.k
+    2
+    >>> model.computeCost(sc.parallelize(data))
+    2.0000000000000004
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -127,7 +131,7 @@ class KMeans(object):
               seed=None, initializationSteps=5, epsilon=1e-4):
         """Train a k-means clustering model."""
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, initializationSteps, epsilon, seed)
+                              runs, initializationMode, seed, initializationSteps, epsilon)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
