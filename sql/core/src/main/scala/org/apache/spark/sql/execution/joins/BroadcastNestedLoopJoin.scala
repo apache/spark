@@ -59,7 +59,7 @@ case class BroadcastNestedLoopJoin(
   }
 
   @transient private lazy val boundCondition =
-    InterpretedPredicate(
+    InterpretedPredicate.create(
       condition
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))
