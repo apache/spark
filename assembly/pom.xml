@@ -36,6 +36,9 @@
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
     <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
+    <spark.shaded.dir>${project.build.directory}/${spark.jar.dir}/shaded</spark.shaded.dir>
+    <spark.shaded.jar>${spark.shaded.dir}/${spark.jar.basename}</spark.shaded.jar>
+    <spark.shaded.unjar>${spark.shaded.dir}/unjar</spark.shaded.unjar>
   </properties>
 
   <dependencies>
@@ -242,6 +245,44 @@
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
       </properties>
+    </profile>
+    <!-- Profiles that enable repackaging assembly jar. -->
+    <profile>
+      <id>repackage</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>java6-package</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <tasks if="jar.tool">
+                    <mkdir dir="${spark.shaded.unjar}"/>
+                    <echo message="Unjar ${spark.jar} to ${spark.shaded.unjar}"/>
+                    <unzip src="${spark.jar}" dest="${spark.shaded.unjar}"/>
+                    <echo message="move original ${spark.jar} to ${spark.shaded.jar} ."/>
+                    <copy file="${spark.jar}" tofile="${spark.shaded.jar}"/>
+                    <echo message="Jar file to ${spark.jar} -C ${spark.shaded.unjar} . with tool ${jar.tool}"/>
+                    <exec executable="${jar.tool}">
+                      <arg value="cf"/>
+                      <arg value="${spark.jar}"/>
+                      <arg value="-C"/>
+                      <arg value="${spark.shaded.unjar}"/>
+                      <arg value="."/>
+                    </exec>
+                    <delete dir="${spark.shaded.unjar}"/>
+                  </tasks>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>
