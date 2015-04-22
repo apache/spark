@@ -118,16 +118,16 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(Seq(databaseName, tableName).map(_.toLowerCase()))
+    invalidateTable(databaseName, tableName)
   }
 
-  def invalidateTable(tableIdentifier: Seq[String]): Unit = {
-    cachedDataSourceTables.invalidate(tableIdentifier.map(_.toLowerCase()))
+  def invalidateTable(databaseName: String, tableName: String): Unit = {
+    cachedDataSourceTables.invalidate(Seq(databaseName, tableName).map(_.toLowerCase()))
   }
 
   val caseSensitive: Boolean = false
 
-  protected def getDBAndTableName(tableIdentifier: Seq[String]): (String, String) = {
+  private[hive] def getDBAndTableName(tableIdentifier: Seq[String]): (String, String) = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val dbName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
@@ -175,10 +175,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
-  def hiveDefaultTableFilePath(tableName: String): String = synchronized {
-    val currentDatabase = client.getDatabase(hive.sessionState.getCurrentDatabase)
-
-    hiveWarehouse.getTablePath(currentDatabase, tableName).toString
+  def hiveDefaultTableFilePath(tableIdents: String): String = synchronized {
+    val (databaseName, tblName) = getDBAndTableName(tableIdents.split("."))
+    hiveWarehouse.getTablePath(databaseName, tblName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = synchronized {

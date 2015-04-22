@@ -68,7 +68,7 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(Seq(tableName))
+    hiveContext.catalog.unregisterTable(tableName.split("."))
     Seq.empty[Row]
   }
 }
@@ -112,12 +112,13 @@ case class CreateMetastoreDataSource(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val tableIdents = tableIdentifier.mkString(".")
 
     if (hiveContext.catalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${tableIdentifier.mkString(".")} already exists.")
+        throw new AnalysisException(s"Table $tableIdents already exists.")
       }
     }
 
@@ -126,7 +127,7 @@ case class CreateMetastoreDataSource(
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdentifier.mkString(".")))
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdents))
       } else {
         options
       }
@@ -152,14 +153,14 @@ case class CreateMetastoreDataSourceAsSelect(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val tableName = tableIdentifier(tableIdentifier.size - 1)
+    val tableName = tableIdentifier.mkString(".")
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdentifier.mkString(".")))
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
       } else {
         options
       }

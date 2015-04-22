@@ -1151,7 +1151,7 @@ class DataFrame private[sql](
       options: Map[String, String]): Unit = {
     val cmd =
       CreateTableUsingAsSelect(
-        Seq(tableName),
+        tableName.split("."),
         source,
         temporary = false,
         mode,

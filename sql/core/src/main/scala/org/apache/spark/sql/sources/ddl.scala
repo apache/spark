@@ -300,7 +300,7 @@ private[sql] case class CreateTableUsing(
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 private[sql] case class CreateTableUsingAsSelect(
-   tableIdentifier: Seq[String],
+    tableIdentifier: Seq[String],
     provider: String,
     temporary: Boolean,
     mode: SaveMode,

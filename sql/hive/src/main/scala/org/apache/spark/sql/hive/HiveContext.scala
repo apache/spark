@@ -107,13 +107,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * call this function to invalidate the cache.
    */
   def refreshTable(tableName: String): Unit = {
-    // TODO: Database support...
-    catalog.refreshTable("default", tableName)
+    val (dbName, tblName) = catalog.getDBAndTableName(tableName.split("."))
+    catalog.refreshTable(dbName, tblName)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    // TODO: Database support...
-    catalog.invalidateTable(Seq("default", tableName))
+    val (dbName, tblName) = catalog.getDBAndTableName(tableName.split("."))
+    catalog.invalidateTable(dbName, tblName)
   }
 
   /**
