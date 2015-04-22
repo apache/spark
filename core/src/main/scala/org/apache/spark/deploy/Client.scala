@@ -39,9 +39,11 @@ private class ClientEndpoint(
     conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging {
 
+  // A scheduled executor used to send messages at the specified time.
   private val forwardMessageThread =
     Utils.newDaemonSingleThreadScheduledExecutor("client-forward-message")
-  private implicit val forwardMessageExecutionContext =
+  // Used to provide the implicit parameter of `Future` methods.
+  private val forwardMessageExecutionContext =
     ExecutionContext.fromExecutor(forwardMessageThread,
       t => t match {
         case ie: InterruptedException => // Exit normally
@@ -104,7 +106,7 @@ private class ClientEndpoint(
         println(s"Error sending messages to master ${driverArgs.master}, exiting.")
         logError(e.getMessage, e)
         System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
-    }
+    }(forwardMessageExecutionContext)
   }
 
   /* Find out driver status then exit the JVM */

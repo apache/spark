@@ -62,6 +62,9 @@ private[spark] class AppClient(
     @volatile private var registerMasterFutures: Array[Future[_]] = null
     @volatile private var registrationRetryTimer: ScheduledFuture[_] = null
 
+    // A thread pool for registering with masters. Because registering with a master is a blocking
+    // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
+    // time so that we can register with all masters.
     private val registerMasterThreadPool = new ThreadPoolExecutor(
       0,
       masterRpcAddresses.size, // Make sure we can register with all masters at the same time
@@ -69,6 +72,7 @@ private[spark] class AppClient(
       new SynchronousQueue[Runnable](),
       Utils.namedThreadFactory("appclient-register-master-threadpool"))
 
+    // A scheduled executor for scheduling the registration actions
     private val registrationRetryThread =
       Utils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
 
@@ -83,6 +87,9 @@ private[spark] class AppClient(
       }
     }
 
+    /**
+     *  Register with all masters asynchronously and returns an array `Future`s for cancellation.
+     */
     private def tryRegisterAllMasters(): Array[Future[_]] = {
       for (masterAddress <- masterRpcAddresses) yield {
         registerMasterThreadPool.submit(new Runnable {
@@ -103,7 +110,11 @@ private[spark] class AppClient(
     }
 
     /**
-     * nthRetry means this is the nth attempt to register with master
+     * Register with all masters asynchronously. It will call `registerWithMaster` every
+     * REGISTRATION_TIMEOUT_SECONDS seconds until exceeding REGISTRATION_RETRIES times.
+     * Once we connect to a master successfully, all scheduling work and Futures will be cancelled.
+     *
+     * nthRetry means this is the nth attempt to register with master.
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures = tryRegisterAllMasters()

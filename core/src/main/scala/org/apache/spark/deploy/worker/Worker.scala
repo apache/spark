@@ -57,9 +57,12 @@ private[worker] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
+  // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
     Utils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
+  // A separated thread to clean up the workDir
   private val cleanupThread = Utils.newDaemonSingleThreadExecutor("worker-cleanup-thread")
+  // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutor(cleanupThread)
 
   // For worker and executor IDs
@@ -133,7 +136,9 @@ private[worker] class Worker(
   private var registerMasterFutures: Array[Future[_]] = null
   private var registrationRetryTimer: Option[ScheduledFuture[_]] = None
 
-  // Blocking requests to setup the master endpoints should be submitted to this thread pool
+  // A thread pool for registering with masters. Because registering with a master is a blocking
+  // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
+  // time so that we can register with all masters.
   private val registerMasterThreadPool = new ThreadPoolExecutor(
     0,
     masterRpcAddresses.size, // Make sure we can register with all masters at the same time
@@ -577,7 +582,8 @@ private[worker] class Worker(
     master match {
       case Some(masterRef) => masterRef.send(message)
       case None =>
-        logWarning(s"Dropping $message because the connection to master has not yet established")
+        logWarning(
+          s"Dropping $message because the connection to master has not yet been established")
     }
   }
 
