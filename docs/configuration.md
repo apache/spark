@@ -1000,14 +1000,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rpc.askTimeout</code></td>
-  <td>30s</td>
+  <td>120s</td>
   <td>
     Duration for an RPC ask operation to wait before timing out.
   </td>
 </tr>
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
-  <td>30s</td>
+  <td>120s</td>
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   <td>
   </td>
