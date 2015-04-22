@@ -184,6 +184,7 @@ private[spark] class Executor(
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+      var taskStart: Long = 0
       startGCTime = computeTotalGcTime()
 
       try {
@@ -205,8 +206,10 @@ private[spark] class Executor(
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
         env.mapOutputTracker.updateEpoch(task.epoch)
 
-        // Run the actual task (its runtime is measured internally and stored in task metrics)
+        // Run the actual task and measure its runtime.
+        taskStart = System.currentTimeMillis()
         val value = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
+        val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
@@ -219,7 +222,9 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.incExecutorDeserializeTime(deserializeEndTime - deserializeStartTime)
+          m.setExecutorDeserializeTime(
+            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
@@ -272,6 +277,7 @@ private[spark] class Executor(
 
           val metrics: Option[TaskMetrics] = Option(task).flatMap { task =>
             task.metrics.map { m =>
+              m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
               m.setJvmGCTime(computeTotalGcTime() - startGCTime)
               m
             }
