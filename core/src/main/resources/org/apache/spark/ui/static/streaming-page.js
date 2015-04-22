@@ -21,13 +21,15 @@ var graphTooltip = d3.select("body").append("div")
     .style("position", "absolute")
     .style("z-index", "10")
     .style("visibility", "hidden")
-    .text("a simple tooltip");
+    .text("");
 
 // Show "text" at location (x, y)
 function showGraphTooltip(text, x, y) {
+    var left = x;
+    var top = y;
     graphTooltip.style("visibility", "visible")
-        .style("top", x + "px")
-        .style("left", y + "px")
+        .style("top", top + "px")
+        .style("left", left + "px")
         .text(text);
 }
 
@@ -52,7 +54,14 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
     var timeFormat = d3.time.format("%H:%M:%S")
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(timeFormat);
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(10)
+                    .tickFormat(function(d) {
+                        if (d.getTime() == minX || d.getTime() == maxX) {
+                            return timeFormat(d);
+                        } else {
+                            return "x";
+                        }
+                    });
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
 
     var line = d3.svg.line()
@@ -77,6 +86,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
         .attr("class", "y axis")
         .call(yAxis)
         .append("text")
+            .attr("transform", "translate(0," + (-3) + ")")
             .text(unitY);
 
     svg.append("path")
@@ -97,7 +107,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
                     .attr("r", function(d) { return 3; })
                     .on('mouseover', function(d) {
                         var tip = d.y + " " + unitY + " at " + timeFormat(new Date(d.x));
-                        showGraphTooltip(tip, event.pageY-25, event.pageX);
+                        showGraphTooltip(tip, d3.event.pageX + 5, d3.event.pageY - 25);
                         // show the point
                         d3.select(this)
                             .attr("stroke", "steelblue")
@@ -126,7 +136,8 @@ function drawDistribution(id, values, minY, maxY, unitY) {
     var width = 300 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
-    var binCount = values.length > 100 ? 100 : values.length;
+    //var binCount = values.length > 100 ? 100 : values.length;
+    var binCount = 10;
     var formatBinValue = d3.format(",.2f");
 
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
@@ -138,10 +149,6 @@ function drawDistribution(id, values, minY, maxY, unitY) {
 
     var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(5);
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
-
-    var line = d3.svg.line()
-        .x(function(d) { return x(d.y); })
-        .y(function(d) { return y(d.x); });
 
     var svg = d3.select(id).append("svg")
         .attr("width", width + margin.left + margin.right)
@@ -158,37 +165,35 @@ function drawDistribution(id, values, minY, maxY, unitY) {
         .attr("class", "y axis")
         .call(yAxis)
         .append("text")
+            .attr("transform", "translate(0," + (-3) + ")")
             .text(unitY);
 
-    svg.append("path")
-        .datum(data)
-        .attr("class", "line")
-        .attr("d", line);
-
-    // Add points to the line. However, we make it invisible at first. But when the user moves mouse
-    // over a point, it will be displayed with its detail.
-    svg.selectAll(".point")
+    var bar = svg.selectAll(".bar")
         .data(data)
-        .enter().append("circle")
-                    .attr("stroke", "white")  // white and opacity = 0 make it invisible
-                    .attr("fill", "white")
-                    .attr("opacity", "0")
-                    .attr("cx", function(d) { return x(d.y); })
-                    .attr("cy", function(d) { return y(d.x); })
-                    .attr("r", function(d) { return 3; })
-                    .on('mouseover', function(d) {
-                        var tip = "[" + formatBinValue(d.x) + ", " + formatBinValue(d.x + d.dx) + "): " + d.y;
-                        showGraphTooltip(tip, event.pageY, event.pageX + 10);
-                        d3.select(this)
-                            .attr("stroke", "steelblue")
-                            .attr("fill", "steelblue")
-                            .attr("opacity", "1");
-                    })
-                    .on('mouseout',  function() {
-                        hideGraphTooltip();
-                        d3.select(this)
-                            .attr("stroke", "white")
-                            .attr("fill", "white")
-                            .attr("opacity", "0");
-                    });
+      .enter().append("g")
+                  .attr("transform", function(d) { return "translate(0," + (y(d.x) - height + y(d.dx))  + ")";})
+                  .attr("class", "bar").append("rect")
+                  .attr("width", function(d) { return x(d.y); })
+                  .attr("height", function(d) { return height - y(d.dx); })
+                  .on('mouseover', function(d) {
+                      var tip = "[" + formatBinValue(d.x) + ", " + formatBinValue(d.x + d.dx) + "): " + d.y;
+
+                      // Calculate the location for tip
+                      var scrollTop  = document.documentElement.scrollTop || document.body.scrollTop;
+                      var scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft;
+                      var target = d3.event.target;
+                      var matrix = target.getScreenCTM();
+                      var targetBBox = target.getBBox();
+                      var point = svg.node().ownerSVGElement.createSVGPoint();
+                      point.x = targetBBox.x;
+                      point.y = targetBBox.y;
+                      var bbox = point.matrixTransform(matrix);
+                      var tipX = bbox.x + scrollLeft + x(d.y) + 2;
+                      var tipY = bbox.y + scrollTop - 6;
+
+                      showGraphTooltip(tip, tipX, tipY);
+                  })
+                  .on('mouseout',  function() {
+                      hideGraphTooltip();
+                  });
 }

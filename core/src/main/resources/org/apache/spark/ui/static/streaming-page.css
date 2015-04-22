@@ -22,7 +22,7 @@
 
 .axis path, .axis line {
   fill: none;
-  stroke: #000;
+  stroke: gray;
   shape-rendering: crispEdges;
 }
 
@@ -34,4 +34,13 @@
   fill: none;
   stroke: steelblue;
   stroke-width: 1.5px;
+}
+
+.bar rect {
+  fill: steelblue;
+  shape-rendering: crispEdges;
+}
+
+.bar rect:hover {
+  fill: orange;
 }
