@@ -233,7 +233,8 @@ private[spark] object SizeEstimator extends Logging {
         }
 
         val size = math.min(s1, s2)
-        state.size += math.max(s1, s2) + (size * (length / (ARRAY_SAMPLE_SIZE))).toLong
+        state.size += math.max(s1, s2) + 
+          (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
       }
     }
   }
