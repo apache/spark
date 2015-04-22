@@ -72,9 +72,8 @@ class UISeleniumSuite
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         // check whether streaming page exists
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
-        val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
-        statisticText should contain("Network receivers:")
-        statisticText should contain("Batch interval:")
+        val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
+        h3Text should contain("Streaming Statistics")
 
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
         h4Text should contain("Active Batches (0)")
@@ -97,9 +96,8 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
-        val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
-        statisticText should not contain ("Network receivers:")
-        statisticText should not contain ("Batch interval:")
+        val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
+        h3Text should not contain("Streaming Statistics")
       }
     }
   }

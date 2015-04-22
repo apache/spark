@@ -318,7 +318,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxY: Long): Seq[Node] = {
     val content = listener.receivedRecordsDistributions.map { case (receiverId, distribution) =>
       generateInputReceiverRow(jsCollector, receiverId, distribution, minX, maxX, minY, maxY)
-    }.reduce(_ ++ _)
+    }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     <table class="table table-bordered">
       <thead>
