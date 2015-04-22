@@ -37,7 +37,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
    * The minimum of documents in which a term should appear.
    * @group param
    */
-  val minDocFreq = new IntParam(
+  final val minDocFreq = new IntParam(
     this, "minDocFreq", "minimum of documents in which a term should appear for filtering")
 
   setDefault(minDocFreq -> 0)
@@ -63,7 +63,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
 @AlphaComponent
-class IDF extends Estimator[IDFModel] with IDFBase {
+final class IDF extends Estimator[IDFModel] with IDFBase {
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
