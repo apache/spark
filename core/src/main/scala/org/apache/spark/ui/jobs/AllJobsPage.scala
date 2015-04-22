@@ -77,7 +77,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.completedStageIndices.diff(job.skippedStageIndices).size}/
             {job.stageIds.size - job.skippedStageIndices.size}
           {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
-          {if (job.skippedStageIndices.size > 0) s"(${job.skippedStageIndices.size} skipped)"}
+          {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
         </td>
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,

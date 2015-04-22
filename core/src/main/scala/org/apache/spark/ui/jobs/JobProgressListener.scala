@@ -231,6 +231,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             skippedStages += stageInfo
             trimStagesIfNecessary(skippedStages)
             jobData.skippedStageIndices.add(stageId)
+            jobData.numSkippedStages += 1
             jobData.numSkippedTasks += stageInfo.numTasks
           }
         }
