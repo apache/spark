@@ -176,4 +176,18 @@ class OpenHashSetSuite extends FunSuite with Matchers {
     assert(set.size === 1000)
     assert(set.capacity > 1000)
   }
+
+  test("diff") {
+    val set1 = new OpenHashSet[Int]()
+    val set2 = new OpenHashSet[Int]()
+    set1.add(1)
+    set1.add(2)
+    set1.add(3)
+    set2.add(2)
+    val set3 = set1.diff(set2)
+    assert(set3.size == 2)
+    assert(set3.contains(1))
+    assert(set3.contains(3))
+    assert(!set3.contains(2))
+  }
 }

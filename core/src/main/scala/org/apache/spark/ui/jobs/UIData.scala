@@ -64,7 +64,7 @@ private[jobs] object UIData {
     var numActiveStages: Int = 0,
     // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
     var completedStageIndices: OpenHashSet[Int] = new OpenHashSet[Int](),
-    var numSkippedStages: Int = 0,
+    var skippedStageIndices: OpenHashSet[Int] = new OpenHashSet[Int](),
     var numFailedStages: Int = 0
   )
 

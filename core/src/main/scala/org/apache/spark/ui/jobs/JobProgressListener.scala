@@ -230,7 +230,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             // if this stage is pending, it won't complete, so mark it as "skipped":
             skippedStages += stageInfo
             trimStagesIfNecessary(skippedStages)
-            jobData.numSkippedStages += 1
+            jobData.skippedStageIndices.add(stageId)
             jobData.numSkippedTasks += stageInfo.numTasks
           }
         }
