@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.classification
+package org.apache.spark.ml.classification
 
 import org.scalatest.FunSuite
-import org.apache.spark.mllib.impl.TreeTests
+
+import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDecisionTreeSuite, EnsembleTestHelper,
-  GradientBoostedTrees => OldGBT}
+import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.DataFrame
 
 
 /**
@@ -56,24 +55,26 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
   test("Binary classification with continuous features: Log Loss") {
     val categoricalFeatures = Map.empty[Int, Int]
     testCombinations.foreach {
-      case (numIterations, learningRate, subsamplingRate) =>
+      case (maxIter, learningRate, subsamplingRate) =>
         val gbt = new GBTClassifier()
           .setMaxDepth(2)
           .setSubsamplingRate(subsamplingRate)
           .setLoss("LogLoss")
-          .setNumIterations(numIterations)
+          .setMaxIter(maxIter)
           .setLearningRate(learningRate)
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
   }
 
+  // TODO: Reinstate test once runWithValidation is implemented
+  /*
   test("runWithValidation stops early and performs better on a validation dataset") {
     val categoricalFeatures = Map.empty[Int, Int]
-    // Set numIterations large enough so that it stops early.
-    val numIterations = 20
+    // Set maxIter large enough so that it stops early.
+    val maxIter = 20
     GBTClassifier.supportedLosses.foreach { loss =>
       val gbt = new GBTClassifier()
-        .setNumIterations(numIterations)
+        .setMaxIter(maxIter)
         .setMaxDepth(2)
         .setLoss(loss)
         .setValidationTol(0.0)
@@ -81,11 +82,14 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
       compareAPIs(trainData, Some(validationData), gbt, categoricalFeatures)
     }
   }
+  */
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
+  // TODO: Reinstate test once save/load are implemented
+  /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
@@ -104,6 +108,7 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
       Utils.deleteRecursively(tempDir)
     }
   }
+  */
 }
 
 private object GBTClassifierSuite {
@@ -117,17 +122,15 @@ private object GBTClassifierSuite {
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTClassifier,
       categoricalFeatures: Map[Int, Int]): Unit = {
-    val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures)
+    val oldBoostingStrategy =
+      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val oldGBT = new OldGBT(oldBoostingStrategy)
-    val (oldModel, newModel) = validationData match {
-      case None =>
-        (oldGBT.run(data),
-          gbt.run(data, categoricalFeatures))
-      case Some(valData) =>
-        (oldGBT.runWithValidation(data, valData),
-          gbt.runWithValidation(data, valData, categoricalFeatures))
-    }
-    val oldModelAsNew = GBTClassificationModel.fromOld(oldModel)
+    val oldModel = oldGBT.run(data)
+    val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
+    val newModel = gbt.fit(newData)
+    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    val oldModelAsNew = GBTClassificationModel.fromOld(oldModel, newModel.parent,
+      newModel.fittingParamMap, categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
   }
 }

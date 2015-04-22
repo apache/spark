@@ -113,7 +113,7 @@ final class DecisionTreeClassificationModel private[ml] (
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
-  override private[ml] def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     rootNode.predict(features)
   }
 

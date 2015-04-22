@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.classification;
+package org.apache.spark.ml.classification;
 
-import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,11 +27,10 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.impl.TreeTests;
-import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.ml.impl.TreeTests;
+import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.util.Utils;
+import org.apache.spark.sql.DataFrame;
 
 
 public class JavaGBTClassifierSuite implements Serializable {
@@ -58,13 +56,10 @@ public class JavaGBTClassifierSuite implements Serializable {
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
         LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
-    JavaRDD<Vector> featureRDD = data.map(new Function<LabeledPoint, Vector>() {
-      @Override
-      public Vector call(LabeledPoint lp) throws Exception {
-        return lp.features();
-      }
-    });
+    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
+    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
+    // This tests setters. Training with various options is tested in Scala.
     GBTClassifier rf = new GBTClassifier()
         .setMaxDepth(2)
         .setMaxBins(10)
@@ -75,28 +70,22 @@ public class JavaGBTClassifierSuite implements Serializable {
         .setCheckpointInterval(10)
         .setSubsamplingRate(1.0)
         .setSeed(1234)
-        .setNumIterations(3)
+        .setMaxIter(3)
         .setLearningRate(0.1)
-        .setValidationTol(0.01)
         .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
     for (int i = 0; i < GBTClassifier.supportedLosses().length; ++i) {
       rf.setLoss(GBTClassifier.supportedLosses()[i]);
     }
-    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    GBTClassificationModel model1 = rf.run(data);
-    GBTClassificationModel model2 = rf.run(data, categoricalFeatures);
-    GBTClassificationModel model3 = rf.run(data, categoricalFeatures, 2);
-    GBTClassificationModel model4 = rf.runWithValidation(data, data);
-    GBTClassificationModel model5 = rf.runWithValidation(data, data, categoricalFeatures);
-    GBTClassificationModel model6 = rf.runWithValidation(data, data, categoricalFeatures, 2);
+    GBTClassificationModel model = rf.fit(dataFrame);
 
-    model1.predict(featureRDD);
-    model2.predict(featureRDD.take(1).get(0));
-    model2.totalNumNodes();
-    model2.toDebugString();
-    model2.getTrees();
-    model2.getTreeWeights();
+    model.transform(dataFrame);
+    model.totalNumNodes();
+    model.toDebugString();
+    model.getTrees();
+    model.getTreeWeights();
 
+    /*
+    // TODO: Add test once save/load are implemented.
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
@@ -106,5 +95,6 @@ public class JavaGBTClassifierSuite implements Serializable {
     } finally {
       Utils.deleteRecursively(tempDir);
     }
+    */
   }
 }

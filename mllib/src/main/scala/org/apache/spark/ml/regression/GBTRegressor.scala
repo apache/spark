@@ -15,214 +15,203 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.ml.regression
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.mllib.impl.tree._
+import org.apache.spark.Logging
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor}
+import org.apache.spark.ml.impl.tree._
+import org.apache.spark.ml.param.{Params, ParamMap, Param}
+import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
-  BoostingStrategy => OldBoostingStrategy}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss => OldLoss,
   SquaredError => OldSquaredError}
-import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGradientBoostedTreesModel}
-import org.apache.spark.mllib.util.{Loader, Saveable}
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
-class GBTRegressor
-  extends TreeRegressorWithValidate[GBTRegressionModel]
-  with GBTParams[GBTRegressor]
-  with TreeRegressorParams[GBTRegressor]
-  with Logging {
-
-  protected var lossStr: String = "squarederror"
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "SquaredError" and "AbsoluteError"
-   * (default = SquaredError)
-   * @param loss  String for loss (case-insensitive)
-   * @group setParam
-   */
-  def setLoss(loss: String): GBTRegressor = {
-    val lossStr = loss.toLowerCase
-    require(GBTRegressor.supportedLosses.contains(lossStr),
-      s"GBTRegressor was given bad loss: $loss." +
-        s"  Supported options: ${GBTRegressor.supportedLosses.mkString(", ")}")
-    this.lossStr = lossStr
-    this
-  }
-
-  /**
-   * Loss function which GBT tries to minimize.
-   * Supported: "SquaredError" and "AbsoluteError"
-   * (default = SquaredError)
-   * @group getParam
-   */
-  def getLossStr: String = lossStr
-
-  /** Convert new loss to old loss. */
-  override protected def getOldLoss: OldLoss = {
-    lossStr match {
-      case "squarederror" => OldSquaredError
-      case "absoluteerror" => OldAbsoluteError
-      case _ =>
-        // Should never happen because of check in setter method.
-        throw new RuntimeException(s"GBTRegressorParams was given bad loss: $lossStr")
-    }
-  }
+@AlphaComponent
+final class GBTRegressor
+  extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
+  with GBTParams with TreeRegressorParams with Logging {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
 
-  override def setMaxDepth(maxDepth: Int): GBTRegressor = super.setMaxDepth(maxDepth)
+  override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
-  override def setMaxBins(maxBins: Int): GBTRegressor = super.setMaxBins(maxBins)
+  override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
-  override def setMinInstancesPerNode(minInstancesPerNode: Int): GBTRegressor =
-    super.setMinInstancesPerNode(minInstancesPerNode)
+  override def setMinInstancesPerNode(value: Int): this.type =
+    super.setMinInstancesPerNode(value)
 
-  override def setMinInfoGain(minInfoGain: Double): GBTRegressor =
-    super.setMinInfoGain(minInfoGain)
+  override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
-  override def setMaxMemoryInMB(maxMemoryInMB: Int): GBTRegressor =
-    super.setMaxMemoryInMB(maxMemoryInMB)
+  override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
-  override def setCacheNodeIds(cacheNodeIds: Boolean): GBTRegressor =
-    super.setCacheNodeIds(cacheNodeIds)
+  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(checkpointInterval: Int): GBTRegressor =
-    super.setCheckpointInterval(checkpointInterval)
+  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   /**
    * The impurity setting is ignored for GBT models.
    * Individual trees are built using impurity "Variance."
    */
-  override def setImpurity(impurity: String): GBTRegressor = {
+  override def setImpurity(value: String): this.type = {
     logWarning("GBTRegressor.setImpurity should NOT be used")
     this
   }
 
   // Parameters from TreeEnsembleParams:
 
-  override def setSubsamplingRate(subsamplingRate: Double): GBTRegressor =
-    super.setSubsamplingRate(subsamplingRate)
+  override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
-  /** WARNING: This parameter is currently ignored by Gradient Boosting. It will be added later. */
-  override def setSeed(seed: Long): GBTRegressor = super.setSeed(seed)
+  override def setSeed(value: Long): this.type = {
+    logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
+    super.setSeed(value)
+  }
 
   // Parameters from GBTParams:
 
-  override def setNumIterations(numIterations: Int): GBTRegressor =
-    super.setNumIterations(numIterations)
+  override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
 
-  override def setLearningRate(learningRate: Double): GBTRegressor =
-    super.setLearningRate(learningRate)
+  override def setLearningRate(value: Double): this.type = super.setLearningRate(value)
 
-  override def setValidationTol(validationTol: Double): GBTRegressor =
-    super.setValidationTol(validationTol)
-
-  override def run(
-      input: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
-    val boostingStrategy = getOldBoostingStrategy(categoricalFeatures)
-    val oldGBT = new OldGBT(boostingStrategy)
-    val oldModel = oldGBT.run(input)
-    GBTRegressionModel.fromOld(oldModel)
-  }
-
-  override def runWithValidation(
-      input: RDD[LabeledPoint],
-      validationInput: RDD[LabeledPoint],
-      categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
-    val boostingStrategy = getOldBoostingStrategy(categoricalFeatures)
-    val oldGBT = new OldGBT(boostingStrategy)
-    val oldModel = oldGBT.runWithValidation(input, validationInput)
-    GBTRegressionModel.fromOld(oldModel)
-  }
+  // Parameters for GBTRegressor:
 
   /**
-   * Create a BoostingStrategy instance to use with the old API.
-   * TODO: Remove once we move implementation to new API.
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "SquaredError" and "AbsoluteError"
+   * (default = SquaredError)
+   * @group param
    */
-  override private[mllib] def getOldBoostingStrategy(
-      categoricalFeatures: Map[Int, Int]): OldBoostingStrategy = {
-    val strategy = super.getOldBoostingStrategy(categoricalFeatures)
-    strategy.treeStrategy.algo = OldAlgo.Regression
-    strategy
+  val loss: Param[String] = new Param[String](this, "loss", "Loss function which GBT tries to" +
+    " minimize (case-insensitive). Supported options: SquaredError, AbsoluteError")
+
+  setDefault(loss -> "squarederror")
+
+  /** @group setParam */
+  def setLoss(value: String): this.type = {
+    val lossStr = value.toLowerCase
+    require(GBTRegressor.supportedLosses.contains(lossStr), "GBTRegressor was given bad loss:" +
+      s" $value. Supported options: ${GBTRegressor.supportedLosses.mkString(", ")}")
+    set(loss, lossStr)
+    this
+  }
+
+  /** @group getParam */
+  def getLoss: String = getOrDefault(loss)
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLoss: OldLoss = {
+    getLoss match {
+      case "squarederror" => OldSquaredError
+      case "absoluteerror" => OldAbsoluteError
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTRegressorParams was given bad loss: $getLoss")
+    }
+  }
+
+  override protected def train(
+      dataset: DataFrame,
+      paramMap: ParamMap): GBTRegressionModel = {
+    val categoricalFeatures: Map[Int, Int] =
+      MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val oldGBT = new OldGBT(boostingStrategy)
+    val oldModel = oldGBT.run(oldDataset)
+    GBTRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 }
 
 object GBTRegressor {
-
   // The losses below should be lowercase.
   /** Accessor for supported loss settings */
-  final val supportedLosses: Array[String] = Array("squarederror", "absoluteerror")
+  final val supportedLosses: Array[String] =
+    Array("squarederror", "absoluteerror").map(_.toLowerCase)
 }
 
 /**
+ * :: AlphaComponent ::
+ *
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for regression.
  * It supports both continuous and categorical features.
  * @param trees  Decision trees in the ensemble.
  * @param treeWeights  Weights for the decision trees in the ensemble.
  */
-class GBTRegressionModel(
+@AlphaComponent
+final class GBTRegressionModel(
+    override val parent: GBTRegressor,
+    override val fittingParamMap: ParamMap,
     val trees: Array[DecisionTreeRegressionModel],
     val treeWeights: Array[Double])
-  extends TreeEnsembleModel with Serializable with Saveable {
+  extends PredictionModel[Vector, GBTRegressionModel]
+  with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
-  require(trees.size == treeWeights.size, "GBTRegressionModel given trees, treeWeights of" +
-    s" non-matching lengths (${trees.size}, ${treeWeights.size}, respectively).")
+  require(trees.length == treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
+    s" non-matching lengths (${trees.length}, ${treeWeights.length}, respectively).")
 
   override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def getTreeWeights: Array[Double] = treeWeights
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
+    // TODO: Override transform() to broadcast model.
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = trees.map(_.predict(features))
+    val treePredictions = trees.map(_.rootNode.predict(features))
     val prediction = blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
+  }
+
+  override protected def copy(): GBTRegressionModel = {
+    val m = new GBTRegressionModel(parent, fittingParamMap, trees, treeWeights)
+    Params.inheritValues(this.extractParamMap(), this, m)
+    m
   }
 
   override def toString: String = {
     s"GBTRegressionModel with $numTrees trees"
   }
 
-  override def save(sc: SparkContext, path: String): Unit = {
-    this.toOld.save(sc, path)
-  }
-
-  override protected def formatVersion: String = OldGradientBoostedTreesModel.formatVersion
-
-  /** Convert to a model in the old API */
-  private[mllib] def toOld: OldGradientBoostedTreesModel = {
-    new OldGradientBoostedTreesModel(OldAlgo.Regression, trees.map(_.toOld), treeWeights)
+  /** (private[ml]) Convert to a model in the old API */
+  private[ml] def toOld: OldGBTModel = {
+    new OldGBTModel(OldAlgo.Regression, trees.map(_.toOld), treeWeights)
   }
 }
 
-object GBTRegressionModel extends Loader[GBTRegressionModel] {
+private[ml] object GBTRegressionModel {
 
-  override def load(sc: SparkContext, path: String): GBTRegressionModel = {
-    GBTRegressionModel.fromOld(OldGradientBoostedTreesModel.load(sc, path))
-  }
-
-  private[mllib] def fromOld(oldModel: OldGradientBoostedTreesModel): GBTRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression,
-      s"Cannot convert non-regression GradientBoostedTreesModel (old API) to" +
-        s" GBTRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    new GBTRegressionModel(oldModel.trees.map(DecisionTreeRegressionModel.fromOld),
-      oldModel.treeWeights)
+  /** (private[ml]) Convert a model from the old API */
+  def fromOld(
+      oldModel: OldGBTModel,
+      parent: GBTRegressor,
+      fittingParamMap: ParamMap,
+      categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
+    require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
+      s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
+    val trees = oldModel.trees.map { tree =>
+      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
+    }
+    new GBTRegressionModel(parent, fittingParamMap, trees, oldModel.treeWeights)
   }
 }

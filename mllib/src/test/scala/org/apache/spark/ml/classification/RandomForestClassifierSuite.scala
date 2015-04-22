@@ -22,8 +22,8 @@ import org.scalatest.FunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.EnsembleTestHelper
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -140,7 +140,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   */
 }
 
-private object RandomForestClassifierSuite extends FunSuite {
+private object RandomForestClassifierSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -151,7 +151,8 @@ private object RandomForestClassifierSuite extends FunSuite {
       rf: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): Unit = {
-    val oldStrategy = rf.getOldStrategy(categoricalFeatures, numClasses)
+    val oldStrategy =
+      rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
       data, oldStrategy, rf.getNumTrees, rf.getFeaturesPerNodeStr, rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)

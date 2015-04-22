@@ -20,6 +20,7 @@ package org.apache.spark.ml.impl.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.impl.estimator.PredictorParams
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo,
   BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Gini => OldGini, Entropy => OldEntropy,
@@ -445,15 +446,7 @@ private[ml] object RandomForestParams {
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
 @DeveloperApi
-private[ml] trait GBTParams extends TreeEnsembleParams {
-
-  /**
-   * Number of trees to train (>= 1).
-   * (default = 20)
-   * @group param
-   */
-  final val numIterations: IntParam = new IntParam(this, "numIterations",
-    "Number of trees to train (>= 1)")
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /**
    * Learning rate in interval (0, 1] for shrinking the contribution of each estimator.
@@ -474,18 +467,14 @@ private[ml] trait GBTParams extends TreeEnsembleParams {
   //final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
   // validationTol -> 1e-5
 
-  setDefault(numIterations -> 20, learningRate -> 0.1)
+  setDefault(maxIter -> 20, learningRate -> 0.1)
 
   /** @group setParam */
-  def setNumIterations(value: Int): this.type = {
-    require(value >= 1,
-      s"Gradient Boosting numIterations parameter cannot be $value; it must be >= 1.")
-    set(numIterations, value)
+  def setMaxIter(value: Int): this.type = {
+    require(value >= 1, s"Gradient Boosting maxIter parameter cannot be $value; it must be >= 1.")
+    set(maxIter, value)
     this
   }
-
-  /** @group getParam */
-  def getNumIterations: Int = getOrDefault(numIterations)
 
   /** @group setParam */
   def setLearningRate(value: Double): this.type = {
@@ -498,15 +487,13 @@ private[ml] trait GBTParams extends TreeEnsembleParams {
   /** @group getParam */
   def getLearningRate: Double = getOrDefault(learningRate)
 
-  /**
-   * Create a BoostingStrategy instance to use with the old API.
-   * NOTE: The caller should set numClasses and algo.
-   */
+  /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
-      categoricalFeatures: Map[Int, Int]): OldBoostingStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2)
+      categoricalFeatures: Map[Int, Int],
+      oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLoss, getNumIterations, getLearningRate)
+    new OldBoostingStrategy(strategy, getOldLoss, getMaxIter, getLearningRate)
   }
 
   /** Get old Gradient Boosting Loss type */

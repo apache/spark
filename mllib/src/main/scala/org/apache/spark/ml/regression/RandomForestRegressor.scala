@@ -82,15 +82,11 @@ final class RandomForestRegressor
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema(paramMap(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
-    val strategy = getOldStrategy(categoricalFeatures)
+    val strategy =
+      super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(
       oldDataset, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
     RandomForestRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
-  }
-
-  /** (private[ml]) Create a Strategy instance to use with the old API. */
-  private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
-    super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
   }
 }
 
@@ -124,12 +120,12 @@ final class RandomForestRegressionModel private[ml] (
   // Note: We may add support for weights (based on tree performance) later on.
   override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
     // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    trees.map(_.predict(features)).sum / numTrees
+    trees.map(_.rootNode.predict(features)).sum / numTrees
   }
 
   override protected def copy(): RandomForestRegressionModel = {
@@ -156,9 +152,8 @@ private[ml] object RandomForestRegressionModel {
       parent: RandomForestRegressor,
       fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): RandomForestRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression,
-      s"Cannot convert non-regression RandomForestModel (old API) to" +
-        s" RandomForestRegressionModel (new API).  Algo is: ${oldModel.algo}")
+    require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
+      s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
     val trees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)

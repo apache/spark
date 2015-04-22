@@ -92,17 +92,11 @@ final class RandomForestClassifier
       // TODO: Automatically index labels.
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
-    val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    val strategy =
+      super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
       oldDataset, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
     RandomForestClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
-  }
-
-  /** (private[ml]) Create a Strategy instance to use with the old API. */
-  private[ml] def getOldStrategy(
-      categoricalFeatures: Map[Int, Int],
-      numClasses: Int): OldStrategy = {
-    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
   }
 }
 
@@ -138,14 +132,14 @@ final class RandomForestClassificationModel private[ml] (
   // Note: We may add support for weights (based on tree performance) later on.
   override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
     // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
     trees.view.foreach { tree =>
-      val prediction = tree.predict(features).toInt
+      val prediction = tree.rootNode.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
     votes.maxBy(_._2)._1
@@ -175,9 +169,8 @@ private[ml] object RandomForestClassificationModel {
       parent: RandomForestClassifier,
       fittingParamMap: ParamMap,
       categoricalFeatures: Map[Int, Int]): RandomForestClassificationModel = {
-    require(oldModel.algo == OldAlgo.Classification,
-      s"Cannot convert non-classification RandomForestModel (old API) to" +
-        s" RandomForestClassificationModel (new API).  Algo is: ${oldModel.algo}")
+    require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
+      s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val trees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeClassificationModel.fromOld(tree, null, null, categoricalFeatures)
