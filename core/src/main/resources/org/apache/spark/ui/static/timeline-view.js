@@ -34,6 +34,14 @@ function drawApplicationTimeline(groupArray, eventObjArray) {
   applicationTimeline.setItems(items);
 
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
+
+  $(".item.range.job.application-timeline-object").each(function() {
+    $(this).click(function() {
+      var jobIdText = $($(this).find(".application-timeline-content")[0]).text();
+      var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
+      window.location.href = "#job-" + jobId;
+    });
+  });
 }
 
 function drawJobTimeline(groupArray, eventObjArray) {
@@ -55,6 +63,18 @@ function drawJobTimeline(groupArray, eventObjArray) {
   jobTimeline.setItems(items);
 
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
+
+    $(".item.range.stage.job-timeline-object").each(function() {
+      $(this).click(function() {
+        var stageIdText = $($(this).find(".job-timeline-content")[0]).text();
+        var stageId = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
+        window.location.href = "#stage-" + stageId;
+      });
+    });
+}
+
+function setupJobEntryLink(id, timeline) {
+  $(id +'')
 }
 
 function setupZoomable(id, timeline) {

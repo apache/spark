@@ -191,7 +191,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
-      <tr>
+      <tr id={"job-" + job.jobId}>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
