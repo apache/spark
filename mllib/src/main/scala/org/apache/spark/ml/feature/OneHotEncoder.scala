@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * with 5 categories, an input value of 2.0 would map to an output vector of
  * (0.0, 0.0, 1.0, 0.0, 0.0). If includeFirst is set to false, the first category is omitted, so the
  * output vector for the previous example would be (0.0, 1.0, 0.0, 0.0) and an input value
- * of 0.0 would map to a vector of all zeros.  Omitting the first category enables the vector
- * columns to be independent.
+ * of 0.0 would map to a vector of all zeros. Including the first category makes the vector columns
+ * linearly dependent because they sum up to one.
  */
 @AlphaComponent
 class OneHotEncoder extends UnaryTransformer[Double, Vector, OneHotEncoder]
@@ -43,8 +43,8 @@ class OneHotEncoder extends UnaryTransformer[Double, Vector, OneHotEncoder]
    * Whether to include a component in the encoded vectors for the first category, defaults to true.
    * @group param
    */
-  final val includeFirst: Param[Boolean] =
-    new Param[Boolean](this, "includeFirst", "include first category")
+  final val includeFirst: BooleanParam =
+    new BooleanParam(this, "includeFirst", "include first category")
   setDefault(includeFirst -> true)
 
   /**
@@ -59,7 +59,7 @@ class OneHotEncoder extends UnaryTransformer[Double, Vector, OneHotEncoder]
   def setIncludeFirst(value: Boolean): this.type = set(includeFirst, value)
 
   /** @group setParam */
-  def setLabelNames(value: Array[String]): this.type = set(labelNames, value)
+  def setLabelNames(attr: NominalAttribute): this.type = set(labelNames, attr.values.get)
 
   /** @group setParam */
   override def setInputCol(value: String): this.type = set(inputCol, value)

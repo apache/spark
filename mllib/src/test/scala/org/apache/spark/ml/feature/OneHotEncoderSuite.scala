@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.attribute.{NominalAttribute, Attribute}
+import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -49,7 +49,7 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
   test("OneHotEncoder includeFirst = true") {
     val (transformed, attr) = stringIndexed()
     val encoder = new OneHotEncoder()
-      .setLabelNames(attr.values.get)
+      .setLabelNames(attr)
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
@@ -68,7 +68,7 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     val (transformed, attr) = stringIndexed()
     val encoder = new OneHotEncoder()
       .setIncludeFirst(false)
-      .setLabelNames(attr.values.get)
+      .setLabelNames(attr)
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
