@@ -116,7 +116,9 @@ class DagBag(object):
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
                     dag.full_filepath = filepath
+                    dag.fileloc = filepath
                     self.bag_dag(dag)
+                    dag.pickle()
 
             self.file_last_changed[filepath] = dttm
 
@@ -261,6 +263,8 @@ class DagPickle(Base):
     """
     id = Column(Integer, primary_key=True)
     pickle = Column(PickleType(pickler=dill))
+    created_dttm = Column(DateTime, default=func.now())
+    pickle_hash = Column(Integer)
 
     __tablename__ = "dag_pickle"
 
@@ -268,6 +272,7 @@ class DagPickle(Base):
         self.dag_id = dag.dag_id
         if hasattr(dag, 'template_env'):
             dag.template_env = None
+        self.pickle_hash = hash(dag)
         self.pickle = dag
 
 
@@ -911,6 +916,18 @@ class BaseOperator(Base):
         else:
             return self._schedule_interval
 
+    def __cmp__(self, other):
+        #logging.info("comparing: " + str(self.task_id))
+        blacklist = {'_sa_instance_state', '_upstream_list', '_downstream_list', 'dag'}
+        for k in set(self.__dict__) - blacklist:
+            if self.__dict__[k] != other.__dict__[k]:
+                print(self.dag_id)
+                print(self.task_id)
+                print(k)
+                print "differen!!!!!!!!!!!!!!!!!!!t"
+                return -1
+        return 0
+
     def execute(self, context):
         '''
         This is the main method to derive when creating an operator.
@@ -1154,12 +1171,24 @@ class DAG(Base):
         here and `'depends_on_past': False` in the operator's call
         `default_args`, the actual value will be `False`.
     :type default_args: dict
+    :param params: a dictionary of DAG level parameters that are made
+        accessible in templates, namespaced under `params`. These
+        params can be overriden at the task level.
+    :type params: dict
+    :param expires_every: timedelta at which the DAG definition gets
+        re-parsed
+    :type expires_every: datetime.timedelta
     """
 
     __tablename__ = "dag"
 
     dag_id = Column(String(ID_LEN), primary_key=True)
     is_paused = Column(Boolean, default=False)
+    last_scheduler_run = Column(DateTime)
+    last_pickled = Column(DateTime)
+    pickle_id = Column(Integer)
+    pickle_size = Column(Integer)
+    fileloc = Column(String(2000))
 
     def __init__(
             self, dag_id,
@@ -1169,7 +1198,8 @@ class DAG(Base):
             template_searchpath=None,
             user_defined_macros=None,
             default_args=None,
-            params=None):
+            params=None,
+            expires_every=timedelta(minutes=10)):
 
         self.user_defined_macros = user_defined_macros
         self.default_args = default_args or {}
@@ -1409,6 +1439,38 @@ class DAG(Base):
             if task.task_id == task_id:
                 return task
         raise Exception("Task {task_id} not found".format(**locals()))
+
+    def __cmp__(self, other):
+        logging.info("comparing: " + str(self.dag_id))
+        blacklist = {'_sa_instance_state', 'end_date', 'last_pickled', 'tasks'}
+        for k in set(self.__dict__) - blacklist:
+            if self.__dict__[k] != other.__dict__[k]:
+                return -1
+
+        if len(self.tasks) != len(other.tasks):
+            return -1
+        for i, task in list(enumerate(self.tasks)):
+            if task != other.tasks[i]:
+                return -1
+        logging.info("Same as before")
+        return 0
+
+    def pickle(self, main_session=None):
+        session = main_session or settings.Session()
+        dag = session.query(DAG).filter(DAG.dag_id==self.dag_id).first()
+        dp = None
+        if dag and dag.pickle_id:
+            dp = session.query(DagPickle).filter(
+                DagPickle.id==dag.pickle_id).first()
+        if not dp or dp.pickle != self:
+            dp = DagPickle(dag=self)
+            session.add(dp)
+            self.last_pickled = datetime.now()
+            session.commit()
+            self.pickle_id = dp.id
+
+        if not main_session:
+            session.close()
 
     def tree_view(self):
         """

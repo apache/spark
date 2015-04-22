@@ -25,11 +25,11 @@ ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None
-if conf.get('master', 'statsd_on'):
+if conf.get('scheduler', 'statsd_on'):
     from statsd import StatsClient
     statsd = StatsClient(
-        host=conf.get('master', 'statsd_host'),
-        port=conf.getint('master', 'statsd_port'),
+        host=conf.get('scheduler', 'statsd_host'),
+        port=conf.getint('scheduler', 'statsd_port'),
         prefix='airflow')
 
 
@@ -66,7 +66,7 @@ class BaseJob(Base):
     def __init__(
             self,
             executor=executors.DEFAULT_EXECUTOR,
-            heartrate=conf.getint('master', 'JOB_HEARTBEAT_SEC'),
+            heartrate=conf.getint('scheduler', 'JOB_HEARTBEAT_SEC'),
             *args, **kwargs):
         self.hostname = socket.gethostname()
         self.executor = executor
@@ -80,7 +80,7 @@ class BaseJob(Base):
     def is_alive(self):
         return (
             (datetime.now() - self.latest_heartbeat).seconds <
-            (conf.getint('master', 'JOB_HEARTBEAT_SEC') * 2.1)
+            (conf.getint('scheduler', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
     def kill(self):
@@ -112,7 +112,7 @@ class BaseJob(Base):
         externally. This allows at the system level to monitor what is
         actually active.
 
-        For instance, an old heartbeat for MasterJob would mean something
+        For instance, an old heartbeat for SchedulerJob would mean something
         is wrong.
 
         This also allows for any job to be killed externally, regardless
@@ -174,9 +174,9 @@ class BaseJob(Base):
         raise NotImplemented("This method needs to be overriden")
 
 
-class MasterJob(BaseJob):
+class SchedulerJob(BaseJob):
     """
-    This MasterJob runs indefinetly and constantly schedules the jobs
+    This SchedulerJob runs indefinetly and constantly schedules the jobs
     that are ready to run. It figures out the latest runs for each
     task and see if the dependencies for the next schedules are met.
     If so it triggers the task instance. It does this for each task
@@ -195,7 +195,7 @@ class MasterJob(BaseJob):
     """
 
     __mapper_args__ = {
-        'polymorphic_identity': 'MasterJob'
+        'polymorphic_identity': 'SchedulerJob'
     }
 
     def __init__(
@@ -209,9 +209,9 @@ class MasterJob(BaseJob):
         self.subdir = subdir
         self.test_mode = test_mode
         self.refresh_dags_every = refresh_dags_every
-        super(MasterJob, self).__init__(*args, **kwargs)
+        super(SchedulerJob, self).__init__(*args, **kwargs)
 
-        self.heartrate = conf.getint('master', 'MASTER_HEARTBEAT_SEC')
+        self.heartrate = conf.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
 
     def process_dag(self, dag, executor):
         session = settings.Session()
@@ -293,10 +293,10 @@ class MasterJob(BaseJob):
 
         utils.pessimistic_connection_handling()
 
-        # Sleep time (seconds) between master runs
+        # Sleep time (seconds) between scheduler runs
 
         logging.basicConfig(level=logging.DEBUG)
-        logging.info("Starting a master scheduler")
+        logging.info("Starting the scheduler")
 
         # This should get new code
         dagbag = models.DagBag(self.subdir)
@@ -327,7 +327,7 @@ class MasterJob(BaseJob):
 
     def heartbeat_callback(self):
         if statsd:
-            statsd.gauge('master_heartbeat', 1, 1)
+            statsd.gauge('scheduler_heartbeat', 1, 1)
 
 
 class BackfillJob(BaseJob):

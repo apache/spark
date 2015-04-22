@@ -46,7 +46,7 @@ from airflow.www import utils as wwwutils
 
 from functools import wraps
 
-AUTHENTICATE = conf.getboolean('master', 'AUTHENTICATE')
+AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
 
@@ -571,32 +571,6 @@ class Airflow(BaseView):
     @expose('/noaccess')
     def noaccess(self):
         return self.render('airflow/noaccess.html')
-
-    @expose('/health_checks')
-    def health_checks(self):
-        J = jobs.BaseJob
-
-        session = settings.Session()
-        latest_heartbeat = session.query(
-            sqla.func.max(J.latest_heartbeat)).filter(
-                J.job_type == 'MasterJob').first()[0]
-        session.commit()
-        session.close()
-        ago = (datetime.now() - latest_heartbeat).total_seconds()
-        fail = False
-        if (
-                ago > (2.5 * conf.getint('master', "MASTER_HEARTBEAT_SEC"))
-        ):
-            fail = True
-        d = {
-            'master_latest_heartbeat': latest_heartbeat.isoformat(),
-            'master_latest_heartbeat_sec_ago': ago,
-            'fail': fail,
-        }
-
-        return Response(
-            response=json.dumps(d, indent=4),
-            status=200, mimetype="application/json")
 
     @expose('/headers')
     def headers(self):
@@ -1448,8 +1422,16 @@ admin.add_view(ConfigurationView(name='Configuration', category="Admin"))
 
 
 class DagModelView(SuperUserMixin, ModelView):
-    column_list = ('dag_id', 'is_paused')
+    column_list = (
+        'dag_id', 'is_paused', 'last_scheduler_run',
+        'last_pickled', 'pickle_id')
     column_editable_list = ('is_paused',)
+    form_widget_args = {
+        'last_scheduler_run':{'disabled':True},
+        'fileloc':{'disabled':True},
+        'last_pickled':{'disabled':True},
+        'pickle_id':{'disabled':True},
+    }
 mv = DagModelView(
     models.DAG, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
@@ -1596,3 +1578,9 @@ mv = KnowEventTypeView(
     Session, name="Known Event Types", category="Manage")
 admin.add_view(mv)
 '''
+class DagPickleView(SuperUserMixin, ModelView):
+    pass
+mv = DagPickleView(
+    models.DagPickle,
+    Session, name="Pickles", category="Manage")
+admin.add_view(mv)
