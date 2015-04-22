@@ -27,7 +27,6 @@ import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -68,9 +67,11 @@ private[feature] trait Word2VecBase extends Params
   def getSeed: Long = getOrDefault(seed)
 
   /**
-   * The minimum count of words that can be kept in training set.
+   * The minimum number of times a token must appear to be included in the word2vec model's
+   * vocabulary.
    */
-  final val minCount = new IntParam(this, "minCount", "the minimum count of words to filter words")
+  final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
+    "appear to be included in the word2vec model's vocabulary")
 
   setDefault(minCount -> 5)
 
@@ -162,7 +163,8 @@ class Word2VecModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Transform a sentence column to a vector column to represent the whole sentence.
+   * Transform a sentence column to a vector column to represent the whole sentence. The transform
+   * is performed by averaging all word vectors it contains.
    */
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)

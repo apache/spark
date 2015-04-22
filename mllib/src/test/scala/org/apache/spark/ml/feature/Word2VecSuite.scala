@@ -58,7 +58,6 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
       case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1 ~== vector2 absTol 1E-5, "Transformed vector is different with expected.")
     }
-
   }
 }
 
