@@ -31,6 +31,7 @@ import org.apache.spark.sql.types.StructType
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
 private[ml] trait CrossValidatorParams extends Params {
+
   /**
    * param for the estimator to be cross-validated
    * @group param
@@ -38,7 +39,7 @@ private[ml] trait CrossValidatorParams extends Params {
   val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
 
   /** @group getParam */
-  def getEstimator: Estimator[_] = get(estimator)
+  def getEstimator: Estimator[_] = getOrDefault(estimator)
 
   /**
    * param for estimator param maps
@@ -48,7 +49,7 @@ private[ml] trait CrossValidatorParams extends Params {
     new Param(this, "estimatorParamMaps", "param maps for the estimator")
 
   /** @group getParam */
-  def getEstimatorParamMaps: Array[ParamMap] = get(estimatorParamMaps)
+  def getEstimatorParamMaps: Array[ParamMap] = getOrDefault(estimatorParamMaps)
 
   /**
    * param for the evaluator for selection
@@ -57,17 +58,18 @@ private[ml] trait CrossValidatorParams extends Params {
   val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
 
   /** @group getParam */
-  def getEvaluator: Evaluator = get(evaluator)
+  def getEvaluator: Evaluator = getOrDefault(evaluator)
 
   /**
    * param for number of folds for cross validation
    * @group param
    */
-  val numFolds: IntParam =
-    new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
+  val numFolds: IntParam = new IntParam(this, "numFolds", "number of folds for cross validation")
 
   /** @group getParam */
-  def getNumFolds: Int = get(numFolds)
+  def getNumFolds: Int = getOrDefault(numFolds)
+
+  setDefault(numFolds -> 3)
 }
 
 /**
@@ -92,7 +94,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val schema = dataset.schema
     transformSchema(dataset.schema, paramMap, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -130,7 +132,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     map(estimator).transformSchema(schema, paramMap)
   }
 }

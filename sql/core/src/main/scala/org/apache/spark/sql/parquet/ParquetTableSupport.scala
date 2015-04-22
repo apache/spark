@@ -198,10 +198,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     if (value != null) {
       schema match {
         case StringType => writer.addBinary(
-          Binary.fromByteArray(
-            value.asInstanceOf[String].getBytes("utf-8")
-          )
-        )
+          Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
@@ -212,6 +209,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case DateType => writer.addInteger(value.asInstanceOf[Int])
         case d: DecimalType =>
           if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
@@ -348,7 +346,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[String].getBytes("utf-8")))
+        Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))
@@ -358,6 +356,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case DateType => writer.addInteger(record.getInt(index))
       case TimestampType => writeTimestamp(record(index).asInstanceOf[java.sql.Timestamp])
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {

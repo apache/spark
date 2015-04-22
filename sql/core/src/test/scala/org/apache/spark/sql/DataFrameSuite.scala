@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
@@ -60,6 +60,14 @@ class DataFrameSuite extends QueryTest {
     assert($"test".toString === "test")
   }
 
+  test("rename nested groupby") {
+    val df = Seq((1,(1,1))).toDF()
+
+    checkAnswer(
+      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
+      Row(1, 1) :: Nil)
+  }
+
   test("invalid plan toString, debug mode") {
     val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
@@ -78,10 +86,21 @@ class DataFrameSuite extends QueryTest {
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
+  test("access complex data") {
+    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
+  }
+
   test("table scan") {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("empty data frame") {
+    assert(TestSQLContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
+    assert(TestSQLContext.emptyDataFrame.count() === 0)
   }
 
   test("head and take") {
@@ -106,6 +125,17 @@ class DataFrameSuite extends QueryTest {
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
+  }
+
+  test("self join with aliases") {
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+
+    checkAnswer(
+      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
+      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
   test("explode") {
@@ -145,6 +175,14 @@ class DataFrameSuite extends QueryTest {
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
+  test("coalesce") {
+    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+
+    checkAnswer(
+      testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
   }
 
@@ -305,8 +343,9 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
+    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -415,6 +454,15 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("call udf in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
@@ -423,6 +471,14 @@ class DataFrameSuite extends QueryTest {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
+
+  test("replace column using withColumn") {
+    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df3 = df2.withColumn("x", df2("x") + 1)
+    checkAnswer(
+      df3.select("x"),
+      Row(2) :: Row(3) :: Row(4) :: Nil)
   }
 
   test("withColumnRenamed") {
@@ -436,6 +492,50 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
+  test("describe") {
+    val describeTestData = Seq(
+      ("Bob",   16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy",   24, 180)).toDF("name", "age", "height")
+
+    val describeResult = Seq(
+      Row("count",   4,               4),
+      Row("mean",    33.0,            178.0),
+      Row("stddev",  16.583123951777, 10.0),
+      Row("min",     16,              164),
+      Row("max",     60,              192))
+
+    val emptyDescribeResult = Seq(
+      Row("count",   0,    0),
+      Row("mean",    null, null),
+      Row("stddev",  null, null),
+      Row("min",     null, null),
+      Row("max",     null, null))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+
+    val describeTwoCols = describeTestData.describe("age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeTwoCols, describeResult)
+
+    val describeAllCols = describeTestData.describe()
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    checkAnswer(describeAllCols, describeResult)
+
+    val describeOneCol = describeTestData.describe("age")
+    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+
+    val describeNoCol = describeTestData.select("name").describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+
+    val emptyDescription = describeTestData.limit(0).describe()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
@@ -445,5 +545,21 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
+  }
+
+  test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
+    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val df = TestSQLContext.createDataFrame(rowRDD, schema)
+    df.rdd.collect()
+  }
+
+  test("SPARK-6899") {
+    val originalValue = TestSQLContext.conf.codegenEnabled
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    checkAnswer(
+      decimalData.agg(avg('a)),
+      Row(new java.math.BigDecimal(2.0)))
+    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 }

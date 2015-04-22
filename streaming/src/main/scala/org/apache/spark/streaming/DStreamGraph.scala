@@ -100,11 +100,11 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def getInputStreams() = this.synchronized { inputStreams.toArray }
+  def getInputStreams(): Array[InputDStream[_]] = this.synchronized { inputStreams.toArray }
 
-  def getOutputStreams() = this.synchronized { outputStreams.toArray }
+  def getOutputStreams(): Array[DStream[_]] = this.synchronized { outputStreams.toArray }
 
-  def getReceiverInputStreams() = this.synchronized {
+  def getReceiverInputStreams(): Array[ReceiverInputDStream[_]] = this.synchronized {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
       .toArray

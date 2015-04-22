@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 
@@ -29,11 +30,17 @@ case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNo
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
-  override def execute() = rdd
+  override def execute(): RDD[Row] = rdd
 
-  override def executeCollect() =
-    rows.map(ScalaReflection.convertRowToScala(_, schema)).toArray
 
-  override def executeTake(limit: Int) =
-    rows.map(ScalaReflection.convertRowToScala(_, schema)).take(limit).toArray
+  override def executeCollect(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).toArray
+  }
+
+
+  override def executeTake(limit: Int): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).take(limit).toArray
+  }
 }

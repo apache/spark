@@ -41,24 +41,28 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-      suiteBase = new KafkaStreamSuiteBase() { };
-      suiteBase.setupKafka();
-      System.clearProperty("spark.driver.port");
-      SparkConf sparkConf = new SparkConf()
-              .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
-      ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setup();
+    SparkConf sparkConf = new SparkConf()
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+    ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
   }
 
   @After
   public void tearDown() {
+    if (ssc != null) {
       ssc.stop();
       ssc = null;
-      System.clearProperty("spark.driver.port");
-      suiteBase.tearDownKafka();
+    }
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
@@ -74,7 +78,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     sent.addAll(Arrays.asList(topic2data));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaDStream<String> stream1 = KafkaUtils.createDirectStream(
@@ -147,8 +151,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.3.0-SNAPSHOT</version>
+  <version>1.4.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -120,7 +120,7 @@
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>1.0.4</hadoop.version>
+    <hadoop.version>2.2.0</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.98.7-hadoop1</hbase.version>
@@ -141,13 +141,13 @@
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.0</codahale.metrics.version>
-    <avro.version>1.7.6</avro.version>
+    <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier></avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
     <commons.httpclient.version>4.2.6</commons.httpclient.version>
-    <commons.math3.version>3.1.1</commons.math3.version>
+    <commons.math3.version>3.4.1</commons.math3.version>
     <test_classpath_file>${project.build.directory}/spark-test-classpath.txt</test_classpath_file>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
@@ -156,8 +156,10 @@
     <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
-    <snappy.version>1.1.1.6</snappy.version>
+    <snappy.version>1.1.1.7</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
+
+    <test.java.home>${java.home}</test.java.home>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -1194,6 +1196,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1224,6 +1227,7 @@
                 launched by the tests have access to the correct test-time classpath.
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1265,6 +1269,7 @@
               <id>create-source-jar</id>
               <goals>
                 <goal>jar-no-fork</goal>
+                <goal>test-jar-no-fork</goal>
               </goals>
             </execution>
           </executions>
@@ -1442,7 +1447,7 @@
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
-        <version>0.4.0</version>
+        <version>0.7.0</version>
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
@@ -1451,12 +1456,12 @@
           <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
           <configLocation>scalastyle-config.xml</configLocation>
-          <outputFile>scalastyle-output.xml</outputFile>
-          <outputEncoding>UTF-8</outputEncoding>
+          <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
+          <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
+          <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
         <executions>
           <execution>
-            <phase>package</phase>
             <goals>
               <goal>check</goal>
             </goals>
@@ -1471,6 +1476,25 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+      </plugin>
+      <!-- Build test-jar's for all projects, since some projects depend on tests from others -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-test-jar</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <configuration>
+              <excludes>
+                <exclude>log4j.properties</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
@@ -1696,6 +1720,16 @@
     </profile>
 
     <profile>
+      <id>test-java-home</id>
+      <activation>
+        <property><name>env.JAVA_HOME</name></property>
+      </activation>
+      <properties>
+        <test.java.home>${env.JAVA_HOME}</test.java.home>
+      </properties>
+    </profile>
+
+    <profile>
       <id>scala-2.11</id>
       <activation>
         <property><name>scala-2.11</name></property>
@@ -1727,6 +1761,9 @@
     </profile>
     <profile>
       <id>parquet-provided</id>
+    </profile>
+    <profile>
+      <id>sparkr</id>
     </profile>
   </profiles>
 </project>

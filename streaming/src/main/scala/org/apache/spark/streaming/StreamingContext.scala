@@ -188,7 +188,7 @@ class StreamingContext private[streaming] (
   /**
    * Return the associated Spark context
    */
-  def sparkContext = sc
+  def sparkContext: SparkContext = sc
 
   /**
    * Set each DStreams in this context to remember RDDs it generated in the last given duration.
@@ -596,7 +596,8 @@ object StreamingContext extends Logging {
   @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
+    : PairDStreamFunctions[K, V] = {
     DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 

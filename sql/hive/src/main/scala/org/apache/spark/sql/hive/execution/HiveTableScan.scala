@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
@@ -128,11 +129,11 @@ case class HiveTableScan(
     }
   }
 
-  override def execute() = if (!relation.hiveQlTable.isPartitioned) {
+  override def execute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
   }
 
-  override def output = attributes
+  override def output: Seq[Attribute] = attributes
 }

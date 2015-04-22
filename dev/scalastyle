@@ -18,9 +18,10 @@
 #
 
 echo -e "q\n" | build/sbt -Phive -Phive-thriftserver scalastyle > scalastyle.txt
+echo -e "q\n" | build/sbt -Phive -Phive-thriftserver test:scalastyle >> scalastyle.txt
 # Check style with YARN built too
-echo -e "q\n" | build/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 scalastyle \
-  >> scalastyle.txt
+echo -e "q\n" | build/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 scalastyle >> scalastyle.txt
+echo -e "q\n" | build/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 test:scalastyle >> scalastyle.txt
 
 ERRORS=$(cat scalastyle.txt | awk '{if($1~/error/)print}')
 rm scalastyle.txt

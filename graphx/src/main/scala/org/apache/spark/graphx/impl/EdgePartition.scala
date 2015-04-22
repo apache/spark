@@ -324,7 +324,7 @@ class EdgePartition[
    *
    * @return an iterator over edges in the partition
    */
-  def iterator = new Iterator[Edge[ED]] {
+  def iterator: Iterator[Edge[ED]] = new Iterator[Edge[ED]] {
     private[this] val edge = new Edge[ED]
     private[this] var pos = 0
 
@@ -351,7 +351,7 @@ class EdgePartition[
 
     override def hasNext: Boolean = pos < EdgePartition.this.size
 
-    override def next() = {
+    override def next(): EdgeTriplet[VD, ED] = {
       val triplet = new EdgeTriplet[VD, ED]
       val localSrcId = localSrcIds(pos)
       val localDstId = localDstIds(pos)
@@ -518,11 +518,11 @@ private class AggregatingEdgeContext[VD, ED, A](
     _attr = attr
   }
 
-  override def srcId = _srcId
-  override def dstId = _dstId
-  override def srcAttr = _srcAttr
-  override def dstAttr = _dstAttr
-  override def attr = _attr
+  override def srcId: VertexId = _srcId
+  override def dstId: VertexId = _dstId
+  override def srcAttr: VD = _srcAttr
+  override def dstAttr: VD = _dstAttr
+  override def attr: ED = _attr
 
   override def sendToSrc(msg: A) {
     send(_localSrcId, msg)

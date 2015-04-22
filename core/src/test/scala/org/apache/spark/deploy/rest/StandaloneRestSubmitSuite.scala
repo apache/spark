@@ -508,7 +508,7 @@ private class DummyMaster(
     exception: Option[Exception] = None)
   extends Actor {
 
-  override def receive = {
+  override def receive: PartialFunction[Any, Unit] = {
     case RequestSubmitDriver(driverDesc) =>
       sender ! SubmitDriverResponse(success = true, Some(submitId), submitMessage)
     case RequestKillDriver(driverId) =>
@@ -531,7 +531,7 @@ private class SmarterMaster extends Actor {
   private var counter: Int = 0
   private val submittedDrivers = new mutable.HashMap[String, DriverState]
 
-  override def receive = {
+  override def receive: PartialFunction[Any, Unit] = {
     case RequestSubmitDriver(driverDesc) =>
       val driverId = s"driver-$counter"
       submittedDrivers(driverId) = RUNNING

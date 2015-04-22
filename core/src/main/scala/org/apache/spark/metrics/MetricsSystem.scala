@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
@@ -84,7 +85,7 @@ private[spark] class MetricsSystem private (
   /**
    * Get any UI handlers used by this metrics system; can only be called after start().
    */
-  def getServletHandlers = {
+  def getServletHandlers: Array[ServletContextHandler] = {
     require(running, "Can only call getServletHandlers on a running MetricsSystem")
     metricsServlet.map(_.getHandlers).getOrElse(Array())
   }

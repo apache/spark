@@ -48,9 +48,9 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
 
   protected def initialize() {}
 
-  def hasNext = buffer.hasRemaining
+  override def hasNext: Boolean = buffer.hasRemaining
 
-  def extractTo(row: MutableRow, ordinal: Int): Unit = {
+  override def extractTo(row: MutableRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 

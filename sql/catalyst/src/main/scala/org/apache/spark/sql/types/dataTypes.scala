@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -298,7 +299,7 @@ class NullType private() extends DataType {
 case object NullType extends NullType
 
 
-protected[sql] object NativeType {
+protected[spark] object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
@@ -307,7 +308,7 @@ protected[sql] object NativeType {
 
 
 protected[sql] trait PrimitiveType extends DataType {
-  override def isPrimitive = true
+  override def isPrimitive: Boolean = true
 }
 
 
@@ -326,7 +327,7 @@ protected[sql] object PrimitiveType {
   }
 }
 
-protected[sql] abstract class NativeType extends DataType {
+protected[spark] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
@@ -349,7 +350,7 @@ class StringType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = String
+  private[sql] type JvmType = UTF8String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 
@@ -442,7 +443,7 @@ class TimestampType private() extends NativeType {
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
   private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
+    def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
 
   /**
@@ -542,7 +543,7 @@ class LongType private() extends IntegralType {
    */
   override def defaultSize: Int = 8
 
-  override def simpleString = "bigint"
+  override def simpleString: String = "bigint"
 
   private[spark] override def asNullable: LongType = this
 }
@@ -572,7 +573,7 @@ class IntegerType private() extends IntegralType {
    */
   override def defaultSize: Int = 4
 
-  override def simpleString = "int"
+  override def simpleString: String = "int"
 
   private[spark] override def asNullable: IntegerType = this
 }
@@ -602,7 +603,7 @@ class ShortType private() extends IntegralType {
    */
   override def defaultSize: Int = 2
 
-  override def simpleString = "smallint"
+  override def simpleString: String = "smallint"
 
   private[spark] override def asNullable: ShortType = this
 }
@@ -632,7 +633,7 @@ class ByteType private() extends IntegralType {
    */
   override def defaultSize: Int = 1
 
-  override def simpleString = "tinyint"
+  override def simpleString: String = "tinyint"
 
   private[spark] override def asNullable: ByteType = this
 }
@@ -670,6 +671,10 @@ case class PrecisionInfo(precision: Int, scale: Int)
  */
 @DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = Decimal.DecimalIsFractional
@@ -696,7 +701,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
    */
   override def defaultSize: Int = 4096
 
-  override def simpleString = precisionInfo match {
+  override def simpleString: String = precisionInfo match {
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
     case None => "decimal(10,0)"
   }
@@ -819,6 +824,10 @@ object ArrayType {
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
       s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
@@ -836,7 +845,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    */
   override def defaultSize: Int = 100 * elementType.defaultSize
 
-  override def simpleString = s"array<${elementType.simpleString}>"
+  override def simpleString: String = s"array<${elementType.simpleString}>"
 
   private[spark] override def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)
@@ -856,6 +865,9 @@ case class StructField(
     dataType: DataType,
     nullable: Boolean = true,
     metadata: Metadata = Metadata.empty) {
+
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, null)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
@@ -923,7 +935,9 @@ object StructType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
             DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
+        DecimalType(
+          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
+          max(leftScale, rightScale))
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
@@ -1003,11 +1017,15 @@ object StructType {
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null)
+
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
@@ -1030,6 +1048,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
+  }
+
+  /**
+   * Returns index of a given field
+   */
+  def fieldIndex(name: String): Int = {
+    nameToIndex.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   protected[sql] def toAttributes: Seq[AttributeReference] =
@@ -1065,7 +1091,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  override def simpleString = {
+  override def simpleString: String = {
     val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
     s"struct<${fieldTypes.mkString(",")}>"
   }
@@ -1121,6 +1147,10 @@ case class MapType(
     keyType: DataType,
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
+
+  /** No-arg constructor for kryo. */
+  def this() = this(null, null, false)
+
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
     builder.append(s"$prefix-- value: ${valueType.typeName} " +
@@ -1142,7 +1172,7 @@ case class MapType(
    */
   override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
 
-  override def simpleString = s"map<${keyType.simpleString},${valueType.simpleString}>"
+  override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
   private[spark] override def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
@@ -1175,8 +1205,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /**
    * Convert the user type to a SQL datum
    *
-   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
-   *       where we need to convert Any to UserType.
+   * TODO: Can we make this take obj: UserType?  The issue is in
+   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
   def serialize(obj: Any): Any
 
