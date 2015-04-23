@@ -106,22 +106,22 @@ final class Word2Vec extends Estimator[Word2VecModel] with Word2VecBase {
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  def setVectorSize(value: Int) = set(vectorSize, value)
+  def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
   /** @group setParam */
-  def setStepSize(value: Double) = set(stepSize, value)
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group setParam */
-  def setNumPartitions(value: Int) = set(numPartitions, value)
+  def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
   /** @group setParam */
-  def setMaxIter(value: Int) = set(maxIter, value)
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  def setSeed(value: Long) = set(seed, value)
+  def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
-  def setMinCount(value: Int) = set(minCount, value)
+  def setMinCount(value: Int): this.type = set(minCount, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): Word2VecModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -159,7 +159,7 @@ class Word2VecModel private[ml] (
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
-  /**@group setParam */
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
