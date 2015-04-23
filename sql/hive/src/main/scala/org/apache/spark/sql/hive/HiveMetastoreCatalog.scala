@@ -692,7 +692,7 @@ private[hive] case class MetastoreRelation
     }
   )
 
-  def updateStats(predicates: Seq[Expression]) = {
+  def updateStats(predicates: Seq[Expression]): Unit = {
     // Filter out all predicates that only deal with partition keys
     val partitionsKeys = AttributeSet(partitionKeys)
     val (pruningPredicates, otherPredicates) = predicates.partition {
