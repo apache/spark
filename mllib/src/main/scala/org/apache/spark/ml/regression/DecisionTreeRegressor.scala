@@ -82,7 +82,7 @@ final class DecisionTreeRegressor
 }
 
 object DecisionTreeRegressor {
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurities: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 }
 

@@ -91,7 +91,7 @@ final class DecisionTreeClassifier
 }
 
 object DecisionTreeClassifier {
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 

@@ -54,15 +54,15 @@ class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Regression with continuous features: SquaredError") {
     val categoricalFeatures = Map.empty[Int, Int]
-    GBTRegressor.supportedLosses.foreach { loss =>
+    GBTRegressor.supportedLossTypes.foreach { loss =>
       testCombinations.foreach {
         case (maxIter, learningRate, subsamplingRate) =>
           val gbt = new GBTRegressor()
             .setMaxDepth(2)
             .setSubsamplingRate(subsamplingRate)
-            .setLoss(loss)
+            .setLossType(loss)
             .setMaxIter(maxIter)
-            .setLearningRate(learningRate)
+            .setStepSize(learningRate)
           compareAPIs(data, None, gbt, categoricalFeatures)
       }
     }
@@ -74,11 +74,11 @@ class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
     val categoricalFeatures = Map.empty[Int, Int]
     // Set maxIter large enough so that it stops early.
     val maxIter = 20
-    GBTRegressor.supportedLosses.foreach { loss =>
+    GBTRegressor.supportedLossTypes.foreach { loss =>
       val gbt = new GBTRegressor()
         .setMaxIter(maxIter)
         .setMaxDepth(2)
-        .setLoss(loss)
+        .setLossType(loss)
         .setValidationTol(0.0)
       compareAPIs(trainData, None, gbt, categoricalFeatures)
       compareAPIs(trainData, Some(validationData), gbt, categoricalFeatures)

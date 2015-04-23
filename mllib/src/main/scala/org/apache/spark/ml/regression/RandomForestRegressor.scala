@@ -74,7 +74,8 @@ final class RandomForestRegressor
 
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
 
-  override def setFeaturesPerNode(value: String): this.type = super.setFeaturesPerNode(value)
+  override def setFeatureSubsetStrategy(value: String): this.type =
+    super.setFeatureSubsetStrategy(value)
 
   override protected def train(
       dataset: DataFrame,
@@ -85,17 +86,18 @@ final class RandomForestRegressor
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(
-      oldDataset, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
+      oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
     RandomForestRegressionModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 }
 
 object RandomForestRegressor {
-  /** Accessor for supported impurity settings */
+  /** Accessor for supported impurity settings: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 
-  /** Accessor for supported featuresPerNode settings */
-  final val supportedFeaturesPerNode: Array[String] = RandomForestParams.supportedFeaturesPerNode
+  /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    RandomForestParams.supportedFeatureSubsetStrategies
 }
 
 /**
@@ -103,33 +105,35 @@ object RandomForestRegressor {
  *
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
- * @param trees  Decision trees in the ensemble.
+ * @param _trees  Decision trees in the ensemble.
  */
 @AlphaComponent
 final class RandomForestRegressionModel private[ml] (
     override val parent: RandomForestRegressor,
     override val fittingParamMap: ParamMap,
-    val trees: Array[DecisionTreeRegressionModel])
+    private val _trees: Array[DecisionTreeRegressionModel])
   extends PredictionModel[Vector, RandomForestRegressionModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
 
-  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
-  override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+  lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+
+  override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
     // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    trees.map(_.rootNode.predict(features)).sum / numTrees
+    _trees.map(_.rootNode.predict(features)).sum / numTrees
   }
 
   override protected def copy(): RandomForestRegressionModel = {
-    val m = new RandomForestRegressionModel(parent, fittingParamMap, trees)
+    val m = new RandomForestRegressionModel(parent, fittingParamMap, _trees)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -140,7 +144,7 @@ final class RandomForestRegressionModel private[ml] (
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
-    new OldRandomForestModel(OldAlgo.Regression, trees.map(_.toOld))
+    new OldRandomForestModel(OldAlgo.Regression, _trees.map(_.toOld))
   }
 }
 
@@ -154,10 +158,10 @@ private[ml] object RandomForestRegressionModel {
       categoricalFeatures: Map[Int, Int]): RandomForestRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
-    val trees = oldModel.trees.map { tree =>
+    val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
     }
-    new RandomForestRegressionModel(parent, fittingParamMap, trees)
+    new RandomForestRegressionModel(parent, fittingParamMap, newTrees)
   }
 }

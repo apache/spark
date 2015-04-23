@@ -90,41 +90,42 @@ final class GBTRegressor
 
   override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
 
-  override def setLearningRate(value: Double): this.type = super.setLearningRate(value)
+  override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
   // Parameters for GBTRegressor:
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
-   * Supported: "SquaredError" and "AbsoluteError"
-   * (default = SquaredError)
+   * Supported: "squared" (L2) and "absolute" (L1)
+   * (default = squared)
    * @group param
    */
-  val loss: Param[String] = new Param[String](this, "loss", "Loss function which GBT tries to" +
-    " minimize (case-insensitive). Supported options: SquaredError, AbsoluteError")
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTRegressor.supportedLossTypes.mkString(", ")}")
 
-  setDefault(loss -> "squarederror")
+  setDefault(lossType -> "squared")
 
   /** @group setParam */
-  def setLoss(value: String): this.type = {
+  def setLossType(value: String): this.type = {
     val lossStr = value.toLowerCase
-    require(GBTRegressor.supportedLosses.contains(lossStr), "GBTRegressor was given bad loss:" +
-      s" $value. Supported options: ${GBTRegressor.supportedLosses.mkString(", ")}")
-    set(loss, lossStr)
+    require(GBTRegressor.supportedLossTypes.contains(lossStr), "GBTRegressor was given bad loss" +
+      s" type: $value. Supported options: ${GBTRegressor.supportedLossTypes.mkString(", ")}")
+    set(lossType, lossStr)
     this
   }
 
   /** @group getParam */
-  def getLoss: String = getOrDefault(loss)
+  def getLossType: String = getOrDefault(lossType)
 
   /** (private[ml]) Convert new loss to old loss. */
-  override private[ml] def getOldLoss: OldLoss = {
-    getLoss match {
-      case "squarederror" => OldSquaredError
-      case "absoluteerror" => OldAbsoluteError
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "squared" => OldSquaredError
+      case "absolute" => OldAbsoluteError
       case _ =>
         // Should never happen because of check in setter method.
-        throw new RuntimeException(s"GBTRegressorParams was given bad loss: $getLoss")
+        throw new RuntimeException(s"GBTRegressorParams was given bad loss type: $getLossType")
     }
   }
 
@@ -143,9 +144,8 @@ final class GBTRegressor
 
 object GBTRegressor {
   // The losses below should be lowercase.
-  /** Accessor for supported loss settings */
-  final val supportedLosses: Array[String] =
-    Array("squarederror", "absoluteerror").map(_.toLowerCase)
+  /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
 }
 
 /**
@@ -154,36 +154,36 @@ object GBTRegressor {
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for regression.
  * It supports both continuous and categorical features.
- * @param trees  Decision trees in the ensemble.
- * @param treeWeights  Weights for the decision trees in the ensemble.
+ * @param _trees  Decision trees in the ensemble.
+ * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @AlphaComponent
 final class GBTRegressionModel(
     override val parent: GBTRegressor,
     override val fittingParamMap: ParamMap,
-    val trees: Array[DecisionTreeRegressionModel],
-    val treeWeights: Array[Double])
+    private val _trees: Array[DecisionTreeRegressionModel],
+    private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTRegressionModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
-  require(trees.length == treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
-    s" non-matching lengths (${trees.length}, ${treeWeights.length}, respectively).")
+  require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
+    s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
-  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
-  override def getTreeWeights: Array[Double] = treeWeights
+  override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
+    val treePredictions = _trees.map(_.rootNode.predict(features))
+    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
   }
 
   override protected def copy(): GBTRegressionModel = {
-    val m = new GBTRegressionModel(parent, fittingParamMap, trees, treeWeights)
+    val m = new GBTRegressionModel(parent, fittingParamMap, _trees, _treeWeights)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -194,7 +194,7 @@ final class GBTRegressionModel(
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
-    new OldGBTModel(OldAlgo.Regression, trees.map(_.toOld), treeWeights)
+    new OldGBTModel(OldAlgo.Regression, _trees.map(_.toOld), _treeWeights)
   }
 }
 
@@ -208,10 +208,10 @@ private[ml] object GBTRegressionModel {
       categoricalFeatures: Map[Int, Int]): GBTRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
-    val trees = oldModel.trees.map { tree =>
+    val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
     }
-    new GBTRegressionModel(parent, fittingParamMap, trees, oldModel.treeWeights)
+    new GBTRegressionModel(parent, fittingParamMap, newTrees, oldModel.treeWeights)
   }
 }

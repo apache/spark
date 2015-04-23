@@ -75,16 +75,16 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (int i = 0; i < RandomForestRegressor.supportedImpurities().length; ++i) {
       rf.setImpurity(RandomForestRegressor.supportedImpurities()[i]);
     }
-    for (int i = 0; i < RandomForestRegressor.supportedFeaturesPerNode().length; ++i) {
-      rf.setFeaturesPerNode(RandomForestRegressor.supportedFeaturesPerNode()[i]);
+    for (int i = 0; i < RandomForestRegressor.supportedFeatureSubsetStrategies().length; ++i) {
+      rf.setFeatureSubsetStrategy(RandomForestRegressor.supportedFeatureSubsetStrategies()[i]);
     }
     RandomForestRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
     model.totalNumNodes();
     model.toDebugString();
-    model.getTrees();
-    model.getTreeWeights();
+    model.trees();
+    model.treeWeights();
 
     /*
     // TODO: Add test once save/load are implemented.

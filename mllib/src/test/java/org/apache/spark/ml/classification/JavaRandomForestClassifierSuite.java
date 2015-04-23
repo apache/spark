@@ -75,16 +75,16 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     for (int i = 0; i < RandomForestClassifier.supportedImpurities().length; ++i) {
       rf.setImpurity(RandomForestClassifier.supportedImpurities()[i]);
     }
-    for (int i = 0; i < RandomForestClassifier.supportedFeaturesPerNode().length; ++i) {
-      rf.setFeaturesPerNode(RandomForestClassifier.supportedFeaturesPerNode()[i]);
+    for (int i = 0; i < RandomForestClassifier.supportedFeatureSubsetStrategies().length; ++i) {
+      rf.setFeatureSubsetStrategy(RandomForestClassifier.supportedFeatureSubsetStrategies()[i]);
     }
     RandomForestClassificationModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
     model.totalNumNodes();
     model.toDebugString();
-    model.getTrees();
-    model.getTreeWeights();
+    model.trees();
+    model.treeWeights();
 
     /*
     // TODO: Add test once save/load are implemented.

@@ -78,7 +78,8 @@ final class RandomForestClassifier
 
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
 
-  override def setFeaturesPerNode(value: String): this.type = super.setFeaturesPerNode(value)
+  override def setFeatureSubsetStrategy(value: String): this.type =
+    super.setFeatureSubsetStrategy(value)
 
   override protected def train(
       dataset: DataFrame,
@@ -95,17 +96,18 @@ final class RandomForestClassifier
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
-      oldDataset, strategy, getNumTrees, getFeaturesPerNodeStr, getSeed.toInt)
+      oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
     RandomForestClassificationModel.fromOld(oldModel, this, paramMap, categoricalFeatures)
   }
 }
 
 object RandomForestClassifier {
-  /** Accessor for supported impurity settings */
+  /** Accessor for supported impurity settings: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
-  /** Accessor for supported featuresPerNode settings */
-  final val supportedFeaturesPerNode: Array[String] = RandomForestParams.supportedFeaturesPerNode
+  /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    RandomForestParams.supportedFeatureSubsetStrategies
 }
 
 /**
@@ -114,23 +116,25 @@ object RandomForestClassifier {
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
- * @param trees  Decision trees in the ensemble.
+ * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
 @AlphaComponent
 final class RandomForestClassificationModel private[ml] (
     override val parent: RandomForestClassifier,
     override val fittingParamMap: ParamMap,
-    val trees: Array[DecisionTreeClassificationModel])
+    private val _trees: Array[DecisionTreeClassificationModel])
   extends PredictionModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
-  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
-  override lazy val getTreeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+  lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+
+  override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
@@ -138,7 +142,7 @@ final class RandomForestClassificationModel private[ml] (
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]
-    trees.view.foreach { tree =>
+    _trees.view.foreach { tree =>
       val prediction = tree.rootNode.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
@@ -146,7 +150,7 @@ final class RandomForestClassificationModel private[ml] (
   }
 
   override protected def copy(): RandomForestClassificationModel = {
-    val m = new RandomForestClassificationModel(parent, fittingParamMap, trees)
+    val m = new RandomForestClassificationModel(parent, fittingParamMap, _trees)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -157,7 +161,7 @@ final class RandomForestClassificationModel private[ml] (
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
-    new OldRandomForestModel(OldAlgo.Classification, trees.map(_.toOld))
+    new OldRandomForestModel(OldAlgo.Classification, _trees.map(_.toOld))
   }
 }
 
@@ -171,10 +175,10 @@ private[ml] object RandomForestClassificationModel {
       categoricalFeatures: Map[Int, Int]): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
-    val trees = oldModel.trees.map { tree =>
+    val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeClassificationModel.fromOld(tree, null, null, categoricalFeatures)
     }
-    new RandomForestClassificationModel(parent, fittingParamMap, trees)
+    new RandomForestClassificationModel(parent, fittingParamMap, newTrees)
   }
 }

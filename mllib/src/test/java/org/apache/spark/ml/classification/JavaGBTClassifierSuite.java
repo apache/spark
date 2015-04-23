@@ -71,18 +71,18 @@ public class JavaGBTClassifierSuite implements Serializable {
         .setSubsamplingRate(1.0)
         .setSeed(1234)
         .setMaxIter(3)
-        .setLearningRate(0.1)
+        .setStepSize(0.1)
         .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < GBTClassifier.supportedLosses().length; ++i) {
-      rf.setLoss(GBTClassifier.supportedLosses()[i]);
+    for (int i = 0; i < GBTClassifier.supportedLossTypes().length; ++i) {
+      rf.setLossType(GBTClassifier.supportedLossTypes()[i]);
     }
     GBTClassificationModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
     model.totalNumNodes();
     model.toDebugString();
-    model.getTrees();
-    model.getTreeWeights();
+    model.trees();
+    model.treeWeights();
 
     /*
     // TODO: Add test once save/load are implemented.

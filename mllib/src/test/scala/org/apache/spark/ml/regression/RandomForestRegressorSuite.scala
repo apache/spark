@@ -54,7 +54,7 @@ class RandomForestRegressorSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxDepth(2)
       .setMaxBins(10)
       .setNumTrees(1)
-      .setFeaturesPerNode("auto")
+      .setFeatureSubsetStrategy("auto")
       .setSeed(123)
     compareAPIs(orderedLabeledPoints50_1000, newRF, categoricalFeaturesInfo)
   }
@@ -111,7 +111,7 @@ private object RandomForestRegressorSuite extends FunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(
-      data, oldStrategy, rf.getNumTrees, rf.getFeaturesPerNodeStr, rf.getSeed.toInt)
+      data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.

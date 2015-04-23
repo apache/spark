@@ -59,9 +59,9 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
         val gbt = new GBTClassifier()
           .setMaxDepth(2)
           .setSubsamplingRate(subsamplingRate)
-          .setLoss("LogLoss")
+          .setLossType("logistic")
           .setMaxIter(maxIter)
-          .setLearningRate(learningRate)
+          .setStepSize(learningRate)
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
   }
@@ -72,11 +72,11 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
     val categoricalFeatures = Map.empty[Int, Int]
     // Set maxIter large enough so that it stops early.
     val maxIter = 20
-    GBTClassifier.supportedLosses.foreach { loss =>
+    GBTClassifier.supportedLossTypes.foreach { loss =>
       val gbt = new GBTClassifier()
         .setMaxIter(maxIter)
         .setMaxDepth(2)
-        .setLoss(loss)
+        .setLossType(loss)
         .setValidationTol(0.0)
       compareAPIs(trainData, None, gbt, categoricalFeatures)
       compareAPIs(trainData, Some(validationData), gbt, categoricalFeatures)

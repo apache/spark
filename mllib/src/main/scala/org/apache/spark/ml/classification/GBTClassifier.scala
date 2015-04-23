@@ -91,40 +91,41 @@ final class GBTClassifier
 
   override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
 
-  override def setLearningRate(value: Double): this.type = super.setLearningRate(value)
+  override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
   // Parameters for GBTClassifier:
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
-   * Supported: "LogLoss"
-   * (default = LogLoss)
+   * Supported: "logistic"
+   * (default = logistic)
    * @group param
    */
-  val loss: Param[String] = new Param[String](this, "loss", "Loss function which GBT tries to" +
-    " minimize (case-insensitive). Supported options: LogLoss")
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTClassifier.supportedLossTypes.mkString(", ")}")
 
-  setDefault(loss -> "logloss")
+  setDefault(lossType -> "logistic")
 
   /** @group setParam */
-  def setLoss(value: String): this.type = {
+  def setLossType(value: String): this.type = {
     val lossStr = value.toLowerCase
-    require(GBTClassifier.supportedLosses.contains(lossStr), "GBTClassifier was given bad loss:" +
-      s" $value. Supported options: ${GBTClassifier.supportedLosses.mkString(", ")}")
-    set(loss, lossStr)
+    require(GBTClassifier.supportedLossTypes.contains(lossStr), "GBTClassifier was given bad loss" +
+      s" type: $value. Supported options: ${GBTClassifier.supportedLossTypes.mkString(", ")}")
+    set(lossType, lossStr)
     this
   }
 
   /** @group getParam */
-  def getLoss: String = getOrDefault(loss)
+  def getLossType: String = getOrDefault(lossType)
 
   /** (private[ml]) Convert new loss to old loss. */
-  override private[ml] def getOldLoss: OldLoss = {
-    getLoss match {
-      case "logloss" => OldLogLoss
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "logistic" => OldLogLoss
       case _ =>
         // Should never happen because of check in setter method.
-        throw new RuntimeException(s"GBTClassifier was given bad loss: $getLoss")
+        throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
     }
   }
 
@@ -151,8 +152,8 @@ final class GBTClassifier
 
 object GBTClassifier {
   // The losses below should be lowercase.
-  /** Accessor for supported loss settings */
-  final val supportedLosses: Array[String] = Array("logloss").map(_.toLowerCase)
+  /** Accessor for supported loss settings: logistic */
+  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
 }
 
 /**
@@ -162,36 +163,36 @@ object GBTClassifier {
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
- * @param trees  Decision trees in the ensemble.
- * @param treeWeights  Weights for the decision trees in the ensemble.
+ * @param _trees  Decision trees in the ensemble.
+ * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @AlphaComponent
 final class GBTClassificationModel(
     override val parent: GBTClassifier,
     override val fittingParamMap: ParamMap,
-    val trees: Array[DecisionTreeRegressionModel],
-    val treeWeights: Array[Double])
+    private val _trees: Array[DecisionTreeRegressionModel],
+    private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "GBTClassificationModel requires at least 1 tree.")
-  require(trees.length == treeWeights.length, "GBTClassificationModel given trees, treeWeights of" +
-    s" non-matching lengths (${trees.length}, ${treeWeights.length}, respectively).")
+  require(_trees.length == _treeWeights.length, "GBTClassificationModel given trees, treeWeights" +
+    s" of non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
-  override def getTrees: Array[DecisionTreeModel] = trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
-  override def getTreeWeights: Array[Double] = treeWeights
+  override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
     // TODO: Override transform() to broadcast model.
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
+    val treePredictions = _trees.map(_.rootNode.predict(features))
+    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
   }
 
   override protected def copy(): GBTClassificationModel = {
-    val m = new GBTClassificationModel(parent, fittingParamMap, trees, treeWeights)
+    val m = new GBTClassificationModel(parent, fittingParamMap, _trees, _treeWeights)
     Params.inheritValues(this.extractParamMap(), this, m)
     m
   }
@@ -202,7 +203,7 @@ final class GBTClassificationModel(
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
-    new OldGBTModel(OldAlgo.Classification, trees.map(_.toOld), treeWeights)
+    new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
   }
 }
 
@@ -216,10 +217,10 @@ private[ml] object GBTClassificationModel {
       categoricalFeatures: Map[Int, Int]): GBTClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTClassificationModel (new API).")
-    val trees = oldModel.trees.map { tree =>
+    val newTrees = oldModel.trees.map { tree =>
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, null, categoricalFeatures)
     }
-    new GBTClassificationModel(parent, fittingParamMap, trees, oldModel.treeWeights)
+    new GBTClassificationModel(parent, fittingParamMap, newTrees, oldModel.treeWeights)
   }
 }

@@ -28,7 +28,6 @@ import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
-import org.apache.spark.ml.tree.TreeEnsembleModel
 import org.apache.spark.sql.DataFrame
 
 
@@ -58,7 +57,7 @@ object RandomForestExample {
       minInstancesPerNode: Int = 1,
       minInfoGain: Double = 0.0,
       numTrees: Int = 10,
-      featuresPerNode: String = "auto",
+      featureSubsetStrategy: String = "auto",
       fracTest: Double = 0.2,
       cacheNodeIds: Boolean = false,
       checkpointDir: Option[String] = None,
@@ -88,11 +87,11 @@ object RandomForestExample {
       opt[Int]("numTrees")
         .text(s"number of trees in ensemble, default: ${defaultParams.numTrees}")
         .action((x, c) => c.copy(numTrees = x))
-      opt[String]("featuresPerNode")
+      opt[String]("featureSubsetStrategy")
         .text(s"number of features to use per node (supported:" +
-        s" ${RandomForestClassifier.supportedFeaturesPerNode.mkString(",")})," +
+        s" ${RandomForestClassifier.supportedFeatureSubsetStrategies.mkString(",")})," +
         s" default: ${defaultParams.numTrees}")
-        .action((x, c) => c.copy(featuresPerNode = x))
+        .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")
         .text(s"fraction of data to hold out for testing.  If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
@@ -182,7 +181,7 @@ object RandomForestExample {
           .setMinInfoGain(params.minInfoGain)
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
-          .setFeaturesPerNode(params.featuresPerNode)
+          .setFeatureSubsetStrategy(params.featureSubsetStrategy)
           .setNumTrees(params.numTrees)
       case "regression" =>
         new RandomForestRegressor()
@@ -194,7 +193,7 @@ object RandomForestExample {
           .setMinInfoGain(params.minInfoGain)
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
-          .setFeaturesPerNode(params.featuresPerNode)
+          .setFeatureSubsetStrategy(params.featureSubsetStrategy)
           .setNumTrees(params.numTrees)
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
@@ -208,18 +207,24 @@ object RandomForestExample {
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained Random Forest from the fitted PipelineModel
-    val rfModel: TreeEnsembleModel = algo match {
+    algo match {
       case "classification" =>
-        pipelineModel.getModel[RandomForestClassificationModel](
+        val rfModel = pipelineModel.getModel[RandomForestClassificationModel](
           dt.asInstanceOf[RandomForestClassifier])
+        if (rfModel.totalNumNodes < 30) {
+          println(rfModel.toDebugString) // Print full model.
+        } else {
+          println(rfModel) // Print model summary.
+        }
       case "regression" =>
-        pipelineModel.getModel[RandomForestRegressionModel](dt.asInstanceOf[RandomForestRegressor])
+        val rfModel = pipelineModel.getModel[RandomForestRegressionModel](
+          dt.asInstanceOf[RandomForestRegressor])
+        if (rfModel.totalNumNodes < 30) {
+          println(rfModel.toDebugString) // Print full model.
+        } else {
+          println(rfModel) // Print model summary.
+        }
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
-    }
-    if (rfModel.totalNumNodes < 30) {
-      println(rfModel.toDebugString) // Print full model.
-    } else {
-      println(rfModel) // Print model summary.
     }
 
     // Evaluate model on training, test data

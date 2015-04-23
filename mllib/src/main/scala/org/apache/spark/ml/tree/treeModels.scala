@@ -17,18 +17,13 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.AlphaComponent
-
 
 /**
- * :: AlphaComponent ::
- *
  * Abstraction for Decision Tree models.
  *
  * TODO: Add support for predicting probabilities and raw predictions
  */
-@AlphaComponent
-trait DecisionTreeModel {
+private[ml] trait DecisionTreeModel {
 
   /** Root of the decision tree */
   def rootNode: Node
@@ -60,23 +55,20 @@ trait DecisionTreeModel {
 }
 
 /**
- * :: AlphaComponent ::
- *
  * Abstraction for models which are ensembles of decision trees
  *
  * TODO: Add support for predicting probabilities and raw predictions
  */
-@AlphaComponent
-trait TreeEnsembleModel {
+private[ml] trait TreeEnsembleModel {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
 
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
-  def getTrees: Array[DecisionTreeModel]
+  def trees: Array[DecisionTreeModel]
 
-  /** Weights for each tree, zippable with [[getTrees]] */
-  def getTreeWeights: Array[Double]
+  /** Weights for each tree, zippable with [[trees]] */
+  def treeWeights: Array[Double]
 
   /** Summary of the model */
   override def toString: String = {
@@ -87,14 +79,14 @@ trait TreeEnsembleModel {
   /** Full description of model */
   def toDebugString: String = {
     val header = toString + "\n"
-    header + getTrees.zip(getTreeWeights).zipWithIndex.map { case ((tree, weight), treeIndex) =>
+    header + trees.zip(treeWeights).zipWithIndex.map { case ((tree, weight), treeIndex) =>
       s"  Tree $treeIndex (weight $weight):\n" + tree.rootNode.subtreeToString(4)
     }.fold("")(_ + _)
   }
 
   /** Number of trees in ensemble */
-  val numTrees: Int = getTrees.length
+  val numTrees: Int = trees.length
 
   /** Total number of nodes, summed over all trees in the ensemble. */
-  lazy val totalNumNodes: Int = getTrees.map(_.numNodes).sum
+  lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 }

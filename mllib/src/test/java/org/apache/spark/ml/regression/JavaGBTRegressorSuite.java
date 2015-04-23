@@ -70,18 +70,18 @@ public class JavaGBTRegressorSuite implements Serializable {
         .setSubsamplingRate(1.0)
         .setSeed(1234)
         .setMaxIter(3)
-        .setLearningRate(0.1)
+        .setStepSize(0.1)
         .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < GBTRegressor.supportedLosses().length; ++i) {
-      rf.setLoss(GBTRegressor.supportedLosses()[i]);
+    for (int i = 0; i < GBTRegressor.supportedLossTypes().length; ++i) {
+      rf.setLossType(GBTRegressor.supportedLossTypes()[i]);
     }
     GBTRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
     model.totalNumNodes();
     model.toDebugString();
-    model.getTrees();
-    model.getTreeWeights();
+    model.trees();
+    model.treeWeights();
 
     /*
     // TODO: Add test once save/load are implemented.

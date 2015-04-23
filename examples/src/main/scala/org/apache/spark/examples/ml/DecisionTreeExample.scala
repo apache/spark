@@ -22,7 +22,6 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.ml.tree.DecisionTreeModel
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
@@ -275,18 +274,24 @@ object DecisionTreeExample {
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained Decision Tree from the fitted PipelineModel
-    val treeModel: DecisionTreeModel = algo match {
+    algo match {
       case "classification" =>
-        pipelineModel.getModel[DecisionTreeClassificationModel](
+        val treeModel = pipelineModel.getModel[DecisionTreeClassificationModel](
           dt.asInstanceOf[DecisionTreeClassifier])
+        if (treeModel.numNodes < 20) {
+          println(treeModel.toDebugString) // Print full model.
+        } else {
+          println(treeModel) // Print model summary.
+        }
       case "regression" =>
-        pipelineModel.getModel[DecisionTreeRegressionModel](dt.asInstanceOf[DecisionTreeRegressor])
+        val treeModel = pipelineModel.getModel[DecisionTreeRegressionModel](
+          dt.asInstanceOf[DecisionTreeRegressor])
+        if (treeModel.numNodes < 20) {
+          println(treeModel.toDebugString) // Print full model.
+        } else {
+          println(treeModel) // Print model summary.
+        }
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
-    }
-    if (treeModel.numNodes < 20) {
-      println(treeModel.toDebugString) // Print full model.
-    } else {
-      println(treeModel) // Print model summary.
     }
 
     // Evaluate model on training, test data

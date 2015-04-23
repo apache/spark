@@ -28,7 +28,6 @@ import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
-import org.apache.spark.ml.tree.TreeEnsembleModel
 import org.apache.spark.sql.DataFrame
 
 
@@ -200,17 +199,22 @@ object GBTExample {
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained GBT from the fitted PipelineModel
-    val rfModel: TreeEnsembleModel = algo match {
+    algo match {
       case "classification" =>
-        pipelineModel.getModel[GBTClassificationModel](dt.asInstanceOf[GBTClassifier])
+        val rfModel = pipelineModel.getModel[GBTClassificationModel](dt.asInstanceOf[GBTClassifier])
+        if (rfModel.totalNumNodes < 30) {
+          println(rfModel.toDebugString) // Print full model.
+        } else {
+          println(rfModel) // Print model summary.
+        }
       case "regression" =>
-        pipelineModel.getModel[GBTRegressionModel](dt.asInstanceOf[GBTRegressor])
+        val rfModel = pipelineModel.getModel[GBTRegressionModel](dt.asInstanceOf[GBTRegressor])
+        if (rfModel.totalNumNodes < 30) {
+          println(rfModel.toDebugString) // Print full model.
+        } else {
+          println(rfModel) // Print model summary.
+        }
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
-    }
-    if (rfModel.totalNumNodes < 30) {
-      println(rfModel.toDebugString) // Print full model.
-    } else {
-      println(rfModel) // Print model summary.
     }
 
     // Evaluate model on training, test data
