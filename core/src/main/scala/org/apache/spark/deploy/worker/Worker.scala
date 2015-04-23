@@ -36,7 +36,7 @@ import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
 private[worker] class Worker(
     override val rpcEnv: RpcEnv,
@@ -59,9 +59,9 @@ private[worker] class Worker(
 
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
-    Utils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
   // A separated thread to clean up the workDir
-  private val cleanupThread = Utils.newDaemonSingleThreadExecutor("worker-cleanup-thread")
+  private val cleanupThread = ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread")
   // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutor(cleanupThread)
 
@@ -144,7 +144,7 @@ private[worker] class Worker(
     masterRpcAddresses.size, // Make sure we can register with all masters at the same time
     60L, TimeUnit.SECONDS,
     new SynchronousQueue[Runnable](),
-    Utils.namedThreadFactory("worker-register-master-threadpool"))
+    ThreadUtils.namedThreadFactory("worker-register-master-threadpool"))
 
   var coresUsed = 0
   var memoryUsed = 0

@@ -27,7 +27,7 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcEnv, ThreadSafeRpcEn
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{SparkExitCode, Utils}
+import org.apache.spark.util.{ThreadUtils, SparkExitCode, Utils}
 
 /**
  * Proxy that relays messages to the driver.
@@ -41,7 +41,7 @@ private class ClientEndpoint(
 
   // A scheduled executor used to send messages at the specified time.
   private val forwardMessageThread =
-    Utils.newDaemonSingleThreadScheduledExecutor("client-forward-message")
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("client-forward-message")
   // Used to provide the implicit parameter of `Future` methods.
   private val forwardMessageExecutionContext =
     ExecutionContext.fromExecutor(forwardMessageThread,

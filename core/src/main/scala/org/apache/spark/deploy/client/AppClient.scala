@@ -26,7 +26,7 @@ import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.rpc._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -70,11 +70,11 @@ private[spark] class AppClient(
       masterRpcAddresses.size, // Make sure we can register with all masters at the same time
       60L, TimeUnit.SECONDS,
       new SynchronousQueue[Runnable](),
-      Utils.namedThreadFactory("appclient-register-master-threadpool"))
+      ThreadUtils.namedThreadFactory("appclient-register-master-threadpool"))
 
     // A scheduled executor for scheduling the registration actions
     private val registrationRetryThread =
-      Utils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
 
     override def onStart(): Unit = {
       try {

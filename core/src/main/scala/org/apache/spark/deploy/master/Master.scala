@@ -45,7 +45,7 @@ import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
 private[master] class Master(
     override val rpcEnv: RpcEnv,
@@ -56,7 +56,7 @@ private[master] class Master(
   extends ThreadSafeRpcEndpoint with Logging with LeaderElectable {
 
   private val forwardMessageThread =
-    Utils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
   // TODO Remove it once we don't use akka.serialization.Serialization
   private val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
