@@ -350,8 +350,8 @@ private[sql] class JDBCRDD(
           val pos = i + 1
           conversions(i) match {
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            // TODO(davies): convert Date into Int
-            case DateConversion       => mutableRow.update(i, rs.getDate(pos))
+            case DateConversion       =>
+              mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
             case DecimalConversion    => mutableRow.update(i, rs.getBigDecimal(pos))
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
