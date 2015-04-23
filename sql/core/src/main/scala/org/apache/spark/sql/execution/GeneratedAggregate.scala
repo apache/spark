@@ -290,7 +290,7 @@ case class GeneratedAggregate(
           aggregationBufferSchema,
           groupKeySchema,
           MemoryAllocator.UNSAFE,
-          1024
+          1024 * 16
         )
 
         while (iter.hasNext) {
