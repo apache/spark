@@ -67,7 +67,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       )
 
     // Write a new-style application log.
-    val newAppCompressedComplete = newLogFile("new1compressed", None, inProgress = false, Some("lzf"))
+    val newAppCompressedComplete = newLogFile("new1compressed", None, inProgress = false,
+      Some("lzf"))
     writeFile(newAppCompressedComplete, true, None,
       SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test", None),
       SparkListenerApplicationEnd(4L))
