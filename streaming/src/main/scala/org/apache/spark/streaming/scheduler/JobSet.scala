@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.HashSet
+
 import org.apache.spark.streaming.Time
 
 /** Class representing a set of Jobs
@@ -27,8 +28,7 @@ private[streaming]
 case class JobSet(
     time: Time,
     jobs: Seq[Job],
-    receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]] = Map.empty
-  ) {
+    receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]] = Map.empty) {
 
   private val incompleteJobs = new HashSet[Job]()
   private val submissionTime = System.currentTimeMillis() // when this jobset was submitted
@@ -47,17 +47,17 @@ case class JobSet(
     if (hasCompleted) processingEndTime = System.currentTimeMillis()
   }
 
-  def hasStarted = processingStartTime > 0
+  def hasStarted: Boolean = processingStartTime > 0
 
-  def hasCompleted = incompleteJobs.isEmpty
+  def hasCompleted: Boolean = incompleteJobs.isEmpty
 
   // Time taken to process all the jobs from the time they started processing
   // (i.e. not including the time they wait in the streaming scheduler queue)
-  def processingDelay = processingEndTime - processingStartTime
+  def processingDelay: Long = processingEndTime - processingStartTime
 
   // Time taken to process all the jobs from the time they were submitted
   // (i.e. including the time they wait in the streaming scheduler queue)
-  def totalDelay = {
+  def totalDelay: Long = {
     processingEndTime - time.milliseconds
   }
 

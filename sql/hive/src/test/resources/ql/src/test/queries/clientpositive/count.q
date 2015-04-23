@@ -1,5 +1,5 @@
 create table abcd (a int, b int, c int, d int);
-LOAD DATA LOCAL INPATH '../data/files/in4.txt' INTO TABLE abcd;
+LOAD DATA LOCAL INPATH '../../data/files/in4.txt' INTO TABLE abcd;
 
 select * from abcd;
 set hive.map.aggr=true;

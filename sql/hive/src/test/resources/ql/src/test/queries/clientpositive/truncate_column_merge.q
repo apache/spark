@@ -2,9 +2,9 @@
 
 CREATE TABLE test_tab (key STRING, value STRING) STORED AS RCFILE;
 
-INSERT OVERWRITE TABLE test_tab SELECT * FROM src LIMIT 5;
+INSERT OVERWRITE TABLE test_tab SELECT * FROM src tablesample (5 rows);
 
-INSERT INTO TABLE test_tab SELECT * FROM src LIMIT 5;
+INSERT INTO TABLE test_tab SELECT * FROM src tablesample (5 rows);
 
 -- The value should be 2 indicating the table has 2 files
 SELECT COUNT(DISTINCT INPUT__FILE__NAME) FROM test_tab;

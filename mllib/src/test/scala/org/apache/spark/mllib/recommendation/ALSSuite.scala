@@ -24,9 +24,8 @@ import scala.util.Random
 import org.scalatest.FunSuite
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.recommendation.ALS.BlockStats
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.storage.StorageLevel
 
 object ALSSuite {
 
@@ -85,7 +84,7 @@ object ALSSuite {
 }
 
 
-class ALSSuite extends FunSuite with LocalSparkContext {
+class ALSSuite extends FunSuite with MLlibTestSparkContext {
 
   test("rank-1 matrices") {
     testALS(50, 100, 1, 15, 0.7, 0.3)
@@ -139,6 +138,32 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     assert(u11 != u2)
   }
 
+  test("Storage Level for RDDs in model") {
+    val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
+    var storageLevel = StorageLevel.MEMORY_ONLY
+    var model = new ALS()
+      .setRank(5)
+      .setIterations(1)
+      .setLambda(1.0)
+      .setBlocks(2)
+      .setSeed(1)
+      .setFinalRDDStorageLevel(storageLevel)
+      .run(ratings)
+    assert(model.productFeatures.getStorageLevel == storageLevel);
+    assert(model.userFeatures.getStorageLevel == storageLevel);
+    storageLevel = StorageLevel.DISK_ONLY
+    model = new ALS()
+      .setRank(5)
+      .setIterations(1)
+      .setLambda(1.0)
+      .setBlocks(2)
+      .setSeed(1)
+      .setFinalRDDStorageLevel(storageLevel)
+      .run(ratings)
+    assert(model.productFeatures.getStorageLevel == storageLevel);
+    assert(model.userFeatures.getStorageLevel == storageLevel);
+  }
+
   test("negative ids") {
     val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
     val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
@@ -162,22 +187,6 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, -1, false)
   }
 
-  test("analyze one user block and one product block") {
-    val localRatings = Seq(
-      Rating(0, 100, 1.0),
-      Rating(0, 101, 2.0),
-      Rating(0, 102, 3.0),
-      Rating(1, 102, 4.0),
-      Rating(2, 103, 5.0))
-    val ratings = sc.makeRDD(localRatings, 2)
-    val stats = ALS.analyzeBlocks(ratings, 1, 1)
-    assert(stats.size === 2)
-    assert(stats(0) === BlockStats("user", 0, 3, 5, 4, 3))
-    assert(stats(1) === BlockStats("product", 0, 4, 5, 3, 4))
-  }
-
-  // TODO: add tests for analyzing multiple user/product blocks
-
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -188,12 +197,13 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param samplingRate what fraction of the user-product pairs are known
    * @param matchThreshold max difference allowed to consider a predicted rating correct
    * @param implicitPrefs flag to test implicit feedback
-   * @param bulkPredict flag to test bulk prediciton
+   * @param bulkPredict flag to test bulk predicition
    * @param negativeWeights whether the generated data can contain negative values
    * @param numUserBlocks number of user blocks to partition users into
    * @param numProductBlocks number of product blocks to partition products into
    * @param negativeFactors whether the generated user/product factors can have negative entries
    */
+  // scalastyle:off
   def testALS(
       users: Int,
       products: Int,
@@ -207,6 +217,8 @@ class ALSSuite extends FunSuite with LocalSparkContext {
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
       negativeFactors: Boolean = true) {
+    // scalastyle:on
+
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
 

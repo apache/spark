@@ -22,6 +22,9 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets.UTF_8
+
+import org.apache.spark.util.Utils
 
 private[nio] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null
@@ -39,7 +42,9 @@ private[nio] abstract class Message(val typ: Long, val id: Int) {
 
   def timeTaken(): String = (finishTime - startTime).toString + " ms"
 
-  override def toString = this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
+  override def toString: String = {
+    this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
+  }
 }
 
 
@@ -48,7 +53,7 @@ private[nio] object Message {
 
   var lastId = 1
 
-  def getNewId() = synchronized {
+  def getNewId(): Int = synchronized {
     lastId += 1
     if (lastId == 0) {
       lastId += 1
@@ -82,6 +87,19 @@ private[nio] object Message {
 
   def createBufferMessage(ackId: Int): BufferMessage = {
     createBufferMessage(new Array[ByteBuffer](0), ackId)
+  }
+
+  /**
+   * Create a "negative acknowledgment" to notify a sender that an error occurred
+   * while processing its message.  The exception's stacktrace will be formatted
+   * as a string, serialized into a byte array, and sent as the message payload.
+   */
+  def createErrorMessage(exception: Exception, ackId: Int): BufferMessage = {
+    val exceptionString = Utils.exceptionString(exception)
+    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes(UTF_8))
+    val errorMessage = createBufferMessage(serializedExceptionString, ackId)
+    errorMessage.hasError = true
+    errorMessage
   }
 
   def create(header: MessageChunkHeader): Message = {

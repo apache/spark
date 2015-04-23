@@ -1,3 +1,0 @@
-line1	{"key12":"value12","key11":"value11","key13":"value13"}	["a","b","c"]	{"A":"one","B":"two"}
-line2	{"key21":"value21","key23":"value23","key22":"value22"}	["d","e","f"]	{"A":"three","B":"four"}
-line3	{"key33":"value33","key31":"value31","key32":"value32"}	["g","h","i"]	{"A":"five","B":"six"}

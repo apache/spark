@@ -17,5 +17,4 @@
 
 package org.apache.spark.storage
 
-
 class BlockNotFoundException(blockId: String) extends Exception(s"Block $blockId not found")

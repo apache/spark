@@ -3,13 +3,13 @@ drop table partition_varchar_1;
 create table partition_varchar_1 (key string, value varchar(20)) partitioned by (dt varchar(10), region int);
 
 insert overwrite table partition_varchar_1 partition(dt='2000-01-01', region=1)
-  select * from src limit 10;
+  select * from src tablesample (10 rows);
 insert overwrite table partition_varchar_1 partition(dt='2000-01-01', region=2)
-  select * from src limit 5;
+  select * from src tablesample (5 rows);
 insert overwrite table partition_varchar_1 partition(dt='2013-08-08', region=1)
-  select * from src limit 20;
+  select * from src tablesample (20 rows);
 insert overwrite table partition_varchar_1 partition(dt='2013-08-08', region=10)
-  select * from src limit 11;
+  select * from src tablesample (11 rows);
 
 select distinct dt from partition_varchar_1;
 select * from partition_varchar_1 where dt = '2000-01-01' and region = 2 order by key,value;

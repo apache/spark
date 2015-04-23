@@ -8,7 +8,7 @@ CREATE TABLE table_complex_type (
        d MAP<STRING,ARRAY<STRING>>
        ) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/create_nested_type.txt' OVERWRITE INTO TABLE table_complex_type;
+LOAD DATA LOCAL INPATH '../../data/files/create_nested_type.txt' OVERWRITE INTO TABLE table_complex_type;
 
 
 explain 

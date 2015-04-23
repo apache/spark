@@ -45,7 +45,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
-  def apply(plan: TreeType): TreeType = {
+  def execute(plan: TreeType): TreeType = {
     var curPlan = plan
 
     batches.foreach { batch =>
@@ -79,7 +79,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         }
 
         if (curPlan.fastEquals(lastPlan)) {
-          logTrace(s"Fixed point reached for batch ${batch.name} after $iteration iterations.")
+          logTrace(
+            s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
         }
         lastPlan = curPlan

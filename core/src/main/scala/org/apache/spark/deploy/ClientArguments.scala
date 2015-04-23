@@ -17,18 +17,19 @@
 
 package org.apache.spark.deploy
 
+import java.net.{URI, URISyntaxException}
+
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
 
-import org.apache.spark.util.MemoryParam
+import org.apache.spark.util.{IntParam, MemoryParam}
 
 /**
  * Command-line parser for the driver client.
  */
-private[spark] class ClientArguments(args: Array[String]) {
-  val defaultCores = 1
-  val defaultMemory = 512
+private[deploy] class ClientArguments(args: Array[String]) {
+  import ClientArguments._
 
   var cmd: String = "" // 'launch' or 'kill'
   var logLevel = Level.WARN
@@ -37,20 +38,20 @@ private[spark] class ClientArguments(args: Array[String]) {
   var master: String = ""
   var jarUrl: String = ""
   var mainClass: String = ""
-  var supervise: Boolean = false
-  var memory: Int = defaultMemory
-  var cores: Int = defaultCores
+  var supervise: Boolean = DEFAULT_SUPERVISE
+  var memory: Int = DEFAULT_MEMORY
+  var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
-  def driverOptions = _driverOptions.toSeq
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
   var driverId: String = ""
 
   parse(args.toList)
 
-  def parse(args: List[String]): Unit = args match {
-    case ("--cores" | "-c") :: value :: tail =>
-      cores = value.toInt
+  private def parse(args: List[String]): Unit = args match {
+    case ("--cores" | "-c") :: IntParam(value) :: tail =>
+      cores = value
       parse(tail)
 
     case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
@@ -73,7 +74,8 @@ private[spark] class ClientArguments(args: Array[String]) {
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
         println(s"Jar url '${_jarUrl}' is not in valid format.")
-        println(s"Must be a jar file path in URL format (e.g. hdfs://XX.jar, file://XX.jar)")
+        println(s"Must be a jar file path in URL format " +
+          "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
         printUsageAndExit(-1)
       }
 
@@ -94,7 +96,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int) {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     val usage =
@@ -103,9 +105,10 @@ private[spark] class ClientArguments(args: Array[String]) {
       |Usage: DriverClient kill <active-master> <driver-id>
       |
       |Options:
-      |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
-      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
+      |   -c CORES, --cores CORES        Number of cores to request (default: $DEFAULT_CORES)
+      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
       |   -s, --supervise                Whether to restart the driver on failure
+      |                                  (default: $DEFAULT_SUPERVISE)
       |   -v, --verbose                  Print more debugging output
      """.stripMargin
     System.err.println(usage)
@@ -113,6 +116,17 @@ private[spark] class ClientArguments(args: Array[String]) {
   }
 }
 
-object ClientArguments {
-  def isValidJarUrl(s: String): Boolean = s.matches("(.+):(.+)jar")
+private[deploy] object ClientArguments {
+  val DEFAULT_CORES = 1
+  val DEFAULT_MEMORY = 512 // MB
+  val DEFAULT_SUPERVISE = false
+
+  def isValidJarUrl(s: String): Boolean = {
+    try {
+      val uri = new URI(s)
+      uri.getScheme != null && uri.getPath != null && uri.getPath.endsWith(".jar")
+    } catch {
+      case _: URISyntaxException => false
+    }
+  }
 }

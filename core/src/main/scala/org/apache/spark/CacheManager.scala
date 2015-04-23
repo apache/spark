@@ -44,9 +44,17 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     blockManager.get(key) match {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
-        new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
+        val existingMetrics = context.taskMetrics
+          .getInputMetricsForReadMethod(blockResult.readMethod)
+        existingMetrics.incBytesRead(blockResult.bytes)
 
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
@@ -61,7 +69,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
 
           // If the task is running locally, do not persist the result
-          if (context.runningLocally) {
+          if (context.isRunningLocally) {
             return computedValues
           }
 

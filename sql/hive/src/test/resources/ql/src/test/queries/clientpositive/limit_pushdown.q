@@ -22,12 +22,17 @@ select value,avg(key + 1) from src group by value order by value limit 20;
 
 -- distincts
 explain
-select distinct(key) from src limit 20;
-select distinct(key) from src limit 20;
+select distinct(cdouble) from alltypesorc limit 20;
+select distinct(cdouble) from alltypesorc limit 20;
 
 explain
-select key, count(distinct(key)) from src group by key limit 20;
-select key, count(distinct(key)) from src group by key limit 20;
+select ctinyint, count(distinct(cdouble)) from alltypesorc group by ctinyint limit 20;
+select ctinyint, count(distinct(cdouble)) from alltypesorc group by ctinyint limit 20;
+
+-- multi distinct
+explain
+select ctinyint, count(distinct(cstring1)), count(distinct(cstring2)) from alltypesorc group by ctinyint limit 20;
+select ctinyint, count(distinct(cstring1)), count(distinct(cstring2)) from alltypesorc group by ctinyint limit 20;
 
 -- limit zero
 explain

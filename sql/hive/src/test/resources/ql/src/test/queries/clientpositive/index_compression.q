@@ -1,4 +1,5 @@
 SET hive.exec.compress.result=true;
+set hive.stats.dbclass=fs;
 CREATE INDEX src_index ON TABLE src(key) as 'COMPACT' WITH DEFERRED REBUILD;
 ALTER INDEX src_index ON src REBUILD;
 

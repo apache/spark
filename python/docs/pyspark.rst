@@ -7,8 +7,10 @@ Subpackages
 .. toctree::
     :maxdepth: 1
     
-    pyspark.mllib
     pyspark.sql
+    pyspark.streaming
+    pyspark.ml
+    pyspark.mllib
 
 Contents
 --------

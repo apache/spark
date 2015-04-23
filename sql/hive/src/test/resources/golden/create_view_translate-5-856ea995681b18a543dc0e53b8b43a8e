@@ -1,0 +1,32 @@
+# col_name            	data_type           	comment             
+	 	 
+key                 	int                 	                    
+value               	string              	                    
+	 	 
+# Detailed Table Information	 	 
+Database:           	default             	 
+Owner:              	animal              	 
+CreateTime:         	Mon Dec 29 00:57:55 PST 2014	 
+LastAccessTime:     	UNKNOWN             	 
+Protect Mode:       	None                	 
+Retention:          	0                   	 
+Table Type:         	VIRTUAL_VIEW        	 
+Table Parameters:	 	 
+	transient_lastDdlTime	1419843475          
+	 	 
+# Storage Information	 	 
+SerDe Library:      	null                	 
+InputFormat:        	org.apache.hadoop.mapred.SequenceFileInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+	 	 
+# View Information	 	 
+View Original Text: 	select key, value from (	 
+  select key, value from src	 	 
+) a	 	 
+View Expanded Text: 	select key, value from (	 
+  select `src`.`key`, `src`.`value` from `default`.`src`	 	 
+) `a`	 	 

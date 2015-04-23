@@ -28,9 +28,10 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -46,7 +47,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with MScheduler
   with Logging {
 
@@ -92,7 +93,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try { {
             val ret = driver.run()
@@ -120,16 +121,18 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
-    val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+      Utils.libraryPathEnvPrefix(Seq(p))
+    }.getOrElse("")
 
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
-        .setValue(extraOpts)
+        .setValue(extraJavaOpts)
         .build())
 
     sc.executorEnvs.foreach { case (key, value) =>
@@ -140,27 +143,36 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(sc.env.actorSystem),
       SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d".format(
-          runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+          .format(prefixEnv, runScript) +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
       command.setValue(
-        ("cd %s*; " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d")
-          .format(basename, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores))
+        s"cd $basename*; $prefixEnv " +
+         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()
@@ -195,7 +207,7 @@ private[spark] class CoarseMesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      val filters = Filters.newBuilder().setRefuseSeconds(-1).build()
+      val filters = Filters.newBuilder().setRefuseSeconds(5).build()
 
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.toString
@@ -238,8 +250,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
-    // If we reached here, no resource with the required name was present
-    throw new IllegalArgumentException("No resource called " + name + " in " + res)
+    0
   }
 
   /** Build a Mesos resource protobuf object */
@@ -251,20 +262,12 @@ private[spark] class CoarseMesosSchedulerBackend(
       .build()
   }
 
-  /** Check whether a Mesos task state represents a finished task */
-  private def isFinished(state: MesosTaskState) = {
-    state == MesosTaskState.TASK_FINISHED ||
-      state == MesosTaskState.TASK_FAILED ||
-      state == MesosTaskState.TASK_KILLED ||
-      state == MesosTaskState.TASK_LOST
-  }
-
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
     logInfo("Mesos task " + taskId + " is now " + state)
     synchronized {
-      if (isFinished(state)) {
+      if (TaskState.isFinished(TaskState.fromMesos(state))) {
         val slaveId = taskIdToSlaveId(taskId)
         slaveIdsWithExecutors -= slaveId
         taskIdToSlaveId -= taskId
@@ -274,7 +277,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           coresByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
-        if (state == MesosTaskState.TASK_FAILED || state == MesosTaskState.TASK_LOST) {
+        if (TaskState.isFailed(TaskState.fromMesos(state))) {
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +

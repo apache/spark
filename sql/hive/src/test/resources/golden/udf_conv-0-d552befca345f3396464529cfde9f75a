@@ -1,1 +1,0 @@
-conv(num, from_base, to_base) - convert num from from_base to to_base

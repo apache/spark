@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Monitoring and Instrumentation
+description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
@@ -78,10 +79,17 @@ follows:
     file system.</td>
   </tr>
   <tr>
-    <td>spark.history.fs.updateInterval</td>
-    <td>10</td>
+    <td>spark.history.fs.logDirectory</td>
+    <td>file:/tmp/spark-events</td>
     <td>
-      The period, in seconds, at which information displayed by this history server is updated.
+     Directory that contains application event logs to be loaded by the history server
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.update.interval</td>
+    <td>10s</td>
+    <td>
+      The period at which information displayed by this history server is updated.
       Each update checks for any changes made to the event logs in persisted storage.
     </td>
   </tr>
@@ -137,10 +145,34 @@ follows:
       If disabled, no access control checks are made. 
     </td>
   </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.enabled</td>
+    <td>false</td>
+    <td>
+      Specifies whether the History Server should periodically clean up event logs from storage.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.interval</td>
+    <td>1d</td>
+    <td>
+      How often the job history cleaner checks for files to delete.
+      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.maxAge</td>
+    <td>7d</td>
+    <td>
+      Job history files older than this will be deleted when the history cleaner runs.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
 making it easy to identify slow tasks, data skew, etc.
+
+Note that the history server only displays completed Spark jobs. One way to signal the completion of a Spark job is to stop the Spark Context explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` to handle the Spark Context setup and tear down, and still show the job history on the UI.
 
 # Metrics
 
@@ -168,6 +200,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `GraphiteSink`: Sends metrics to a Graphite node.
+* `Slf4jSink`: Sends metrics to slf4j as log entries.
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:

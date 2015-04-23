@@ -25,22 +25,25 @@ private[spark]
 // scalastyle:off
 abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterator[A] {
 // scalastyle:on
-  def next() = sub.next()
-  def hasNext = {
+
+  private[this] var completed = false
+  def next(): A = sub.next()
+  def hasNext: Boolean = {
     val r = sub.hasNext
-    if (!r) {
+    if (!r && !completed) {
+      completed = true
       completion()
     }
     r
   }
 
-  def completion()
+  def completion(): Unit
 }
 
 private[spark] object CompletionIterator {
-  def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A,I] = {
+  def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A, I] = {
     new CompletionIterator[A,I](sub) {
-      def completion() = completionFunction
+      def completion(): Unit = completionFunction
     }
   }
 }

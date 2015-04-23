@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 case class AggregateEvaluation(
     schema: Seq[Attribute],
@@ -50,7 +50,7 @@ case class GeneratedAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
-  override def requiredChildDistribution =
+  override def requiredChildDistribution: Seq[Distribution] =
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
@@ -61,53 +61,101 @@ case class GeneratedAggregate(
       }
     }
 
-  override def output = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
-  override def execute() = {
+  override def execute(): RDD[Row] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
 
+    // If you add any new function support, please add tests in org.apache.spark.sql.SQLQuerySuite
+    // (in test "aggregation with codegen").
     val computeFunctions = aggregatesToCompute.map {
       case c @ Count(expr) =>
+        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
+        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
+        val toCount = expr match {
+          case UnscaledValue(e) => e
+          case _ => expr
+        }
         val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
         val initialValue = Literal(0L)
-        val updateFunction = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
+        val updateFunction = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
         val result = currentCount
 
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
-      case Sum(expr) =>
-        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
-        val initialValue = Cast(Literal(0L), expr.dataType)
+      case s @ Sum(expr) =>
+        val calcType =
+          expr.dataType match {
+            case DecimalType.Fixed(_, _) =>
+              DecimalType.Unlimited
+            case _ =>
+              expr.dataType
+          }
 
-        // Coalasce avoids double calculation...
+        val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
+        val initialValue = Literal.create(null, calcType)
+
+        // Coalesce avoids double calculation...
         // but really, common sub expression elimination would be better....
-        val updateFunction = Coalesce(Add(expr, currentSum) :: currentSum :: Nil)
-        val result = currentSum
+        val zero = Cast(Literal(0), calcType)
+        val updateFunction = Coalesce(
+          Add(
+            Coalesce(currentSum :: zero :: Nil),
+            Cast(expr, calcType)
+          ) :: currentSum :: zero :: Nil)
+        val result =
+          expr.dataType match {
+            case DecimalType.Fixed(_, _) =>
+              Cast(currentSum, s.dataType)
+            case _ => currentSum
+          }
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
-      case a @ Average(expr) =>
-        val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
-        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
-        val initialCount = Literal(0L)
-        val initialSum = Cast(Literal(0L), expr.dataType)
-        val updateCount = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
-        val updateSum = Coalesce(Add(expr, currentSum) :: currentSum :: Nil)
+      case cs @ CombineSum(expr) =>
+        val calcType = expr.dataType
+          expr.dataType match {
+            case DecimalType.Fixed(_, _) =>
+              DecimalType.Unlimited
+            case _ =>
+              expr.dataType
+          }
 
-        val result = Divide(Cast(currentSum, DoubleType), Cast(currentCount, DoubleType))
+        val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
+        val initialValue = Literal.create(null, calcType)
 
-        AggregateEvaluation(
-          currentCount :: currentSum :: Nil,
-          initialCount :: initialSum :: Nil,
-          updateCount :: updateSum :: Nil,
-          result
-        )
+        // Coalasce avoids double calculation...
+        // but really, common sub expression elimination would be better....
+        val zero = Cast(Literal(0), calcType)
+        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
+        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
+        val actualExpr = expr match {
+          case UnscaledValue(e) => e
+          case _ => expr
+        }
+        // partial sum result can be null only when no input rows present 
+        val updateFunction = If(
+          IsNotNull(actualExpr),
+          Coalesce(
+            Add(
+              Coalesce(currentSum :: zero :: Nil), 
+              Cast(expr, calcType)) :: currentSum :: zero :: Nil),
+          currentSum)
+          
+        val result =
+          expr.dataType match {
+            case DecimalType.Fixed(_, _) =>
+              Cast(currentSum, cs.dataType)
+            case _ => currentSum
+          }
 
+        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
+        
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
-        val initialValue = Literal(null, expr.dataType)
+        val initialValue = Literal.create(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
 
         AggregateEvaluation(
@@ -116,8 +164,20 @@ case class GeneratedAggregate(
           updateMax :: Nil,
           currentMax)
 
+      case m @ Min(expr) =>
+        val currentMin = AttributeReference("currentMin", expr.dataType, nullable = true)()
+        val initialValue = Literal.create(null, expr.dataType)
+        val updateMin = MinOf(currentMin, expr)
+
+        AggregateEvaluation(
+          currentMin :: Nil,
+          initialValue :: Nil,
+          updateMin :: Nil,
+          currentMin)
+
       case CollectHashSet(Seq(expr)) =>
-        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(expr.dataType), nullable = false)()
         val initialValue = NewSet(expr.dataType)
         val addToSet = AddItemToSet(expr, set)
 
@@ -128,9 +188,10 @@ case class GeneratedAggregate(
           set)
 
       case CombineSetsAndCount(inputSet) =>
-        val ArrayType(inputType, _) = inputSet.dataType
-        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
-        val initialValue = NewSet(inputType)
+        val elementType = inputSet.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val set =
+          AttributeReference("hashSet", new OpenHashSetUDT(elementType), nullable = false)()
+        val initialValue = NewSet(elementType)
         val collectSets = CombineSets(set, inputSet)
 
         AggregateEvaluation(
@@ -138,11 +199,13 @@ case class GeneratedAggregate(
           initialValue :: Nil,
           collectSets :: Nil,
           CountSet(set))
+
+      case o => sys.error(s"$o can't be codegened.")
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[TreeNodeRef, Expression] = 
+    val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
         case (agg, func) => new TreeNodeRef(agg) -> func.result
       }.toMap
@@ -223,9 +286,9 @@ case class GeneratedAggregate(
           private[this] val resultIterator = buffers.entrySet.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
 
-          def hasNext = resultIterator.hasNext
+          def hasNext: Boolean = resultIterator.hasNext
 
-          def next() = {
+          def next(): Row = {
             val currentGroup = resultIterator.next()
             resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
           }

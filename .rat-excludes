@@ -1,5 +1,7 @@
 target
+cache
 .gitignore
+.gitattributes
 .project
 .classpath
 .mima-excludes
@@ -17,6 +19,7 @@ fairscheduler.xml.template
 spark-defaults.conf.template
 log4j.properties
 log4j.properties.template
+metrics.properties
 metrics.properties.template
 slaves
 slaves.template
@@ -43,11 +46,13 @@ SparkImports.scala
 SparkJLineCompletion.scala
 SparkJLineReader.scala
 SparkMemberHandlers.scala
+SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
 work
 .*\.q
+.*\.qv
 golden
 test.out/*
 .*iml
@@ -61,3 +66,6 @@ dist/*
 logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
+known_translations
+DESCRIPTION
+NAMESPACE

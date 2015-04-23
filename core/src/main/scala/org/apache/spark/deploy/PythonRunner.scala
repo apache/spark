@@ -26,7 +26,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
- * A main class used by spark-submit to launch Python applications. It executes python as a
+ * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner {
@@ -87,8 +87,8 @@ object PythonRunner {
     // Strip the URI scheme from the path
     formattedPath =
       new URI(formattedPath).getScheme match {
-        case Utils.windowsDrive(d) if windows => formattedPath
         case null => formattedPath
+        case Utils.windowsDrive(d) if windows => formattedPath
         case _ => new URI(formattedPath).getPath
       }
 

@@ -1,3 +1,4 @@
+-- INCLUDE_HADOOP_MAJOR_VERSIONS(0.20,0.20S)
 -- Tests that when overwriting a partition in a table after altering the bucketing/sorting metadata
 -- the partition metadata is updated as well.
 

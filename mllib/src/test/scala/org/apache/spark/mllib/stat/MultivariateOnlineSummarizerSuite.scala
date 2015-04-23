@@ -208,4 +208,15 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
 
     assert(summarizer2.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
   }
+
+  test("merging summarizer when one side has zero mean (SPARK-4355)") {
+    val s0 = new MultivariateOnlineSummarizer()
+      .add(Vectors.dense(2.0))
+      .add(Vectors.dense(2.0))
+    val s1 = new MultivariateOnlineSummarizer()
+      .add(Vectors.dense(1.0))
+      .add(Vectors.dense(-1.0))
+    s0.merge(s1)
+    assert(s0.mean(0) ~== 1.0 absTol 1e-14)
+  }
 }

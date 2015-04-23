@@ -20,9 +20,9 @@ package org.apache.spark.sql.columnar.compression
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.types.AtomicType
 
 class RunLengthEncodingSuite extends FunSuite {
   testRunLengthEncoding(new NoopColumnStats, BOOLEAN)
@@ -32,7 +32,7 @@ class RunLengthEncodingSuite extends FunSuite {
   testRunLengthEncoding(new LongColumnStats,    LONG)
   testRunLengthEncoding(new StringColumnStats,  STRING)
 
-  def testRunLengthEncoding[T <: NativeType](
+  def testRunLengthEncoding[T <: AtomicType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T]) {
 
