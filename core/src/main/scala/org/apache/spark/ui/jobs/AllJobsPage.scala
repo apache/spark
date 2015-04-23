@@ -29,8 +29,6 @@ import org.apache.spark.JobExecutionStatus
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
-  private val startTime: Option[Long] = parent.sc.map(_.startTime)
-  private val listener = parent.listener
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="200px" height="85px">
       <rect x="5px" y="5px" width="20px" height="15px"
@@ -44,41 +42,44 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       <text x="35px" y="77px">Running Job</text>
     </svg></div>.toString.filter(_ != '\n')
 
+  private val EXECUTORS_LEGEND =
+    <div class="legend-area"><svg width="200px" height="55px">
+      <rect x="5px" y="5px" width="20px" height="15px"
+            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <text x="35px" y="17px">Executor Added</text>
+      <rect x="5px" y="35px" width="20px" height="15px"
+            rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
+      <text x="35px" y="47px">Executor Removed</text>
+    </svg></div>.toString.filter(_ != '\n')
+
   private def getlastStageDescription(job: JobUIData) = {
     val lastStageInfo = Option(job.stageIds)
       .filter(_.nonEmpty)
-      .flatMap { ids => listener.stageIdToInfo.get(ids.max)}
+      .flatMap { ids => parent.listener.stageIdToInfo.get(ids.max)}
     val lastStageData = lastStageInfo.flatMap { s =>
-      listener.stageIdToData.get((s.stageId, s.attemptId))
+      parent.listener.stageIdToData.get((s.stageId, s.attemptId))
     }
     lastStageData.flatMap(_.description).getOrElse("")
   }
 
-  private def makeTimeline(jobs: Seq[JobUIData], executors: Seq[ExecutorUIData]): Seq[Node] = {
+  private def makeJobEvent(jobUIDatas: Seq[JobUIData]): Seq[String] = {
+    jobUIDatas.filter { jobUIData =>
+      jobUIData.status != JobExecutionStatus.UNKNOWN && jobUIData.submissionTime.isDefined
+    }.map { jobUIData =>
+      val jobId = jobUIData.jobId
+      val status = jobUIData.status
+      val jobDescription = getlastStageDescription(jobUIData)
+      val submissionTime = jobUIData.submissionTime.get
+      val completionTimeOpt = jobUIData.completionTime
+      val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
+      val classNameByStatus = status match {
+        case JobExecutionStatus.SUCCEEDED => "succeeded"
+        case JobExecutionStatus.FAILED => "failed"
+        case JobExecutionStatus.RUNNING => "running"
+      }
 
-    def makeJobEvent(jobUIDatas: Seq[JobUIData]): Seq[String] = {
-      jobUIDatas.flatMap { jobUIData =>
-        val jobId = jobUIData.jobId
-        val status = jobUIData.status
-        val jobDescription = getlastStageDescription(jobUIData)
-        val submissionTimeOpt = jobUIData.submissionTime
-        val completionTimeOpt = jobUIData.completionTime
-
-        if (status == JobExecutionStatus.UNKNOWN || submissionTimeOpt.isEmpty ||
-          completionTimeOpt.isEmpty && status != JobExecutionStatus.RUNNING) {
-          None
-        }
-
-        val submissionTime = submissionTimeOpt.get
-        val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
-        val classNameByStatus = status match {
-          case JobExecutionStatus.SUCCEEDED => "succeeded"
-          case JobExecutionStatus.FAILED => "failed"
-          case JobExecutionStatus.RUNNING => "running"
-        }
-
-        val jobEventJsonAsStr =
-          s"""
+      val jobEventJsonAsStr =
+        s"""
            |{
            |  'className': 'job application-timeline-object ${classNameByStatus}',
            |  'group': 'jobs',
@@ -89,25 +90,25 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'title': '${jobDescription} (Job ${jobId})\\nStatus: ${status}\\n' +
            |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |    '${
-                    if (status != JobExecutionStatus.RUNNING) {
-                      s"""\\nCompletion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
-                    } else {
-                      ""
-                    }
-                 }'
+          if (status != JobExecutionStatus.RUNNING) {
+            s"""\\nCompletion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+          } else {
+            ""
+          }
+        }'
            |}
          """.stripMargin
-        Some(jobEventJsonAsStr)
-      }
+      jobEventJsonAsStr
     }
+  }
 
-    def makeExecutorEvent(executorUIDatas: Seq[ExecutorUIData]): Seq[String] = {
-      val events = ListBuffer[String]()
-      executorUIDatas.foreach { event =>
+  private def makeExecutorEvent(executorUIDatas: Seq[ExecutorUIData]): Seq[String] = {
+    val events = ListBuffer[String]()
+    executorUIDatas.foreach { event =>
 
-        if (event.startTime.isDefined) {
-          val addedEvent =
-            s"""
+      if (event.startTime.isDefined) {
+        val addedEvent =
+          s"""
                |{
                |  'className': 'executor added',
                |  'group': 'executors',
@@ -116,12 +117,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                |  'title': 'Added at ${UIUtils.formatDate(new Date(event.startTime.get))}'
                |}
              """.stripMargin
-          events += addedEvent
-        }
+        events += addedEvent
+      }
 
-        if (event.finishTime.isDefined) {
-          val removedEvent =
-            s"""
+      if (event.finishTime.isDefined) {
+        val removedEvent =
+          s"""
                |{
                |  'className': 'executor removed',
                |  'group': 'executors',
@@ -137,31 +138,26 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                      }'
                |}
              """.stripMargin
-          events += removedEvent
-        }
+        events += removedEvent
       }
-      events.toSeq
     }
+    events.toSeq
+  }
+
+  private def makeTimeline(
+      jobs: Seq[JobUIData],
+      executors: Seq[ExecutorUIData],
+      startTime: Long): Seq[Node] = {
 
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
     val executorEventJsonAsStrSeq = makeExecutorEvent(executors)
-
-    val executorsLegend =
-      <div class="legend-area"><svg width="200px" height="55px">
-        <rect x="5px" y="5px" width="20px" height="15px"
-          rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-        <text x="35px" y="17px">Executor Added</text>
-        <rect x="5px" y="35px" width="20px" height="15px"
-          rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
-        <text x="35px" y="47px">Executor Removed</text>
-      </svg></div>.toString.filter(_ != '\n')
 
     val groupJsonArrayAsStr =
       s"""
           |[
           |  {
           |    'id': 'executors',
-          |    'content': '<div>Executors</div>${executorsLegend}',
+          |    'content': '<div>Executors</div>${EXECUTORS_LEGEND}',
           |  },
           |  {
           |    'id': 'jobs',
@@ -182,7 +178,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     <div id="application-timeline"></div> ++
     <script type="text/javascript">
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
-         s"${eventArrayAsStr}, ${startTime.getOrElse(-1L)});")}
+         s"${eventArrayAsStr}, ${startTime});")}
     </script>
   }
 
@@ -201,10 +197,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     def makeRow(job: JobUIData): Seq[Node] = {
       val lastStageInfo = Option(job.stageIds)
         .filter(_.nonEmpty)
-        .flatMap { ids => listener.stageIdToInfo.get(ids.max) }
-      val lastStageData = lastStageInfo.flatMap { s =>
-        listener.stageIdToData.get((s.stageId, s.attemptId))
-      }
+        .flatMap { ids => parent.listener.stageIdToInfo.get(ids.max) }
 
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
       val lastStageDescription = getlastStageDescription(job)
@@ -252,7 +245,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val listener = parent.listener
     listener.synchronized {
+      val startTime = listener.startTime
       val activeJobs = listener.activeJobs.values.toSeq
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
@@ -271,11 +266,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (startTime.isDefined) {
+            {if (parent.sc.isDefined) {
               // Total duration is not meaningful unless the UI is live
               <li>
                 <strong>Total Duration: </strong>
-                {UIUtils.formatDuration(System.currentTimeMillis() - startTime.get)}
+                {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
               </li>
             }}
             <li>
@@ -310,9 +305,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </div>
 
       var content = summary
-      val appStartTime =
       content ++= <h4>Events on Application Timeline</h4> ++
-        makeTimeline(activeJobs ++ completedJobs ++ failedJobs, listener.executors)
+        makeTimeline(activeJobs ++ completedJobs ++ failedJobs, listener.executors, startTime)
 
       if (shouldShowActiveJobs) {
         content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++

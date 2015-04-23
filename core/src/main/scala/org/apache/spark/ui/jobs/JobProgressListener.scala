@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer, TreeSet}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -49,6 +49,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type StageAttemptId = Int
   type PoolName = String
   type ExecutorId = String
+
+  // Applicatin:
+  @volatile var startTime = -1L
 
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
@@ -554,6 +557,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       executorUIData.finishReason = Option(executorRemoved.reason)
       trimExecutorsIfNecessary(executors)
     }
+  }
+
+  override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
+    startTime = appStarted.time
   }
 }
 

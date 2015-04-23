@@ -24,8 +24,8 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
       return a.value - b.value
     },
     editable: false,
-    showCurrentTime: false,
-    showCustomTime: true,
+    showCurrentTime: true,
+    min: startTime,
     zoomable: false
   };
 
@@ -33,10 +33,6 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   applicationTimeline.setOptions(options);
   applicationTimeline.setGroups(groups);
   applicationTimeline.setItems(items);
-
-  if (startTime != -1) {
-    applicationTimeline.setCustomTime(startTime);
-  }
 
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
 
@@ -49,7 +45,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   });
 }
 
-function drawJobTimeline(groupArray, eventObjArray, startTime) {
+function drawJobTimeline(groupArray, eventObjArray) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $('#job-timeline')[0];
@@ -59,7 +55,6 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
     },
     editable: false,
     showCurrentTime: false,
-    showCustomTime: true,
     zoomable: false,
   };
 
@@ -67,10 +62,6 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   jobTimeline.setOptions(options);
   jobTimeline.setGroups(groups);
   jobTimeline.setItems(items);
-
-  if (startTime != -1) {
-    jobTimeline.setCustomTime(startTime)
-  }
 
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
 
