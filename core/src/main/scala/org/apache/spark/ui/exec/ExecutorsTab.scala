@@ -65,7 +65,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
     executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
 
-  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
+  override def onExecutorRemoved(
+      executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
     val eid = executorRemoved.executorId
     val uiData = executorIdToData(eid)
     uiData.finishTime = Some(executorRemoved.time)

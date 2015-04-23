@@ -39,22 +39,30 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   $(".item.range.job.application-timeline-object").each(function() {
     var getJobId = function(baseElem) {
       var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
-      var jobId = "#job-" + jobIdText.match("\\(Job (\\d+)\\)")[1];
+      var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
       return jobId;
-    }
+    };
 
     $(this).click(function() {
-      window.location.href = getJobId(this);
+      window.location.href = "job/?id=" + getJobId(this);
     });
 
     $(this).hover(
       function() {
-        $(getJobId(this)).addClass("corresponding-item-hover");
+        $("#job-" + getJobId(this)).addClass("corresponding-item-hover");
       },
       function() {
-        $(getJobId(this)).removeClass("corresponding-item-hover");
+        $("#job-" + getJobId(this)).removeClass("corresponding-item-hover");
       }
     );
+  });
+
+  $("span.expand-application-timeline").click(function() {
+    $("#application-timeline").toggleClass('collapsed');
+
+    // Switch the class of the arrow from open to closed.
+    $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-open');
+    $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-closed');
   });
 }
 
@@ -80,25 +88,35 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
 
   $(".item.range.stage.job-timeline-object").each(function() {
-
-    var getStageId = function(baseElem) {
+    var getStageIdAndAttempt = function(baseElem) {
       var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
-      var stageId = "#stage-" + stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
-      return stageId;
-    }
+      var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
+      return stageIdAndAttempt;
+    };
 
     $(this).click(function() {
-      window.location.href = getStageId(this);
+      var idAndAttempt = getStageIdAndAttempt(this);
+      var id = idAndAttempt[0];
+      var attempt = idAndAttempt[1];
+      window.location.href = "../../stages/stage/?id=" + id + "&attempt=" + attempt;
     });
 
     $(this).hover(
       function() {
-        $(getStageId(this)).addClass("corresponding-item-hover");
+        $("#stage-" + getStageId(this)).addClass("corresponding-item-hover");
       },
       function() {
-        $(getStageId(this)).removeClass("corresponding-item-hover");
+        $("#stage-" + getStageId(this)).removeClass("corresponding-item-hover");
       }
     );
+  });
+
+  $("span.expand-job-timeline").click(function() {
+    $("#job-timeline").toggleClass('collapsed');
+
+    // Switch the class of the arrow from open to closed.
+    $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-open');
+    $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-closed');
   });
 }
 

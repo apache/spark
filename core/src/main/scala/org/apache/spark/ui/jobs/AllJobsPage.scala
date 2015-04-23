@@ -30,26 +30,26 @@ import org.apache.spark.JobExecutionStatus
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val JOBS_LEGEND =
-    <div class="legend-area"><svg width="200px" height="85px">
+    <div class="legend-area"><svg width="150px" height="85px">
       <rect x="5px" y="5px" width="20px" height="15px"
             rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Succeeded Job</text>
-      <rect x="5px" y="35px" width="20px" height="15px"
+      <text x="35px" y="17px">Succeeded</text>
+      <rect x="5px" y="30px" width="20px" height="15px"
             rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
-      <text x="35px" y="47px">Failed Job</text>
-      <rect x="5px" y="65px" width="20px" height="15px"
+      <text x="35px" y="42px">Failed</text>
+      <rect x="5px" y="55px" width="20px" height="15px"
             rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
-      <text x="35px" y="77px">Running Job</text>
+      <text x="35px" y="67px">Running</text>
     </svg></div>.toString.filter(_ != '\n')
 
   private val EXECUTORS_LEGEND =
-    <div class="legend-area"><svg width="200px" height="55px">
+    <div class="legend-area"><svg width="150px" height="55px">
       <rect x="5px" y="5px" width="20px" height="15px"
             rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
-      <text x="35px" y="17px">Executor Added</text>
-      <rect x="5px" y="35px" width="20px" height="15px"
+      <text x="35px" y="17px">Added</text>
+      <rect x="5px" y="30px" width="20px" height="15px"
             rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
-      <text x="35px" y="47px">Executor Removed</text>
+      <text x="35px" y="42px">Removed</text>
     </svg></div>.toString.filter(_ != '\n')
 
   private def getLastStageNameAndDescription(job: JobUIData): (String, String) = {
@@ -170,7 +170,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val eventArrayAsStr =
       (jobEventJsonAsStrSeq ++ executorEventJsonAsStrSeq).mkString("[", ",", "]")
 
-    <div id="application-timeline">
+    <span class="expand-application-timeline">
+      <span class="expand-application-timeline-arrow arrow-closed"></span>
+      <strong>Event Timeline</strong>
+    </span> ++
+    <div id="application-timeline" class="collapsed">
       <div class="control-panel">
         <div id="application-timeline-zoom-lock">
           <input type="checkbox" checked="checked"></input>
@@ -303,8 +307,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
-      content ++= <h4>Event Timeline</h4> ++
-        makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
+      content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
 
       if (shouldShowActiveJobs) {

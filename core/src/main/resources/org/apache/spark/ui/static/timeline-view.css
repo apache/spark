@@ -20,7 +20,7 @@ div#application-timeline, div#job-timeline {
 }
 
 #application-timeline div.legend-area {
-  margin-top: 20px;
+  margin-top: 5px;
 }
 
 .vis.timeline div.content {
@@ -109,6 +109,18 @@ div#application-timeline, div#job-timeline {
   z-index: 2;
 }
 
-tr.corresponding-item-hover {
-  background: #FFE1FA !important;
+tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
+  background-color: #FFE1FA !important;
+}
+
+#application-timeline.collapsed {
+  display: none;
+}
+
+#job-timeline.collapsed {
+  display: none;
+}
+
+.control-panel {
+  margin-bottom: 5px;
 }
