@@ -185,4 +185,7 @@ object TestJsonData {
       """{"a":{, b:3}""" ::
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """]""" :: Nil)
+
+  val empty =
+    TestSQLContext.sparkContext.parallelize(Seq[String]())
 }

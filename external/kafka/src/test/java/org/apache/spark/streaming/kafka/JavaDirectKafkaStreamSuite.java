@@ -20,50 +20,49 @@ package org.apache.spark.streaming.kafka;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
-
 import scala.Tuple2;
-
-import junit.framework.Assert;
 
 import kafka.common.TopicAndPartition;
 import kafka.message.MessageAndMetadata;
 import kafka.serializer.StringDecoder;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-
-import org.junit.Test;
-import org.junit.After;
-import org.junit.Before;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private transient Random random = new Random();
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-      suiteBase = new KafkaStreamSuiteBase() { };
-      suiteBase.setupKafka();
-      System.clearProperty("spark.driver.port");
-      SparkConf sparkConf = new SparkConf()
-              .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
-      ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setup();
+    SparkConf sparkConf = new SparkConf()
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+    ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
   }
 
   @After
   public void tearDown() {
+    if (ssc != null) {
       ssc.stop();
       ssc = null;
-      System.clearProperty("spark.driver.port");
-      suiteBase.tearDownKafka();
+    }
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
@@ -79,7 +78,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     sent.addAll(Arrays.asList(topic2data));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaDStream<String> stream1 = KafkaUtils.createDirectStream(
@@ -93,7 +92,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(scala.Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) throws Exception {
             return kv._2();
           }
         }
@@ -121,7 +120,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     unifiedStream.foreachRDD(
         new Function<JavaRDD<String>, Void>() {
           @Override
-          public Void call(org.apache.spark.api.java.JavaRDD<String> rdd) throws Exception {
+          public Void call(JavaRDD<String> rdd) throws Exception {
             result.addAll(rdd.collect());
             return null;
           }
@@ -152,8 +151,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

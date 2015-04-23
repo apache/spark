@@ -149,10 +149,10 @@ private[spark] class PipedRDD[T: ClassTag](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream).getLines
+    val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
-      def next() = lines.next()
-      def hasNext = {
+      def next(): String = lines.next()
+      def hasNext: Boolean = {
         if (lines.hasNext) {
           true
         } else {
@@ -162,7 +162,7 @@ private[spark] class PipedRDD[T: ClassTag](
           }
 
           // cleanup task working directory if used
-          if (workInTaskDirectory == true) {
+          if (workInTaskDirectory) {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
               Utils.deleteRecursively(new File(taskDirectory))
             }

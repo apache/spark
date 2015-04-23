@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
+import org.apache.spark.util.Utils
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -57,13 +58,7 @@ object HiveThriftServer2 extends Logging {
     logInfo("Starting SparkContext")
     SparkSQLEnv.init()
 
-    Runtime.getRuntime.addShutdownHook(
-      new Thread() {
-        override def run() {
-          SparkSQLEnv.stop()
-        }
-      }
-    )
+    Utils.addShutdownHook { () => SparkSQLEnv.stop() }
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
@@ -98,16 +93,14 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    if (isHTTPTransportMode(hiveConf)) {
-      val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
-      setSuperField(this, "thriftCLIService", thriftCliService)
-      addService(thriftCliService)
+    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
+      new ThriftHttpCLIService(sparkSqlCliService)
     } else {
-      val thriftCliService = new ThriftBinaryCLIService(sparkSqlCliService)
-      setSuperField(this, "thriftCLIService", thriftCliService)
-      addService(thriftCliService)
+      new ThriftBinaryCLIService(sparkSqlCliService)
     }
 
+    setSuperField(this, "thriftCLIService", thriftCliService)
+    addService(thriftCliService)
     initCompositeService(hiveConf)
   }
 

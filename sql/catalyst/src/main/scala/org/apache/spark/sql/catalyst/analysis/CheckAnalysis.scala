@@ -25,7 +25,8 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-class CheckAnalysis {
+trait CheckAnalysis {
+  self: Analyzer =>
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -33,17 +34,31 @@ class CheckAnalysis {
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  def failAnalysis(msg: String) = {
+  protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
 
-  def apply(plan: LogicalPlan): Unit = {
+  def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
+    exprs.flatMap(_.collect {
+      case e: Generator => true
+    }).length >= 1
+  }
+
+  def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
+            if (operator.childrenResolved) {
+              a match {
+                case UnresolvedAttribute(nameParts) =>
+                  // Throw errors for specific problems with get field.
+                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
+              }
+            }
+
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
@@ -63,7 +78,7 @@ class CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case aggregatePlan@Aggregate(groupingExprs, aggregateExprs, child) =>
+          case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
               case e: Attribute if !groupingExprs.contains(e) =>
@@ -85,17 +100,27 @@ class CheckAnalysis {
 
             cleaned.foreach(checkValidAggregateExpression)
 
-          case o if o.children.nonEmpty &&
-            !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
-            val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
-            val input = o.inputSet.map(_.prettyString).mkString(",")
+          case _ => // Fallbacks to the following checks
+        }
 
-            failAnalysis(s"resolved attributes $missingAttributes missing from $input")
+        operator match {
+          case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val missingAttributes = o.missingInput.mkString(",")
+            val input = o.inputSet.mkString(",")
 
-          // Catch all
+            failAnalysis(
+              s"resolved attribute(s) $missingAttributes missing from $input " +
+                s"in operator ${operator.simpleString}")
+
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
+
+          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
+            failAnalysis(
+              s"""Only a single table generating function is allowed in a SELECT clause, found:
+                 | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
+
 
           case _ => // Analysis successful!
         }

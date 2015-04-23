@@ -23,7 +23,8 @@ import org.apache.spark.util.Utils
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) extends Logging {
+private[history] class HistoryServerArguments(conf: SparkConf, args: Array[String]) 
+  extends Logging {
   private var propertiesFile: String = null
 
   parse(args.toList)

@@ -53,13 +53,13 @@ class LocalSparkCluster(
     /* Start the Master */
     val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
     masterActorSystems += masterSystem
-    val masterUrl = "spark://" + localHostname + ":" + masterPort
+    val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + masterPort
     val masters = Array(masterUrl)
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
-        memoryPerWorker, masters, null, Some(workerNum))
+        memoryPerWorker, masters, null, Some(workerNum), _conf)
       workerActorSystems += workerSystem
     }
 

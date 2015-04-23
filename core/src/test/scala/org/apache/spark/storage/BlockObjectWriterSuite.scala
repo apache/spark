@@ -16,19 +16,21 @@
  */
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
 import java.io.File
+
+import org.scalatest.FunSuite
+
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 class BlockObjectWriterSuite extends FunSuite {
   test("verify write metrics") {
-    val file = new File("somefile")
-    file.deleteOnExit()
+    val file = new File(Utils.createTempDir(), "somefile")
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
-      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
+      new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20))
     // Record metrics update on every write
@@ -47,11 +49,10 @@ class BlockObjectWriterSuite extends FunSuite {
   }
 
   test("verify write metrics on revert") {
-    val file = new File("somefile")
-    file.deleteOnExit()
+    val file = new File(Utils.createTempDir(), "somefile")
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
-      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
+      new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20))
     // Record metrics update on every write
@@ -71,11 +72,10 @@ class BlockObjectWriterSuite extends FunSuite {
   }
 
   test("Reopening a closed block writer") {
-    val file = new File("somefile")
-    file.deleteOnExit()
+    val file = new File(Utils.createTempDir(), "somefile")
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
-      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
+      new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
     writer.open()
     writer.close()

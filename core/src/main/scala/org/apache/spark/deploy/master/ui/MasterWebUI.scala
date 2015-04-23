@@ -21,17 +21,17 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone master.
  */
-private[spark]
+private[master]
 class MasterWebUI(val master: Master, requestedPort: Int)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
 
   val masterActorRef = master.self
-  val timeout = AkkaUtils.askTimeout(master.conf)
+  val timeout = RpcUtils.askTimeout(master.conf)
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   initialize()
@@ -43,10 +43,10 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(
-      createRedirectHandler("/app/kill", "/", masterPage.handleAppKillRequest))
-    attachHandler(
-      createRedirectHandler("/driver/kill", "/", masterPage.handleDriverKillRequest))
+    attachHandler(createRedirectHandler(
+      "/app/kill", "/", masterPage.handleAppKillRequest, httpMethod = "POST"))
+    attachHandler(createRedirectHandler(
+      "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethod = "POST"))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
@@ -62,6 +62,6 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   }
 }
 
-private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
+private[master] object MasterWebUI {
+  private val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }

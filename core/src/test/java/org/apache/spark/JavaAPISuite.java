@@ -24,11 +24,12 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import org.apache.spark.input.PortableDataStream;
+import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -51,8 +52,11 @@ import org.junit.Test;
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
 
@@ -262,6 +266,22 @@ public class JavaAPISuite implements Serializable {
       @Override
       public void call(String s) throws IOException {
         accum.add(1);
+      }
+    });
+    Assert.assertEquals(2, accum.value().intValue());
+  }
+
+  @Test
+  public void foreachPartition() {
+    final Accumulator<Integer> accum = sc.accumulator(0);
+    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
+    rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
+      @Override
+      public void call(Iterator<String> iter) throws IOException {
+        while (iter.hasNext()) {
+          iter.next();
+          accum.add(1);
+        }
       }
     });
     Assert.assertEquals(2, accum.value().intValue());
@@ -658,6 +678,13 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void toArray() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3));
+    List<Integer> list = rdd.toArray();
+    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
+  }
+
+  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -703,8 +730,8 @@ public class JavaAPISuite implements Serializable {
     Tuple2<double[], long[]> results = rdd.histogram(2);
     double[] expected_buckets = {1.0, 2.5, 4.0};
     long[] expected_counts = {2, 2};
-    Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
-    Assert.assertArrayEquals(expected_counts, results._2);
+    Assert.assertArrayEquals(expected_buckets, results._1(), 0.1);
+    Assert.assertArrayEquals(expected_counts, results._2());
     // Test with provided buckets
     long[] histogram = rdd.histogram(expected_buckets);
     Assert.assertArrayEquals(expected_counts, histogram);
@@ -712,6 +739,94 @@ public class JavaAPISuite implements Serializable {
     Assert.assertArrayEquals(
         new long[] {0},
         sc.parallelizeDoubles(new ArrayList<Double>(0), 1).histogram(new double[]{0.0, 1.0}));
+  }
+
+  private static class DoubleComparator implements Comparator<Double>, Serializable {
+    public int compare(Double o1, Double o2) {
+      return o1.compareTo(o2);
+    }
+  }
+
+  @Test
+  public void max() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.max(new DoubleComparator());
+    Assert.assertEquals(4.0, max, 0.001);
+  }
+
+  @Test
+  public void min() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.min(new DoubleComparator());
+    Assert.assertEquals(1.0, max, 0.001);
+  }
+
+  @Test
+  public void naturalMax() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.max();
+    Assert.assertTrue(4.0 == max);
+  }
+
+  @Test
+  public void naturalMin() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.min();
+    Assert.assertTrue(1.0 == max);
+  }
+
+  @Test
+  public void takeOrdered() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    Assert.assertEquals(Arrays.asList(1.0, 2.0), rdd.takeOrdered(2, new DoubleComparator()));
+    Assert.assertEquals(Arrays.asList(1.0, 2.0), rdd.takeOrdered(2));
+  }
+
+  @Test
+  public void top() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    List<Integer> top2 = rdd.top(2);
+    Assert.assertEquals(Arrays.asList(4, 3), top2);
+  }
+
+  private static class AddInts implements Function2<Integer, Integer, Integer> {
+    @Override
+    public Integer call(Integer a, Integer b) {
+      return a + b;
+    }
+  }
+
+  @Test
+  public void reduce() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    int sum = rdd.reduce(new AddInts());
+    Assert.assertEquals(10, sum);
+  }
+
+  @Test
+  public void reduceOnJavaDoubleRDD() {
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double sum = rdd.reduce(new Function2<Double, Double, Double>() {
+      @Override
+      public Double call(Double v1, Double v2) throws Exception {
+        return v1 + v2;
+      }
+    });
+    Assert.assertEquals(10.0, sum, 0.001);
+  }
+
+  @Test
+  public void fold() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    int sum = rdd.fold(0, new AddInts());
+    Assert.assertEquals(10, sum);
+  }
+
+  @Test
+  public void aggregate() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    int sum = rdd.aggregate(0, new AddInts(), new AddInts());
+    Assert.assertEquals(10, sum);
   }
 
   @Test
@@ -829,6 +944,25 @@ public class JavaAPISuite implements Serializable {
     });
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
+
+
+  @Test
+  public void mapPartitionsWithIndex() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
+    JavaRDD<Integer> partitionSums = rdd.mapPartitionsWithIndex(
+      new Function2<Integer, Iterator<Integer>, Iterator<Integer>>() {
+        @Override
+        public Iterator<Integer> call(Integer index, Iterator<Integer> iter) throws Exception {
+          int sum = 0;
+          while (iter.hasNext()) {
+            sum += iter.next();
+          }
+          return Collections.singletonList(sum).iterator();
+        }
+    }, false);
+    Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
+  }
+
 
   @Test
   public void repartition() {
@@ -1308,6 +1442,49 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(Arrays.asList(1, 2, 3, 4, 5), recovered.collect());
   }
 
+  @Test
+  public void combineByKey() {
+    JavaRDD<Integer> originalRDD = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6));
+    Function<Integer, Integer> keyFunction = new Function<Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1) throws Exception {
+        return v1 % 3;
+      }
+    };
+    Function<Integer, Integer> createCombinerFunction = new Function<Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1) throws Exception {
+        return v1;
+      }
+    };
+
+    Function2<Integer, Integer, Integer> mergeValueFunction = new Function2<Integer, Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1, Integer v2) throws Exception {
+        return v1 + v2;
+      }
+    };
+
+    JavaPairRDD<Integer, Integer> combinedRDD = originalRDD.keyBy(keyFunction)
+        .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
+    Map<Integer, Integer> results = combinedRDD.collectAsMap();
+    ImmutableMap<Integer, Integer> expected = ImmutableMap.of(0, 9, 1, 5, 2, 7);
+    Assert.assertEquals(expected, results);
+
+    Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
+        combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
+    combinedRDD = originalRDD.keyBy(keyFunction)
+        .combineByKey(
+             createCombinerFunction,
+             mergeValueFunction,
+             mergeValueFunction,
+             defaultPartitioner,
+             false,
+             new KryoSerializer(new SparkConf()));
+    results = combinedRDD.collectAsMap();
+    Assert.assertEquals(expected, results);
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void mapOnPairRDD() {
@@ -1511,6 +1688,19 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<List<Integer>> future = rdd.collectAsync();
     List<Integer> result = future.get();
     Assert.assertEquals(data, result);
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(1, future.jobIds().size());
+  }
+
+  @Test
+  public void takeAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<List<Integer>> future = rdd.takeAsync(1);
+    List<Integer> result = future.get();
+    Assert.assertEquals(1, result.size());
+    Assert.assertEquals((Integer) 1, result.get(0));
     Assert.assertFalse(future.isCancelled());
     Assert.assertTrue(future.isDone());
     Assert.assertEquals(1, future.jobIds().size());
