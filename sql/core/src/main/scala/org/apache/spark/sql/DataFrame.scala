@@ -1085,6 +1085,9 @@ class DataFrame private[sql](
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
+   *
+   * Also note that this doesn't create a hive table, but instead creates a Spark data source table.
+   * Here the metadata is persisted into Hive. But table will be not accessible from the hive.
    * @group output
    */
   @Experimental
