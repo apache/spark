@@ -22,6 +22,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.hadoop.hive.metastore.Warehouse
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata._
@@ -29,6 +30,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -669,6 +671,7 @@ private[hive] case class MetastoreRelation
     new Partition(hiveQlTable, tPartition)
   }
 
+  @transient var newStatistics: Option[BigInt] = None
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
       val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
@@ -679,15 +682,115 @@ private[hive] case class MetastoreRelation
       // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
       // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
       // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
-      BigInt(
+      newStatistics.getOrElse(BigInt(
         // When table is external,`totalSize` is always zero, which will influence join strategy
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+          .getOrElse(sqlContext.conf.defaultSizeInBytes))))
     }
   )
+
+  def updateStats(predicates: Seq[Expression]) = {
+    // Filter out all predicates that only deal with partition keys
+    val partitionsKeys = AttributeSet(partitionKeys)
+    val (pruningPredicates, otherPredicates) = predicates.partition {
+      _.references.subsetOf(partitionsKeys)
+    }
+
+    if (hiveQlTable.isPartitioned) {
+      val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))
+      // Translate the predicate so that it automatically casts the input values to the
+      // correct data types during evaluation.
+      val castedPredicate = rawPredicate transform {
+        case a: AttributeReference =>
+          val idx = partitionKeys.indexWhere(a.exprId == _.exprId)
+          val key = partitionKeys(idx)
+          Cast(BoundReference(idx, StringType, nullable = true), key.dataType)
+      }
+
+      val inputData = new GenericMutableRow(partitionKeys.size)
+      val pruningCondition =
+        if (sqlContext.conf.codegenEnabled) {
+          GeneratePredicate.generate(castedPredicate)
+        } else {
+          InterpretedPredicate.create(castedPredicate)
+        }
+
+      /* These are referred partitions for this query */
+      val refParts = hiveQlPartitions.filter { part =>
+        val partitionValues = part.getValues
+        var i = 0
+        while (i < partitionValues.size()) {
+          inputData(i) = partitionValues(i)
+          i += 1
+        }
+        pruningCondition(inputData)
+      }
+
+      val sc = sqlContext.asInstanceOf[HiveContext]
+      val PARQUET_METADATA_FILE: String = "_metadata"
+
+      // get sizes of partitions already stored, for others
+      // compute and store the value
+      def calculatePartSize(fs: FileSystem, path: Path): Long = {
+        val fileStatus = fs.getFileStatus(path)
+        val statuses = fs.listStatus(path)
+        // Handling for parquet metadata files as well
+        val children = statuses.filterNot { status =>
+          val name = status.getPath.getName
+          (name(0) == '.' || name(0) == '_' || name == PARQUET_METADATA_FILE)
+        }
+
+        children.map(fileStatus => fileStatus.getLen).sum
+      }
+
+      def sumParts(fs: FileSystem): Long = {
+        var size: Long = 0
+        refParts.foreach { refPart =>
+          // get size of the partition
+          val partParams = refPart.getParameters
+          val oldSize =
+            Option(partParams.get(HiveShim.getStatsSetupConstTotalSize))
+              .map(_.toLong)
+              .getOrElse(0L)
+          if (oldSize == 0) {
+            val path = new Path(refPart.getLocation)
+            val partSize = calculatePartSize(fs, path)
+            if (partSize > 0) {
+              size += partSize
+              val tableFullName = hiveQlTable.getDbName + "." + hiveQlTable.getTableName
+              partParams.put(HiveShim.getStatsSetupConstTotalSize, partSize.toString)
+              refPart.getTPartition.setParameters(partParams)
+
+              // store this in metastore
+              sc.catalog.synchronized {
+                try sc.catalog.client.alterPartition(tableFullName, refPart) catch {
+                  case e: Throwable => // Do nothing !
+                }
+              }
+            }
+          }
+
+          size += oldSize
+
+          if (size > sqlContext.conf.autoBroadcastJoinThreshold) {
+            return sqlContext.conf.defaultSizeInBytes
+          }
+        }
+
+        size
+      }
+
+      if (refParts.size > 0) {
+        val fp = new Path(refParts.head.getLocation)
+        val fs = fp.getFileSystem(sc.hiveconf)
+        val size = sumParts(fs)
+        newStatistics = Option(BigInt(size))
+      }
+    }
+  }
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {

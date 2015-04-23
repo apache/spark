@@ -253,4 +253,82 @@ private[hive] trait HiveStrategies {
       case _ => Nil
     }
   }
+
+  /**
+   * Uses the ExtractEquiJoinKeys pattern to find joins where at least some of the predicates can be
+   * evaluated by matching hash keys.
+   *
+   * This strategy applies a simple optimization based on the estimates of the physical sizes of
+   * the two join sides.  When planning a [[joins.BroadcastHashJoin]], if one side has an
+   * estimated physical size smaller than the user-settable threshold
+   * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]], the planner would mark it as the
+   * ''build'' relation and mark the other relation as the ''stream'' side.  The build table will be
+   * ''broadcasted'' to all of the executors involved in the join, as a
+   * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
+   * will instead be used to decide the build side in a [[joins.ShuffledHashJoin]].
+   * Works similar to HashJoin strategy in SparkStrategies, but applies a better estimate of join
+   * size in case of partitioned tables by computing sizes of referred partitions of the table.
+   */
+  object HiveHashJoin extends Strategy with PredicateHelper {
+
+    private[this] def makeBroadcastHashJoin(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      condition: Option[Expression],
+      side: joins.BuildSide) = {
+      val broadcastHashJoin = org.apache.spark.sql.execution.joins.BroadcastHashJoin(
+        leftKeys, rightKeys, side, planLater(left), planLater(right))
+      condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
+    }
+
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if {
+          val (fields, filters, child, _) = PhysicalOperation.collectProjectsAndFilters(right)
+          Some((fields.getOrElse(child.output), filters, child))
+          right transform {
+              case relation: MetastoreRelation => relation.updateStats(filters)
+                relation
+          }
+          sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold
+        } =>
+          logInfo(s"Estimated size of right side  = ${right.statistics.sizeInBytes}")
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+          if {
+            val (fields, filters, child, _) = PhysicalOperation.collectProjectsAndFilters(left)
+            Some((fields.getOrElse(child.output), filters, child))
+            left transform {
+              case relation: MetastoreRelation => relation.updateStats(filters)
+                relation
+            }
+            sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+              left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold
+          } =>
+          logInfo(s"Estimated size of left side = ${left.statistics.sizeInBytes}")
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+        val buildSide =
+          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+            joins.BuildRight
+          } else {
+            joins.BuildLeft
+          }
+        val hashJoin = joins.ShuffledHashJoin(
+          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
+        joins.HashOuterJoin(
+          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+
+      case _ => Nil
+    }
+  }
+
 }
