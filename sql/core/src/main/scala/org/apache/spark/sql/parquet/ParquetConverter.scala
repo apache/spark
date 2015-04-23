@@ -146,7 +146,8 @@ private[sql] object CatalystConverter {
         }
       }
       // All other primitive types use the default converter
-      case ctype: PrimitiveType => { // note: need the type tag here!
+      case ctype: DataType if ParquetTypesConverter.isPrimitiveType(ctype) => {
+        // note: need the type tag here!
         new CatalystPrimitiveConverter(parent, fieldIndex)
       }
       case _ => throw new RuntimeException(
@@ -324,9 +325,9 @@ private[parquet] class CatalystGroupConverter(
 
   override def start(): Unit = {
     current = ArrayBuffer.fill(size)(null)
-    converters.foreach {
-      converter => if (!converter.isPrimitive) {
-        converter.asInstanceOf[CatalystConverter].clearBuffer
+    converters.foreach { converter =>
+      if (!converter.isPrimitive) {
+        converter.asInstanceOf[CatalystConverter].clearBuffer()
       }
     }
   }
@@ -612,7 +613,7 @@ private[parquet] class CatalystArrayConverter(
 
   override def start(): Unit = {
     if (!converter.isPrimitive) {
-      converter.asInstanceOf[CatalystConverter].clearBuffer
+      converter.asInstanceOf[CatalystConverter].clearBuffer()
     }
   }
 
