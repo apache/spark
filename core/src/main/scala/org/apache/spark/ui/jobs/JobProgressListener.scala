@@ -76,10 +76,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   var numCompletedStages = 0
   var numFailedStages = 0
 
-  // Executors:
-  val executors = ListBuffer[ExecutorUIData]()
-  val executorIdToData = HashMap[ExecutorId, ExecutorUIData]()
-
   // Misc:
   val executorIdToBlockManagerId = HashMap[ExecutorId, BlockManagerId]()
 
@@ -92,7 +88,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", DEFAULT_RETAINED_JOBS)
-  val retainedExecutors = conf.getInt("spark.ui.retainedExecutors", DEFAULT_RETAINED_EXECUTORS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -169,17 +164,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         }
       }
       jobs.trimStart(toRemove)
-    }
-  }
-
-  /** If executors is too large, remove and garbage collect old executors */
-  private def trimExecutorsIfNecessary(executors: ListBuffer[ExecutorUIData]) = synchronized {
-    if (executors.size > retainedExecutors) {
-      val toRemove = math.max(retainedExecutors / 10, 1)
-      executors.take(toRemove).foreach { executor =>
-        executorIdToData.remove(executor.executorId)
-      }
-      executors.trimStart(toRemove)
     }
   }
 
@@ -536,29 +520,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) {
-    synchronized {
-      val executorUIData = ExecutorUIData(executorAdded.executorId, Some(executorAdded.time))
-      executors += executorUIData
-      executorIdToData.put(executorAdded.executorId, executorUIData)
-      trimExecutorsIfNecessary(executors)
-    }
-  }
-
-  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) {
-    synchronized {
-      val executorUIData = executorIdToData.getOrElseUpdate(executorRemoved.executorId, {
-        val uiData = ExecutorUIData(executorId = executorRemoved.executorId)
-        executors += uiData
-        uiData
-      })
-      executorUIData.finishTime = Some(executorRemoved.time)
-      // use option in case for that reason is null
-      executorUIData.finishReason = Option(executorRemoved.reason)
-      trimExecutorsIfNecessary(executors)
-    }
-  }
-
   override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
     startTime = appStarted.time
   }
@@ -568,5 +529,4 @@ private object JobProgressListener {
   val DEFAULT_POOL_NAME = "default"
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
-  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

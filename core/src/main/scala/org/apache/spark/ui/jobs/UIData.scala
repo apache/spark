@@ -24,7 +24,7 @@ import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.HashMap
 
-private[jobs] object UIData {
+private[ui] object UIData {
 
   class ExecutorSummary {
     var taskTime : Long = 0
@@ -110,8 +110,7 @@ private[jobs] object UIData {
       var errorMessage: Option[String] = None)
 
   case class ExecutorUIData(
-      val executorId: String,
-      val startTime: Option[Long] = None,
+      val startTime: Long,
       var finishTime: Option[Long] = None,
       var finishReason: Option[String] = None)
 }

@@ -37,6 +37,10 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
+.vis.timeline .item.stage {
+  cursor: pointer;
+}
+
 .vis.timeline .item.stage.failed {
    background-color: #FF5475;
 }
@@ -55,6 +59,10 @@ div#application-timeline, div#job-timeline {
    background-color: #FDFFCA;
    border-color: #97B0F8;
    z-index: auto;
+}
+
+.vis.timeline .item.job {
+  cursor: pointer;
 }
 
 .vis.timeline .item.job.succeeded {
@@ -99,4 +107,8 @@ div#application-timeline, div#job-timeline {
   border-color: #FFC200;
   background-color: #FFF785;
   z-index: 2;
+}
+
+tr.corresponding-item-hover {
+  background: #FFE1FA !important;
 }

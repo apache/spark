@@ -24,7 +24,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
       return a.value - b.value
     },
     editable: false,
-    showCurrentTime: true,
+    showCurrentTime: false,
     min: startTime,
     zoomable: false
   };
@@ -37,11 +37,24 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
 
   $(".item.range.job.application-timeline-object").each(function() {
+    var getJobId = function(baseElem) {
+      var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
+      var jobId = "#job-" + jobIdText.match("\\(Job (\\d+)\\)")[1];
+      return jobId;
+    }
+
     $(this).click(function() {
-      var jobIdText = $($(this).find(".application-timeline-content")[0]).text();
-      var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
-      window.location.href = "#job-" + jobId;
+      window.location.href = getJobId(this);
     });
+
+    $(this).hover(
+      function() {
+        $(getJobId(this)).addClass("corresponding-item-hover");
+      },
+      function() {
+        $(getJobId(this)).removeClass("corresponding-item-hover");
+      }
+    );
   });
 }
 
@@ -67,11 +80,25 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
 
   $(".item.range.stage.job-timeline-object").each(function() {
+
+    var getStageId = function(baseElem) {
+      var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
+      var stageId = "#stage-" + stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
+      return stageId;
+    }
+
     $(this).click(function() {
-      var stageIdText = $($(this).find(".job-timeline-content")[0]).text();
-      var stageId = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
-      window.location.href = "#stage-" + stageId;
+      window.location.href = getStageId(this);
     });
+
+    $(this).hover(
+      function() {
+        $(getStageId(this)).addClass("corresponding-item-hover");
+      },
+      function() {
+        $(getStageId(this)).removeClass("corresponding-item-hover");
+      }
+    );
   });
 }
 

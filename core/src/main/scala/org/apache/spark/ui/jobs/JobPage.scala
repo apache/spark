@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.util.Date
 
-import scala.collection.mutable.{Buffer, ListBuffer}
+import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
 import scala.xml.{NodeSeq, Node, Unparsed}
 
 import javax.servlet.http.HttpServletRequest
@@ -59,18 +59,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val stageId = stage.stageId
       val attemptId = stage.attemptId
       val name = stage.name
-      val status = {
-        if (stage.completionTime.isDefined) {
-          if (stage.failureReason.isDefined) {
-            "failed"
-          } else {
-            "succeeded"
-          }
-        } else {
-          "running"
-        }
-      }
-
+      val status = stage.getStatusString
       val submissionTime = stage.submissionTime.get
       val completionTime = stage.completionTime.getOrElse(System.currentTimeMillis())
 
@@ -96,23 +85,21 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     }
   }
 
-  def makeExecutorEvent(executorUIDatas: Seq[ExecutorUIData]): Seq[String] = {
+  def makeExecutorEvent(executorUIDatas: HashMap[String, ExecutorUIData]): Seq[String] = {
     val events = ListBuffer[String]()
-    executorUIDatas.foreach { event =>
-
-      if (event.startTime.isDefined) {
-        val addedEvent =
-          s"""
-               |{
-               |  'className': 'executor added',
-               |  'group': 'executors',
-               |  'start': new Date(${event.startTime.get}),
-               |  'content': '<div>Executor ${event.executorId} added</div>',
-               |  'title': 'Added at ${UIUtils.formatDate(new Date(event.startTime.get))}'
-               |}
-             """.stripMargin
-        events += addedEvent
-      }
+    executorUIDatas.foreach {
+      case (executorId, event) =>
+      val addedEvent =
+        s"""
+           |{
+           |  'className': 'executor added',
+           |  'group': 'executors',
+           |  'start': new Date(${event.startTime}),
+           |  'content': '<div>Executor ${executorId} added</div>',
+           |  'title': 'Added at ${UIUtils.formatDate(new Date(event.startTime))}'
+           |}
+         """.stripMargin
+      events += addedEvent
 
       if (event.finishTime.isDefined) {
         val removedEvent =
@@ -121,7 +108,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
                |  'className': 'executor removed',
                |  'group': 'executors',
                |  'start': new Date(${event.finishTime.get}),
-               |  'content': '<div>Executor ${event.executorId} removed</div>',
+               |  'content': '<div>Executor ${executorId} removed</div>',
                |  'title': 'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
@@ -140,7 +127,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
   private def  makeTimeline(
       stages: Seq[StageInfo],
-      executors: Seq[ExecutorUIData],
+      executors: HashMap[String, ExecutorUIData],
       jobStartTime: Long): Seq[Node] = {
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
@@ -163,20 +150,21 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     val eventArrayAsStr =
       (stageEventJsonAsStrSeq ++ executorsJsonAsStrSeq).mkString("[", ",", "]")
 
-    <div class="control-panel">
-      <div id="job-timeline-zoom-lock">
-        <input type="checkbox" checked="checked"></input>
-        <span>Zoom Lock</span>
+    <div id="job-timeline">
+      <div class="control-panel">
+        <div id="job-timeline-zoom-lock">
+          <input type="checkbox" checked="checked"></input>
+          <span>Zoom Lock</span>
+        </div>
       </div>
     </div> ++
-    <div id="job-timeline"></div> ++
     <script type="text/javascript">
       {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${jobStartTime});")}
     </script>
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val listener = parent.listener
+    val listener = parent.jobProgresslistener
 
     listener.synchronized {
       val parameterId = request.getParameter("id")
@@ -222,18 +210,18 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
       val pendingOrSkippedStagesTable =
         new StageTableBase(pendingOrSkippedStages.sortBy(_.stageId).reverse,
-          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          parent.basePath, parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
+          parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler)
+          parent.jobProgresslistener, isFairScheduler = parent.isFairScheduler)
 
       val shouldShowActiveStages = activeStages.nonEmpty
       val shouldShowPendingStages = !isComplete && pendingOrSkippedStages.nonEmpty
@@ -302,9 +290,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       var content = summary
       val jobStartTime = jobData.submissionTime.get
-      content ++= <h4>Events on Job Timeline</h4> ++
+      val executorListener = parent.executorListener
+      content ++= <h4>Event Timeline</h4> ++
         makeTimeline(activeStages ++ completedStages ++ failedStages,
-          listener.executors, jobStartTime)
+          executorListener.executorIdToData, jobStartTime)
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
