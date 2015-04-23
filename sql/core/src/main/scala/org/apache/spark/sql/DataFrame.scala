@@ -1086,8 +1086,8 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that this doesn't create a hive table, but instead creates a Spark data source table.
-   * Here the metadata is persisted into Hive. But table will be not accessible from the hive.
+   * Also note that while this function can persist the table metadata into Hive's metastore,
+   * the table will NOT be accessible from Hive.
    * @group output
    */
   @Experimental
