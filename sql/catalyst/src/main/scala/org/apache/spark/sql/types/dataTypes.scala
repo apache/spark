@@ -41,6 +41,21 @@ import org.apache.spark.util.Utils
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  private val nonDecimalNameToType = {
+    (Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all)
+      .map(t => t.typeName -> t).toMap
+  }
+
+  /** Given the string representation of a type, return its DataType */
+  private def nameToType(name: String): DataType = {
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    name match {
+      case "decimal" => DecimalType.Unlimited
+      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
+      case other => nonDecimalNameToType(other)
+    }
+  }
+
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
       case JObject(seq) => Some(seq.toList.sortBy(_._1))
@@ -51,7 +66,7 @@ object DataType {
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private def parseDataType(json: JValue): DataType = json match {
     case JString(name) =>
-      PrimitiveType.nameToType(name)
+      nameToType(name)
 
     case JSortedObject(
         ("containsNull", JBool(n)),
@@ -190,13 +205,11 @@ object DataType {
         equalsIgnoreNullability(leftKeyType, rightKeyType) &&
         equalsIgnoreNullability(leftValueType, rightValueType)
       case (StructType(leftFields), StructType(rightFields)) =>
-        leftFields.size == rightFields.size &&
-        leftFields.zip(rightFields)
-          .forall{
-            case (left, right) =>
-              left.name == right.name && equalsIgnoreNullability(left.dataType, right.dataType)
-          }
-      case (left, right) => left == right
+        leftFields.length == rightFields.length &&
+        leftFields.zip(rightFields).forall { case (l, r) =>
+          l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
+        }
+      case (l, r) => l == r
     }
   }
 
@@ -225,12 +238,11 @@ object DataType {
           equalsIgnoreCompatibleNullability(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
-        fromFields.size == toFields.size &&
-          fromFields.zip(toFields).forall {
-            case (fromField, toField) =>
-              fromField.name == toField.name &&
-                (toField.nullable || !fromField.nullable) &&
-                equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              (toField.nullable || !fromField.nullable) &&
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
@@ -255,8 +267,6 @@ abstract class DataType {
 
   /** The default size of a value of this data type. */
   def defaultSize: Int
-
-  def isPrimitive: Boolean = false
 
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
@@ -307,26 +317,6 @@ protected[sql] object NativeType {
 }
 
 
-protected[sql] trait PrimitiveType extends DataType {
-  override def isPrimitive: Boolean = true
-}
-
-
-protected[sql] object PrimitiveType {
-  private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
-  private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
-
-  /** Given the string representation of a type, return its DataType */
-  private[sql] def nameToType(name: String): DataType = {
-    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
-    name match {
-      case "decimal" => DecimalType.Unlimited
-      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType(other)
-    }
-  }
-}
-
 protected[sql] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
@@ -346,7 +336,7 @@ protected[sql] abstract class NativeType extends DataType {
  * @group dataType
  */
 @DeveloperApi
-class StringType private() extends NativeType with PrimitiveType {
+class StringType private() extends NativeType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -373,7 +363,7 @@ case object StringType extends StringType
  * @group dataType
  */
 @DeveloperApi
-class BinaryType private() extends NativeType with PrimitiveType {
+class BinaryType private() extends NativeType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -407,7 +397,7 @@ case object BinaryType extends BinaryType
  *@group dataType
  */
 @DeveloperApi
-class BooleanType private() extends NativeType with PrimitiveType {
+class BooleanType private() extends NativeType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -492,7 +482,7 @@ case object DateType extends DateType
  *
  * @group dataType
  */
-abstract class NumericType extends NativeType with PrimitiveType {
+abstract class NumericType extends NativeType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
