@@ -101,19 +101,6 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   /** Return true if this set contains the specified element. */
   def contains(k: T): Boolean = getPos(k) != INVALID_POS
 
-  /** Return the difference of this set and another set. */
-  def diff(that: OpenHashSet[T]): OpenHashSet[T] = {
-    val result = new OpenHashSet[T]()
-    val iter = this.iterator
-    while(iter.hasNext) {
-      val value = iter.next()
-      if(!that.contains(value)) {
-        result.add(value)
-      }
-    }
-    result
-  }
-
   /**
    * Add an element to the set. If the set is over capacity after the insertion, grow the set
    * and rehash all elements.

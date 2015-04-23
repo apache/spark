@@ -230,7 +230,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             // if this stage is pending, it won't complete, so mark it as "skipped":
             skippedStages += stageInfo
             trimStagesIfNecessary(skippedStages)
-            jobData.skippedStageIndices.add(stageId)
             jobData.numSkippedStages += 1
             jobData.numSkippedTasks += stageInfo.numTasks
           }
@@ -272,7 +271,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        jobData.completedStageIndices.add(stage.stageId)
+        if (!stage.submissionTime.isEmpty) {
+          jobData.completedStageIndices.add(stage.stageId)
+        }
       } else {
         jobData.numFailedStages += 1
       }
@@ -284,6 +285,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val stage = stageSubmitted.stageInfo
     activeStages(stage.stageId) = stage
     pendingStages.remove(stage.stageId)
+
+    // If a stage retries again, it should be removed from completedStageIndices set
+    for (
+      activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
+      jobId <- activeJobsDependentOnStage;
+      jobData <- jobIdToData.get(jobId)
+    ) {
+      if (jobData.completedStageIndices.contains(stage.stageId)) {
+        jobData.completedStageIndices.remove(stage.stageId)
+      }
+    }
+
     val poolName = Option(stageSubmitted.properties).map {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
