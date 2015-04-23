@@ -36,15 +36,32 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
         if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-          right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+          right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold &&
+          canEvaluate(condition.getOrElse(Literal(true)), left) =>
         val semiJoin = joins.BroadcastLeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+        if canEvaluate(condition.getOrElse(Literal(true)), left) =>
         val semiJoin = joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+        if !canEvaluate(condition.getOrElse(Literal(true)), left) =>
+        // leftsemi join see the same rows of right table as one row,
+        // so we dinctinct on right table befor hashjoin
+        val hashJoin =
+          joins.ShuffledHashJoin(
+            leftKeys,
+            rightKeys,
+            joins.BuildRight,
+            planLater(left),
+            planLater(logical.Distinct(right)))
+
+        condition
+          .map(cond => Project(left.output, Filter(cond, hashJoin)))
+          .getOrElse(Project(left.output, hashJoin)) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
         joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
