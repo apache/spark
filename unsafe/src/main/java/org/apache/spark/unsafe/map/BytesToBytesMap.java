@@ -139,17 +139,38 @@ public final class BytesToBytesMap {
 
   private final Location loc;
 
+  private final boolean enablePerfMetrics;
 
-  public BytesToBytesMap(MemoryAllocator allocator, int initialCapacity, double loadFactor) {
+  private long timeSpentResizingMs = 0;
+
+  private int numResizes = 0;
+
+  private long numProbes = 0;
+
+  private long numKeyLookups = 0;
+
+  public BytesToBytesMap(
+      MemoryAllocator allocator,
+      int initialCapacity,
+      double loadFactor,
+      boolean enablePerfMetrics) {
     this.inHeap = allocator instanceof HeapMemoryAllocator;
     this.allocator = allocator;
     this.loadFactor = loadFactor;
     this.loc = new Location();
+    this.enablePerfMetrics = enablePerfMetrics;
     allocate(initialCapacity);
   }
 
   public BytesToBytesMap(MemoryAllocator allocator, int initialCapacity) {
-    this(allocator, initialCapacity, 0.70);
+    this(allocator, initialCapacity, 0.70, false);
+  }
+
+  public BytesToBytesMap(
+      MemoryAllocator allocator,
+      int initialCapacity,
+      boolean enablePerfMetrics) {
+    this(allocator, initialCapacity, 0.70, enablePerfMetrics);
   }
 
   @Override
@@ -205,10 +226,16 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
+    if (enablePerfMetrics) {
+      numKeyLookups++;
+    }
     final int hashcode = HASHER.hashUnsafeWords(keyBaseObject, keyBaseOffset, keyRowLengthBytes);
     int pos = hashcode & mask;
     int step = 1;
     while (true) {
+      if (enablePerfMetrics) {
+        numProbes++;
+      }
       if (!bitset.isSet(pos)) {
         // This is a new key.
         return loc.with(pos, hashcode, false);
@@ -485,9 +512,35 @@ public final class BytesToBytesMap {
   }
 
   /**
+   * Returns the total amount of time spent resizing this map (in milliseconds).
+   */
+  public long getTimeSpentResizingMs() {
+    if (!enablePerfMetrics) {
+      throw new IllegalStateException();
+    }
+    return timeSpentResizingMs;
+  }
+
+
+  /**
+   * Returns the average number of probes per key lookup.
+   */
+  public double getAverageProbesPerLookup() {
+    if (!enablePerfMetrics) {
+      throw new IllegalStateException();
+    }
+    return (1.0 * numProbes) / numKeyLookups;
+  }
+
+  /**
    * Grows the size of the hash table and re-hash everything.
    */
   private void growAndRehash() {
+    long resizeStartTime = -1;
+    if (enablePerfMetrics) {
+      numResizes++;
+      resizeStartTime = System.currentTimeMillis();
+    }
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
     final BitSet oldBitSet = bitset;
@@ -526,6 +579,10 @@ public final class BytesToBytesMap {
     // Deallocate the old data structures.
     allocator.free(oldLongArray.memoryBlock());
     allocator.free(oldBitSet.memoryBlock());
+    if (enablePerfMetrics) {
+      System.out.println("Resizing took " + (System.currentTimeMillis() - resizeStartTime) + " ms");
+      timeSpentResizingMs += System.currentTimeMillis() - resizeStartTime;
+    }
   }
 
   /** Returns the next number greater or equal num that is power of 2. */

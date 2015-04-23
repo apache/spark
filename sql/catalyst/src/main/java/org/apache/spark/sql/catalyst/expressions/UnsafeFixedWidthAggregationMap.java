@@ -68,6 +68,8 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   private long[] groupingKeyConversionScratchSpace = new long[1024 / 8];
 
+  private final boolean enablePerfMetrics;
+
   /**
    * @return true if UnsafeFixedWidthAggregationMap supports grouping keys with the given schema,
    *         false otherwise.
@@ -102,19 +104,22 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
    * @param allocator the memory allocator used to allocate our Unsafe memory structures.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
+   * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
       Row emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
       MemoryAllocator allocator,
-      int initialCapacity) {
+      int initialCapacity,
+      boolean enablePerfMetrics) {
     this.emptyAggregationBuffer =
       convertToUnsafeRow(emptyAggregationBuffer, aggregationBufferSchema);
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.groupingKeyToUnsafeRowConverter = new UnsafeRowConverter(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map = new BytesToBytesMap(allocator, initialCapacity);
+    this.map = new BytesToBytesMap(allocator, initialCapacity, enablePerfMetrics);
+    this.enablePerfMetrics = enablePerfMetrics;
   }
 
   /**
@@ -230,6 +235,15 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public void free() {
     map.free();
+  }
+
+  public void printPerfMetrics() {
+    if (!enablePerfMetrics) {
+      throw new IllegalStateException("Perf metrics not enabled");
+    }
+    System.out.println("Average probes per lookup: " + map.getAverageProbesPerLookup());
+    System.out.println("Time spent resizing (ms): " + map.getTimeSpentResizingMs());
+    System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
   }
 
 }
