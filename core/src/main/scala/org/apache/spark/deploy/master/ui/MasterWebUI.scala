@@ -22,7 +22,7 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone master.
@@ -33,7 +33,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   with UIRoot {
 
   val masterActorRef = master.self
-  val timeout = AkkaUtils.askTimeout(master.conf)
+  val timeout = RpcUtils.askTimeout(master.conf)
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   val masterPage = new MasterPage(this)
@@ -48,10 +48,10 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(JsonRootResource.getJsonServlet(this))
-    attachHandler(
-      createRedirectHandler("/app/kill", "/", masterPage.handleAppKillRequest))
-    attachHandler(
-      createRedirectHandler("/driver/kill", "/", masterPage.handleDriverKillRequest))
+    attachHandler(createRedirectHandler(
+      "/app/kill", "/", masterPage.handleAppKillRequest, httpMethod = "POST"))
+    attachHandler(createRedirectHandler(
+      "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethod = "POST"))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */

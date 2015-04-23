@@ -22,7 +22,8 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{HasInputCols, HasOutputCol, ParamMap}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -44,7 +45,7 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
@@ -54,19 +55,20 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
       schema(c).dataType match {
         case DoubleType => UnresolvedAttribute(c)
         case t if t.isInstanceOf[VectorUDT] => UnresolvedAttribute(c)
-        case _: NativeType => Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
+        case _: NumericType | BooleanType =>
+          Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
       }
     }
     dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
+    val map = extractParamMap(paramMap)
     val inputColNames = map(inputCols)
     val outputColName = map(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
     inputDataTypes.foreach {
-      case _: NativeType =>
+      case _: NumericType | BooleanType =>
       case t if t.isInstanceOf[VectorUDT] =>
       case other =>
         throw new IllegalArgumentException(s"Data type $other is not supported.")

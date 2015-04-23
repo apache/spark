@@ -54,38 +54,14 @@ infer_type <- function(x) {
       # StructType
       types <- lapply(x, infer_type)
       fields <- lapply(1:length(x), function(i) {
-        list(name = names[[i]], type = types[[i]], nullable = TRUE)
+        structField(names[[i]], types[[i]], TRUE)
       })
-      list(type = "struct", fields = fields)
+      do.call(structType, fields)
     }
   } else if (length(x) > 1) {
     list(type = "array", elementType = type, containsNull = TRUE)
   } else {
     type
-  }
-}
-
-#' dump the schema into JSON string
-tojson <- function(x) {
-  if (is.list(x)) {
-    names <- names(x)
-    if (!is.null(names)) {
-      items <- lapply(names, function(n) {
-        safe_n <- gsub('"', '\\"', n)
-        paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
-      })
-      d <- paste(items, collapse = ', ')
-      paste('{', d, '}', sep = '')
-    } else {
-      l <- paste(lapply(x, tojson), collapse = ', ')
-      paste('[', l, ']', sep = '')
-    }
-  } else if (is.character(x)) {
-    paste('"', x, '"', sep = '')
-  } else if (is.logical(x)) {
-    if (x) "true" else "false"
-  } else {
-    stop(paste("unexpected type:", class(x)))
   }
 }
 
@@ -134,7 +110,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || is.null(names(schema))) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
     row <- first(rdd)
     names <- if (is.null(schema)) {
       names(row)
@@ -143,7 +119,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
     }
     if (is.null(names)) {
       names <- lapply(1:length(row), function(x) {
-       paste("_", as.character(x), sep = "")
+        paste("_", as.character(x), sep = "")
       })
     }
 
@@ -159,20 +135,18 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
 
     types <- lapply(row, infer_type)
     fields <- lapply(1:length(row), function(i) {
-      list(name = names[[i]], type = types[[i]], nullable = TRUE)
+      structField(names[[i]], types[[i]], TRUE)
     })
-    schema <- list(type = "struct", fields = fields)
+    schema <- do.call(structType, fields)
   }
 
-  stopifnot(class(schema) == "list")
-  stopifnot(schema$type == "struct")
-  stopifnot(class(schema$fields) == "list")
-  schemaString <- tojson(schema)
+  stopifnot(class(schema) == "structType")
+  # schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schemaString, sqlCtx)
+                     srdd, schema$jobj, sqlCtx)
   dataFrame(sdf)
 }
 

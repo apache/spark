@@ -25,6 +25,8 @@ import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import com.google.common.reflect.TypeToken
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -130,16 +132,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.apply(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
 
   @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback(_))
+    new SparkSQLParser(fallback.parse(_))
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
-    ddlParser(sql, false).getOrElse(sqlParser(sql))
+    ddlParser.parse(sql, false).getOrElse(sqlParser.parse(sql))
   }
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
@@ -873,8 +875,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * passed to this function.
    *
    * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` to retrieve
-   * @param upperBound the maximum value of `columnName` to retrieve
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    *
@@ -1081,7 +1083,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) :: Nil
+      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
   }
 
   protected[sql] def openSession(): SQLSession = {
@@ -1118,12 +1120,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
     def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
-    lazy val analyzed: LogicalPlan = analyzer(logical)
+    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
-    lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
+    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
@@ -1132,7 +1134,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
+    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[Row] = executedPlan.execute()
@@ -1195,6 +1197,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case FloatType => true
       case DateType => true
       case TimestampType => true
+      case StringType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
       case StructType(_) => true
@@ -1221,56 +1224,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = inferDataType(beanClass)
+    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }
   }
 
-  /**
-   * Infers the corresponding SQL data type of a Java class.
-   * @param clazz Java class
-   * @return (SQL data type, nullable)
-   */
-  private def inferDataType(clazz: Class[_]): (DataType, Boolean) = {
-    // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
-    clazz match {
-      case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
-
-      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
-      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
-      case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
-      case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
-      case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
-      case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
-      case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
-      case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
-
-      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
-      case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
-      case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
-      case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
-      case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
-      case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
-      case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
-
-      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
-      case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
-      case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-
-      case c: Class[_] if c.isArray =>
-        val (dataType, nullable) = inferDataType(c.getComponentType)
-        (ArrayType(dataType, nullable), true)
-
-      case _ =>
-        val beanInfo = Introspector.getBeanInfo(clazz)
-        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
-        val fields = properties.map { property =>
-          val (dataType, nullable) = inferDataType(property.getPropertyType)
-          new StructField(property.getName, dataType, nullable)
-        }
-        (new StructType(fields), true)
-    }
-  }
 }
+
+
