@@ -37,13 +37,14 @@ import org.apache.spark.util.Distribution
 private[ui] case class TimelineUIData(divId: String, data: Seq[(Long, _)], minX: Long, maxX: Long,
     minY: Long, maxY: Long, unitY: String) {
 
-  def toHtmlAndJs: (Seq[Node], String) = {
+  def toHtml(jsCollector: JsCollector): Seq[Node] = {
     val jsForData = data.map { case (x, y) =>
       s"""{"x": $x, "y": $y}"""
     }.mkString("[", ",", "]")
-
-    (<div id={divId}></div>,
+    jsCollector.addStatement(
       s"drawTimeline('#$divId', $jsForData, $minX, $maxX, $minY, $maxY, '$unitY');")
+
+    <div id={divId}></div>
   }
 }
 
@@ -57,11 +58,12 @@ private[ui] case class TimelineUIData(divId: String, data: Seq[(Long, _)], minX:
 private[ui] case class DistributionUIData(
     divId: String, data: Seq[_], minY: Long, maxY: Long, unitY: String) {
 
-  def toHtmlAndJs: (Seq[Node], String) = {
+  def toHtml(jsCollector: JsCollector): Seq[Node] = {
     val jsForData = data.mkString("[", ",", "]")
+    jsCollector.addPreparedStatement(s"prepareDistribution($jsForData, $minY, $maxY);")
+    jsCollector.addStatement(s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY');")
 
-    (<div id={divId}></div>,
-      s"drawDistribution('#$divId', $jsForData, $minY, $maxY, '$unitY');")
+    <div id={divId}></div>
   }
 }
 
@@ -149,7 +151,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
 
-    val jsCollector = ArrayBuffer[String]()
+    val jsCollector = new JsCollector
 
     // Use the max value of "schedulingDelay", "processingTime", and "totalDelay" to make the
     // Y axis ranges same.
@@ -179,8 +181,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxBatchTime,
         minEventRate,
         maxEventRate,
-        "events/sec").toHtmlAndJs
-    jsCollector += timelineDataForEventRateOfAllReceivers._2
+        "events/sec").toHtml(jsCollector)
 
     val distributionDataForEventRateOfAllReceivers =
       DistributionUIData(
@@ -188,8 +189,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         eventRateForAllReceivers.data.map(_._2),
         minEventRate,
         maxEventRate,
-        "events/sec").toHtmlAndJs
-    jsCollector += distributionDataForEventRateOfAllReceivers._2
+        "events/sec").toHtml(jsCollector)
 
     val timelineDataForSchedulingDelay =
       TimelineUIData(
@@ -199,8 +199,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxBatchTime,
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += timelineDataForSchedulingDelay._2
+        "ms").toHtml(jsCollector)
 
     val distributionDataForSchedulingDelay =
       DistributionUIData(
@@ -208,8 +207,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         schedulingDelay.data.map(_._2),
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += distributionDataForSchedulingDelay._2
+        "ms").toHtml(jsCollector)
 
     val timelineDataForProcessingTime =
       TimelineUIData(
@@ -219,8 +217,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxBatchTime,
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += timelineDataForProcessingTime._2
+        "ms").toHtml(jsCollector)
 
     val distributionDataForProcessingTime =
       DistributionUIData(
@@ -228,8 +225,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         processingTime.data.map(_._2),
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += distributionDataForProcessingTime._2
+        "ms").toHtml(jsCollector)
 
     val timelineDataForTotalDelay =
       TimelineUIData(
@@ -239,8 +235,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxBatchTime,
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += timelineDataForTotalDelay._2
+        "ms").toHtml(jsCollector)
 
     val distributionDataForTotalDelay =
       DistributionUIData(
@@ -248,8 +243,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         totalDelay.data.map(_._2),
         minTime,
         maxTime,
-        "ms").toHtmlAndJs
-    jsCollector += distributionDataForTotalDelay._2
+        "ms").toHtml(jsCollector)
 
     val table =
       // scalastyle:off
@@ -266,8 +260,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
             </div>
             <div>Avg: {eventRateForAllReceivers.avg.map(_.formatted("%.2f")).getOrElse(emptyCell)} events/sec</div>
           </td>
-          <td>{timelineDataForEventRateOfAllReceivers._1}</td>
-          <td>{distributionDataForEventRateOfAllReceivers._1}</td>
+          <td>{timelineDataForEventRateOfAllReceivers}</td>
+          <td>{distributionDataForEventRateOfAllReceivers}</td>
         </tr>
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
@@ -279,39 +273,34 @@ private[ui] class StreamingPage(parent: StreamingTab)
             <div><strong>Scheduling Delay</strong></div>
             <div>Avg: {formatDurationOption(schedulingDelay.avg)}</div>
           </td>
-          <td>{timelineDataForSchedulingDelay._1}</td>
-          <td>{distributionDataForSchedulingDelay._1}</td>
+          <td>{timelineDataForSchedulingDelay}</td>
+          <td>{distributionDataForSchedulingDelay}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Processing Time</strong></div>
             <div>Avg: {formatDurationOption(processingTime.avg)}</div>
           </td>
-          <td>{timelineDataForProcessingTime._1}</td>
-          <td>{distributionDataForProcessingTime._1}</td>
+          <td>{timelineDataForProcessingTime}</td>
+          <td>{distributionDataForProcessingTime}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Total Delay</strong></div>
             <div>Avg: {formatDurationOption(totalDelay.avg)}</div>
           </td>
-          <td>{timelineDataForTotalDelay._1}</td>
-          <td>{distributionDataForTotalDelay._1}</td>
+          <td>{timelineDataForTotalDelay}</td>
+          <td>{distributionDataForTotalDelay}</td>
         </tr>
       </tbody>
     </table>
     // scalastyle:on
 
-    val js =
-      s"""
-         |$$(document).ready(function(){
-         |    ${jsCollector.mkString("\n")}
-         |});""".stripMargin
-    table ++ <script>{Unparsed(js)}</script>
+    table ++ jsCollector.toHtml
   }
 
   private def generateInputReceiversTable(
-      jsCollector: ArrayBuffer[String],
+      jsCollector: JsCollector,
       minX: Long,
       maxX: Long,
       minY: Long,
@@ -337,7 +326,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   private def generateInputReceiverRow(
-      jsCollector: ArrayBuffer[String],
+      jsCollector: JsCollector,
       receiverId: Int,
       distribution: Option[Distribution],
       minX: Long,
@@ -367,8 +356,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         maxX,
         minY,
         maxY,
-        "events/sec").toHtmlAndJs
-    jsCollector += timelineForEventRate._2
+        "events/sec").toHtml(jsCollector)
 
     val distributionForEventsRate =
       DistributionUIData(
@@ -376,8 +364,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         receivedRecords.map(_._2),
         minY,
         maxY,
-        "events/sec").toHtmlAndJs
-    jsCollector += distributionForEventsRate._2
+        "events/sec").toHtml(jsCollector)
 
     // scalastyle:off
     <tr>
@@ -394,9 +381,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
       <tr>
         <td colspan="3">
-          {timelineForEventRate._1}
+          {timelineForEventRate}
         </td>
-        <td>{distributionForEventsRate._1}</td>
+        <td>{distributionForEventsRate}</td>
       </tr>
     // scalastyle:on
   }
@@ -433,5 +420,29 @@ private[ui] class StreamingPage(parent: StreamingTab)
 private object StreamingPage {
   val BLACK_RIGHT_TRIANGLE_HTML = "&#9654;"
   val BLACK_DOWN_TRIANGLE_HTML = "&#9660;"
+}
+
+private[ui] class JsCollector {
+  private val preparedStatements = ArrayBuffer[String]()
+  private val statements = ArrayBuffer[String]()
+
+  def addPreparedStatement(js: String): Unit = {
+    preparedStatements += js
+  }
+
+  def addStatement(js: String): Unit = {
+    statements += js
+  }
+
+  def toHtml: Seq[Node] = {
+    val js =
+      s"""
+         |$$(document).ready(function(){
+         |    ${preparedStatements.mkString("\n")}
+         |    ${statements.mkString("\n")}
+         |});""".stripMargin
+
+   <script>{Unparsed(js)}</script>
+  }
 }
 

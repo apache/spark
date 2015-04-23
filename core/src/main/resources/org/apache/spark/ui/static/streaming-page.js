@@ -16,6 +16,10 @@
  */
 
 
+var globalMinX = 0;
+var globalMaxX = 0;
+var binCount = 10;
+
 // An invisible div to show details of a point in the graph
 var graphTooltip = d3.select("body").append("div")
     .style("position", "absolute")
@@ -137,14 +141,14 @@ function drawDistribution(id, values, minY, maxY, unitY) {
     var height = 150 - margin.top - margin.bottom;
 
     //var binCount = values.length > 100 ? 100 : values.length;
-    var binCount = 10;
     var formatBinValue = d3.format(",.2f");
 
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
     var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
 
     var x = d3.scale.linear()
-        .domain([0, d3.max(data, function(d) { return d.y; })])
+        .domain([globalMinX, globalMaxX])
+        //.domain([0, d3.max(data, function(d) { return d.y; })])
         .range([0, width]);
 
     var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(5);
@@ -196,4 +200,10 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                   .on('mouseout',  function() {
                       hideGraphTooltip();
                   });
+}
+
+function prepareDistribution(values, minY, maxY) {
+    var data = d3.layout.histogram().range([minY, maxY]).bins(binCount)(values);
+    var maxBarSize = d3.max(data, function(d) { return d.y; });
+    globalMaxX = maxBarSize > globalMaxX? maxBarSize : globalMaxX;
 }
