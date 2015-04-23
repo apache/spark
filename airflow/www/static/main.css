@@ -1,4 +1,10 @@
 body { padding-top: 70px; }
+a.navbar-brand span {
+    color: white;
+}
+a.navbar-brand {
+    cursor: default;
+}
 span.status_square {
     width:10px;
     height:10px;

@@ -250,11 +250,15 @@ class Airflow(BaseView):
                 "Data has been truncated to {0}"
                 " rows. Expect incomplete results.").format(CHART_LIMIT)
 
+        def date_handler(obj):
+            return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+
         if not payload['error'] and len(df) == 0:
             payload['error'] += "Empty result set. "
         elif (
                 not payload['error'] and
                 chart.sql_layout == 'series' and
+                chart.chart_type != "datatable" and
                 len(df.columns) < 3):
             payload['error'] += "SQL needs to return at least 3 columns. "
         elif (
@@ -264,9 +268,10 @@ class Airflow(BaseView):
             payload['error'] += "SQL needs to return at least 2 columns. "
         elif not payload['error']:
             import numpy as np
+            chart_type = chart.chart_type
 
             data = None
-            if chart.chart_type == "datatable":
+            if chart_type == "datatable":
                 chart.show_datatable = True
             if chart.show_datatable:
                 data = df.to_dict(orient="split")
@@ -286,7 +291,15 @@ class Airflow(BaseView):
 
             series = []
             colorAxis = None
-            if chart.chart_type in ('para',):
+            if chart_type == 'datatable':
+                payload['data'] = data
+                payload['state'] = 'SUCCESS'
+                return Response(
+                    response=json.dumps(payload, indent=4, default=date_handler),
+                    status=200,
+                    mimetype="application/json")
+
+            elif chart_type == 'para':
                 df.rename(columns={
                     df.columns[0]: 'name',
                     df.columns[1]: 'group',
@@ -296,7 +309,7 @@ class Airflow(BaseView):
                     status=200,
                     mimetype="application/text")
 
-            elif chart.chart_type == 'heatmap':
+            elif chart_type == 'heatmap':
                 color_perc_lbound = float(
                     request.args.get('color_perc_lbound', 0))
                 color_perc_rbound = float(
@@ -370,40 +383,39 @@ class Airflow(BaseView):
                     'max': 2200,
                 }
             else:
-                if chart.sql_layout == 'series':
-                    # User provides columns (series, x, y)
-                    xaxis_label = df.columns[1]
-                    yaxis_label = df.columns[2]
-                    df[df.columns[2]] = df[df.columns[2]].astype(np.float)
-                    df = df.pivot_table(
-                        index=df.columns[1],
-                        columns=df.columns[0],
-                        values=df.columns[2], aggfunc=np.sum)
-                else:
-                    # User provides columns (x, y, metric1, metric2, ...)
-                    xaxis_label = df.columns[0]
-                    yaxis_label = 'y'
-                    df.index = df[df.columns[0]]
-                    df = df.sort(df.columns[0])
-                    del df[df.columns[0]]
+                    if chart.sql_layout == 'series':
+                        # User provides columns (series, x, y)
+                        xaxis_label = df.columns[1]
+                        yaxis_label = df.columns[2]
+                        df[df.columns[2]] = df[df.columns[2]].astype(np.float)
+                        df = df.pivot_table(
+                            index=df.columns[1],
+                            columns=df.columns[0],
+                            values=df.columns[2], aggfunc=np.sum)
+                    else:
+                        # User provides columns (x, y, metric1, metric2, ...)
+                        xaxis_label = df.columns[0]
+                        yaxis_label = 'y'
+                        df.index = df[df.columns[0]]
+                        df = df.sort(df.columns[0])
+                        del df[df.columns[0]]
+                        for col in df.columns:
+                            df[col] = df[col].astype(np.float)
+
                     for col in df.columns:
-                        df[col] = df[col].astype(np.float)
+                        series.append({
+                            'name': col,
+                            'data': [
+                                (i, v)
+                                for i, v in df[col].iteritems() if not np.isnan(v)]
+                        })
+                    series = [serie for serie in sorted(
+                        series, key=lambda s: s['data'][0][1], reverse=True)]
 
-                for col in df.columns:
-                    series.append({
-                        'name': col,
-                        'data': [
-                            (i, v)
-                            for i, v in df[col].iteritems() if not np.isnan(v)]
-                    })
-                series = [serie for serie in sorted(
-                    series, key=lambda s: s['data'][0][1], reverse=True)]
-
-            chart_type = chart.chart_type
-            if chart.chart_type == "stacked_area":
+            if chart_type == "stacked_area":
                 stacking = "normal"
                 chart_type = 'area'
-            elif chart.chart_type == "percent_area":
+            elif chart_type == "percent_area":
                 stacking = "percent"
                 chart_type = 'area'
             else:
@@ -447,8 +459,6 @@ class Airflow(BaseView):
             payload['data'] = data
             payload['request_dict'] = request_dict
 
-        def date_handler(obj):
-            return obj.isoformat() if hasattr(obj, 'isoformat') else obj
 
         return Response(
             response=json.dumps(payload, indent=4, default=date_handler),
@@ -467,6 +477,7 @@ class Airflow(BaseView):
         if chart.chart_type == 'para':
             return self.render('airflow/para/para.html', chart=chart)
 
+        sql = ""
         if chart.show_sql:
             sql = Markup(highlight(
                 chart.sql,
