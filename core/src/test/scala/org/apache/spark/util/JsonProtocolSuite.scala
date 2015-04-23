@@ -275,9 +275,11 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
+    // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
     val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
+      .removeField({ _._1 == "App Attempt ID" })
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 

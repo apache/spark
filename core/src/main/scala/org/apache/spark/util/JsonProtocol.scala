@@ -195,7 +195,7 @@ private[spark] object JsonProtocol {
     ("App ID" -> applicationStart.appId.map(JString(_)).getOrElse(JNothing)) ~
     ("Timestamp" -> applicationStart.time) ~
     ("User" -> applicationStart.sparkUser) ~
-    ("appAttemptId" -> applicationStart.appAttemptId.map(JString(_)).getOrElse(JNothing))
+    ("App Attempt ID" -> applicationStart.appAttemptId.map(JString(_)).getOrElse(JNothing))
   }
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
