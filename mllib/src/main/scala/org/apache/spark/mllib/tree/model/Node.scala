@@ -76,6 +76,31 @@ class Node (
   }
 
   /**
+   * predict value and probability if node is not leaf (classification only)
+   * @param features feature value
+   * @return predict
+   */
+  def probability(features: Vector) : Predict = {
+    if (isLeaf) {
+      predict
+    } else{
+      if (split.get.featureType == Continuous) {
+        if (features(split.get.feature) <= split.get.threshold) {
+          leftNode.get.probability(features)
+        } else {
+          rightNode.get.probability(features)
+        }
+      } else {
+        if (split.get.categories.contains(features(split.get.feature))) {
+          leftNode.get.probability(features)
+        } else {
+          rightNode.get.probability(features)
+        }
+      }
+    }
+  }
+
+  /**
    * predict value if node is not leaf
    * @param features feature value
    * @return predicted value
