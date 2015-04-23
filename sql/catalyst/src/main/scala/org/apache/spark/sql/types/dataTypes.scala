@@ -299,7 +299,7 @@ class NullType private() extends DataType {
 case object NullType extends NullType
 
 
-protected[spark] object NativeType {
+protected[sql] object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
@@ -327,7 +327,7 @@ protected[sql] object PrimitiveType {
   }
 }
 
-protected[spark] abstract class NativeType extends DataType {
+protected[sql] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
