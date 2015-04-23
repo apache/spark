@@ -41,14 +41,14 @@ case class SimpleFSBasedRelation
     (val sqlContext: SQLContext)
   extends FSBasedRelation {
 
+  class SimpleOutputWriter extends OutputWriter {
+    override def write(row: Row): Unit = TestResult.writtenRows += row
+  }
+
   override val path = parameter("path")
 
   override def dataSchema: StructType =
     DataType.fromJson(parameter("schema")).asInstanceOf[StructType]
-
-  override def newOutputWriter(path: String): OutputWriter = new OutputWriter {
-    override def write(row: Row): Unit = TestResult.writtenRows += row
-  }
 
   override def buildScan(
       requiredColumns: Array[String],
@@ -67,6 +67,8 @@ case class SimpleFSBasedRelation
 
     Option(TestResult.rowsToRead).getOrElse(sqlContext.emptyResult)
   }
+
+  override def outputWriterClass: Class[_ <: OutputWriter] = classOf[SimpleOutputWriter]
 }
 
 object TestResult {

@@ -314,7 +314,7 @@ abstract class FSBasedRelation extends BaseRelation {
   def dataSchema: StructType
 
   /**
-   * Builds an `RDD[Row` containing all rows within this relation.
+   * Builds an `RDD[Row]` containing all rows within this relation.
    *
    * @param inputPaths Data files to be read. If the underlying relation is partitioned, only data
    *        files within required partition directories are included.
@@ -325,7 +325,7 @@ abstract class FSBasedRelation extends BaseRelation {
   }
 
   /**
-   * Builds an `RDD[Row` containing all rows within this relation.
+   * Builds an `RDD[Row]` containing all rows within this relation.
    *
    * @param requiredColumns Required columns.
    * @param inputPaths Data files to be read. If the underlying relation is partitioned, only data
