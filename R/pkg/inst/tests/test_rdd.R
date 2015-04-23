@@ -643,3 +643,8 @@ test_that("collectAsMap() on a pairwise RDD", {
   vals <- collectAsMap(rdd)
   expect_equal(vals, list(`1` = "a", `2` = "b"))
 })
+
+test_that("show()", {
+  rdd <- parallelize(sc, list())    
+  expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
+})
