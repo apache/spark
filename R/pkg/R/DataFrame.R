@@ -790,9 +790,12 @@ setMethod("$", signature(x = "DataFrame"),
 
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
-            stopifnot(class(value) == "Column")
+            stopifnot(class(value) == "Column" || is.null(value))
             cols <- columns(x)
             if (name %in% cols) {
+              if (is.null(value)) {
+                cols <- Filter(function(c) { c != name }, cols)
+              }
               cols <- lapply(cols, function(c) {
                 if (c == name) {
                   alias(value, name)
@@ -802,6 +805,9 @@ setMethod("$<-", signature(x = "DataFrame"),
               })
               nx <- select(x, cols)
             } else {
+              if (is.null(value)) {
+                return(x)
+              }
               nx <- withColumn(x, name, value)
             }
             x@sdf <- nx@sdf
