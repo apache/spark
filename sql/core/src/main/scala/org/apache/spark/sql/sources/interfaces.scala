@@ -93,13 +93,13 @@ trait SchemaRelationProvider {
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
  *
- * The difference between a [[RelationProvider]] and a [[PartitionedSchemaRelationProvider]] is
+ * The difference between a [[RelationProvider]] and a [[FSBasedRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
  * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
- * and [[PartitionedSchemaRelationProvider]] if it can support schema inference, user-specified
+ * and [[FSBasedRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
  */
-trait PartitionedSchemaRelationProvider {
+trait FSBasedRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
