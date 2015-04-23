@@ -17,13 +17,11 @@
 
 package org.apache.spark.streaming.scheduler
 
-
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
-import akka.actor._
-
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
 
@@ -36,7 +34,7 @@ private[streaming] case class RegisterReceiver(
     streamId: Int,
     typ: String,
     host: String,
-    receiverActor: ActorRef
+    receiverEndpoint: RpcEndpointRef
   ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends ReceiverTrackerMessage
@@ -67,19 +65,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   )
   private val listenerBus = ssc.scheduler.listenerBus
 
-  // actor is created when generator starts.
+  // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
-  private var actor: ActorRef = null
+  private var endpoint: RpcEndpointRef = null
 
-  /** Start the actor and receiver execution thread. */
+  /** Start the endpoint and receiver execution thread. */
   def start(): Unit = synchronized {
-    if (actor != null) {
+    if (endpoint != null) {
       throw new SparkException("ReceiverTracker already started")
     }
 
     if (!receiverInputStreams.isEmpty) {
-      actor = ssc.env.actorSystem.actorOf(Props(new ReceiverTrackerActor),
-        "ReceiverTracker")
+      endpoint = ssc.env.rpcEnv.setupEndpoint(
+        "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
       if (!skipReceiverLaunch) receiverExecutor.start()
       logInfo("ReceiverTracker started")
     }
@@ -87,13 +85,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (!receiverInputStreams.isEmpty && actor != null) {
+    if (!receiverInputStreams.isEmpty && endpoint != null) {
       // First, stop the receivers
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
-      // Finally, stop the actor
-      ssc.env.actorSystem.stop(actor)
-      actor = null
+      // Finally, stop the endpoint
+      ssc.env.rpcEnv.stop(endpoint)
+      endpoint = null
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
     }
@@ -129,8 +127,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     // Signal the receivers to delete old block data
     if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
-      receiverInfo.values.flatMap { info => Option(info.actor) }
-        .foreach { _ ! CleanupOldBlocks(cleanupThreshTime) }
+      receiverInfo.values.flatMap { info => Option(info.endpoint) }
+        .foreach { _.send(CleanupOldBlocks(cleanupThreshTime)) }
     }
   }
 
@@ -139,23 +137,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       streamId: Int,
       typ: String,
       host: String,
-      receiverActor: ActorRef,
-      sender: ActorRef
+      receiverEndpoint: RpcEndpointRef,
+      senderAddress: RpcAddress
     ) {
     if (!receiverInputStreamIds.contains(streamId)) {
       throw new SparkException("Register received for unexpected id " + streamId)
     }
     receiverInfo(streamId) = ReceiverInfo(
-      streamId, s"${typ}-${streamId}", receiverActor, true, host)
+      streamId, s"${typ}-${streamId}", receiverEndpoint, true, host)
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
-    logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
+    logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
   }
 
   /** Deregister a receiver */
   private def deregisterReceiver(streamId: Int, message: String, error: String) {
     val newReceiverInfo = receiverInfo.get(streamId) match {
       case Some(oldInfo) =>
-        oldInfo.copy(actor = null, active = false, lastErrorMessage = message, lastError = error)
+        oldInfo.copy(endpoint = null, active = false, lastErrorMessage = message, lastError = error)
       case None =>
         logWarning("No prior receiver info")
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
@@ -199,19 +197,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receivedBlockTracker.hasUnallocatedReceivedBlocks
   }
 
-  /** Actor to receive messages from the receivers. */
-  private class ReceiverTrackerActor extends Actor {
+  /** RpcEndpoint to receive messages from the receivers. */
+  private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
+
     override def receive: PartialFunction[Any, Unit] = {
-      case RegisterReceiver(streamId, typ, host, receiverActor) =>
-        registerReceiver(streamId, typ, host, receiverActor, sender)
-        sender ! true
-      case AddBlock(receivedBlockInfo) =>
-        sender ! addBlock(receivedBlockInfo)
       case ReportError(streamId, message, error) =>
         reportError(streamId, message, error)
+    }
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case RegisterReceiver(streamId, typ, host, receiverEndpoint) =>
+        registerReceiver(streamId, typ, host, receiverEndpoint, context.sender.address)
+        context.reply(true)
+      case AddBlock(receivedBlockInfo) =>
+        context.reply(addBlock(receivedBlockInfo))
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
-        sender ! true
+        context.reply(true)
     }
   }
 
@@ -314,8 +316,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     /** Stops the receivers. */
     private def stopReceivers() {
       // Signal the receivers to stop
-      receiverInfo.values.flatMap { info => Option(info.actor)}
-                         .foreach { _ ! StopReceiver }
+      receiverInfo.values.flatMap { info => Option(info.endpoint)}
+                         .foreach { _.send(StopReceiver) }
       logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
     }
   }
