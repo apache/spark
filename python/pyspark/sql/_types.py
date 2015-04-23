@@ -17,6 +17,7 @@
 
 import sys
 import decimal
+import time
 import datetime
 import keyword
 import warnings
@@ -29,6 +30,9 @@ from operator import itemgetter
 if sys.version >= "3":
     long = int
     unicode = str
+
+from py4j.protocol import register_input_converter
+from py4j.java_gateway import JavaClass
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -1235,6 +1239,29 @@ class Row(tuple):
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join(self)
+
+
+class DateConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.date)
+
+    def convert(self, obj, gateway_client):
+        Date = JavaClass("java.sql.Date", gateway_client)
+        return Date.valueOf(obj.strftime("%Y-%m-%d"))
+
+
+class DatetimeConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, datetime.datetime)
+
+    def convert(self, obj, gateway_client):
+        Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
+        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
+
+
+# datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeConverter())
+register_input_converter(DateConverter())
 
 
 def _test():

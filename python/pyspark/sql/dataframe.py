@@ -25,8 +25,6 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from py4j.java_collections import ListConverter, MapConverter
-
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
@@ -186,9 +184,7 @@ class DataFrame(object):
             source = self.sql_ctx.getConf("spark.sql.sources.default",
                                           "org.apache.spark.sql.parquet")
         jmode = self._java_save_mode(mode)
-        joptions = MapConverter().convert(options,
-                                          self.sql_ctx._sc._gateway._gateway_client)
-        self._jdf.saveAsTable(tableName, source, jmode, joptions)
+        self._jdf.saveAsTable(tableName, source, jmode, options)
 
     def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
@@ -211,9 +207,7 @@ class DataFrame(object):
             source = self.sql_ctx.getConf("spark.sql.sources.default",
                                           "org.apache.spark.sql.parquet")
         jmode = self._java_save_mode(mode)
-        joptions = MapConverter().convert(options,
-                                          self._sc._gateway._gateway_client)
-        self._jdf.save(source, jmode, joptions)
+        self._jdf.save(source, jmode, options)
 
     @property
     def schema(self):
@@ -465,16 +459,23 @@ class DataFrame(object):
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: Join expression
+        :param joinExprs: a string for join column name, or a join expression (Column).
+            If joinExprs is a string indicating the name of the join column,
+            the column must exist on both sides, and this performs an inner equi-join.
         :param joinType: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name').select(df.name, df2.height).collect()
+        [Row(name=u'Bob', height=85)]
         """
 
         if joinExprs is None:
             jdf = self._jdf.join(other._jdf)
+        elif isinstance(joinExprs, basestring):
+            jdf = self._jdf.join(other._jdf, joinExprs)
         else:
             assert isinstance(joinExprs, Column), "joinExprs should be Column"
             if joinType is None:
@@ -819,7 +820,6 @@ class DataFrame(object):
             value = float(value)
 
         if isinstance(value, dict):
-            value = MapConverter().convert(value, self.sql_ctx._sc._gateway._gateway_client)
             return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
         elif subset is None:
             return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
@@ -932,9 +932,7 @@ class GroupedData(object):
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jmap = MapConverter().convert(exprs[0],
-                                          self.sql_ctx._sc._gateway._gateway_client)
-            jdf = self._jdf.agg(jmap)
+            jdf = self._jdf.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -1040,8 +1038,7 @@ def _to_seq(sc, cols, converter=None):
     """
     if converter:
         cols = [converter(c) for c in cols]
-    jcols = ListConverter().convert(cols, sc._gateway._gateway_client)
-    return sc._jvm.PythonUtils.toSeq(jcols)
+    return sc._jvm.PythonUtils.toSeq(cols)
 
 
 def _unary_op(name, doc="unary operator"):

@@ -44,6 +44,13 @@ import org.apache.spark.sql.{SQLContext, DataFrame}
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
  * }}}
+ * Note that Decision Trees can take a large amount of memory.  If the run-example command above
+ * fails, try running via spark-submit and specifying the amount of memory as at least 1g.
+ * For local mode, run
+ * {{{
+ * ./bin/spark-submit --class org.apache.spark.examples.ml.DecisionTreeExample --driver-memory 1g
+ *   [examples JAR path] [options]
+ * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object DecisionTreeExample {
@@ -70,7 +77,7 @@ object DecisionTreeExample {
     val parser = new OptionParser[Params]("DecisionTreeExample") {
       head("DecisionTreeExample: an example decision tree app.")
       opt[String]("algo")
-        .text(s"algorithm (Classification, Regression), default: ${defaultParams.algo}")
+        .text(s"algorithm (classification, regression), default: ${defaultParams.algo}")
         .action((x, c) => c.copy(algo = x))
       opt[Int]("maxDepth")
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
@@ -222,18 +229,23 @@ object DecisionTreeExample {
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
-      val labelIndexer = new StringIndexer().setInputCol("labelString").setOutputCol(labelColName)
+      val labelIndexer = new StringIndexer()
+        .setInputCol("labelString")
+        .setOutputCol(labelColName)
       stages += labelIndexer
     }
     // (2) Identify categorical features using VectorIndexer.
     //     Features with more than maxCategories values will be treated as continuous.
-    val featuresIndexer = new VectorIndexer().setInputCol("features")
-      .setOutputCol("indexedFeatures").setMaxCategories(10)
+    val featuresIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(10)
     stages += featuresIndexer
     // (3) Learn DecisionTree
     val dt = algo match {
       case "classification" =>
-        new DecisionTreeClassifier().setFeaturesCol("indexedFeatures")
+        new DecisionTreeClassifier()
+          .setFeaturesCol("indexedFeatures")
           .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)
@@ -242,7 +254,8 @@ object DecisionTreeExample {
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
       case "regression" =>
-        new DecisionTreeRegressor().setFeaturesCol("indexedFeatures")
+        new DecisionTreeRegressor()
+          .setFeaturesCol("indexedFeatures")
           .setLabelCol(labelColName)
           .setMaxDepth(params.maxDepth)
           .setMaxBins(params.maxBins)

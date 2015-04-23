@@ -117,7 +117,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this.asInstanceOf[this.type]
+    this
   }
 
   /** @group getParam */
@@ -283,7 +283,7 @@ private[ml] trait TreeRegressorParams extends Params {
   def getImpurity: String = getOrDefault(impurity)
 
   /** Convert new impurity to old impurity. */
-  protected def getOldImpurity: OldImpurity = {
+  private[ml] def getOldImpurity: OldImpurity = {
     getImpurity match {
       case "variance" => OldVariance
       case _ =>

@@ -38,7 +38,7 @@ sealed trait Split extends Serializable {
   private[tree] def toOld: OldSplit
 }
 
-private[ml] object Split {
+private[tree] object Split {
 
   def fromOld(oldSplit: OldSplit, categoricalFeatures: Map[Int, Int]): Split = {
     oldSplit.featureType match {
@@ -58,7 +58,7 @@ private[ml] object Split {
  *                        left. Otherwise, it goes right.
  * @param numCategories  Number of categories for this feature.
  */
-final class CategoricalSplit(
+final class CategoricalSplit private[ml] (
     override val featureIndex: Int,
     leftCategories: Array[Double],
     private val numCategories: Int)
@@ -130,7 +130,8 @@ final class CategoricalSplit(
  * @param threshold  If the feature value is <= this threshold, then the split goes left.
  *                    Otherwise, it goes right.
  */
-final class ContinuousSplit(override val featureIndex: Int, val threshold: Double) extends Split {
+final class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
+  extends Split {
 
   override private[ml] def shouldGoLeft(features: Vector): Boolean = {
     features(featureIndex) <= threshold
