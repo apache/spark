@@ -74,10 +74,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   var numFailedStages = 0
 
   // Executors:
-  val addedExecutors = TreeSet[(Long, ExecutorId)]()
-  val removedExecutors = TreeSet[(Long, ExecutorId)]()
-  val executorIdToAddedTime = new HashMap[ExecutorId, Long]
-  val executorIdToRemovedTimeAndReason = new HashMap[ExecutorId, (Long, String)]
+  val executors = ListBuffer[ExecutorUIData]()
+  val executorIdToData = HashMap[ExecutorId, ExecutorUIData]()
 
   // Misc:
   val executorIdToBlockManagerId = HashMap[ExecutorId, BlockManagerId]()
@@ -91,10 +89,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", DEFAULT_RETAINED_JOBS)
-  val retainedExecutorAddedEvents =
-    conf.getInt("spark.ui.retainedExecutorAddedEvents", DEFAULT_RETAINED_EXECUTOR_ADDED_EVENTS)
-  val retainedExecutorRemovedEvents =
-    conf.getInt("spark.ui.retainedExecutorRemovedEvents", DEFAULT_RETAINED_EXECUTOR_REMOVED_EVENTS)
+  val retainedExecutors = conf.getInt("spark.ui.retainedExecutors", DEFAULT_RETAINED_EXECUTORS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -174,29 +169,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
   }
 
-  /** If ExecutorAddedEvents is too large, remove and garbage collect old events */
-  private def trimExecutorAddedEventsIfNecessary(events: TreeSet[(Long, ExecutorId)]) =
-    synchronized {
-      if (events.size > retainedExecutorAddedEvents) {
-        val toRemove = math.max(retainedExecutorAddedEvents / 10, 1)
-        events.take(toRemove).foreach { event =>
-          addedExecutors.remove(event)
-          executorIdToAddedTime.remove(event._2)
-        }
+  /** If executors is too large, remove and garbage collect old executors */
+  private def trimExecutorsIfNecessary(executors: ListBuffer[ExecutorUIData]) = synchronized {
+    if (executors.size > retainedExecutors) {
+      val toRemove = math.max(retainedExecutors / 10, 1)
+      executors.take(toRemove).foreach { executor =>
+        executorIdToData.remove(executor.executorId)
       }
+      executors.trimStart(toRemove)
     }
-
-  /** If ExecutorRemovedEvents is too large, remove and garbage collect old events */
-  private def trimExecutorRemovedEventsIfNecessary(events: TreeSet[(Long, ExecutorId)]) =
-    synchronized {
-      if (events.size > retainedExecutorRemovedEvents) {
-        val toRemove = math.max(retainedExecutorRemovedEvents / 10, 1)
-        events.take(toRemove).foreach { event =>
-          removedExecutors.remove(event)
-          executorIdToRemovedTimeAndReason.remove(event._2)
-        }
-      }
-    }
+  }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobGroup = for (
@@ -553,19 +535,24 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) {
     synchronized {
-      val executorId = executorAdded.executorId
-      addedExecutors += ((executorAdded.time, executorId))
-      executorIdToAddedTime(executorId) = executorAdded.time
-      trimExecutorAddedEventsIfNecessary(addedExecutors)
+      val executorUIData = ExecutorUIData(executorAdded.executorId, Some(executorAdded.time))
+      executors += executorUIData
+      executorIdToData.put(executorAdded.executorId, executorUIData)
+      trimExecutorsIfNecessary(executors)
     }
   }
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) {
     synchronized {
-      val executorId = executorRemoved.executorId
-      removedExecutors += ((executorRemoved.time, executorId))
-      executorIdToRemovedTimeAndReason(executorId) = (executorRemoved.time, executorRemoved.reason)
-      trimExecutorRemovedEventsIfNecessary(removedExecutors)
+      val executorUIData = executorIdToData.getOrElseUpdate(executorRemoved.executorId, {
+        val uiData = ExecutorUIData(executorId = executorRemoved.executorId)
+        executors += uiData
+        uiData
+      })
+      executorUIData.finishTime = Some(executorRemoved.time)
+      // use option in case for that reason is null
+      executorUIData.finishReason = Option(executorRemoved.reason)
+      trimExecutorsIfNecessary(executors)
     }
   }
 }
@@ -574,6 +561,5 @@ private object JobProgressListener {
   val DEFAULT_POOL_NAME = "default"
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
-  val DEFAULT_RETAINED_EXECUTOR_ADDED_EVENTS = 1000
-  val DEFAULT_RETAINED_EXECUTOR_REMOVED_EVENTS = 1000
+  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

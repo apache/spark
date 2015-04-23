@@ -108,4 +108,10 @@ private[jobs] object UIData {
       var taskInfo: TaskInfo,
       var taskMetrics: Option[TaskMetrics] = None,
       var errorMessage: Option[String] = None)
+
+  case class ExecutorUIData(
+      val executorId: String,
+      val startTime: Option[Long] = None,
+      var finishTime: Option[Long] = None,
+      var finishReason: Option[String] = None)
 }

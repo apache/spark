@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-function drawApplicationTimeline(groupArray, eventObjArray) {
+function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $("#application-timeline")[0];
@@ -25,6 +25,7 @@ function drawApplicationTimeline(groupArray, eventObjArray) {
     },
     editable: false,
     showCurrentTime: false,
+    showCustomTime: true,
     zoomable: false
   };
 
@@ -32,6 +33,10 @@ function drawApplicationTimeline(groupArray, eventObjArray) {
   applicationTimeline.setOptions(options);
   applicationTimeline.setGroups(groups);
   applicationTimeline.setItems(items);
+
+  if (startTime != -1) {
+    applicationTimeline.setCustomTime(startTime);
+  }
 
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
 
@@ -44,7 +49,7 @@ function drawApplicationTimeline(groupArray, eventObjArray) {
   });
 }
 
-function drawJobTimeline(groupArray, eventObjArray) {
+function drawJobTimeline(groupArray, eventObjArray, startTime) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $('#job-timeline')[0];
@@ -54,6 +59,7 @@ function drawJobTimeline(groupArray, eventObjArray) {
     },
     editable: false,
     showCurrentTime: false,
+    showCustomTime: true,
     zoomable: false,
   };
 
@@ -62,15 +68,19 @@ function drawJobTimeline(groupArray, eventObjArray) {
   jobTimeline.setGroups(groups);
   jobTimeline.setItems(items);
 
+  if (startTime != -1) {
+    jobTimeline.setCustomTime(startTime)
+  }
+
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
 
-    $(".item.range.stage.job-timeline-object").each(function() {
-      $(this).click(function() {
-        var stageIdText = $($(this).find(".job-timeline-content")[0]).text();
-        var stageId = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
-        window.location.href = "#stage-" + stageId;
-      });
+  $(".item.range.stage.job-timeline-object").each(function() {
+    $(this).click(function() {
+      var stageIdText = $($(this).find(".job-timeline-content")[0]).text();
+      var stageId = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].replace(".", "-");
+      window.location.href = "#stage-" + stageId;
     });
+  });
 }
 
 function setupJobEntryLink(id, timeline) {
