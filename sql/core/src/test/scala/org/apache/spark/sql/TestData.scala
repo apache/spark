@@ -86,6 +86,15 @@ object TestData {
       TestData3(2, Some(2)) :: Nil).toDF()
   testData3.registerTempTable("testData3")
 
+  case class TestData4(a: Int, b: Int)
+  val testData4 =
+    TestSQLContext.sparkContext.parallelize(
+      TestData4(1, 1) ::
+      TestData4(1, 1) ::
+      TestData4(1, 2) ::
+      TestData4(1, 2) :: Nil, 2).toDF()
+  testData4.registerTempTable("testData4")
+
   val emptyTableData = logical.LocalRelation($"a".int, $"b".int)
 
   case class UpperCaseData(N: Int, L: String)
