@@ -144,7 +144,7 @@ private[hive] object HiveQl {
 
   protected val hqlParser = {
     val fallback = new ExtendedHiveQlParser
-    new SparkSQLParser(fallback(_))
+    new SparkSQLParser(fallback.parse(_))
   }
 
   /**
@@ -240,7 +240,7 @@ private[hive] object HiveQl {
 
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hqlParser(sql)
+  def parseSql(sql: String): LogicalPlan = hqlParser.parse(sql)
 
   val errorRegEx = "line (\\d+):(\\d+) (.*)".r
 

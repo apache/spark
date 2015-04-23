@@ -26,7 +26,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
   import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
-  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer(in)
+  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)

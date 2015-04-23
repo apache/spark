@@ -17,12 +17,12 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -132,8 +132,8 @@ private[spark] class ExecutorAllocationManager(
   private val listener = new ExecutorAllocationListener
 
   // Executor that handles the scheduling task.
-  private val executor = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("spark-dynamic-executor-allocation"))
+  private val executor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
 
   /**
    * Verify that the settings specified through the config are valid.

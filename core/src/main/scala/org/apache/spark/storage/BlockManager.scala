@@ -29,7 +29,7 @@ import scala.util.Random
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
-import org.apache.spark.executor._
+import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
@@ -50,11 +50,8 @@ private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
-    readMethod: DataReadMethod.Value,
-    bytes: Long) {
-  val inputMetrics = new InputMetrics(readMethod)
-  inputMetrics.incBytesRead(bytes)
-}
+    val readMethod: DataReadMethod.Value,
+    val bytes: Long)
 
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
