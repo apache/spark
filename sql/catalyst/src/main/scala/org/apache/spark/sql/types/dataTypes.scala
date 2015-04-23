@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -298,7 +299,7 @@ class NullType private() extends DataType {
 case object NullType extends NullType
 
 
-protected[sql] object NativeType {
+protected[spark] object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
@@ -326,7 +327,7 @@ protected[sql] object PrimitiveType {
   }
 }
 
-protected[sql] abstract class NativeType extends DataType {
+protected[spark] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
@@ -349,7 +350,7 @@ class StringType private() extends NativeType with PrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = String
+  private[sql] type JvmType = UTF8String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 
@@ -934,7 +935,9 @@ object StructType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
             DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
+        DecimalType(
+          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
+          max(leftScale, rightScale))
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
@@ -1022,6 +1025,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
@@ -1044,6 +1048,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
+  }
+
+  /**
+   * Returns index of a given field
+   */
+  def fieldIndex(name: String): Int = {
+    nameToIndex.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   protected[sql] def toAttributes: Seq[AttributeReference] =
@@ -1193,8 +1205,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /**
    * Convert the user type to a SQL datum
    *
-   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
-   *       where we need to convert Any to UserType.
+   * TODO: Can we make this take obj: UserType?  The issue is in
+   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
   def serialize(obj: Any): Any
 

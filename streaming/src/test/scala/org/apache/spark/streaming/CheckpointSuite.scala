@@ -43,7 +43,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   var ssc: StreamingContext = null
 
-  override def batchDuration = Milliseconds(500)
+  override def batchDuration: Duration = Milliseconds(500)
 
   override def beforeFunction() {
     super.beforeFunction()
@@ -72,7 +72,7 @@ class CheckpointSuite extends TestSuiteBase {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.sum + state.getOrElse(0)))
+        Some(values.sum + state.getOrElse(0))
       }
       st.map(x => (x, 1))
       .updateStateByKey(updateFunc)
@@ -199,7 +199,12 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq() ),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
-      Seq( Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq() ),
+      Seq(
+        Seq(("a", 2), ("b", 1)),
+        Seq(("", 2)),
+        Seq(),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("", 2)), Seq() ),
       3
     )
   }
@@ -212,7 +217,8 @@ class CheckpointSuite extends TestSuiteBase {
     val n = 10
     val w = 4
     val input = (1 to n).map(_ => Seq("a")).toSeq
-    val output = Seq(Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 3))) ++ (1 to (n - w + 1)).map(x => Seq(("a", 4)))
+    val output = Seq(
+      Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 3))) ++ (1 to (n - w + 1)).map(x => Seq(("a", 4)))
     val operation = (st: DStream[String]) => {
       st.map(x => (x, 1))
         .reduceByKeyAndWindow(_ + _, _ - _, batchDuration * w, batchDuration)
@@ -236,7 +242,13 @@ class CheckpointSuite extends TestSuiteBase {
             classOf[TextOutputFormat[Text, IntWritable]])
           output
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -259,7 +271,13 @@ class CheckpointSuite extends TestSuiteBase {
             classOf[NewTextOutputFormat[Text, IntWritable]])
           output
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -298,7 +316,13 @@ class CheckpointSuite extends TestSuiteBase {
             output
           }
         },
-        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        Seq(
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq(),
+          Seq(("a", 2), ("b", 1)),
+          Seq(("", 2)),
+          Seq()),
         3
       )
     } finally {
@@ -533,7 +557,8 @@ class CheckpointSuite extends TestSuiteBase {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] =
+  {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.getTimeMillis())
     for (i <- 1 to numBatches.toInt) {
@@ -543,7 +568,7 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("Manual clock after advancing = " + clock.getTimeMillis())
     Thread.sleep(batchDuration.milliseconds)
 
-    val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
+    val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
     }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     outputStream.output.map(_.flatten)

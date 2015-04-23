@@ -17,10 +17,12 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{Executors, TimeUnit}
+
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{SystemClock, Clock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -78,16 +80,16 @@ private[spark] class ExecutorAllocationManager(
     Integer.MAX_VALUE)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
-  private val schedulerBacklogTimeout = conf.getLong(
-    "spark.dynamicAllocation.schedulerBacklogTimeout", 5)
+  private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.schedulerBacklogTimeout", "5s")
 
-  // Same as above, but used only after `schedulerBacklogTimeout` is exceeded
-  private val sustainedSchedulerBacklogTimeout = conf.getLong(
-    "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", schedulerBacklogTimeout)
+  // Same as above, but used only after `schedulerBacklogTimeoutS` is exceeded
+  private val sustainedSchedulerBacklogTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", s"${schedulerBacklogTimeoutS}s")
 
   // How long an executor must be idle for before it is removed (seconds)
-  private val executorIdleTimeout = conf.getLong(
-    "spark.dynamicAllocation.executorIdleTimeout", 600)
+  private val executorIdleTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.executorIdleTimeout", "600s")
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
@@ -129,6 +131,10 @@ private[spark] class ExecutorAllocationManager(
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
 
+  // Executor that handles the scheduling task.
+  private val executor = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("spark-dynamic-executor-allocation"))
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -144,14 +150,14 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
     }
-    if (schedulerBacklogTimeout <= 0) {
+    if (schedulerBacklogTimeoutS <= 0) {
       throw new SparkException("spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
     }
-    if (sustainedSchedulerBacklogTimeout <= 0) {
+    if (sustainedSchedulerBacklogTimeoutS <= 0) {
       throw new SparkException(
         "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
     }
-    if (executorIdleTimeout <= 0) {
+    if (executorIdleTimeoutS <= 0) {
       throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
     }
     // Require external shuffle service for dynamic allocation
@@ -173,32 +179,24 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Register for scheduler callbacks to decide when to add and remove executors.
+   * Register for scheduler callbacks to decide when to add and remove executors, and start
+   * the scheduling task.
    */
   def start(): Unit = {
     listenerBus.addListener(listener)
-    startPolling()
+
+    val scheduleTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(schedule())
+    }
+    executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
   }
 
   /**
-   * Start the main polling thread that keeps track of when to add and remove executors.
+   * Stop the allocation manager.
    */
-  private def startPolling(): Unit = {
-    val t = new Thread {
-      override def run(): Unit = {
-        while (true) {
-          try {
-            schedule()
-          } catch {
-            case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
-          }
-          Thread.sleep(intervalMillis)
-        }
-      }
-    }
-    t.setName("spark-dynamic-executor-allocation")
-    t.setDaemon(true)
-    t.start()
+  def stop(): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(10, TimeUnit.SECONDS)
   }
 
   /**
@@ -264,8 +262,8 @@ private[spark] class ExecutorAllocationManager(
     } else if (addTime != NOT_SET && now >= addTime) {
       val delta = addExecutors(maxNeeded)
       logDebug(s"Starting timer to add more executors (to " +
-        s"expire in $sustainedSchedulerBacklogTimeout seconds)")
-      addTime += sustainedSchedulerBacklogTimeout * 1000
+        s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
+      addTime += sustainedSchedulerBacklogTimeoutS * 1000
       delta
     } else {
       0
@@ -353,7 +351,7 @@ private[spark] class ExecutorAllocationManager(
     val removeRequestAcknowledged = testing || client.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
-        s"$executorIdleTimeout seconds (new desired total will be ${numExistingExecutors - 1})")
+        s"$executorIdleTimeoutS seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
       true
     } else {
@@ -409,8 +407,8 @@ private[spark] class ExecutorAllocationManager(
   private def onSchedulerBacklogged(): Unit = synchronized {
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
-        s"are building up (to expire in $schedulerBacklogTimeout seconds)")
-      addTime = clock.getTimeMillis + schedulerBacklogTimeout * 1000
+        s"are building up (to expire in $schedulerBacklogTimeoutS seconds)")
+      addTime = clock.getTimeMillis + schedulerBacklogTimeoutS * 1000
     }
   }
 
@@ -433,8 +431,8 @@ private[spark] class ExecutorAllocationManager(
     if (executorIds.contains(executorId)) {
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
-        removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
+          s"scheduled to run on the executor (to expire in $executorIdleTimeoutS seconds)")
+        removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeoutS * 1000
       }
     } else {
       logWarning(s"Attempted to mark unknown executor $executorId idle")

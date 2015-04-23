@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.sql.{Timestamp, Date}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -35,10 +36,10 @@ class SimpleScanSource extends RelationProvider {
 case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
   extends BaseRelation with TableScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
+  override def buildScan(): RDD[Row] = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
@@ -57,9 +58,9 @@ case class AllDataTypesScan(
   extends BaseRelation
   with TableScan {
 
-  override def schema = userSpecifiedSchema
+  override def schema: StructType = userSpecifiedSchema
 
-  override def buildScan() = {
+  override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
@@ -73,7 +74,7 @@ case class AllDataTypesScan(
         i.toDouble,
         new java.math.BigDecimal(i),
         new java.math.BigDecimal(i),
-        new Date((i + 1) * 8640000),
+        new Date(1970, 1, 1),
         new Timestamp(20000 + i),
         s"varchar_$i",
         Seq(i, i + 1),
@@ -81,7 +82,7 @@ case class AllDataTypesScan(
         Map(i -> i.toString),
         Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
-        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date((i + 2) * 8640000)))))
+        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
     }
   }
 }
@@ -102,7 +103,7 @@ class TableScanSuite extends DataSourceTest {
       i.toDouble,
       new java.math.BigDecimal(i),
       new java.math.BigDecimal(i),
-      new Date((i + 1) * 8640000),
+      new Date(1970, 1, 1),
       new Timestamp(20000 + i),
       s"varchar_$i",
       Seq(i, i + 1),
@@ -110,7 +111,7 @@ class TableScanSuite extends DataSourceTest {
       Map(i -> i.toString),
       Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
       Row(i, i.toString),
-      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date((i + 2) * 8640000)))))
+      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
   }.toSeq
 
   before {
@@ -265,7 +266,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(new Date((i + 2) * 8640000)))).toSeq)
+    (1 to 10).map(i => Row(Seq(new Date(1970, 1, i + 1)))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution
