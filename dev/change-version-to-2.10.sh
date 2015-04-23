@@ -19,7 +19,6 @@
 
 # Note that this will not necessarily work as intended with non-GNU sed (e.g. OS X)
 BASEDIR=$(dirname $0)/..
-
 find $BASEDIR -name 'pom.xml' | grep -v target \
   | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.11/\1_2.10/g' {}
 
