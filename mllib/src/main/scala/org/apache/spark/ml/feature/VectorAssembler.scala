@@ -55,7 +55,8 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
       schema(c).dataType match {
         case DoubleType => UnresolvedAttribute(c)
         case t if t.isInstanceOf[VectorUDT] => UnresolvedAttribute(c)
-        case _: NativeType => Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
+        case _: NumericType =>
+          Alias(Cast(UnresolvedAttribute(c), DoubleType), s"${c}_double_$uid")()
       }
     }
     dataset.select(col("*"), assembleFunc(new Column(CreateStruct(args))).as(map(outputCol)))
@@ -67,7 +68,7 @@ class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
     val outputColName = map(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
     inputDataTypes.foreach {
-      case _: NativeType =>
+      case _: NumericType =>
       case t if t.isInstanceOf[VectorUDT] =>
       case other =>
         throw new IllegalArgumentException(s"Data type $other is not supported.")
