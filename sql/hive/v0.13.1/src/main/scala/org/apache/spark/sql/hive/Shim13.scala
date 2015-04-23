@@ -22,8 +22,9 @@ import java.util.{Properties, ArrayList => JArrayList}
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
+import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.Kryo;
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -61,39 +62,40 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   // for Serialization
   def this() = this(null)
 
+
+  import java.io.{OutputStream, InputStream}
+
+  import com.esotericsoftware.kryo.io.Input;
+  import com.esotericsoftware.kryo.io.Output;
+
   import org.apache.spark.util.Utils._
 
   @transient
-  private val methodDeSerialize = {
-    val method = classOf[Utilities].getDeclaredMethod(
-      "deserializeObjectByKryo",
-      classOf[Kryo],
-      classOf[java.io.InputStream],
-      classOf[Class[_]])
-    method.setAccessible(true)
-
-    method
+  private def deserializeObjectByKryo[T: ClassTag](kryo: Kryo,
+                                                   in: InputStream,
+                                                   clazz: Class[_]): T = {
+    val inp = new Input(in);
+    val t: T = kryo.readObject(inp,clazz).asInstanceOf[T];
+    inp.close();
+    return t;
   }
 
   @transient
-  private val methodSerialize = {
-    val method = classOf[Utilities].getDeclaredMethod(
-      "serializeObjectByKryo",
-      classOf[Kryo],
-      classOf[Object],
-      classOf[java.io.OutputStream])
-    method.setAccessible(true)
-
-    method
+  private def serializeObjectByKryo(kryo: Kryo,
+                                    plan: Object,
+                                    out: OutputStream ) {
+    val output: Output = new Output(out);
+    kryo.writeObject(output, plan);
+    output.close();
   }
 
   def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-    methodDeSerialize.invoke(null, Utilities.runtimeSerializationKryo.get(), is, clazz)
+    deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
       .asInstanceOf[UDFType]
   }
 
   def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-    methodSerialize.invoke(null, Utilities.runtimeSerializationKryo.get(), function, out)
+    serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
   }
 
   private var instance: AnyRef = null
