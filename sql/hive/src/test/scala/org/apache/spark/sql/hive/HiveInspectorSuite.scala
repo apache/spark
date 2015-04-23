@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.nio.ByteBuffer
 import java.util
 import java.util.{Locale, TimeZone}
 
@@ -141,6 +142,10 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).foreach { case (b1, b2) => assert(b1 === b2) }
+      case (r1: ByteBuffer, r2: ByteBuffer) =>
+        r1.compareTo(r2) == 0
+      case (r1: ByteBuffer, r2: Array[Byte]) =>
+        r1.compareTo(ByteBuffer.wrap(r2)) == 0
       case (r1, r2) => assert(r1 === r2)
     }
   }

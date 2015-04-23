@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
+import java.nio.ByteBuffer
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._

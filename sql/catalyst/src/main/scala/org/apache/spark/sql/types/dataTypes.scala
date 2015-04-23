@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import java.nio.ByteBuffer
 import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
@@ -363,15 +364,11 @@ class BinaryType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Array[Byte]
+  private[sql] type InternalType = ByteBuffer
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val ordering = new Ordering[InternalType] {
-    def compare(x: Array[Byte], y: Array[Byte]): Int = {
-      for (i <- 0 until x.length; if i < y.length) {
-        val res = x(i).compareTo(y(i))
-        if (res != 0) return res
-      }
-      x.length - y.length
+    def compare(x: ByteBuffer, y: ByteBuffer): Int = {
+      x.compareTo(y)
     }
   }
 

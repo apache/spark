@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.{ArrayList => JArrayList, Properties}
 
 import scala.collection.JavaConversions._
@@ -159,7 +160,7 @@ private[hive] object HiveShim {
     if (value == null) null else new hiveIo.ByteWritable(value.asInstanceOf[Byte])
 
   def getBinaryWritable(value: Any): hadoopIo.BytesWritable =
-    if (value == null) null else new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
+    if (value == null) null else new hadoopIo.BytesWritable(value.asInstanceOf[ByteBuffer].array())
 
   def getDateWritable(value: Any): hiveIo.DateWritable =
     if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])

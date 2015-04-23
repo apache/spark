@@ -59,7 +59,7 @@ private[sql] object ParquetFilters {
       case BinaryType =>
         (n: String, v: Any) => FilterApi.eq(
           binaryColumn(n),
-          Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+          Option(v).map(b => Binary.fromByteBuffer(v.asInstanceOf[ByteBuffer])).orNull)
     }
 
     val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {

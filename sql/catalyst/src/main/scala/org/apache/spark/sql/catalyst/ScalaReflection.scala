@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -71,7 +73,7 @@ trait ScalaReflection {
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
       // Need to decide if we actually need a special type here.
-      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
+      case t if t <:< typeOf[ByteBuffer] => Schema(BinaryType, nullable = true)
       case t if t <:< typeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
@@ -135,7 +137,7 @@ trait ScalaReflection {
   def typeOfObject: PartialFunction[Any, DataType] = {
     // The data type can be determined without ambiguity.
     case obj: Boolean => BooleanType
-    case obj: Array[Byte] => BinaryType
+    case obj: ByteBuffer => BinaryType
     case obj: String => StringType
     case obj: UTF8String => StringType
     case obj: Byte => ByteType
