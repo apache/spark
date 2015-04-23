@@ -25,7 +25,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Row, SQLContext}
 import org.scalatest.exceptions.TestFailedException
 
-class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
+class PolynomialExpansionSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
 
@@ -44,19 +44,19 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val twoDegreeExpansion: Array[Vector] = Array(
-      Vectors.sparse(9, Array(0, 1, 3, 4, 6), Array(-2.0, 2.3, 4.0, -4.6, 5.29)),
-      Vectors.dense(-2.0, 2.3, 4.0, -4.6, 5.29),
-      Vectors.dense(Array.fill[Double](9)(0.0)),
-      Vectors.dense(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0),
-      Vectors.sparse(9, Array.empty[Int], Array.empty[Double]))
+      Vectors.sparse(10, Array(0, 1, 2, 3, 4, 5), Array(1.0, -2.0, 4.0, 2.3, -4.6, 5.29)),
+      Vectors.dense(1.0, -2.0, 4.0, 2.3, -4.6, 5.29),
+      Vectors.dense(Array(1.0) ++ Array.fill[Double](9)(0.0)),
+      Vectors.dense(1.0, 0.6, 0.36, -1.1, -0.66, 1.21, -3.0, -1.8, 3.3, 9.0),
+      Vectors.sparse(10, Array(0), Array(1.0)))
 
     val df = sqlContext.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
 
-    val polynomialMapper = new PolynomialMapper()
+    val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
 
-    polynomialMapper.transform(df).select("polyFeatures", "expected").collect().foreach {
+    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
       case Row(expanded: DenseVector, expected: DenseVector) =>
         assert(expanded ~== expected absTol 1e-1)
       case Row(expanded: SparseVector, expected: SparseVector) =>
@@ -76,23 +76,22 @@ class PolynomialMapperSuite extends FunSuite with MLlibTestSparkContext {
     )
 
     val threeDegreeExpansion: Array[Vector] = Array(
-      Vectors.sparse(19, Array(0, 1, 3, 4, 6, 9, 10, 12, 15),
-        Array(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167)),
-      Vectors.dense(-2.0, 2.3, 4.0, -4.6, 5.29, -8.0, 9.2, -10.58, 12.167),
-      Vectors.dense(Array.fill[Double](19)(0.0)),
-      Vectors.dense(0.6, -1.1, -3.0, 0.36, -0.66, -1.8, 1.21, 3.3, 9.0, 0.216, -0.396, -1.08, 0.73,
-        1.98, 5.4, -1.33, -3.63, -9.9, -27.0),
-      Vectors.sparse(19, Array.empty[Int], Array.empty[Double]))
-
+      Vectors.sparse(20, Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+        Array(1.0, -2.0, 4.0, -8.0, 2.3, -4.6, 9.2, 5.29, -10.58, 12.17)),
+      Vectors.dense(1.0, -2.0, 4.0, -8.0, 2.3, -4.6, 9.2, 5.29, -10.58, 12.17),
+      Vectors.dense(Array(1.0) ++ Array.fill[Double](19)(0.0)),
+      Vectors.dense(1.0, 0.6, 0.36, 0.216, -1.1, -0.66, -0.396, 1.21, 0.726, -1.331, -3.0, -1.8,
+        -1.08, 3.3, 1.98, -3.63, 9.0, 5.4, -9.9, -27.0),
+      Vectors.sparse(20, Array(0), Array(1.0)))
 
     val df = sqlContext.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
 
-    val polynomialMapper = new PolynomialMapper()
+    val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
       .setDegree(3)
 
-    polynomialMapper.transform(df).select("polyFeatures", "expected").collect().foreach {
+    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
       case Row(expanded: DenseVector, expected: DenseVector) =>
         assert(expanded ~== expected absTol 1e-1)
       case Row(expanded: SparseVector, expected: SparseVector) =>
