@@ -131,7 +131,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     reader.close()
   }
 
-  test("FileBasedWriteAheadLogRandomReader - reading data using random reader written with writer") {
+  test("FileBasedWriteAheadLogRandomReader- reading data using random reader written with writer") {
     // Write data using writer for testing the random reader
     val data = generateRandomData()
     val segments = writeDataUsingWriter(testFile, data)
@@ -267,7 +267,10 @@ object WriteAheadLogSuite {
   /**
    * Write data to a file using the writer class and return an array of the file segments written.
    */
-  def writeDataUsingWriter(filePath: String, data: Seq[String]): Seq[FileBasedWriteAheadLogSegment] = {
+  def writeDataUsingWriter(
+      filePath: String,
+      data: Seq[String]
+    ): Seq[FileBasedWriteAheadLogSegment] = {
     val writer = new FileBasedWriteAheadLogWriter(filePath, hadoopConf)
     val segments = data.map {
       item => writer.write(item)
