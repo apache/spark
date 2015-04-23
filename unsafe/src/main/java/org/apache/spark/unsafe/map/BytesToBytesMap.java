@@ -17,14 +17,6 @@
 
 package org.apache.spark.unsafe.map;
 
-import org.apache.spark.unsafe.*;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.bitset.BitSet;
-import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.*;
-
-import java.lang.IllegalStateException;
 import java.lang.Long;
 import java.lang.Object;
 import java.lang.Override;
@@ -33,8 +25,17 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
+import org.apache.spark.unsafe.*;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.bitset.BitSet;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.memory.*;
+
 /**
- * A bytes to bytes hash map where keys and values are contiguous regions of bytes.
+ * An append-only hash map where keys and values are contiguous regions of bytes.
+ *
+ * This class is not thread-safe.
  *
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
@@ -350,36 +351,34 @@ public final class BytesToBytesMap {
     }
 
     /**
-     * Sets the value defined at this position. This method may only be called once for a given
-     * key; if you want to update the value associated with a key, then you can directly manipulate
-     * the bytes stored at the value address.
+     * Store a new key and value. This method may only be called once for a given key; if you want
+     * to update the value associated with a key, then you can directly manipulate the bytes stored
+     * at the value address.
      *
-     * It is only valid to call this method after having first called `lookup()` using the same key.
+     * It is only valid to call this method immediately after calling `lookup()` using the same key.
      *
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
-     * will return information on the data stored by this `storeKeyAndValue` call.
+     * will return information on the data stored by this `putNewKey` call.
      *
      * As an example usage, here's the proper way to store a new key:
      *
      * <code>
      *   Location loc = map.lookup(keyBaseOffset, keyBaseObject, keyLengthInBytes);
      *   if (!loc.isDefined()) {
-     *     loc.storeKeyAndValue(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
+     *     loc.putNewKey(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
      *   }
      * </code>
      *
      * Unspecified behavior if the key is not defined.
      */
-    public void storeKeyAndValue(
-        Object keyBaseObject,
-        long keyBaseOffset,
-        int keyLengthBytes,  // TODO(josh): words?  bytes? eventually, we'll want to be more consistent about this
-        Object valueBaseObject,
-        long valueBaseOffset,
-        long valueLengthBytes) {
-      if (isDefined) {
-        throw new IllegalStateException("Can only set value once for a key");
-      }
+    public void putNewKey(
+      Object keyBaseObject,
+      long keyBaseOffset,
+      int keyLengthBytes,  // TODO(josh): words?  bytes? eventually, we'll want to be more consistent about this
+      Object valueBaseObject,
+      long valueBaseOffset,
+      long valueLengthBytes) {
+      assert (!isDefined) : "Can only set value once for a key";
       isDefined = true;
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
@@ -388,7 +387,6 @@ public final class BytesToBytesMap {
       // must be stored in the same memory page.
       final long requiredSize = 8 + 8 + keyLengthBytes + valueLengthBytes;
       assert(requiredSize <= PAGE_SIZE_BYTES);
-      // Bookeeping
       size++;
       bitset.set(pos);
 

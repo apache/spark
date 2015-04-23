@@ -96,7 +96,7 @@ public abstract class AbstractTestBytesToBytesMap {
       final BytesToBytesMap.Location loc =
         map.lookup(keyData, BYTE_ARRAY_OFFSET, recordLengthBytes);
       Assert.assertFalse(loc.isDefined());
-      loc.storeKeyAndValue(
+      loc.putNewKey(
         keyData,
         BYTE_ARRAY_OFFSET,
         recordLengthBytes,
@@ -119,7 +119,7 @@ public abstract class AbstractTestBytesToBytesMap {
       Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
 
       try {
-        loc.storeKeyAndValue(
+        loc.putNewKey(
           keyData,
           BYTE_ARRAY_OFFSET,
           recordLengthBytes,
@@ -146,7 +146,7 @@ public abstract class AbstractTestBytesToBytesMap {
         final BytesToBytesMap.Location loc =
           map.lookup(value, PlatformDependent.LONG_ARRAY_OFFSET, 8);
         Assert.assertFalse(loc.isDefined());
-        loc.storeKeyAndValue(
+        loc.putNewKey(
           value,
           PlatformDependent.LONG_ARRAY_OFFSET,
           8,
@@ -196,7 +196,7 @@ public abstract class AbstractTestBytesToBytesMap {
             key.length
           );
           Assert.assertFalse(loc.isDefined());
-          loc.storeKeyAndValue(
+          loc.putNewKey(
             key,
             BYTE_ARRAY_OFFSET,
             key.length,
@@ -204,7 +204,7 @@ public abstract class AbstractTestBytesToBytesMap {
             BYTE_ARRAY_OFFSET,
             value.length
           );
-          // After calling storeKeyAndValue, the following should be true, even before calling
+          // After calling putNewKey, the following should be true, even before calling
           // lookup():
           Assert.assertTrue(loc.isDefined());
           Assert.assertEquals(key.length, loc.getKeyLength());

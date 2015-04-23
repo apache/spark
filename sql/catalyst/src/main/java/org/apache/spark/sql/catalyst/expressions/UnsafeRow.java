@@ -17,17 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.types.DataType;
-import static org.apache.spark.sql.types.DataTypes.*;
-
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
-import org.apache.spark.unsafe.PlatformDependent;
-import org.apache.spark.unsafe.bitset.BitSetMethods;
-import org.apache.spark.unsafe.string.UTF8StringMethods;
 import scala.collection.Map;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
@@ -40,12 +29,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.types.DataType;
+import static org.apache.spark.sql.types.DataTypes.*;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.string.UTF8StringMethods;
 
 // TODO: pick a better name for this class, since this is potentially confusing.
 // Maybe call it UnsafeMutableRow?
 
 /**
- * An Unsafe implementation of Row which is backed by raw memory instead of Java objets.
+ * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
  *
  * Each tuple has three parts: [null bit set] [values] [variable length portion]
  *
@@ -56,6 +53,9 @@ import java.util.Set;
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
  * base address of the row) that points to the beginning of the variable-length field.
+ *
+ * Instances of `UnsafeRow` act as pointers to row data stored in this format, similar to how
+ * `Writable` objects work in Hadoop.
  */
 public final class UnsafeRow implements MutableRow {
 
@@ -64,6 +64,11 @@ public final class UnsafeRow implements MutableRow {
   private int numFields;
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
+  /**
+   * This optional schema is required if you want to call generic get() and set() methods on
+   * this UnsafeRow, but is optional if callers will only use type-specific getTYPE() and setTYPE()
+   * methods.
+   */
   @Nullable
   private StructType schema;
 
@@ -103,9 +108,27 @@ public final class UnsafeRow implements MutableRow {
     readableFieldTypes.addAll(settableFieldTypes);
   }
 
+  /**
+   * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
+   * since the value returned by this constructor is equivalent to a null pointer.
+   */
   public UnsafeRow() { }
 
-  public void set(Object baseObject, long baseOffset, int numFields, StructType schema) {
+  /**
+   * Update this UnsafeRow to point to different backing data.
+   *
+   * @param baseObject the base object
+   * @param baseOffset the offset within the base object
+   * @param numFields the number of fields in this row
+   * @param schema an optional schema; this is necessary if you want to call generic get() or set()
+   *               methods on this row, but is optional if the caller will only use type-specific
+   *               getTYPE() and setTYPE() methods.
+   */
+  public void pointTo(
+      Object baseObject,
+      long baseOffset,
+      int numFields,
+      @Nullable StructType schema) {
     assert numFields >= 0 : "numFields should >= 0";
     assert schema == null || schema.fields().length == numFields;
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);

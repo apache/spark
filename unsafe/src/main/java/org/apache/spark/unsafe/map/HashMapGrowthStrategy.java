@@ -27,7 +27,7 @@ public interface HashMapGrowthStrategy {
   /**
    * Double the size of the hash map every time.
    */
-   HashMapGrowthStrategy DOUBLING = new Doubling();
+  HashMapGrowthStrategy DOUBLING = new Doubling();
 
   class Doubling implements HashMapGrowthStrategy {
     @Override

@@ -17,10 +17,12 @@
 
 package org.apache.spark.unsafe.string;
 
+import java.io.UnsupportedEncodingException;
+import java.lang.Object;
+import java.lang.String;
+
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-
-import java.io.UnsupportedEncodingException;import java.lang.Object;import java.lang.String;
 
 /**
  * A String encoded in UTF-8 as long representing the string's length, followed by a
@@ -31,14 +33,6 @@ public final class UTF8StringMethods {
   private UTF8StringMethods() {
     // Make the default constructor private, since this only holds static methods.
     // See UTF8StringPointer for a more object-oriented interface to UTF8String data.
-  }
-
-  /**
-   * Return the length of the string, in bytes (NOT characters), not including
-   * the space to store the length itself.
-   */
-  static long getLengthInBytes(Object baseObject, long baseOffset) {
-    return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
   }
 
   public static int compare(
@@ -68,7 +62,7 @@ public final class UTF8StringMethods {
       int prefixLengthInBytes) {
     if (prefixLengthInBytes > strLengthInBytes) {
       return false;
-    } {
+    } else {
       return ByteArrayMethods.arrayEquals(
         strBaseObject,
         strBaseOffset,
@@ -87,7 +81,7 @@ public final class UTF8StringMethods {
       int suffixLengthInBytes) {
     if (suffixLengthInBytes > strLengthInBytes) {
       return false;
-    } {
+    } else {
       return ByteArrayMethods.arrayEquals(
         strBaseObject,
         strBaseOffset + strLengthInBytes - suffixLengthInBytes,

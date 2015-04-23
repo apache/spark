@@ -180,7 +180,7 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
   }
 
   def writeRow(row: Row, baseObject: Object, baseOffset: Long): Long = {
-    unsafeRow.set(baseObject, baseOffset, writers.length, null)
+    unsafeRow.pointTo(baseObject, baseOffset, writers.length, null)
     var fieldNumber = 0
     var appendCursor: Int = fixedLengthSize
     while (fieldNumber < writers.length) {

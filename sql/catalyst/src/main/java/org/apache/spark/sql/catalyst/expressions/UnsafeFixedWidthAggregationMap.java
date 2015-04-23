@@ -154,7 +154,7 @@ public final class UnsafeFixedWidthAggregationMap {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      loc.storeKeyAndValue(
+      loc.putNewKey(
         groupingKeyConversionScratchSpace,
         PlatformDependent.LONG_ARRAY_OFFSET,
         groupingKeySize,
@@ -166,7 +166,7 @@ public final class UnsafeFixedWidthAggregationMap {
 
     // Reset the pointer to point to the value that we just stored or looked up:
     final MemoryLocation address = loc.getValueAddress();
-    currentAggregationBuffer.set(
+    currentAggregationBuffer.pointTo(
       address.getBaseObject(),
       address.getBaseOffset(),
       aggregationBufferSchema.length(),
@@ -201,13 +201,13 @@ public final class UnsafeFixedWidthAggregationMap {
         final BytesToBytesMap.Location loc = mapLocationIterator.next();
         final MemoryLocation keyAddress = loc.getKeyAddress();
         final MemoryLocation valueAddress = loc.getValueAddress();
-        entry.key.set(
+        entry.key.pointTo(
           keyAddress.getBaseObject(),
           keyAddress.getBaseOffset(),
           groupingKeySchema.length(),
           groupingKeySchema
         );
-        entry.value.set(
+        entry.value.pointTo(
           valueAddress.getBaseObject(),
           valueAddress.getBaseOffset(),
           aggregationBufferSchema.length(),
