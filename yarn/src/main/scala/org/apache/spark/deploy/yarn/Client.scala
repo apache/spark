@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream}
+import java.io.{IOException, File, FileOutputStream}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -656,6 +656,9 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
+            return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+          case ie: IOException =>
+            logError(s"Application $appId occurred an unexpected IOException.")
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
         }
       val state = report.getYarnApplicationState
