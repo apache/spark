@@ -66,6 +66,11 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
   .Object
 })
 
+setMethod("show", "RDD",
+          function(.Object) {
+              cat(callJMethod(.Object@jrdd, "toString"))
+          })
+
 setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {
   .Object@env <- new.env()
   .Object@env$isCached <- FALSE
