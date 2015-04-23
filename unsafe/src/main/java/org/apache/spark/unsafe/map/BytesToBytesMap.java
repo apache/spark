@@ -131,9 +131,9 @@ public final class BytesToBytesMap {
   /**
    * Number of keys defined in the map.
    */
-  private long size;
+  private int size;
 
-  private long growthThreshold;
+  private int growthThreshold;
 
   private int mask;
 
@@ -184,7 +184,7 @@ public final class BytesToBytesMap {
   /**
    * Returns the number of keys defined in the map.
    */
-  public long size() { return size; }
+  public int size() { return size; }
 
   /**
    * Returns an iterator for iterating over the entries of this map.
@@ -482,7 +482,7 @@ public final class BytesToBytesMap {
     longArray = new LongArray(allocator.allocate(capacity * 8 * 2));
     bitset = new BitSet(allocator.allocate(capacity / 8).zero());
 
-    this.growthThreshold = (long) (capacity * loadFactor);
+    this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
   }
 
@@ -575,9 +575,9 @@ public final class BytesToBytesMap {
       // the similar code path in addWithoutResize.
       while (keepGoing) {
         if (!bitset.isSet(newPos)) {
+          bitset.set(newPos);
           longArray.set(newPos * 2, keyPointer);
           longArray.set(newPos * 2 + 1, valueOffsetPlusHashcode);
-          bitset.set(newPos);
           keepGoing = false;
         } else {
           newPos = (newPos + step) & mask;
