@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Kryo
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -65,8 +65,8 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
 
   import java.io.{OutputStream, InputStream}
 
-  import com.esotericsoftware.kryo.io.Input;
-  import com.esotericsoftware.kryo.io.Output;
+  import com.esotericsoftware.kryo.io.Input
+  import com.esotericsoftware.kryo.io.Output
 
   import org.apache.spark.util.Utils._
 
@@ -74,19 +74,19 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   private def deserializeObjectByKryo[T: ClassTag](kryo: Kryo,
                                                    in: InputStream,
                                                    clazz: Class[_]): T = {
-    val inp = new Input(in);
-    val t: T = kryo.readObject(inp,clazz).asInstanceOf[T];
-    inp.close();
-    return t;
+    val inp = new Input(in)
+    val t: T = kryo.readObject(inp,clazz).asInstanceOf[T]
+    inp.close()
+    t
   }
 
   @transient
   private def serializeObjectByKryo(kryo: Kryo,
                                     plan: Object,
                                     out: OutputStream ) {
-    val output: Output = new Output(out);
-    kryo.writeObject(output, plan);
-    output.close();
+    val output: Output = new Output(out)
+    kryo.writeObject(output, plan)
+    output.close()
   }
 
   def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
