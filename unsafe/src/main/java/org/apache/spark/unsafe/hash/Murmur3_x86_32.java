@@ -48,14 +48,12 @@ public final class Murmur3_x86_32 {
     // See https://code.google.com/p/guava-libraries/source/browse/guava/src/com/google/common/hash/Murmur3_32HashFunction.java#167
     // TODO(josh) veryify that this was implemented correctly
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
-    int k1 = 0;
     int h1 = seed;
     for (int offset = 0; offset < lengthInBytes; offset += 4) {
       int halfWord = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
-
-      k1 ^= halfWord << offset;
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
     }
-    h1 ^= mixK1(k1);
     return fmix(h1, lengthInBytes);
   }
 

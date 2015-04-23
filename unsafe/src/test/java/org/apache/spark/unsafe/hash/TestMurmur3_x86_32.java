@@ -81,16 +81,36 @@ public class TestMurmur3_x86_32 {
       int byteArrSize = rand.nextInt(100) * 8;
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
-      long memoryAddr = PlatformDependent.UNSAFE.allocateMemory(byteArrSize);
-      PlatformDependent.copyMemory(
-        bytes, PlatformDependent.BYTE_ARRAY_OFFSET, null, memoryAddr, byteArrSize);
 
       Assert.assertEquals(
-        hasher.hashUnsafeWords(null, memoryAddr, byteArrSize),
-        hasher.hashUnsafeWords(null, memoryAddr, byteArrSize));
+        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
 
-      hashcodes.add(hasher.hashUnsafeWords(null, memoryAddr, byteArrSize));
-      PlatformDependent.UNSAFE.freeMemory(memoryAddr);
+      hashcodes.add(hasher.hashUnsafeWords(
+        bytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+    }
+
+    // A very loose bound.
+    Assert.assertTrue(hashcodes.size() > size * 0.95);
+  }
+
+  @Test
+  public void randomizedStressTestPaddedStrings() {
+    int size = 64000;
+    // A set used to track collision rate.
+    Set<Integer> hashcodes = new HashSet<Integer>();
+    for (int i = 0; i < size; i++) {
+      int byteArrSize = 8;
+      byte[] strBytes = ("" + i).getBytes();
+      byte[] paddedBytes = new byte[byteArrSize];
+      System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
+
+      Assert.assertEquals(
+        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize),
+        hasher.hashUnsafeWords(paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
+
+      hashcodes.add(hasher.hashUnsafeWords(
+        paddedBytes, PlatformDependent.BYTE_ARRAY_OFFSET, byteArrSize));
     }
 
     // A very loose bound.

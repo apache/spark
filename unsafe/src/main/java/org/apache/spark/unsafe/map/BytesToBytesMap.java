@@ -149,6 +149,8 @@ public final class BytesToBytesMap {
 
   private long numKeyLookups = 0;
 
+  private long numHashCollisions = 0;
+
   public BytesToBytesMap(
       MemoryAllocator allocator,
       int initialCapacity,
@@ -257,6 +259,10 @@ public final class BytesToBytesMap {
             );
             if (areEqual) {
               return loc;
+            } else {
+              if (enablePerfMetrics) {
+                numHashCollisions++;
+              }
             }
           }
         }
@@ -530,6 +536,13 @@ public final class BytesToBytesMap {
       throw new IllegalStateException();
     }
     return (1.0 * numProbes) / numKeyLookups;
+  }
+
+  public long getNumHashCollisions() {
+    if (!enablePerfMetrics) {
+      throw new IllegalStateException();
+    }
+    return numHashCollisions;
   }
 
   /**

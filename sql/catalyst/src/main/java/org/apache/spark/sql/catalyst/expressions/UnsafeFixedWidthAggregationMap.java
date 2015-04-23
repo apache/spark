@@ -242,6 +242,7 @@ public final class UnsafeFixedWidthAggregationMap {
       throw new IllegalStateException("Perf metrics not enabled");
     }
     System.out.println("Average probes per lookup: " + map.getAverageProbesPerLookup());
+    System.out.println("Number of hash collisions: " + map.getNumHashCollisions());
     System.out.println("Time spent resizing (ms): " + map.getTimeSpentResizingMs());
     System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
   }
