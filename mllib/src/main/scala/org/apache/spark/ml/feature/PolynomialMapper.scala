@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.AlphaComponent
@@ -41,16 +42,19 @@ class PolynomialMapper extends UnaryTransformer[Vector, Vector, PolynomialMapper
    * The polynomial degree to expand, which should be larger than 1.
    * @group param
    */
-  val degree = new IntParam(this, "degree", "the polynomial degree to expand", Some(2))
+  val degree = new IntParam(this, "degree", "the polynomial degree to expand")
+  setDefault(degree -> 2)
 
   /** @group getParam */
-  def getDegree: Int = get(degree)
+  def getDegree: Int = getOrDefault(degree)
 
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
-    PolynomialMapper.transform(getDegree)
+  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = { v =>
+    val d = paramMap(degree)
+    // PolynomialMapper.transform(getDegree)
+    PolynomialMapperV2.expand(v, d)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
@@ -235,6 +239,115 @@ object PolynomialMapper {
         fillSparseVector(indices, values, 0, originalLen, 2, degree, feature.size, originalLen)
 
         Vectors.sparse(expectedDims, indices.toArray, values.toArray)
+    }
+  }
+}
+
+/**
+ * The expansion is done via recursion. Given n features and degree d, the size after expansion is
+ * (n + d choose d) (including 1 and first-order values). For example, let f([a, b, c], 3) be the
+ * function that expands [a, b, c] to their monomials of degree 3. We have the following recursion:
+ *
+ * {{{
+ * f([a, b, c], 3) = f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
+ * }}}
+ *
+ * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
+ * current index and increment it properly for sparse input.
+ */
+object PolynomialMapperV2 {
+
+  private def choose(n: Int, k: Int): Int = {
+    Range(n, n - k, -1).product / Range(k, 1, -1).product
+  }
+
+  private def getPolySize(numFeatures: Int, degree: Int): Int = choose(numFeatures + degree, degree)
+
+  private def expandDense(
+      values: Array[Double],
+      lastIdx: Int,
+      degree: Int,
+      multiplier: Double,
+      polyValues: Array[Double],
+      curPolyIdx: Int): Int = {
+    if (multiplier == 0.0) {
+      // do nothing
+    } else if (degree == 0 || lastIdx < 0) {
+      polyValues(curPolyIdx) = multiplier
+    } else {
+      val v = values(lastIdx)
+      val lastIdx1 = lastIdx - 1
+      var alpha = multiplier
+      var i = 0
+      var curStart = curPolyIdx
+      while (i <= degree && alpha != 0.0) {
+        curStart = expandDense(values, lastIdx1, degree - i, alpha, polyValues, curStart)
+        i += 1
+        alpha *= v
+      }
+    }
+    curPolyIdx + getPolySize(lastIdx + 1, degree)
+  }
+
+  private def expandSparse(
+      indices: Array[Int],
+      values: Array[Double],
+      lastIdx: Int,
+      lastFeatureIdx: Int,
+      degree: Int,
+      multiplier: Double,
+      polyIndices: mutable.ArrayBuilder[Int],
+      polyValues: mutable.ArrayBuilder[Double],
+      curPolyIdx: Int): Int = {
+    if (multiplier == 0.0) {
+      // do nothing
+    } else if (degree == 0 || lastIdx < 0) {
+      polyIndices += curPolyIdx
+      polyValues += multiplier
+    } else {
+      // Skip all zeros at the tail.
+      val v = values(lastIdx)
+      val lastIdx1 = lastIdx - 1
+      val lastFeatureIdx1 = indices(lastIdx) - 1
+      var alpha = multiplier
+      var curStart = curPolyIdx
+      var i = 0
+      while (i <= degree && alpha != 0.0) {
+        curStart = expandSparse(indices, values, lastIdx1, lastFeatureIdx1, degree - i, alpha,
+          polyIndices, polyValues, curStart)
+        i += 1
+        alpha *= v
+      }
+    }
+    curPolyIdx + getPolySize(lastFeatureIdx + 1, degree)
+  }
+
+  private def expand(dv: DenseVector, degree: Int): DenseVector = {
+    val n = dv.size
+    val polySize = getPolySize(n, degree)
+    val polyValues = new Array[Double](polySize)
+    expandDense(dv.values, n - 1, degree, 1.0, polyValues, 0)
+    new DenseVector(polyValues)
+  }
+
+  private def expand(sv: SparseVector, degree: Int): SparseVector = {
+    val polySize = getPolySize(sv.size, degree)
+    val nnz = sv.values.length
+    val nnzPolySize = getPolySize(nnz, degree)
+    val polyIndices = mutable.ArrayBuilder.make[Int]
+    polyIndices.sizeHint(nnzPolySize)
+    val polyValues = mutable.ArrayBuilder.make[Double]
+    polyValues.sizeHint(nnzPolySize)
+    expandSparse(
+      sv.indices, sv.values, nnz - 1, sv.size - 1, degree, 1.0, polyIndices, polyValues, 0)
+    new SparseVector(polySize, polyIndices.result(), polyValues.result())
+  }
+
+  def expand(v: Vector, degree: Int): Vector = {
+    v match {
+      case dv: DenseVector => expand(dv, degree)
+      case sv: SparseVector => expand(sv, degree)
+      case _ => throw new IllegalArgumentException
     }
   }
 }
