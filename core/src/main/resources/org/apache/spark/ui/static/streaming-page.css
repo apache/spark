@@ -44,3 +44,11 @@
 .bar rect:hover {
   fill: orange;
 }
+
+.timeline {
+  width: 500px;
+}
+
+.distribution {
+  width: 300px;
+}

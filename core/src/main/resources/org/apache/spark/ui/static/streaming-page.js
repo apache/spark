@@ -50,7 +50,8 @@ function hideGraphTooltip() {
  * @param unitY the unit of Y axis
  */
 function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
-    var margin = {top: 20, right: 30, bottom: 30, left: 50};
+    d3.select(d3.select(id).node().parentNode).style("padding", "8px 0 8px 8px").style("border-right", "0px solid white");
+    var margin = {top: 20, right: 27, bottom: 30, left: 50};
     var width = 500 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
@@ -58,14 +59,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
     var timeFormat = d3.time.format("%H:%M:%S")
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(10)
-                    .tickFormat(function(d) {
-                        if (d.getTime() == minX || d.getTime() == maxX) {
-                            return timeFormat(d);
-                        } else {
-                            return "x";
-                        }
-                    });
+    var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(timeFormat);
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
 
     var line = d3.svg.line()
@@ -136,7 +130,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY) {
  * @param unitY the unit of Y axis
  */
 function drawDistribution(id, values, minY, maxY, unitY) {
-    var margin = {top: 20, right: 30, bottom: 30, left: 50};
+    d3.select(d3.select(id).node().parentNode).style("padding", "8px 8px 8px 0").style("border-left", "0px solid white");
+    var margin = {top: 20, right: 30, bottom: 30, left: 10};
     var width = 300 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
@@ -152,7 +147,7 @@ function drawDistribution(id, values, minY, maxY, unitY) {
         .range([0, width]);
 
     var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(5);
-    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(5);
+    var yAxis = d3.svg.axis().scale(y).orient("left").ticks(0).tickFormat(function(d) { return ""; });
 
     var svg = d3.select(id).append("svg")
         .attr("width", width + margin.left + margin.right)

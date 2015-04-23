@@ -260,8 +260,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
             </div>
             <div>Avg: {eventRateForAllReceivers.avg.map(_.formatted("%.2f")).getOrElse(emptyCell)} events/sec</div>
           </td>
-          <td>{timelineDataForEventRateOfAllReceivers}</td>
-          <td>{distributionDataForEventRateOfAllReceivers}</td>
+          <td class="timeline">{timelineDataForEventRateOfAllReceivers}</td>
+          <td class="distribution">{distributionDataForEventRateOfAllReceivers}</td>
         </tr>
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
@@ -273,24 +273,24 @@ private[ui] class StreamingPage(parent: StreamingTab)
             <div><strong>Scheduling Delay</strong></div>
             <div>Avg: {formatDurationOption(schedulingDelay.avg)}</div>
           </td>
-          <td>{timelineDataForSchedulingDelay}</td>
-          <td>{distributionDataForSchedulingDelay}</td>
+          <td class="timeline">{timelineDataForSchedulingDelay}</td>
+          <td class="distribution">{distributionDataForSchedulingDelay}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Processing Time</strong></div>
             <div>Avg: {formatDurationOption(processingTime.avg)}</div>
           </td>
-          <td>{timelineDataForProcessingTime}</td>
-          <td>{distributionDataForProcessingTime}</td>
+          <td class="timeline">{timelineDataForProcessingTime}</td>
+          <td class="distribution">{distributionDataForProcessingTime}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div><strong>Total Delay</strong></div>
             <div>Avg: {formatDurationOption(totalDelay.avg)}</div>
           </td>
-          <td>{timelineDataForTotalDelay}</td>
-          <td>{distributionDataForTotalDelay}</td>
+          <td class="timeline">{timelineDataForTotalDelay}</td>
+          <td class="distribution">{distributionDataForTotalDelay}</td>
         </tr>
       </tbody>
     </table>
@@ -313,9 +313,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <thead>
         <tr>
           <th></th>
-          <th>Status</th>
-          <th>Location</th>
-          <th>Last Error Time</th>
+          <th style="width: 166.7px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Status</div></th>
+          <th style="width: 166.7px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Location</div></th>
+          <th style="width: 166.7px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Last Error Time</div></th>
           <th>Last Error Message</th>
         </tr>
       </thead>
@@ -380,10 +380,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <td>{receiverLastError}</td>
     </tr>
       <tr>
-        <td colspan="3">
+        <td colspan="3" class="timeline">
           {timelineForEventRate}
         </td>
-        <td>{distributionForEventsRate}</td>
+        <td class="distribution">{distributionForEventsRate}</td>
       </tr>
     // scalastyle:on
   }
