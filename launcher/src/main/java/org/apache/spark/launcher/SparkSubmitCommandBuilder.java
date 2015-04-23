@@ -308,7 +308,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * Return whether the given main class represents a thrift server.
    */
   private boolean isThriftServer(String mainClass) {
-    return mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2");
+    return (mainClass != null &&
+        mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
 
 
