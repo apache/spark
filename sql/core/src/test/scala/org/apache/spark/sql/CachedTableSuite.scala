@@ -299,7 +299,7 @@ class CachedTableSuite extends QueryTest {
     assert(cacheManager.isEmpty)
   }
 
-  test("Clear accumulators when uncacheTable to prevent memory leaking") {
+  ignore("Clear accumulators when uncacheTable to prevent memory leaking") {
     val accsSize = Accumulators.originals.size
 
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
