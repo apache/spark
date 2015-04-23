@@ -45,6 +45,36 @@ import org.apache.spark.util.Utils
 class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
 
   /**
+   * Predict value and probability for a single data point using the model trained.
+   *
+   * @param features array representing a single data point
+   * @return Predict type containing prediction and probability from the trained model
+   */
+  def probability(features: Vector): Predict = {
+    topNode.probability(features)
+  }
+
+  /**
+   * Predict values and probability for the given data set using the model trained.
+   *
+   * @param features RDD representing data points to be predicted
+   * @return RDD of predictions for each of the given data points
+   */
+  def probability(features: RDD[Vector]): RDD[Predict] = {
+    features.map(x => probability(x))
+  }
+
+  /**
+   * Predict values and probability for the given data set using the model trained.
+   *
+   * @param features JavaRDD representing data points to be predicted
+   * @return JavaRDD of predictions for each of the given data points
+   */
+  def probability(features: JavaRDD[Vector]): JavaRDD[Predict] = {
+    probability(features.rdd)
+  }
+
+  /**
    * Predict values for a single data point using the model trained.
    *
    * @param features array representing a single data point
