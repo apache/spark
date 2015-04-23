@@ -244,7 +244,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             if($nullTerm)
               ${defaultPrimitive(StringType)}
             else
-              org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
+              org.apache.spark.sql.types.UTF8String(
+                ${eval.primitiveTerm}.asInstanceOf[ByteBuffer].array())
         """.children
 
       case Cast(child @ DateType(), StringType) =>
@@ -283,8 +284,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         (e1, e2).evaluateAs (BooleanType) {
           case (eval1, eval2) =>
             q"""
-              java.util.Arrays.equals($eval1.asInstanceOf[Array[Byte]],
-                 $eval2.asInstanceOf[Array[Byte]])
+              $eval1.asInstanceOf[ByteBuffer].compareTo($eval2.asInstanceOf[ByteBuffer]) == 0
             """
         }
 

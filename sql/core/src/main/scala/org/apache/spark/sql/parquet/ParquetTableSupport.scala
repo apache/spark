@@ -18,6 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import java.util.{HashMap => JHashMap}
+import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
 import parquet.column.ParquetProperties
@@ -200,7 +201,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case StringType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
-          Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
+          Binary.fromByteBuffer(value.asInstanceOf[ByteBuffer]))
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
         case ShortType => writer.addInteger(value.asInstanceOf[Short])
         case LongType => writer.addLong(value.asInstanceOf[Long])
@@ -348,7 +349,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case StringType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
       case BinaryType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
+        Binary.fromByteBuffer(record(index).asInstanceOf[ByteBuffer]))
       case IntegerType => writer.addInteger(record.getInt(index))
       case ShortType => writer.addInteger(record.getShort(index))
       case LongType => writer.addLong(record.getLong(index))

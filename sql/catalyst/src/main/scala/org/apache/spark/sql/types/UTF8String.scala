@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import java.nio.ByteBuffer
 import java.util.Arrays
 
 /**
@@ -211,4 +212,16 @@ object UTF8String {
       null
     }
   }
+
+  /**
+   * Create a UTF-8 String from ByteBuffer, which should be encoded in UTF-8
+   */
+  def apply(bytes: ByteBuffer): UTF8String = {
+    if (bytes != null) {
+      new UTF8String().set(bytes.array())
+    } else {
+      null
+    }
+  }
+ 
 }

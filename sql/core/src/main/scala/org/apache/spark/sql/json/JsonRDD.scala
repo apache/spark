@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.json
 
+import java.nio.ByteBuffer
 import java.sql.Timestamp
 
 import scala.collection.Map
@@ -459,7 +460,7 @@ private[sql] object JsonRDD extends Logging {
       case (LongType, v: Long) => gen.writeNumber(v)
       case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
-      case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
+      case (BinaryType, v: ByteBuffer) => gen.writeBinary(v.array())
       case (BooleanType, v: Boolean) => gen.writeBoolean(v)
       case (DateType, v) => gen.writeString(v.toString)
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, v)

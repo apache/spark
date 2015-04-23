@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.ByteBuffer
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
@@ -111,7 +112,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
+    case BinaryType => buildCast[ByteBuffer](_, b => UTF8String(b.array()))
     case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
     case TimestampType => buildCast[Timestamp](_, t => UTF8String(timestampToString(t)))
     case _ => buildCast[Any](_, o => UTF8String(o.toString))
@@ -119,7 +120,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
-    case StringType => buildCast[UTF8String](_, _.getBytes)
+    case StringType => buildCast[UTF8String](_, s => ByteBuffer.wrap(s.getBytes))
   }
 
   // UDFToBoolean

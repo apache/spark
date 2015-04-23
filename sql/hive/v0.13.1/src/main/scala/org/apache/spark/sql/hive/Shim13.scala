@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.nio.ByteBuffer
 import java.rmi.server.UID
 import java.util.{Properties, ArrayList => JArrayList}
 
@@ -257,7 +258,7 @@ private[hive] object HiveShim {
     if (value == null) {
       null
     } else {
-      new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
+      new hadoopIo.BytesWritable(value.asInstanceOf[ByteBuffer].array())
     }
 
   def getDateWritable(value: Any): hiveIo.DateWritable =

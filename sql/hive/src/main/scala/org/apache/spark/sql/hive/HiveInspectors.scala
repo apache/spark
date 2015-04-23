@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.nio.ByteBuffer
+
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -193,7 +195,7 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
     case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.Unlimited
     case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.Unlimited
-    case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
+    case c: Class[_] if c == classOf[ByteBuffer] => BinaryType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
     case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
     case c: Class[_] if c == classOf[java.lang.Long] => LongType
@@ -307,7 +309,9 @@ private[hive] trait HiveInspectors {
         val bw = x.getPrimitiveWritableObject(data)
         val result = new Array[Byte](bw.getLength()) 
         System.arraycopy(bw.getBytes(), 0, result, 0, bw.getLength())
-        result
+        ByteBuffer.wrap(result)
+      case x: BinaryObjectInspector =>
+        ByteBuffer.wrap(x.getPrimitiveJavaObject(data))
       case x: DateObjectInspector if x.preferWritable() =>
         DateUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
       case x: DateObjectInspector => DateUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
@@ -435,7 +439,7 @@ private[hive] trait HiveInspectors {
       case _: HiveDecimalObjectInspector =>
         HiveShim.createDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
-      case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
+      case _: BinaryObjectInspector => a.asInstanceOf[ByteBuffer].array()
       case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)
       case _: DateObjectInspector => DateUtils.toJavaDate(a.asInstanceOf[Int])
       case _: TimestampObjectInspector if x.preferWritable() => HiveShim.getTimestampWritable(a)

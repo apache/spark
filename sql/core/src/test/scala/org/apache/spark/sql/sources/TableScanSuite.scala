@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import java.nio.ByteBuffer
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.rdd.RDD
@@ -64,7 +65,7 @@ case class AllDataTypesScan(
     sqlContext.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
-        s"str_$i".getBytes(),
+        ByteBuffer.wrap(s"str_$i".getBytes()),
         i % 2 == 0,
         i.toByte,
         i.toShort,

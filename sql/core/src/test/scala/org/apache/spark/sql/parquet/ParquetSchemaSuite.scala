@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.ByteBuffer
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -44,7 +46,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
     }
   }
 
-  testSchema[(Boolean, Int, Long, Float, Double, Array[Byte])](
+  testSchema[(Boolean, Int, Long, Float, Double, ByteBuffer)](
     "basic types",
     """
       |message root {
@@ -151,7 +153,7 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
 
   // Test for SPARK-4520 -- ensure that thrift generated parquet schema is generated
   // as expected from attributes
-  testSchema[(Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
+  testSchema[(ByteBuffer, ByteBuffer, ByteBuffer, Seq[Int], Map[ByteBuffer, Seq[Int]])](
     "thrift generated parquet schema",
     """
       |message root {

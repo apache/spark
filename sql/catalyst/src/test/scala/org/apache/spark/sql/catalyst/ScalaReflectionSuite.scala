@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
+import java.nio.ByteBuffer
 import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
@@ -46,7 +47,7 @@ case class NullableData(
     decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
-    binaryField: Array[Byte])
+    binaryField: ByteBuffer)
 
 case class OptionalData(
     intField: Option[Int],
@@ -194,7 +195,7 @@ class ScalaReflectionSuite extends FunSuite {
     assert(BooleanType === typeOfObject(false))
 
     // BinaryType
-    assert(BinaryType === typeOfObject("string".getBytes))
+    assert(BinaryType === typeOfObject(ByteBuffer.wrap("string".getBytes)))
 
     // StringType
     assert(StringType === typeOfObject("string"))

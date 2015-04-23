@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.ByteBuffer
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -37,7 +38,8 @@ object Literal {
     case d: Decimal => Literal(d, DecimalType.Unlimited)
     case t: Timestamp => Literal(t, TimestampType)
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
-    case a: Array[Byte] => Literal(a, BinaryType)
+    case a: ByteBuffer => Literal(a, BinaryType)
+    case a: Array[Byte] => Literal(ByteBuffer.wrap(a), BinaryType)
     case null => Literal(null, NullType)
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
