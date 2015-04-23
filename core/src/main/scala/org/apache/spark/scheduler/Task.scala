@@ -95,7 +95,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   def killed: Boolean = _killed
 
   /**
-   * Returns the amount of time spent on task / RDD deserialization.
+   * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
 
