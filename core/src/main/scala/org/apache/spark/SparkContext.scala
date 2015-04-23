@@ -217,7 +217,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _heartbeatReceiver: RpcEndpointRef = _
   @volatile private var _dagScheduler: DAGScheduler = _
   private var _applicationId: String = _
-  private var _applicationAttemptId: String = _
+  private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
@@ -313,7 +313,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   def applicationId: String = _applicationId
-  def applicationAttemptId: String = _applicationAttemptId
+  def applicationAttemptId: Option[String] = _applicationAttemptId
 
   def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
@@ -1847,7 +1847,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, Some(applicationAttemptId)))
+      startTime, sparkUser, applicationAttemptId))
   }
 
   /** Post the application end event */
@@ -1895,7 +1895,7 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
-  private val activeContext: AtomicReference[SparkContext] = 
+  private val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
 
   /**
@@ -1948,11 +1948,11 @@ object SparkContext extends Logging {
   }
 
   /**
-   * This function may be used to get or instantiate a SparkContext and register it as a 
-   * singleton object. Because we can only have one active SparkContext per JVM, 
-   * this is useful when applications may wish to share a SparkContext. 
+   * This function may be used to get or instantiate a SparkContext and register it as a
+   * singleton object. Because we can only have one active SparkContext per JVM,
+   * this is useful when applications may wish to share a SparkContext.
    *
-   * Note: This function cannot be used to create multiple SparkContext instances 
+   * Note: This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
@@ -1965,17 +1965,17 @@ object SparkContext extends Logging {
       activeContext.get()
     }
   }
-  
+
   /**
-   * This function may be used to get or instantiate a SparkContext and register it as a 
-   * singleton object. Because we can only have one active SparkContext per JVM, 
+   * This function may be used to get or instantiate a SparkContext and register it as a
+   * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
-   * 
+   *
    * This method allows not passing a SparkConf (useful if just retrieving).
-   * 
-   * Note: This function cannot be used to create multiple SparkContext instances 
-   * even if multiple contexts are allowed. 
-   */ 
+   *
+   * Note: This function cannot be used to create multiple SparkContext instances
+   * even if multiple contexts are allowed.
+   */
   def getOrCreate(): SparkContext = {
     getOrCreate(new SparkConf())
   }

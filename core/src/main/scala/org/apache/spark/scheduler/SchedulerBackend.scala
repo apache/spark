@@ -46,6 +46,6 @@ private[spark] trait SchedulerBackend {
    *
    * @return An application attempt id
    */
-  def applicationAttemptId(): String = ""
+  def applicationAttemptId(): Option[String] = None
 
 }

@@ -47,7 +47,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
       appId: String,
-      appAttemptId: String,
+      appAttemptId: Option[String],
       inProgress: Boolean,
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
@@ -60,20 +60,20 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val provider = new FsHistoryProvider(createTestConf())
 
     // Write a new-style application log.
-    val newAppComplete = newLogFile("new1", "", inProgress = false)
+    val newAppComplete = newLogFile("new1", None, inProgress = false)
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart("new-app-complete", None, 1L, "test", None),
       SparkListenerApplicationEnd(5L)
       )
 
     // Write a new-style application log.
-    val newAppCompressedComplete = newLogFile("new1compressed", "", inProgress = false, Some("lzf"))
+    val newAppCompressedComplete = newLogFile("new1compressed", None, inProgress = false, Some("lzf"))
     writeFile(newAppCompressedComplete, true, None,
       SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test", None),
       SparkListenerApplicationEnd(4L))
 
     // Write an unfinished app, new-style.
-    val newAppIncomplete = newLogFile("new2", "", inProgress = true)
+    val newAppIncomplete = newLogFile("new2", None, inProgress = true)
     writeFile(newAppIncomplete, true, None,
       SparkListenerApplicationStart("new-app-incomplete", None, 1L, "test", None)
       )
@@ -165,12 +165,12 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("SPARK-3697: ignore directories that cannot be read.") {
-    val logFile1 = newLogFile("new1", "", inProgress = false)
+    val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", None, 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
-    val logFile2 = newLogFile("new2", "", inProgress = false)
+    val logFile2 = newLogFile("new2", None, inProgress = false)
     writeFile(logFile2, true, None,
       SparkListenerApplicationStart("app1-2", None, 1L, "test", None),
       SparkListenerApplicationEnd(2L)
@@ -186,7 +186,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("history file is renamed from inprogress to completed") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val logFile1 = newLogFile("app1", "", inProgress = true)
+    val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
       SparkListenerApplicationEnd(2L)
@@ -197,7 +197,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
         endWith(EventLoggingListener.IN_PROGRESS)
     }
 
-    logFile1.renameTo(newLogFile("app1", "", inProgress = false))
+    logFile1.renameTo(newLogFile("app1", None, inProgress = false))
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should not
@@ -208,7 +208,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("SPARK-5582: empty log directory") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val logFile1 = newLogFile("app1", "", inProgress = true)
+    val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
       SparkListenerApplicationEnd(2L))
@@ -224,7 +224,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("apps with multiple attempts") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val attempt1 = newLogFile("app1", "attempt1", inProgress = false)
+    val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(attempt1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(2L)
@@ -235,7 +235,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.head.attempts.size should be (1)
     }
 
-    val attempt2 = newLogFile("app1", "attempt2", inProgress = true)
+    val attempt2 = newLogFile("app1", Some("attempt2"), inProgress = true)
     writeFile(attempt2, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2"))
       )
@@ -246,7 +246,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.head.attempts.head.attemptId should be ("attempt1")
     }
 
-    val completedAttempt2 = newLogFile("app1", "attempt2", inProgress = false)
+    val completedAttempt2 = newLogFile("app1", Some("attempt2"), inProgress = false)
     attempt2.delete()
     writeFile(attempt2, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
@@ -260,7 +260,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       list.head.attempts.head.attemptId should be ("attempt2")
     }
 
-    val app2Attempt1 = newLogFile("app2", "attempt1", inProgress = false)
+    val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
     writeFile(attempt2, true, None,
       SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(6L)

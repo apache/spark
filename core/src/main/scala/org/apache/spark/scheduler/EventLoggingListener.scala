@@ -47,7 +47,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
-    appAttemptId : String,
+    appAttemptId : Option[String],
     logBaseDir: URI,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
@@ -55,7 +55,7 @@ private[spark] class EventLoggingListener(
 
   import EventLoggingListener._
 
-  def this(appId: String, appAttemptId : String, logBaseDir: URI, sparkConf: SparkConf) =
+  def this(appId: String, appAttemptId : Option[String], logBaseDir: URI, sparkConf: SparkConf) =
     this(appId, appAttemptId, logBaseDir, sparkConf,
       SparkHadoopUtil.get.newConfiguration(sparkConf))
 
@@ -267,15 +267,15 @@ private[spark] object EventLoggingListener extends Logging {
   def getLogPath(
       logBaseDir: URI,
       appId: String,
-      appAttemptId: String,
+      appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
     val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
     val base = logBaseDir.toString.stripSuffix("/") + "/" + sanitize(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
-    if (appAttemptId.isEmpty) {
-      base + codec
+    if (appAttemptId.isDefined) {
+      base + "_" + sanitize(appAttemptId.get) + codec
     } else {
-      base + "_" + sanitize(appAttemptId) + codec
+      base + codec
     }
   }
 
