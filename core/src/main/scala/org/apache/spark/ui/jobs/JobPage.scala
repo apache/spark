@@ -138,7 +138,11 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     events.toSeq
   }
 
-  private def  makeTimeline(stages: Seq[StageInfo], executors: Seq[ExecutorUIData]): Seq[Node] = {
+  private def  makeTimeline(
+      stages: Seq[StageInfo],
+      executors: Seq[ExecutorUIData],
+      jobStartTime: Long): Seq[Node] = {
+
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
     val executorsJsonAsStrSeq = makeExecutorEvent(executors)
 
@@ -167,7 +171,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     </div> ++
     <div id="job-timeline"></div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr});")}
+      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${jobStartTime});")}
     </script>
   }
 
@@ -297,8 +301,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         </div>
 
       var content = summary
+      val jobStartTime = jobData.submissionTime.get
       content ++= <h4>Events on Job Timeline</h4> ++
-        makeTimeline(activeStages ++ completedStages ++ failedStages, listener.executors)
+        makeTimeline(activeStages ++ completedStages ++ failedStages,
+          listener.executors, jobStartTime)
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++

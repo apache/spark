@@ -45,7 +45,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   });
 }
 
-function drawJobTimeline(groupArray, eventObjArray) {
+function drawJobTimeline(groupArray, eventObjArray, startTime) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $('#job-timeline')[0];
@@ -55,6 +55,7 @@ function drawJobTimeline(groupArray, eventObjArray) {
     },
     editable: false,
     showCurrentTime: false,
+    min: startTime,
     zoomable: false,
   };
 
