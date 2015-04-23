@@ -623,7 +623,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
       case StringType => q"$inputRow($ordinal).asInstanceOf[org.apache.spark.sql.types.UTF8String]"
-      case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
+      case dt: DataType if isNativeType(dt) => q"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
     }
   }
@@ -635,7 +635,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       value: TermName) = {
     dataType match {
       case StringType => q"$destinationRow.update($ordinal, $value)"
-      case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
+      case dt: DataType if isNativeType(dt) =>
+        q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
       case _ => q"$destinationRow.update($ordinal, $value)"
     }
   }
@@ -675,7 +676,18 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   protected def termForType(dt: DataType) = dt match {
-    case n: NativeType => n.tag
+    case n: AtomicType => n.tag
     case _ => typeTag[Any]
   }
+
+  /**
+   * List of data types that have special accessors and setters in [[Row]].
+   */
+  protected val nativeTypes =
+    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+
+  /**
+   * Returns true if the data type has a special accessor and setter in [[Row]].
+   */
+  protected def isNativeType(dt: DataType) = nativeTypes.contains(dt)
 }

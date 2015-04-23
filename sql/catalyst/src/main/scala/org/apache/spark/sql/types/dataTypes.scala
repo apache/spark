@@ -41,6 +41,22 @@ import org.apache.spark.util.Utils
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  private val nonDecimalNameToType = {
+    Seq(NullType, DateType, TimestampType, BinaryType,
+      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+      .map(t => t.typeName -> t).toMap
+  }
+
+  /** Given the string representation of a type, return its DataType */
+  private def nameToType(name: String): DataType = {
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    name match {
+      case "decimal" => DecimalType.Unlimited
+      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
+      case other => nonDecimalNameToType(other)
+    }
+  }
+
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
       case JObject(seq) => Some(seq.toList.sortBy(_._1))
@@ -51,7 +67,7 @@ object DataType {
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private def parseDataType(json: JValue): DataType = json match {
     case JString(name) =>
-      PrimitiveType.nameToType(name)
+      nameToType(name)
 
     case JSortedObject(
         ("containsNull", JBool(n)),
@@ -190,13 +206,11 @@ object DataType {
         equalsIgnoreNullability(leftKeyType, rightKeyType) &&
         equalsIgnoreNullability(leftValueType, rightValueType)
       case (StructType(leftFields), StructType(rightFields)) =>
-        leftFields.size == rightFields.size &&
-        leftFields.zip(rightFields)
-          .forall{
-            case (left, right) =>
-              left.name == right.name && equalsIgnoreNullability(left.dataType, right.dataType)
-          }
-      case (left, right) => left == right
+        leftFields.length == rightFields.length &&
+        leftFields.zip(rightFields).forall { case (l, r) =>
+          l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
+        }
+      case (l, r) => l == r
     }
   }
 
@@ -225,12 +239,11 @@ object DataType {
           equalsIgnoreCompatibleNullability(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
-        fromFields.size == toFields.size &&
-          fromFields.zip(toFields).forall {
-            case (fromField, toField) =>
-              fromField.name == toField.name &&
-                (toField.nullable || !fromField.nullable) &&
-                equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              (toField.nullable || !fromField.nullable) &&
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
@@ -255,8 +268,6 @@ abstract class DataType {
 
   /** The default size of a value of this data type. */
   def defaultSize: Int
-
-  def isPrimitive: Boolean = false
 
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
@@ -299,42 +310,17 @@ class NullType private() extends DataType {
 case object NullType extends NullType
 
 
-protected[sql] object NativeType {
-  val all = Seq(
-    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
-
-  def unapply(dt: DataType): Boolean = all.contains(dt)
-}
-
-
-protected[sql] trait PrimitiveType extends DataType {
-  override def isPrimitive: Boolean = true
-}
-
-
-protected[sql] object PrimitiveType {
-  private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
-  private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
-
-  /** Given the string representation of a type, return its DataType */
-  private[sql] def nameToType(name: String): DataType = {
-    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
-    name match {
-      case "decimal" => DecimalType.Unlimited
-      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType(other)
-    }
-  }
-}
-
-protected[sql] abstract class NativeType extends DataType {
-  private[sql] type JvmType
-  @transient private[sql] val tag: TypeTag[JvmType]
-  private[sql] val ordering: Ordering[JvmType]
+/**
+ * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
+ */
+protected[sql] abstract class AtomicType extends DataType {
+  private[sql] type InternalType
+  @transient private[sql] val tag: TypeTag[InternalType]
+  private[sql] val ordering: Ordering[InternalType]
 
   @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
     val mirror = runtimeMirror(Utils.getSparkClassLoader)
-    ClassTag[JvmType](mirror.runtimeClass(tag.tpe))
+    ClassTag[InternalType](mirror.runtimeClass(tag.tpe))
   }
 }
 
@@ -346,13 +332,13 @@ protected[sql] abstract class NativeType extends DataType {
  * @group dataType
  */
 @DeveloperApi
-class StringType private() extends NativeType with PrimitiveType {
+class StringType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = UTF8String
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type InternalType = UTF8String
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the StringType is 4096 bytes.
@@ -373,13 +359,13 @@ case object StringType extends StringType
  * @group dataType
  */
 @DeveloperApi
-class BinaryType private() extends NativeType with PrimitiveType {
+class BinaryType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Array[Byte]
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val ordering = new Ordering[JvmType] {
+  private[sql] type InternalType = Array[Byte]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  private[sql] val ordering = new Ordering[InternalType] {
     def compare(x: Array[Byte], y: Array[Byte]): Int = {
       for (i <- 0 until x.length; if i < y.length) {
         val res = x(i).compareTo(y(i))
@@ -407,13 +393,13 @@ case object BinaryType extends BinaryType
  *@group dataType
  */
 @DeveloperApi
-class BooleanType private() extends NativeType with PrimitiveType {
+class BooleanType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Boolean
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type InternalType = Boolean
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the BooleanType is 1 byte.
@@ -434,15 +420,15 @@ case object BooleanType extends BooleanType
  * @group dataType
  */
 @DeveloperApi
-class TimestampType private() extends NativeType {
+class TimestampType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "TimestampType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Timestamp
+  private[sql] type InternalType = Timestamp
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
 
-  private[sql] val ordering = new Ordering[JvmType] {
+  private[sql] val ordering = new Ordering[InternalType] {
     def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
 
@@ -465,15 +451,15 @@ case object TimestampType extends TimestampType
  * @group dataType
  */
 @DeveloperApi
-class DateType private() extends NativeType {
+class DateType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DateType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Int
+  private[sql] type InternalType = Int
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
 
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the DateType is 4 bytes.
@@ -492,13 +478,13 @@ case object DateType extends DateType
  *
  * @group dataType
  */
-abstract class NumericType extends NativeType with PrimitiveType {
+abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
-  private[sql] val numeric: Numeric[JvmType]
+  private[sql] val numeric: Numeric[InternalType]
 }
 
 
@@ -517,7 +503,7 @@ protected[sql] object IntegralType {
 
 
 protected[sql] sealed abstract class IntegralType extends NumericType {
-  private[sql] val integral: Integral[JvmType]
+  private[sql] val integral: Integral[InternalType]
 }
 
 
@@ -532,11 +518,11 @@ class LongType private() extends IntegralType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Long
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Long
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the LongType is 8 bytes.
@@ -562,11 +548,11 @@ class IntegerType private() extends IntegralType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Int
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Int
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the IntegerType is 4 bytes.
@@ -592,11 +578,11 @@ class ShortType private() extends IntegralType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "ShortType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Short
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Short
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the ShortType is 2 bytes.
@@ -622,11 +608,11 @@ class ByteType private() extends IntegralType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "ByteType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Byte
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Byte
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the ByteType is 1 byte.
@@ -651,8 +637,8 @@ protected[sql] object FractionalType {
 
 
 protected[sql] sealed abstract class FractionalType extends NumericType {
-  private[sql] val fractional: Fractional[JvmType]
-  private[sql] val asIntegral: Integral[JvmType]
+  private[sql] val fractional: Fractional[InternalType]
+  private[sql] val asIntegral: Integral[InternalType]
 }
 
 
@@ -675,8 +661,8 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
   /** No-arg constructor for kryo. */
   protected def this() = this(null)
 
-  private[sql] type JvmType = Decimal
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Decimal
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = Decimal.DecimalIsFractional
   private[sql] val fractional = Decimal.DecimalIsFractional
   private[sql] val ordering = Decimal.DecimalIsFractional
@@ -753,11 +739,11 @@ class DoubleType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Double
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Double
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
 
   /**
@@ -782,11 +768,11 @@ class FloatType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type JvmType = Float
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] type InternalType = Float
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
   private[sql] val asIntegral = FloatAsIfIntegral
 
   /**
