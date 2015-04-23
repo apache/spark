@@ -123,6 +123,14 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     assert(termVertexIds.map(i => LDA.index2term(i.toLong)) === termIds)
     assert(termVertexIds.forall(i => LDA.isTermVertex((i.toLong, 0))))
   }
+
+  test("setter alias") {
+    val lda = new LDA().setAlpha(2.0).setBeta(3.0)
+    assert(lda.getAlpha === 2.0)
+    assert(lda.getDocConcentration === 2.0)
+    assert(lda.getBeta === 3.0)
+    assert(lda.getTopicConcentration === 3.0)
+  }
 }
 
 private[clustering] object LDASuite {
