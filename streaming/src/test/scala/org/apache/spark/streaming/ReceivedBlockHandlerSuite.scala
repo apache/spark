@@ -43,7 +43,7 @@ import WriteAheadLogSuite._
 
 class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
 
-  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
+  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
   val hadoopConf = new Configuration()
   val storageLevel = StorageLevel.MEMORY_ONLY_SER
   val streamId = 1
@@ -130,10 +130,11 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
           "Unexpected store result type"
         )
         // Verify the data in write ahead log files is correct
-        val fileSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].segment}
-        val loggedData = fileSegments.flatMap { segment =>
-          val reader = new WriteAheadLogRandomReader(segment.path, hadoopConf)
-          val bytes = reader.read(segment)
+        val walSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].segment}
+        val loggedData = walSegments.flatMap { walSegment =>
+          val fileSegment = walSegment.asInstanceOf[FileBasedWriteAheadLogSegment]
+          val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
+          val bytes = reader.read(fileSegment)
           reader.close()
           blockManager.dataDeserialize(generateBlockId(), bytes).toList
         }

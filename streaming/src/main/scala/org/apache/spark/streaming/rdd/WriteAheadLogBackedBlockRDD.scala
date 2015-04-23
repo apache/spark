@@ -18,12 +18,10 @@ package org.apache.spark.streaming.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.streaming.util.{HdfsUtils, WriteAheadLogFileSegment, WriteAheadLogRandomReader}
+import org.apache.spark.streaming.util._
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
@@ -37,7 +35,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDDPartition(
     val index: Int,
     val blockId: BlockId,
-    val segment: WriteAheadLogFileSegment)
+    val segment: WriteAheadLogSegment)
   extends Partition
 
 
@@ -58,7 +56,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
-    @transient segments: Array[WriteAheadLogFileSegment],
+    @transient segments: Array[WriteAheadLogSegment],
     storeInBlockManager: Boolean,
     storageLevel: StorageLevel)
   extends BlockRDD[T](sc, blockIds) {
@@ -96,9 +94,17 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         logDebug(s"Read partition data of $this from block manager, block $blockId")
         iterator
       case None => // Data not found in Block Manager, grab it from write ahead log file
-        val reader = new WriteAheadLogRandomReader(partition.segment.path, hadoopConf)
-        val dataRead = reader.read(partition.segment)
-        reader.close()
+        val dataRead = {
+          var writeAheadLog: WriteAheadLog = null
+          try {
+            writeAheadLog = WriteAheadLogUtils.createLogForReceiver(conf, null, hadoopConf)
+            writeAheadLog.read(partition.segment)
+          } finally {
+            if (writeAheadLog != null) {
+              writeAheadLog.close()
+            }
+          }
+        }
         logInfo(s"Read partition data of $this from write ahead log, segment ${partition.segment}")
         if (storeInBlockManager) {
           blockManager.putBytes(blockId, dataRead, storageLevel)
@@ -117,8 +123,14 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockLocations = getBlockIdLocations().get(partition.blockId)
-    blockLocations.getOrElse(
-      HdfsUtils.getFileSegmentLocations(
-        partition.segment.path, partition.segment.offset, partition.segment.length, hadoopConfig))
+    blockLocations.getOrElse {
+      partition.segment match {
+        case fileSegment: FileBasedWriteAheadLogSegment =>
+          HdfsUtils.getFileSegmentLocations(
+            fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+        case _ =>
+          Seq.empty
+      }
+    }
   }
 }

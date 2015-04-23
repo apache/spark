@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogReader
+import org.apache.spark.streaming.util.FileBasedWriteAheadLogReader
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -115,7 +115,7 @@ class ReceivedBlockTrackerSuite
 
     // Start tracker and add blocks
     conf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
-    conf.set("spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", "1")
+    conf.set("spark.streaming.driver.writeAheadLog.rotationIntervalSecs", "1")
     val tracker1 = createTracker(clock = manualClock)
     tracker1.isLogManagerEnabled should be (true)
 
@@ -231,7 +231,7 @@ class ReceivedBlockTrackerSuite
   def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
-      file => new WriteAheadLogReader(file, hadoopConf).toSeq
+      file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.map { byteBuffer =>
       Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array)
     }.toList

@@ -23,28 +23,32 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-import WriteAheadLogSuite._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.{ManualClock, Utils}
-import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.SparkConf
+import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.streaming.util.FileBasedWriteAheadLog._
 
 class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
+  import WriteAheadLogSuite._
+  
   val hadoopConf = new Configuration()
   var tempDir: File = null
   var testDir: String = null
   var testFile: String = null
-  var manager: WriteAheadLogManager = null
+  var writeAheadLog: FileBasedWriteAheadLog = null
 
   before {
     tempDir = Utils.createTempDir()
     testDir = tempDir.toString
     testFile = new File(tempDir, "testFile").toString
-    if (manager != null) {
-      manager.stop()
-      manager = null
+    if (writeAheadLog != null) {
+      writeAheadLog.close()
+      writeAheadLog = null
     }
   }
 
@@ -52,16 +56,16 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     Utils.deleteRecursively(tempDir)
   }
 
-  test("WriteAheadLogWriter - writing data") {
+  test("FileBasedWriteAheadLogWriter - writing data") {
     val dataToWrite = generateRandomData()
     val segments = writeDataUsingWriter(testFile, dataToWrite)
     val writtenData = readDataManually(segments)
     assert(writtenData === dataToWrite)
   }
 
-  test("WriteAheadLogWriter - syncing of data by writing and reading immediately") {
+  test("FileBasedWriteAheadLogWriter - syncing of data by writing and reading immediately") {
     val dataToWrite = generateRandomData()
-    val writer = new WriteAheadLogWriter(testFile, hadoopConf)
+    val writer = new FileBasedWriteAheadLogWriter(testFile, hadoopConf)
     dataToWrite.foreach { data =>
       val segment = writer.write(stringToByteBuffer(data))
       val dataRead = readDataManually(Seq(segment)).head
@@ -70,10 +74,10 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     writer.close()
   }
 
-  test("WriteAheadLogReader - sequentially reading data") {
+  test("FileBasedWriteAheadLogReader - sequentially reading data") {
     val writtenData = generateRandomData()
     writeDataManually(writtenData, testFile)
-    val reader = new WriteAheadLogReader(testFile, hadoopConf)
+    val reader = new FileBasedWriteAheadLogReader(testFile, hadoopConf)
     val readData = reader.toSeq.map(byteBufferToString)
     assert(readData === writtenData)
     assert(reader.hasNext === false)
@@ -83,14 +87,14 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     reader.close()
   }
 
-  test("WriteAheadLogReader - sequentially reading data written with writer") {
+  test("FileBasedWriteAheadLogReader - sequentially reading data written with writer") {
     val dataToWrite = generateRandomData()
     writeDataUsingWriter(testFile, dataToWrite)
     val readData = readDataUsingReader(testFile)
     assert(readData === dataToWrite)
   }
 
-  test("WriteAheadLogReader - reading data written with writer after corrupted write") {
+  test("FileBasedWriteAheadLogReader - reading data written with writer after corrupted write") {
     // Write data manually for testing the sequential reader
     val dataToWrite = generateRandomData()
     writeDataUsingWriter(testFile, dataToWrite)
@@ -113,38 +117,38 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     assert(readDataUsingReader(testFile) === (dataToWrite.dropRight(1)))
   }
 
-  test("WriteAheadLogRandomReader - reading data using random reader") {
+  test("FileBasedWriteAheadLogRandomReader - reading data using random reader") {
     // Write data manually for testing the random reader
     val writtenData = generateRandomData()
     val segments = writeDataManually(writtenData, testFile)
 
     // Get a random order of these segments and read them back
     val writtenDataAndSegments = writtenData.zip(segments).toSeq.permutations.take(10).flatten
-    val reader = new WriteAheadLogRandomReader(testFile, hadoopConf)
+    val reader = new FileBasedWriteAheadLogRandomReader(testFile, hadoopConf)
     writtenDataAndSegments.foreach { case (data, segment) =>
       assert(data === byteBufferToString(reader.read(segment)))
     }
     reader.close()
   }
 
-  test("WriteAheadLogRandomReader - reading data using random reader written with writer") {
+  test("FileBasedWriteAheadLogRandomReader - reading data using random reader written with writer") {
     // Write data using writer for testing the random reader
     val data = generateRandomData()
     val segments = writeDataUsingWriter(testFile, data)
 
     // Read a random sequence of segments and verify read data
     val dataAndSegments = data.zip(segments).toSeq.permutations.take(10).flatten
-    val reader = new WriteAheadLogRandomReader(testFile, hadoopConf)
+    val reader = new FileBasedWriteAheadLogRandomReader(testFile, hadoopConf)
     dataAndSegments.foreach { case (data, segment) =>
       assert(data === byteBufferToString(reader.read(segment)))
     }
     reader.close()
   }
 
-  test("WriteAheadLogManager - write rotating logs") {
+  test("FileBasedWriteAheadLog - write rotating logs") {
     // Write data using manager
     val dataToWrite = generateRandomData()
-    writeDataUsingManager(testDir, dataToWrite)
+    writeDataUsingWriteAheadLog(testDir, dataToWrite)
 
     // Read data manually to verify the written data
     val logFiles = getLogFilesInDirectory(testDir)
@@ -153,7 +157,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     assert(writtenData === dataToWrite)
   }
 
-  test("WriteAheadLogManager - read rotating logs") {
+  test("FileBasedWriteAheadLog - read rotating logs") {
     // Write data manually for testing reading through manager
     val writtenData = (1 to 10).map { i =>
       val data = generateRandomData()
@@ -167,25 +171,25 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     assert(fileSystem.exists(logDirectoryPath) === true)
 
     // Read data using manager and verify
-    val readData = readDataUsingManager(testDir)
+    val readData = readDataUsingWriteAheadLog(testDir)
     assert(readData === writtenData)
   }
 
-  test("WriteAheadLogManager - recover past logs when creating new manager") {
+  test("FileBasedWriteAheadLog - recover past logs when creating new manager") {
     // Write data with manager, recover with new manager and verify
     val dataToWrite = generateRandomData()
-    writeDataUsingManager(testDir, dataToWrite)
+    writeDataUsingWriteAheadLog(testDir, dataToWrite)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
-    val readData = readDataUsingManager(testDir)
+    val readData = readDataUsingWriteAheadLog(testDir)
     assert(dataToWrite === readData)
   }
 
-  test("WriteAheadLogManager - cleanup old logs") {
+  test("FileBasedWriteAheadLog - cleanup old logs") {
     logCleanUpTest(waitForCompletion = false)
   }
 
-  test("WriteAheadLogManager - cleanup old logs synchronously") {
+  test("FileBasedWriteAheadLog - cleanup old logs synchronously") {
     logCleanUpTest(waitForCompletion = true)
   }
 
@@ -193,11 +197,11 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     // Write data with manager, recover with new manager and verify
     val manualClock = new ManualClock
     val dataToWrite = generateRandomData()
-    manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
+    writeAheadLog = writeDataUsingWriteAheadLog(testDir, dataToWrite, manualClock, closeLog = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    manager.cleanupOldLogs(manualClock.getTimeMillis() / 2, waitForCompletion)
+    writeAheadLog.cleanup(manualClock.getTimeMillis() / 2, waitForCompletion)
 
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
@@ -208,11 +212,11 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     }
   }
 
-  test("WriteAheadLogManager - handling file errors while reading rotating logs") {
+  test("FileBasedWriteAheadLog - handling file errors while reading rotating logs") {
     // Generate a set of log files
     val manualClock = new ManualClock
     val dataToWrite1 = generateRandomData()
-    writeDataUsingManager(testDir, dataToWrite1, manualClock)
+    writeDataUsingWriteAheadLog(testDir, dataToWrite1, manualClock)
     val logFiles1 = getLogFilesInDirectory(testDir)
     assert(logFiles1.size > 1)
 
@@ -220,12 +224,12 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
     manualClock.advance(100000)
-    writeDataUsingManager(testDir, dataToWrite2, manualClock)
+    writeDataUsingWriteAheadLog(testDir, dataToWrite2, manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
 
     // Read the files and verify that all the written data can be read
-    val readData1 = readDataUsingManager(testDir)
+    val readData1 = readDataUsingWriteAheadLog(testDir)
     assert(readData1 === (dataToWrite1 ++ dataToWrite2))
 
     // Corrupt the first set of files so that they are basically unreadable
@@ -236,7 +240,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     }
 
     // Verify that the corrupted files do not prevent reading of the second set of data
-    val readData = readDataUsingManager(testDir)
+    val readData = readDataUsingWriteAheadLog(testDir)
     assert(readData === dataToWrite2)
   }
 }
@@ -246,15 +250,15 @@ object WriteAheadLogSuite {
   private val hadoopConf = new Configuration()
 
   /** Write data to a file directly and return an array of the file segments written. */
-  def writeDataManually(data: Seq[String], file: String): Seq[WriteAheadLogFileSegment] = {
-    val segments = new ArrayBuffer[WriteAheadLogFileSegment]()
+  def writeDataManually(data: Seq[String], file: String): Seq[FileBasedWriteAheadLogSegment] = {
+    val segments = new ArrayBuffer[FileBasedWriteAheadLogSegment]()
     val writer = HdfsUtils.getOutputStream(file, hadoopConf)
     data.foreach { item =>
       val offset = writer.getPos
       val bytes = Utils.serialize(item)
       writer.writeInt(bytes.size)
       writer.write(bytes)
-      segments += WriteAheadLogFileSegment(file, offset, bytes.size)
+      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.size)
     }
     writer.close()
     segments
@@ -263,8 +267,8 @@ object WriteAheadLogSuite {
   /**
    * Write data to a file using the writer class and return an array of the file segments written.
    */
-  def writeDataUsingWriter(filePath: String, data: Seq[String]): Seq[WriteAheadLogFileSegment] = {
-    val writer = new WriteAheadLogWriter(filePath, hadoopConf)
+  def writeDataUsingWriter(filePath: String, data: Seq[String]): Seq[FileBasedWriteAheadLogSegment] = {
+    val writer = new FileBasedWriteAheadLogWriter(filePath, hadoopConf)
     val segments = data.map {
       item => writer.write(item)
     }
@@ -273,26 +277,29 @@ object WriteAheadLogSuite {
   }
 
   /** Write data to rotating files in log directory using the manager class. */
-  def writeDataUsingManager(
+  def writeDataUsingWriteAheadLog(
       logDirectory: String,
       data: Seq[String],
       manualClock: ManualClock = new ManualClock,
-      stopManager: Boolean = true
-    ): WriteAheadLogManager = {
+      closeLog: Boolean = true
+    ): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
-    val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
-      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = manualClock)
+
+    val conf = new SparkConf()
+    conf.set(ROLLING_INTERVAL_SECS_CONF_KEY, "1")
+    val wal = new FileBasedWriteAheadLog(conf, logDirectory, hadoopConf)
+    
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
       manualClock.advance(500)
-      manager.writeToLog(item)
+      wal.write(item, manualClock.getTimeMillis())
     }
-    if (stopManager) manager.stop()
-    manager
+    if (closeLog) wal.close()
+    wal
   }
 
   /** Read data from a segments of a log file directly and return the list of byte buffers. */
-  def readDataManually(segments: Seq[WriteAheadLogFileSegment]): Seq[String] = {
+  def readDataManually(segments: Seq[FileBasedWriteAheadLogSegment]): Seq[String] = {
     segments.map { segment =>
       val reader = HdfsUtils.getInputStream(segment.path, hadoopConf)
       try {
@@ -331,18 +338,18 @@ object WriteAheadLogSuite {
 
   /** Read all the data from a log file using reader class and return the list of byte buffers. */
   def readDataUsingReader(file: String): Seq[String] = {
-    val reader = new WriteAheadLogReader(file, hadoopConf)
+    val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
     val readData = reader.toList.map(byteBufferToString)
     reader.close()
     readData
   }
 
   /** Read all the data in the log file in a directory using the manager class. */
-  def readDataUsingManager(logDirectory: String): Seq[String] = {
-    val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
-      callerName = "WriteAheadLogSuite")
-    val data = manager.readFromLog().map(byteBufferToString).toSeq
-    manager.stop()
+  def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
+    import scala.collection.JavaConversions._
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf)
+    val data = wal.readAll().map(byteBufferToString).toSeq
+    wal.close()
     data
   }
 

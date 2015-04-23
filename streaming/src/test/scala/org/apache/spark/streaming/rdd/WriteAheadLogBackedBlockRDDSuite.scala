@@ -25,7 +25,7 @@ import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, WriteAheadLogWriter}
+import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
 import org.apache.spark.util.Utils
 
 class WriteAheadLogBackedBlockRDDSuite
@@ -145,9 +145,9 @@ class WriteAheadLogBackedBlockRDDSuite
   private def writeLogSegments(
       blockData: Seq[Seq[String]],
       blockIds: Seq[BlockId]
-    ): Seq[WriteAheadLogFileSegment] = {
+    ): Seq[FileBasedWriteAheadLogSegment] = {
     require(blockData.size === blockIds.size)
-    val writer = new WriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
+    val writer = new FileBasedWriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
       writer.write(blockManager.dataSerialize(id, data.iterator))
     }
@@ -155,7 +155,7 @@ class WriteAheadLogBackedBlockRDDSuite
     segments
   }
 
-  private def generateFakeSegments(count: Int): Seq[WriteAheadLogFileSegment] = {
-    Array.fill(count)(new WriteAheadLogFileSegment("random", 0L, 0))
+  private def generateFakeSegments(count: Int): Seq[FileBasedWriteAheadLogSegment] = {
+    Array.fill(count)(new FileBasedWriteAheadLogSegment("random", 0L, 0))
   }
 }
