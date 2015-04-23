@@ -90,7 +90,7 @@ private[sql] object CatalystConverter {
         createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
       }
       // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType, false) => {
+      case ArrayType(elementType: AtomicType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
       }
       // This is for other types of arrays, including those with nested fields
@@ -118,19 +118,19 @@ private[sql] object CatalystConverter {
       case ShortType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.JvmType])
+            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.InternalType])
         }
       }
       case ByteType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
+            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.InternalType])
         }
       }
       case DateType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
-            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
+            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.InternalType])
         }
       }
       case d: DecimalType => {
@@ -637,13 +637,13 @@ private[parquet] class CatalystArrayConverter(
  * @param capacity The (initial) capacity of the buffer
  */
 private[parquet] class CatalystNativeArrayConverter(
-    val elementType: NativeType,
+    val elementType: AtomicType,
     val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
   extends CatalystConverter {
 
-  type NativeType = elementType.JvmType
+  type NativeType = elementType.InternalType
 
   private var buffer: Array[NativeType] = elementType.classTag.newArray(capacity)
 
