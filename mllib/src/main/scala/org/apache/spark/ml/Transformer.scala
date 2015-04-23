@@ -94,7 +94,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
       throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
     }
     val outputFields = schema.fields :+
-      StructField(map(outputCol), outputDataType, !outputDataType.isPrimitive)
+      StructField(map(outputCol), outputDataType, nullable = false)
     StructType(outputFields)
   }
 
