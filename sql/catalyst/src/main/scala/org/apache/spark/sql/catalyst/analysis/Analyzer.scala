@@ -336,9 +336,37 @@ class Analyzer(
         }
         j.copy(right = newRight)
 
+      // When resolve `SortOrder`s in Sort based on child, don't report errors as
+      // we still have chance to resolve it based on grandchild
+      case s @ Sort(ordering, global, child) =>
+        var changed = false
+        val newOrdering = ordering.map { order =>
+          // Resolve SortOrder in one round, or fail and return the origin one.
+          try {
+            val newOrder = order transformUp {
+              case u @ UnresolvedAttribute(nameParts) =>
+                child.resolve(nameParts, resolver).getOrElse(u)
+              case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                ExtractValue(child, fieldName, resolver)
+            }
+            if (!newOrder.fastEquals(order)) {
+              changed = true
+            }
+            newOrder.asInstanceOf[SortOrder]
+          } catch {
+            case a: AnalysisException => order
+          }
+        }
+
+        if (changed) {
+          Sort(newOrdering, global, child)
+        } else {
+          s
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        q transformExpressionsUp {
           case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
             resolver(nameParts(0), VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
@@ -424,6 +452,7 @@ class Analyzer(
             Sort(withAggsRemoved, global,
               Aggregate(grouping, aggs ++ missing, child)))
         } else {
+          logDebug(s"Failed to find $missing in ${a.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
     }
@@ -437,30 +466,30 @@ class Analyzer(
         ordering: Seq[SortOrder],
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[Seq[String]] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
 
-      // Create a map from name, to resolved attributes, when the desired name can be found
-      // prior to the projection.
-      val resolved: Map[Seq[String], NamedExpression] =
-        unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
+      // Store `SortOrder`s we resolved based on grandchild
+      val resolved = scala.collection.mutable.ListBuffer.empty[Expression]
+
+      val resolvedOrdering = ordering.map { order =>
+        val newOrder = order transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            grandchild.resolve(nameParts, resolver).getOrElse(u)
+          case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+            ExtractValue(child, fieldName, resolver)
+        }
+        if (!newOrder.fastEquals(order) && newOrder.resolved) {
+          resolved += newOrder
+        }
+        newOrder.asInstanceOf[SortOrder]
+      }
 
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
-      val requiredAttributes = AttributeSet(resolved.values)
+      val requiredAttributes = AttributeSet(resolved)
 
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
       val missingInProject = requiredAttributes -- child.output
-
-      // Now that we have all the attributes we need, reconstruct a resolved ordering.
-      // It is important to do it here, instead of waiting for the standard resolved as adding
-      // attributes to the project below can actually introduce ambiquity that was not present
-      // before.
-      val resolvedOrdering = ordering.map(_ transform {
-        case u @ UnresolvedAttribute(name) => resolved.getOrElse(name, u)
-      }).asInstanceOf[Seq[SortOrder]]
 
       (resolvedOrdering, missingInProject.toSeq)
     }

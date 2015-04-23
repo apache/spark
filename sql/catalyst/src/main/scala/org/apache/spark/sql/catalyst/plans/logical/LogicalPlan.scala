@@ -111,9 +111,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver,
-      throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(nameParts, children.flatMap(_.output), resolver, throwErrors)
+      resolver: Resolver): Option[NamedExpression] =
+    resolve(nameParts, children.flatMap(_.output), resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -122,9 +121,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolve(
       nameParts: Seq[String],
-      resolver: Resolver,
-      throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(nameParts, output, resolver, throwErrors)
+      resolver: Resolver): Option[NamedExpression] =
+    resolve(nameParts, output, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -219,8 +217,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   protected def resolve(
       nameParts: Seq[String],
       input: Seq[Attribute],
-      resolver: Resolver,
-      throwErrors: Boolean): Option[NamedExpression] = {
+      resolver: Resolver): Option[NamedExpression] = {
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -254,19 +251,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        try {
-          // The foldLeft adds GetFields for every remaining parts of the identifier,
-          // and aliases it with the last part of the identifier.
-          // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-          // Then this will add GetField("c", GetField("b", a)), and alias
-          // the final expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-            ExtractValue(expr, Literal(fieldName), resolver))
-          val aliasName = nestedFields.last
-          Some(Alias(fieldExprs, aliasName)())
-        } catch {
-          case a: AnalysisException if !throwErrors => None
-        }
+        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
+        // and aliases it with the last part of the identifier.
+        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias
+        // the final expression as "c".
+        val fieldExprs = nestedFields.foldLeft(a: Expression)(ExtractValue(_, _, resolver))
+        val aliasName = nestedFields.last
+        Some(Alias(fieldExprs, aliasName)())
 
       // No matches.
       case Seq() =>
