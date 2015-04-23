@@ -1,4 +1,4 @@
-package org.apache.spark.status.api.v1;/*
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,6 +15,8 @@ package org.apache.spark.status.api.v1;/*
  * limitations under the License.
  */
 
+package org.apache.spark.status.api.v1;
+
 import org.apache.spark.status.api.EnumUtil;
 
 import java.util.HashSet;
@@ -25,8 +27,8 @@ public enum TaskSorting {
   IncreasingRuntime("runtime"),
   DecreasingRuntime("-runtime");
 
-  final Set<String> alternateNames;
-  TaskSorting(String... names) {
+  private final Set<String> alternateNames;
+  private TaskSorting(String... names) {
     alternateNames = new HashSet<String>();
     for (String n: names) {
       alternateNames.add(n);
@@ -34,8 +36,9 @@ public enum TaskSorting {
   }
 
   public static TaskSorting fromString(String str) {
+    String lower = str.toLowerCase();
     for (TaskSorting t: values()) {
-      if (t.alternateNames.contains(str.toLowerCase())) {
+      if (t.alternateNames.contains(lower)) {
         return t;
       }
     }

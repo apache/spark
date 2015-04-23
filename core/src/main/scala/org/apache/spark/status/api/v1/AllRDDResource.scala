@@ -70,7 +70,6 @@ private[spark] object AllRDDResource {
         (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
       }
 
-
     val dataDistribution = if (includeDetails) {
       Some(storageStatusList.map { status =>
         new RDDDataDistribution(

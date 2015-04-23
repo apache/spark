@@ -119,7 +119,6 @@ class HistoryServer(
   def initialize() {
     attachPage(new HistoryPage(this))
 
-
     attachHandler(JsonRootResource.getJsonServlet(this))
 
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))

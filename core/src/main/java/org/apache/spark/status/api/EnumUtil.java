@@ -27,12 +27,12 @@ public class EnumUtil {
       return null;
     }
     for (E e : constants) {
-      if (e.name().equalsIgnoreCase(str))
+      if (e.name().equalsIgnoreCase(str)) {
         return e;
+      }
     }
     throw new IllegalArgumentException(
       String.format("Illegal type='%s'. Supported type values: %s",
-        str, Joiner.on(", ").join(
-          Arrays.asList(constants))));
+        str, Joiner.on(", ").join(constants)));
   }
 }
