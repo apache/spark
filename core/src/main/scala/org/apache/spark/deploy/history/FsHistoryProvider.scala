@@ -270,7 +270,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     val newIterator = newApps.iterator.buffered
     val oldIterator = applications.values.iterator.buffered
     while (newIterator.hasNext && oldIterator.hasNext) {
-      if (compareAppInfo(newIterator.head, oldIterator.head)) {
+      if (newAppMap.contains(oldIterator.head.id)) {
+        oldIterator.next()
+      } else if (compareAppInfo(newIterator.head, oldIterator.head)) {
         addIfAbsent(newIterator.next())
       } else {
         addIfAbsent(oldIterator.next())
@@ -328,13 +330,29 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private def compareAppInfo(
       i1: FsApplicationHistoryInfo,
       i2: FsApplicationHistoryInfo): Boolean = {
-    compareAttemptInfo(i1.attempts.head, i2.attempts.head)
+    val a1 = i1.attempts.head
+    val a2 = i2.attempts.head
+    if (a1.endTime != a2.endTime) a1.endTime >= a2.endTime else a1.startTime >= a2.startTime
   }
 
+  /**
+   * Comparison function that defines the sort order for application attempts within the same
+   * application. Order is: running attempts before complete attempts, running attempts sorted
+   * by start time, completed attempts sorted by end time.
+   *
+   * Normally applications should have a single running attempt; but failure to call sc.stop()
+   * may cause multiple running attempts to show up.
+   *
+   * @return Whether `a1` should precede `a2`.
+   */
   private def compareAttemptInfo(
-      i1: FsApplicationAttemptInfo,
-      i2: FsApplicationAttemptInfo): Boolean = {
-    if (i1.endTime != i2.endTime) i1.endTime >= i2.endTime else i1.startTime >= i2.startTime
+      a1: FsApplicationAttemptInfo,
+      a2: FsApplicationAttemptInfo): Boolean = {
+    if (a1.completed == a2.completed) {
+      if (a1.completed) a1.endTime >= a2.endTime else a1.startTime >= a2.startTime
+    } else {
+      !a1.completed
+    }
   }
 
   /**

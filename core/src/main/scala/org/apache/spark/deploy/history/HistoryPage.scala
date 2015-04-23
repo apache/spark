@@ -38,7 +38,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList()
-      .filter(_.attempts.exists(_.completed != requestedIncomplete))
+      .filter(_.attempts.head.completed != requestedIncomplete)
     val allAppsSize = allApps.size
 
     val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0

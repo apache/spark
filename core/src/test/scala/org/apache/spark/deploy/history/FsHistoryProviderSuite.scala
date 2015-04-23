@@ -244,7 +244,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.size should be (2)
-      list.head.attempts.head.attemptId should be ("attempt1")
+      list.head.attempts.head.attemptId should be ("attempt2")
     }
 
     val completedAttempt2 = newLogFile("app1", Some("attempt2"), inProgress = false)
