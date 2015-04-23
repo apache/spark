@@ -30,6 +30,8 @@ import org.apache.spark.unsafe.memory.MemoryLocation;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
+ *
+ * This map supports a maximum of 2 billion keys.
  */
 public final class UnsafeFixedWidthAggregationMap {
 
@@ -106,7 +108,7 @@ public final class UnsafeFixedWidthAggregationMap {
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
       MemoryAllocator allocator,
-      long initialCapacity) {
+      int initialCapacity) {
     this.emptyAggregationBuffer =
       convertToUnsafeRow(emptyAggregationBuffer, aggregationBufferSchema);
     this.aggregationBufferSchema = aggregationBufferSchema;

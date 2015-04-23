@@ -40,11 +40,4 @@ public class TestLongArray {
     Assert.assertEquals(1L, arr.get(0));
     Assert.assertEquals(3L, arr.get(1));
   }
-
-  @Test
-  public void toJvmArray() {
-    LongArray arr = createTestData();
-    long[] expected = {1L, 3L};
-    Assert.assertArrayEquals(expected, arr.toJvmArray());
-  }
 }

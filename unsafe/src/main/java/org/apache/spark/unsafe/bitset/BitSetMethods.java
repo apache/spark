@@ -39,7 +39,7 @@ public final class BitSetMethods {
   /**
    * Sets the bit at the specified index to {@code true}.
    */
-  public static void set(Object baseObject, long baseOffset, long index) {
+  public static void set(Object baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -50,7 +50,7 @@ public final class BitSetMethods {
   /**
    * Sets the bit at the specified index to {@code false}.
    */
-  public static void unset(Object baseObject, long baseOffset, long index) {
+  public static void unset(Object baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -61,7 +61,7 @@ public final class BitSetMethods {
   /**
    * Returns {@code true} if the bit is set at the specified index.
    */
-  public static boolean isSet(Object baseObject, long baseOffset, long index) {
+  public static boolean isSet(Object baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -98,18 +98,18 @@ public final class BitSetMethods {
    * @param bitsetSizeInWords the size of the bitset, measured in 8-byte words
    * @return the index of the next set bit, or -1 if there is no such bit
    */
-  public static long nextSetBit(
+  public static int nextSetBit(
       Object baseObject,
       long baseOffset,
-      long fromIndex,
-      long bitsetSizeInWords) {
-    long wi = fromIndex >> 6;
+      int fromIndex,
+      int bitsetSizeInWords) {
+    int wi = fromIndex >> 6;
     if (wi >= bitsetSizeInWords) {
       return -1;
     }
 
     // Try to find the next set bit in the current word
-    final long subIndex = fromIndex & 0x3f;
+    final int subIndex = fromIndex & 0x3f;
     long word =
       PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + wi * WORD_SIZE) >> subIndex;
     if (word != 0) {

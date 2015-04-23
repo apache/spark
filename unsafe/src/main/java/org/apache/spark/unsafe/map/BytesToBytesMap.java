@@ -135,12 +135,12 @@ public final class BytesToBytesMap {
 
   private long growthThreshold;
 
-  private long mask;
+  private int mask;
 
   private final Location loc;
 
 
-  public BytesToBytesMap(MemoryAllocator allocator, long initialCapacity, double loadFactor) {
+  public BytesToBytesMap(MemoryAllocator allocator, int initialCapacity, double loadFactor) {
     this.inHeap = allocator instanceof HeapMemoryAllocator;
     this.allocator = allocator;
     this.loadFactor = loadFactor;
@@ -148,7 +148,7 @@ public final class BytesToBytesMap {
     allocate(initialCapacity);
   }
 
-  public BytesToBytesMap(MemoryAllocator allocator, long initialCapacity) {
+  public BytesToBytesMap(MemoryAllocator allocator, int initialCapacity) {
     this(allocator, initialCapacity, 0.70);
   }
 
@@ -174,7 +174,7 @@ public final class BytesToBytesMap {
   public Iterator<Location> iterator() {
     return new Iterator<Location>() {
 
-      private long nextPos = bitset.nextSetBit(0);
+      private int nextPos = bitset.nextSetBit(0);
 
       @Override
       public boolean hasNext() {
@@ -183,7 +183,7 @@ public final class BytesToBytesMap {
 
       @Override
       public Location next() {
-        final long pos = nextPos;
+        final int pos = nextPos;
         nextPos = bitset.nextSetBit(nextPos + 1);
         return loc.with(pos, 0, true);
       }
@@ -206,8 +206,8 @@ public final class BytesToBytesMap {
       long keyBaseOffset,
       int keyRowLengthBytes) {
     final int hashcode = HASHER.hashUnsafeWords(keyBaseObject, keyBaseOffset, keyRowLengthBytes);
-    long pos = ((long) hashcode) & mask;
-    long step = 1;
+    int pos = hashcode & mask;
+    int step = 1;
     while (true) {
       if (!bitset.isSet(pos)) {
         // This is a new key.
@@ -244,7 +244,7 @@ public final class BytesToBytesMap {
    */
   public final class Location {
     /** An index into the hash map's Long array */
-    private long pos;
+    private int pos;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
     /**
@@ -255,8 +255,8 @@ public final class BytesToBytesMap {
     private int keyHashcode;
     private final MemoryLocation keyMemoryLocation = new MemoryLocation();
     private final MemoryLocation valueMemoryLocation = new MemoryLocation();
-    private long keyLength;
-    private long valueLength;
+    private int keyLength;
+    private int valueLength;
 
     private void updateAddressesAndSizes(long fullKeyAddress, long offsetFromKeyToValue) {
       if (inHeap) {
@@ -264,18 +264,18 @@ public final class BytesToBytesMap {
         final long keyOffsetInPage = getOffsetInPage(fullKeyAddress);
         keyMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8);
         valueMemoryLocation.setObjAndOffset(page, keyOffsetInPage + 8 + offsetFromKeyToValue);
-        keyLength = PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
+        keyLength = (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage);
         valueLength =
-          PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + offsetFromKeyToValue);
+          (int) PlatformDependent.UNSAFE.getLong(page, keyOffsetInPage + offsetFromKeyToValue);
       } else {
         keyMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8);
         valueMemoryLocation.setObjAndOffset(null, fullKeyAddress + 8 + offsetFromKeyToValue);
-        keyLength = PlatformDependent.UNSAFE.getLong(fullKeyAddress);
-        valueLength = PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
+        keyLength = (int) PlatformDependent.UNSAFE.getLong(fullKeyAddress);
+        valueLength = (int) PlatformDependent.UNSAFE.getLong(fullKeyAddress + offsetFromKeyToValue);
       }
     }
 
-    Location with(long pos, int keyHashcode, boolean isDefined) {
+    Location with(int pos, int keyHashcode, boolean isDefined) {
       this.pos = pos;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
@@ -325,7 +325,7 @@ public final class BytesToBytesMap {
      * Returns the length of the key defined at this position.
      * Unspecified behavior if the key is not defined.
      */
-    public long getKeyLength() {
+    public int getKeyLength() {
       assert (isDefined);
       return keyLength;
     }
@@ -345,7 +345,7 @@ public final class BytesToBytesMap {
      * Returns the length of the value defined at this position.
      * Unspecified behavior if the key is not defined.
      */
-    public long getValueLength() {
+    public int getValueLength() {
       assert (isDefined);
       return valueLength;
     }
@@ -372,12 +372,12 @@ public final class BytesToBytesMap {
      * Unspecified behavior if the key is not defined.
      */
     public void putNewKey(
-      Object keyBaseObject,
-      long keyBaseOffset,
-      int keyLengthBytes,  // TODO(josh): words?  bytes? eventually, we'll want to be more consistent about this
-      Object valueBaseObject,
-      long valueBaseOffset,
-      long valueLengthBytes) {
+        Object keyBaseObject,
+        long keyBaseOffset,
+        int keyLengthBytes,
+        Object valueBaseObject,
+        long valueBaseOffset,
+        int valueLengthBytes) {
       assert (!isDefined) : "Can only set value once for a key";
       isDefined = true;
       assert (keyLengthBytes % 8 == 0);
@@ -444,8 +444,8 @@ public final class BytesToBytesMap {
     }
   }
 
-  private void allocate(long capacity) {
-    capacity = java.lang.Math.max(nextPowerOf2(capacity), 64);
+  private void allocate(int capacity) {
+    capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
     longArray = new LongArray(allocator.allocate(capacity * 8 * 2));
     bitset = new BitSet(allocator.allocate(capacity / 8).zero());
 
@@ -491,18 +491,18 @@ public final class BytesToBytesMap {
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
     final BitSet oldBitSet = bitset;
-    final long oldCapacity = oldBitSet.capacity();
+    final int oldCapacity = (int) oldBitSet.capacity();
 
     // Allocate the new data structures
-    allocate(growthStrategy.nextCapacity(oldCapacity));
+    allocate(Math.min(Integer.MAX_VALUE, growthStrategy.nextCapacity(oldCapacity)));
 
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
-    for (long pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
+    for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
       final long keyPointer = oldLongArray.get(pos * 2);
       final long valueOffsetPlusHashcode = oldLongArray.get(pos * 2 + 1);
       final int hashcode = (int) (valueOffsetPlusHashcode & MASK_LONG_LOWER_32_BITS);
-      long newPos = ((long) hashcode) & mask;
-      long step = 1;
+      int newPos = hashcode & mask;
+      int step = 1;
       boolean keepGoing = true;
 
       // No need to check for equality here when we insert so this has one less if branch than

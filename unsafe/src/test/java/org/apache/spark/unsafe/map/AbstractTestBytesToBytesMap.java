@@ -128,7 +128,7 @@ public abstract class AbstractTestBytesToBytesMap {
           recordLengthBytes
         );
         Assert.fail("Should not be able to set a new value for a key");
-      } catch (IllegalStateException e) {
+      } catch (AssertionError e) {
         // Expected exception; do nothing.
       }
     } finally {
@@ -177,7 +177,7 @@ public abstract class AbstractTestBytesToBytesMap {
 
   @Test
   public void randomizedStressTest() {
-    final long size = 65536;
+    final int size = 65536;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
     final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();

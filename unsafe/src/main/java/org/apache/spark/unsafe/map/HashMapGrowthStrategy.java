@@ -22,7 +22,7 @@ package org.apache.spark.unsafe.map;
  */
 public interface HashMapGrowthStrategy {
 
-  long nextCapacity(long currentCapacity);
+  int nextCapacity(int currentCapacity);
 
   /**
    * Double the size of the hash map every time.
@@ -31,7 +31,7 @@ public interface HashMapGrowthStrategy {
 
   class Doubling implements HashMapGrowthStrategy {
     @Override
-    public long nextCapacity(long currentCapacity) {
+    public int nextCapacity(int currentCapacity) {
       return currentCapacity * 2;
     }
   }

@@ -24,14 +24,12 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  * An array of long values. Compared with native JVM arrays, this:
  * <ul>
  *   <li>supports using both in-heap and off-heap memory</li>
- *   <li>supports 64-bit addressing, i.e. array length greater than {@code Integer.MAX_VALUE}</li>
  *   <li>has no bound checking, and thus can crash the JVM process when assert is turned off</li>
  * </ul>
  */
 public final class LongArray {
 
   private static final int WIDTH = 8;
-  private static final long ARRAY_OFFSET = PlatformDependent.LONG_ARRAY_OFFSET;
 
   private final MemoryBlock memory;
   private final Object baseObj;
@@ -41,6 +39,7 @@ public final class LongArray {
 
   public LongArray(MemoryBlock memory) {
     assert memory.size() % WIDTH == 0 : "Memory not aligned (" + memory.size() + ")";
+    assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 4 billion elements";
     this.memory = memory;
     this.baseObj = memory.getBaseObject();
     this.baseOffset = memory.getBaseOffset();
@@ -61,7 +60,7 @@ public final class LongArray {
   /**
    * Sets the value at position {@code index}.
    */
-  public void set(long index, long value) {
+  public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
     PlatformDependent.UNSAFE.putLong(baseObj, baseOffset + index * WIDTH, value);
@@ -70,29 +69,9 @@ public final class LongArray {
   /**
    * Returns the value at position {@code index}.
    */
-  public long get(long index) {
+  public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
     return PlatformDependent.UNSAFE.getLong(baseObj, baseOffset + index * WIDTH);
-  }
-
-  /**
-   * Returns a copy of the array as a JVM native array. The caller should make sure this array's
-   * length is less than {@code Integer.MAX_VALUE}.
-   */
-  public long[] toJvmArray() throws IndexOutOfBoundsException {
-    if (length > Integer.MAX_VALUE) {
-      throw new IndexOutOfBoundsException(
-        "array size (" + length + ") too large and cannot be converted into JVM array");
-    }
-
-    final long[] arr = new long[(int) length];
-    PlatformDependent.UNSAFE.copyMemory(
-      baseObj,
-      baseOffset,
-      arr,
-      ARRAY_OFFSET,
-      length * WIDTH);
-    return arr;
   }
 }

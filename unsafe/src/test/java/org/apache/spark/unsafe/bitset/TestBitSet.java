@@ -55,18 +55,6 @@ public class TestBitSet {
   }
 
   @Test
-  public void cardinality() {
-    BitSet bs = createBitSet(64);
-    Assert.assertEquals(0, bs.cardinality());
-
-    // Set every bit and check it.
-    for (int i = 0; i < bs.capacity(); i++) {
-      bs.set(i);
-      Assert.assertEquals(i + 1, bs.cardinality());
-    }
-  }
-
-  @Test
   public void traversal() {
     BitSet bs = createBitSet(256);
 
