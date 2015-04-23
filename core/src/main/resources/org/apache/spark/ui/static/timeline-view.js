@@ -74,10 +74,6 @@ function drawJobTimeline(groupArray, eventObjArray) {
   });
 }
 
-function setupJobEntryLink(id, timeline) {
-  $(id +'')
-}
-
 function setupZoomable(id, timeline) {
   $(id + '>input[type="checkbox"]').click(function() {
     if (this.checked) {
