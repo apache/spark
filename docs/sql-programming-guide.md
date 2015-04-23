@@ -672,47 +672,9 @@ Registering a DataFrame as a table allows you to run SQL queries over its data. 
 describes the general methods for loading and saving data using the Spark Data Sources and then
 goes into specific options that are available for the built-in data sources.
 
-## Generic Load/Save Functions
-
-In the simplest form, the default data source (`parquet` unless otherwise configured by
-`spark.sql.sources.default`) will be used for all operations.
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-val df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-
-DataFrame df = sqlContext.load("people.parquet");
-df.select("name", "age").save("namesAndAges.parquet");
-
-{% endhighlight %}
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-
-df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
-
-{% endhighlight %}
-
-</div>
-</div>
-
 ### Manually Specifying Options
 
-You can also manually specify the data source that will be used along with any extra options
+You can manually specify the data source that will be used along with any extra options
 that you would like to pass to the data source.  Data sources are specified by their fully qualified
 name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can also use the shorted
 name (`json`, `parquet`, `jdbc`).  DataFrames of any type can be converted into other types
@@ -722,7 +684,7 @@ using this syntax.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.json", "json")
+val df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 {% endhighlight %}
 
@@ -732,7 +694,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.json", "json");
+DataFrame df = sqlContext.load("examples/src/main/resources/people.json", "json");
 df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% endhighlight %}
@@ -743,13 +705,52 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.json", "json")
+df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
 
 </div>
 </div>
+
+## Generic Load/Save Functions
+
+In the simplest form, the default data source (`parquet` unless otherwise configured by
+`spark.sql.sources.default`) will be used for all operations.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavoriteColors.parquet")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+
+DataFrame df = sqlContext.load("examples/src/main/resources/users.parquet");
+df.select("name", "favorite_color").save("namesAndFavoriteColors.parquet");
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+
+df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavoriteColors.parquet")
+
+{% endhighlight %}
+
+</div>
+</div>
+
 
 ### Save Modes
 
