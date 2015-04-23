@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
@@ -245,12 +247,26 @@ trait CatalystScan {
 /**
  * ::Experimental::
  * [[OutputWriter]] is used together with [[FSBasedRelation]] for persisting rows to the
- * underlying file system.  An [[OutputWriter]] instance is created when a new output file is
- * opened.  This instance is used to persist rows to this single output file.
+ * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
+ * An [[OutputWriter]] instance is created and initialized when a new output file is opened on
+ * executor side.  This instance is used to persist rows to this single output file.
  */
 @Experimental
 abstract class OutputWriter {
-  def init(): Unit = ()
+  /**
+   * Initializes this [[OutputWriter]] before any rows are persisted.
+   *
+   * @param path The file path to which this [[OutputWriter]] is supposed to write.
+   * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
+   *        schema if the corresponding relation is partitioned.
+   * @param options Data source options inherited from driver side.
+   * @param conf Hadoop configuration inherited from driver side.
+   */
+  def init(
+      path: String,
+      dataSchema: StructType,
+      options: java.util.Map[String, String],
+      conf: Configuration): Unit = ()
 
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
@@ -341,5 +357,5 @@ abstract class FSBasedRelation extends BaseRelation {
    * This method is responsible for producing a new [[OutputWriter]] for each newly opened output
    * file on the executor side.
    */
-  def newOutputWriter(path: String): OutputWriter
+  def outputWriterClass: Class[_ <: OutputWriter]
 }
