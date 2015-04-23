@@ -17,41 +17,51 @@
 package org.apache.spark.network.util;
 
 public enum ByteUnit {
-  BYTE (1),
-  KiB (1024L),
-  MiB ((long) Math.pow(1024L, 2L)),
-  GiB ((long) Math.pow(1024L, 3L)),
-  TiB ((long) Math.pow(1024L, 4L)),
-  PiB ((long) Math.pow(1024L, 5L));
+  BYTE (1, "Bytes"),
+  KiB (1024, "KiB"),
+  MiB (Math.pow(1024, 2), "MiB"),
+  GiB (Math.pow(1024, 3), "GiB"),
+  TiB (Math.pow(1024, 4), "TiB"),
+  PiB (Math.pow(1024, 5), "PiB");
 
-  private ByteUnit(long multiplier) {
+  private ByteUnit(double multiplier, String name) {
     this.multiplier = multiplier;
+    this.name = name;
   }
 
   // Interpret the provided number (d) with suffix (u) as this unit type.
   // E.g. KiB.interpret(1, MiB) interprets 1MiB as its KiB representation = 1024k
-  public long interpret(long d, ByteUnit u) {
-    return u.toBytes(d) / multiplier;  
+  public long convertFrom(long d, ByteUnit u) {
+    double converted = u.toBytes(d) / multiplier;
+    if (converted > Long.MAX_VALUE)
+      throw new IllegalArgumentException("Converted value (" + converted + ") " +
+        "exceeds Long.MAX_VALUE for " + name + ". Try a larger suffix (e.g. MiB instead of KiB)");
+    return (long) converted;  
   }
   
   // Convert the provided number (d) interpreted as this unit type to unit type (u). 
-  public long convert(long d, ByteUnit u) {
-    return toBytes(d) / u.multiplier;
+  public long convertTo(long d, ByteUnit u) {
+    double converted = toBytes(d) / u.multiplier;
+    if (converted > Long.MAX_VALUE)
+      throw new IllegalArgumentException("Converted value (" + converted + ") " +
+        "exceeds Long.MAX_VALUE for " + u.name + ". Try a larger suffix (e.g. MiB instead of KiB)");
+
+    return (long) converted;
   }
 
-  public long toBytes(long d) {
-    if (d == 0) { return 0; }
-    long over = MAX / d;
-    if (d >  over) return Long.MAX_VALUE;
-    if (d < -over) return Long.MIN_VALUE;
+  public double toBytes(long d) {
+    if (d < 0) {
+      throw new IllegalArgumentException("Negative size value. Size must be positive: " + d);
+    }
     return d * multiplier; 
   }
-  public long toKiB(long d) { return convert(d, KiB); }
-  public long toMiB(long d) { return convert(d, MiB); }
-  public long toGiB(long d) { return convert(d, GiB); }
-  public long toTiB(long d) { return convert(d, TiB); }
-  public long toPiB(long d) { return convert(d, PiB); }
   
-  private long multiplier = 0;
-  private static final long MAX = Long.MAX_VALUE;
+  public long toKiB(long d) { return convertTo(d, KiB); }
+  public long toMiB(long d) { return convertTo(d, MiB); }
+  public long toGiB(long d) { return convertTo(d, GiB); }
+  public long toTiB(long d) { return convertTo(d, TiB); }
+  public long toPiB(long d) { return convertTo(d, PiB); }
+  
+  private double multiplier = 0;
+  private String name = "";
 }

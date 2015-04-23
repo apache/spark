@@ -126,6 +126,27 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
+    // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
+    // This demonstrates that we can have e.g 1024^3 PB without overflowing. 
+    assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))                                  
+    assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
+    
+    // Run this to confirm it doesn't throw an exception
+    assert(Utils.byteStringAsBytes("9223372036854775807") === 9223372036854775807L) 
+    assert(ByteUnit.PiB.toPiB(9223372036854775807L) === 9223372036854775807L)
+    
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MAX when converted to bytes 
+      Utils.byteStringAsBytes("9223372036854775808")
+    }
+
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MAX when converted to TB
+      ByteUnit.PiB.toTiB(9223372036854775807L)
+    }
+    
     // Test fractional string
     intercept[NumberFormatException] {
       Utils.byteStringAsMb("0.064")
@@ -157,6 +178,13 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("This 123mb breaks")
     }
+    
+//    // Test overflow
+//    intercept[NumberFormatException] {
+//      
+//
+//      ByteUnit.convertTo(0x7fffffffffffffffL, ByteUnit.KiB)
+//    }
   }
   
   test("bytesToString") {

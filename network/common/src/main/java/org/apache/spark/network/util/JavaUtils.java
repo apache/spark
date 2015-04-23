@@ -222,10 +222,10 @@ public class JavaUtils {
         }
 
         // If suffix is valid use that, otherwise none was provided and use the default passed
-        return unit.interpret(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
+        return unit.convertFrom(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
       } else if (fractionMatcher.matches()) {
         throw new NumberFormatException("Fractional values are not supported. Input was: " 
-          + fractionMatcher.group(1);
+          + fractionMatcher.group(1));
       } else {
         throw new NumberFormatException("Failed to parse byte string: " + str);  
       }
