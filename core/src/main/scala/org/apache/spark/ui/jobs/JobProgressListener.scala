@@ -285,18 +285,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val stage = stageSubmitted.stageInfo
     activeStages(stage.stageId) = stage
     pendingStages.remove(stage.stageId)
-
-    // If a stage retries again, it should be removed from completedStageIndices set
-    for (
-      activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
-    ) {
-      if (jobData.completedStageIndices.contains(stage.stageId)) {
-        jobData.completedStageIndices.remove(stage.stageId)
-      }
-    }
-
     val poolName = Option(stageSubmitted.properties).map {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
@@ -318,6 +306,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages += 1
+
+      // If a stage retries again, it should be removed from completedStageIndices set
+      jobData.completedStageIndices.remove(stage.stageId)
     }
   }
 
