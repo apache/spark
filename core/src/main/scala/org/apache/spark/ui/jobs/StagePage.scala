@@ -41,19 +41,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     if (graph.isEmpty) {
       return Seq.empty
     }
-    val viz = <div id="stage-viz">{VizGraph.makeDotFile(graph.get)}</div>
-    val script = {
-      <script type="text/javascript">
-        <xml:unparsed>
-          var dot = document.getElementById("stage-viz").innerHTML;
-          var dot = dot.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"");
-          console.log(dot);
-          var viz = Viz(dot, "svg", "dot");
-          document.getElementById("stage-viz").innerHTML = viz;
-        </xml:unparsed>
-      </script>
+    {
+      <div id="viz-dot-file" style="display:none">
+        {VizGraph.makeDotFile(graph.get)}
+      </div>
+      <svg id="viz-graph"></svg>
+      <script type="text/javascript">renderStageViz()</script>
     }
-    viz ++ script
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

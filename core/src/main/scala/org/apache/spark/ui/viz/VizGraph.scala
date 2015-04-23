@@ -81,7 +81,10 @@ private[ui] object VizGraph {
         while (scopeIt.hasNext) {
           val scopeId = scopeIt.next()
           val scope = scopes.getOrElseUpdate(scopeId, new VizScope(scopeId))
-          scope.attachChildNode(node)
+          // Only attach this node to the innermost scope
+          if (!scopeIt.hasNext) {
+            scope.attachChildNode(node)
+          }
           // RDD scopes are hierarchical, with the outermost scopes ordered first
           // If there is not a previous scope, then this must be a root scope
           if (previousScope == null) {
@@ -106,48 +109,35 @@ private[ui] object VizGraph {
    */
   def makeDotFile(graph: VizGraph): String = {
     val dotFile = new StringBuilder
-    dotFile.append(
-      """
-        |digraph G {
-        |  node[fontsize="12", style="rounded, bold", shape="box"]
-        |  graph[labeljust="r", style="bold", color="#DDDDDD", fontsize="10"]
-      """.stripMargin.trim)
+    dotFile.append("digraph G {\n")
     //
     graph.rootScopes.foreach { scope =>
       dotFile.append(makeDotSubgraph(scope, "  "))
     }
     //
     graph.rootNodes.foreach { node =>
-      dotFile.append("  " + makeDotNode(node) + "\n")
+      dotFile.append(s"  ${makeDotNode(node)};\n")
     }
     //
     graph.edges.foreach { edge =>
-      dotFile.append("  " + edge.fromId + "->" + edge.toId + "\n")
+      dotFile.append(s"  ${edge.fromId}->${edge.toId};\n")
     }
     dotFile.append("}")
+    println(dotFile.toString())
     dotFile.toString()
   }
 
   /** */
   private def makeDotNode(node: VizNode): String = {
-    val dnode = new StringBuilder
-    dnode.append(node.id)
-    dnode.append(s""" [label="${node.name}"""")
-    if (node.isCached) {
-      dnode.append(s""", URL="/storage/rdd/?id=${node.id}", color="red"""")
-    }
-    dnode.append("]")
-    dnode.toString()
+    s"""${node.id} [label="${node.name}"]"""
   }
 
   /** */
   private def makeDotSubgraph(scope: VizScope, indent: String): String = {
     val subgraph = new StringBuilder
-    subgraph.append(indent + "subgraph cluster" + scope.id + " {\n")
-    subgraph.append(indent + "  label=\"" + scope.name + "\"\n")
-    subgraph.append(indent + "  fontcolor=\"#AAAAAA\"\n")
+    subgraph.append(indent + s"subgraph cluster${scope.id} {\n")
     scope.childrenNodes.foreach { node =>
-      subgraph.append(indent + "  " + makeDotNode(node) + "\n")
+      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
     }
     scope.childrenScopes.foreach { cscope =>
       subgraph.append(makeDotSubgraph(cscope, indent + "  "))

@@ -168,7 +168,10 @@ private[spark] object UIUtils extends Logging {
   }
 
   def vizHeaderNodes: Seq[Node] = {
-    <script src={prependBaseUri("/static/viz.js")}></script>
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={prependBaseUri("/static/spark-stage-viz.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
