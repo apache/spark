@@ -17,7 +17,7 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
-import java.util.{Iterator =>JIterator}
+import java.util.{Iterator => JIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -26,8 +26,8 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * This class manages write ahead log files.
@@ -56,7 +56,7 @@ private[streaming] class FileBasedWriteAheadLog(
 
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
   implicit private val executionContext = ExecutionContext.fromExecutorService(
-    Utils.newDaemonFixedThreadPool(1, threadpoolName))
+    ThreadUtils.newDaemonSingleThreadExecutor(threadpoolName))
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
   private var currentLogPath: Option[String] = None
