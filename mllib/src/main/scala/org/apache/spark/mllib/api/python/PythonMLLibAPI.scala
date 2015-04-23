@@ -291,12 +291,16 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String,
-      seed: java.lang.Long): KMeansModel = {
+      seed: java.lang.Long,
+      initializationSteps: Int,
+      epsilon: Double): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
+      .setInitializationSteps(initializationSteps)
+      .setEpsilon(epsilon)
 
     if (seed != null) kMeansAlg.setSeed(seed)
 
@@ -305,6 +309,15 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       data.rdd.unpersist(blocking = false)
     }
+  }
+
+  /**
+   * Java stub for Python mllib KMeansModel.computeCost()
+   */
+  def computeCostKmeansModel(
+      data: JavaRDD[Vector],
+      centers: java.util.ArrayList[Vector]): Double = {
+    new KMeansModel(centers).computeCost(data)
   }
 
   /**
