@@ -611,7 +611,7 @@ private[sql] case class ParquetRelation2(
 
     val rawPredicate =
       partitionPruningPredicates.reduceOption(expressions.And).getOrElse(Literal(true))
-    val boundPredicate = InterpretedPredicate(rawPredicate transform {
+    val boundPredicate = InterpretedPredicate.create(rawPredicate transform {
       case a: AttributeReference =>
         val index = partitionColumns.indexWhere(a.name == _.name)
         BoundReference(index, partitionColumns(index).dataType, nullable = true)

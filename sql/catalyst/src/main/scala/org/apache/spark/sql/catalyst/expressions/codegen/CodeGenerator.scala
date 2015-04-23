@@ -98,11 +98,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       })
 
   /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def apply(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    apply(bind(expressions, inputSchema))
+  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
+    generate(bind(expressions, inputSchema))
 
   /** Generates the requested evaluator given already bound expression(s). */
-  def apply(expressions: InType): OutType = cache.get(canonicalize(expressions))
+  def generate(expressions: InType): OutType = cache.get(canonicalize(expressions))
 
   /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
