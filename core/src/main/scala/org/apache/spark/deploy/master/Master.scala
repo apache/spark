@@ -927,8 +927,8 @@ private[deploy] object Master extends Logging {
       webUiPort: Int,
       conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
-      securityManager = securityMgr)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
+      conf.clone.set("spark.port.maxRetries", "0"), securityManager = securityMgr)
     val actor = actorSystem.actorOf(
       Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
     val timeout = RpcUtils.askTimeout(conf)

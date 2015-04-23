@@ -81,7 +81,8 @@ private[deploy] class StandaloneRestServer(
 
   /** Start the server and return the bound port. */
   def start(): Int = {
-    val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
+    val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart,
+      masterConf.clone.set("spark.port.maxRetries", "0"))
     _server = Some(server)
     logInfo(s"Started REST server for submitting applications on port $boundPort")
     boundPort
