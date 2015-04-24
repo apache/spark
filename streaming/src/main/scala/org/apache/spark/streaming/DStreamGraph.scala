@@ -110,6 +110,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       .toArray
   }
 
+  def getDirectInputStreams(): Array[InputDStream[_]] = this.synchronized {
+    inputStreams.filter(_.isDirectInputStream).toArray
+  }
+
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
     val jobs = this.synchronized {

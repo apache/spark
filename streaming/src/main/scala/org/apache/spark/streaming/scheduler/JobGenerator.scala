@@ -245,7 +245,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Success(jobs) =>
         val receivedBlockInfos =
           jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
-        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
+        val directBlockInfos =
+          jobScheduler.directStreamTracker.getBlocksOfBatch(time).mapValues(_.toArray)
+        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos, directBlockInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
@@ -266,6 +268,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // checkpointing of this batch to complete.
       val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
       jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
+      jobScheduler.directStreamTracker.cleanupOldBatches(time - maxRememberDuration)
       markBatchFullyProcessed(time)
     }
   }
@@ -278,6 +281,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
     val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
     jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
+    jobScheduler.directStreamTracker.cleanupOldBatches(time - maxRememberDuration)
     markBatchFullyProcessed(time)
   }
 

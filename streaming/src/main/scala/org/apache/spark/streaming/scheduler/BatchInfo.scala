@@ -33,6 +33,7 @@ import org.apache.spark.streaming.Time
 case class BatchInfo(
     batchTime: Time,
     receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]],
+    directBlockInfo: Map[Int, Array[DirectBlockInfo]],
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long]

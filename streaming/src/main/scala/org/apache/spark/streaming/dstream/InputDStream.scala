@@ -41,6 +41,9 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
 
   ssc.graph.addInputStream(this)
 
+  /** This is an unique identifier for the input stream. */
+  val id = ssc.getNewInputStreamId()
+
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
    * Additionally it also ensures valid times are in strictly increasing order.
@@ -68,6 +71,8 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     if (ssc.graph.batchDuration == null) throw new Exception("batchDuration is null")
     ssc.graph.batchDuration
   }
+
+  private[streaming] def isDirectInputStream: Boolean = false
 
   /** Method called to start receiving data. Subclasses must implement this method. */
   def start()
