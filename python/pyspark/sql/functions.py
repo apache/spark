@@ -37,6 +37,7 @@ __all__ = [
     'rand',
     'randn',
     'sparkPartitionId',
+    'coalesce',
     'udf']
 
 
@@ -164,6 +165,42 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+
+def coalesce(*cols):
+    """Returns the first column that is not null.
+
+    >>> cDf = sqlContext.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
+    >>> cDf.show()
+    +----+----+
+    |   a|   b|
+    +----+----+
+    |null|null|
+    |   1|null|
+    |null|   2|
+    +----+----+
+
+    >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
+    +-------------+
+    |Coalesce(a,b)|
+    +-------------+
+    |         null|
+    |            1|
+    |            2|
+    +-------------+
+
+    >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
+    +----+----+---------------+
+    |   a|   b|Coalesce(a,0.0)|
+    +----+----+---------------+
+    |null|null|            0.0|
+    |   1|null|            1.0|
+    |null|   2|            0.0|
+    +----+----+---------------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
