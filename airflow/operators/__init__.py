@@ -32,6 +32,7 @@ _operators = {
     'hive_stats_operator': ['HiveStatsCollectionOperator'],
     's3_to_hive_operator': ['S3ToHiveTransfer'],
     'hive_to_mysql': ['HiveToMySqlTransfer'],
+    's3_file_transform_operator' : ['S3FileTransformOperator'],
     }
 
 _import_module_attrs(globals(), _operators)
