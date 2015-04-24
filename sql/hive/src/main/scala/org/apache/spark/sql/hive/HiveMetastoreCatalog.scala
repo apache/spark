@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -723,7 +724,7 @@ private[hive] case class MetastoreRelation
         val partitionValues = part.getValues
         var i = 0
         while (i < partitionValues.size()) {
-          inputData(i) = partitionValues(i)
+          inputData(i) = CatalystTypeConverters.convertToCatalyst(partitionValues(i))
           i += 1
         }
         pruningCondition(inputData)
