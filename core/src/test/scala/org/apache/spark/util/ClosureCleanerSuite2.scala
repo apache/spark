@@ -24,10 +24,6 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.serializer.SerializerInstance
 
-// TODO: REMOVE ME
-import java.util.Properties
-import org.apache.log4j.PropertyConfigurator
-
 /**
  * Another test suite for the closure cleaner that is finer-grained.
  * For tests involving end-to-end Spark jobs, see {{ClosureCleanerSuite}}.
@@ -56,6 +52,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll {
   private def someSerializableMethod() = 1
   private def someNonSerializableMethod() = new NonSerializable
 
+  /** Assert that the given closure is serializable (or not). */
   private def assertSerializable(closure: AnyRef, serializable: Boolean): Unit = {
     if (serializable) {
       closureSerializer.serialize(closure)
@@ -66,6 +63,10 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll {
     }
   }
 
+  /**
+   * Helper method for testing whether closure cleaning works as expected.
+   * This cleans the given closure twice, with and without transitive cleaning.
+   */
   private def testClean(
       closure: AnyRef,
       serializableBefore: Boolean,
@@ -74,6 +75,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll {
     testClean(closure, serializableBefore, serializableAfter, transitive = false)
   }
 
+  /** Helper method for testing whether closure cleaning works as expected. */
   private def testClean(
       closure: AnyRef,
       serializableBefore: Boolean,
@@ -266,26 +268,18 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll {
       testClean(inner2, serializableBefore = false, serializableAfter = true, transitive = true)
     }
 
+    // Same as above, but with more levels of nesting
+    val test3 = () => { () => test1() }
+    val test4 = () => { () => test2() }
+    val test5 = () => { () => { () => test3() } }
+    val test6 = () => { () => { () => test4() } }
+
     test1()
     test2()
-  }
-
-
-
-
-
-  // TODO: REMOVE ME
-  configureLog4j()
-  private def configureLog4j(): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", "WARN, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    pro.put("log4j.logger.org.apache.spark.util.ClosureCleaner", "DEBUG")
-    PropertyConfigurator.configure(pro)
+    test3()()
+    test4()()
+    test5()()()
+    test6()()()
   }
 
 }
