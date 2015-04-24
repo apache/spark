@@ -56,7 +56,7 @@ if __name__ == "__main__":
         ./bin/spark-submit --driver-class-path /path/to/example/jar \
         /path/to/examples/hbase_inputformat.py <host> <table> [<znode>]
         Assumes you have some data in HBase already, running on <host>, in <table>
-          optionally, you can specify the parent znode for your hbase cluster - <znode>
+          optionally, you can specify parent znode for your hbase cluster - <znode>
         """, file=sys.stderr)
         exit(-1)
 
@@ -66,7 +66,8 @@ if __name__ == "__main__":
 
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
     if len(sys.argv) > 3:
-      conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3], "hbase.mapreduce.inputtable": table}
+      conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
+        "hbase.mapreduce.inputtable": table}
     keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
     valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
 
