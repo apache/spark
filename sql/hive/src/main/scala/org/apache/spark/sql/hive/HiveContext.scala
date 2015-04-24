@@ -359,8 +359,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  // Sub class may need to overwrite the following 2 functions custom sql dialect parser support
-
   override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
     classOf[HiveQLDialect].getCanonicalName
   } else {
