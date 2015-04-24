@@ -33,11 +33,11 @@ object ExecutorExitCode {
   /** DiskStore failed to create a local temporary directory after many attempts. */
   val DISK_STORE_FAILED_TO_CREATE_DIR = 53
 
-  /** ExtBlkStore failed to initialize after many attempts. */
-  val ExtBlk_STORE_FAILED_TO_INITIALIZE = 54
+  /** ExternalBlockStore failed to initialize after many attempts. */
+  val EXTERNAL_BLOCK_STORE_FAILED_TO_INITIALIZE = 54
 
-  /** ExtBlkStore failed to create a local temporary directory after many attempts. */
-  val ExtBlk_STORE_FAILED_TO_CREATE_DIR = 55
+  /** ExternalBlockStore failed to create a local temporary directory after many attempts. */
+  val EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR = 55
 
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
@@ -46,11 +46,11 @@ object ExecutorExitCode {
       case OOM => "OutOfMemoryError"
       case DISK_STORE_FAILED_TO_CREATE_DIR =>
         "Failed to create local directory (bad spark.local.dir?)"
-      // TODO: replace external block store with concreate implementation desc
-      case ExtBlk_STORE_FAILED_TO_INITIALIZE => "External Block Store failed to initialize."
-      // TODO: replace external block store with concreate implementation desc
-      case ExtBlk_STORE_FAILED_TO_CREATE_DIR =>
-        "External Block Store failed to create a local temporary directory."
+      // TODO: replace external block store with concrete implementation name
+      case EXTERNAL_BLOCK_STORE_FAILED_TO_INITIALIZE => "ExternalBlockStore failed to initialize."
+      // TODO: replace external block store with concrete implementation name
+      case EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR =>
+        "ExternalBlockStore failed to create a local temporary directory."
       case _ =>
         "Unknown executor exit code (" + exitCode + ")" + (
           if (exitCode > 128) {

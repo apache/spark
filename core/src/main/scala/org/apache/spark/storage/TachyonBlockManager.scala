@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * default, one block is mapped to one file with a name given by its BlockId.
  *
  */
-private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging {
+private[spark] class TachyonBlockManager() extends ExternalBlockManager with Logging {
 
   var blockManager: BlockManager =_
   var rootDirs: String = _
@@ -78,7 +78,7 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
 
   override def toString: String = {"ExternalBlockStore-Tachyon"}
 
-  override def removeFile(blockId: BlockId): Boolean = {
+  override def removeBlock(blockId: BlockId): Boolean = {
     val file = getFile(blockId)
     if (fileExists(file)) {
       removeFile(file)
@@ -87,7 +87,7 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
     }
   }
 
-  override def fileExists(blockId: BlockId): Boolean = {
+  override def blockExists(blockId: BlockId): Boolean = {
     val file = getFile(blockId)
     fileExists(file)
   }
@@ -132,7 +132,7 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
     client.exist(new TachyonURI(file.getPath()))
   }
 
-  def getFile(filename: String): TachyonFile = {
+  private def getFile(filename: String): TachyonFile = {
     // Figure out which tachyon directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % tachyonDirs.length
@@ -162,7 +162,7 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
     file
   }
 
-  def getFile(blockId: BlockId): TachyonFile = getFile(blockId.name)
+  private def getFile(blockId: BlockId): TachyonFile = getFile(blockId.name)
 
   // TODO: Some of the logic here could be consolidated/de-duplicated with that in the DiskStore.
   private def createTachyonDirs(): Array[TachyonFile] = {
@@ -174,7 +174,7 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
       var tachyonDirId: String = null
       var tries = 0
       val rand = new Random()
-      while (!foundLocalDir && tries < ExtBlockStore.MAX_DIR_CREATION_ATTEMPTS) {
+      while (!foundLocalDir && tries < ExternalBlockStore.MAX_DIR_CREATION_ATTEMPTS) {
         tries += 1
         try {
           tachyonDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
@@ -189,9 +189,9 @@ private[spark] class TachyonBlockManager() extends ExtBlockManager with Logging 
         }
       }
       if (!foundLocalDir) {
-        logError("Failed " + ExtBlockStore.MAX_DIR_CREATION_ATTEMPTS
+        logError("Failed " + ExternalBlockStore.MAX_DIR_CREATION_ATTEMPTS
           + " attempts to create tachyon dir in " + rootDir)
-        System.exit(ExecutorExitCode.ExtBlk_STORE_FAILED_TO_CREATE_DIR)
+        System.exit(ExecutorExitCode.EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created tachyon directory at " + tachyonDir)
       tachyonDir

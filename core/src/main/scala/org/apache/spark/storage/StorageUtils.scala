@@ -199,33 +199,34 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
-    val changeInExtBlkStore = newBlockStatus.extBlkStoreSize - oldBlockStatus.extBlkStoreSize
+    val changeInExternalBlockStore =
+      newBlockStatus.externalBlockStoreSize - oldBlockStatus.externalBlockStoreSize
     val level = newBlockStatus.storageLevel
 
     // Compute new info from old info
-    val (oldMem, oldDisk, oldExtBlkStore) = blockId match {
+    val (oldMem, oldDisk, oldExternalBlockStore) = blockId match {
       case RDDBlockId(rddId, _) =>
         _rddStorageInfo.get(rddId)
-          .map { case (mem, disk, extBlk, _) => (mem, disk, extBlk) }
+          .map { case (mem, disk, externalBlockStore, _) => (mem, disk, externalBlockStore) }
           .getOrElse((0L, 0L, 0L))
       case _ =>
         _nonRddStorageInfo
     }
     val newMem = math.max(oldMem + changeInMem, 0L)
     val newDisk = math.max(oldDisk + changeInDisk, 0L)
-    val newExtBlkStore = math.max(oldExtBlkStore + changeInExtBlkStore, 0L)
+    val newExternalBlockStore = math.max(oldExternalBlockStore + changeInExternalBlockStore, 0L)
 
     // Set the correct info
     blockId match {
       case RDDBlockId(rddId, _) =>
         // If this RDD is no longer persisted, remove it
-        if (newMem + newDisk + newExtBlkStore == 0) {
+        if (newMem + newDisk + newExternalBlockStore == 0) {
           _rddStorageInfo.remove(rddId)
         } else {
-          _rddStorageInfo(rddId) = (newMem, newDisk, newExtBlkStore, level)
+          _rddStorageInfo(rddId) = (newMem, newDisk, newExternalBlockStore, level)
         }
       case _ =>
-        _nonRddStorageInfo = (newMem, newDisk, newExtBlkStore)
+        _nonRddStorageInfo = (newMem, newDisk, newExternalBlockStore)
     }
   }
 
@@ -247,13 +248,13 @@ private[spark] object StorageUtils {
       val numCachedPartitions = statuses.map(_.numRddBlocksById(rddId)).sum
       val memSize = statuses.map(_.memUsedByRdd(rddId)).sum
       val diskSize = statuses.map(_.diskUsedByRdd(rddId)).sum
-      val extBlkStoreSize = statuses.map(_.offHeapUsedByRdd(rddId)).sum
+      val externalBlockStoreSize = statuses.map(_.offHeapUsedByRdd(rddId)).sum
 
       rddInfo.storageLevel = storageLevel
       rddInfo.numCachedPartitions = numCachedPartitions
       rddInfo.memSize = memSize
       rddInfo.diskSize = diskSize
-      rddInfo.extBlkStoreSize = extBlkStoreSize
+      rddInfo.externalBlockStoreSize = externalBlockStoreSize
     }
   }
 

@@ -247,11 +247,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  // Generate the random name for a temp folder in OffHeap
+  // Generate the random name for a temp folder in external block store
   // Add a timestamp as the suffix here to make it more safe
-  val extBlkFolderName = "spark-" + randomUUID.toString()
-  @deprecated("Use extBlkFolderName instead.", "1.4.0")
-  val tachyonFolderName = extBlkFolderName
+  val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
+  @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
+  val tachyonFolderName = externalBlockStoreFolderName
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
@@ -388,7 +388,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    _conf.set("spark.extBlkStore.folderName", extBlkFolderName)
+    _conf.set("spark.externalBlockStore.folderName", externalBlockStoreFolderName)
 
     if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 

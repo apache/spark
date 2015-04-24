@@ -1,4 +1,4 @@
----
+--
 layout: global
 displayTitle: Spark Configuration
 title: Configuration
@@ -843,28 +843,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.extBlkStore.blockManager</code></td>
+  <td><code>spark.externalBlockStore.blockManager</code></td>
   <td>org.apache.spark.storage.TachyonBlockManager</td>
   <td>
-    Implementation of external blocker store (file system) that store RDDs. The file system's URL is set by
-    <code>spark.extBlkStore.url</code>. It can also be a comma-separated list of multiple
-    directories on Tachyon file system.
+    Implementation of external block manager (file system) that store RDDs. The file system's URL is set by
+    <code>spark.externalBlockStore.url</code>.
   </td>
 </tr>
 <tr>
-  <td><code>spark.extBlkStore.baseDir</code></td>
+  <td><code>spark.externalBlockStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the external block File System that store RDDs. The Tachyon file system's URL is set by
-    <code>spark.extBlkStore.url</code>. It can also be a comma-separated list of multiple
+    Directories of the external block store that store RDDs. The file system's URL is set by
+   <code>spark.externalBlockStore.url</code> It can also be a comma-separated list of multiple
     directories on Tachyon file system.
   </td>
 </tr>
 <tr>
-  <td><code>spark.extBlkStore.url</code></td>
+  <td><code>spark.externalBlockStore.url</code></td>
   <td>tachyon://localhost:19998 for Tachyon</td>
   <td>
-    The URL of the underlying external blocker file system in the external blocker store.
+    The URL of the underlying external blocker file system in the external block store.
   </td>
 </tr>
 </table>
