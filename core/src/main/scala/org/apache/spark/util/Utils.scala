@@ -2182,7 +2182,6 @@ private [util] class SparkShutdownHookManager {
   }
 
   def remove(ref: AnyRef): Boolean = synchronized {
-    checkState()
     hooks.remove(ref)
   }
 
