@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -170,15 +171,21 @@ class Word2VecModel private[ml] (
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
     val bWordVectors = dataset.sqlContext.sparkContext.broadcast(wordVectors)
-    val word2Vec = udf { v: Seq[String] =>
-      if (v.size == 0) {
-        Vectors.zeros(map(vectorSize))
+    val word2Vec = udf { sentence: Seq[String] =>
+      if (sentence.size == 0) {
+        Vectors.sparse(map(vectorSize), Array.empty[Int], Array.empty[Double])
       } else {
-        Vectors.dense(
-          v.map(bWordVectors.value.getVectors).foldLeft(Array.fill[Double](map(vectorSize))(0)) {
-            (cum, vec) => cum.zip(vec).map(x => x._1 + x._2)
-          }.map(_ / v.size)
-        )
+        val cum = Vectors.zeros(map(vectorSize))
+        val model = bWordVectors.value.getVectors
+        for (word <- sentence) {
+          if (model.contains(word)) {
+            axpy(1.0, bWordVectors.value.transform(word), cum)
+          } else {
+            // pass words which not belong to model
+          }
+        }
+        scal(1.0 / sentence.size, cum)
+        cum
       }
     }
     dataset.withColumn(map(outputCol), word2Vec(col(map(inputCol))))
