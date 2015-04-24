@@ -279,7 +279,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
               org.apache.spark.sql.types.UTF8String(${eval.primitiveTerm}.toString)
         """.children
 
-      case EqualTo(e1: BinaryType, e2: BinaryType) =>
+      case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
         (e1, e2).evaluateAs (BooleanType) {
           case (eval1, eval2) =>
             q"""
