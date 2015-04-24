@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
+import java.util.concurrent.TimeUnit
 
 import scala.io.Source
 
@@ -30,7 +31,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
 
@@ -283,6 +284,50 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     }
   }
 
+  test("log cleaner") {
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(maxAge / 2)
+    val provider = new FsHistoryProvider(
+      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+
+    val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
+      SparkListenerApplicationEnd(2L)
+      )
+    log1.setLastModified(0L)
+
+    val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
+      SparkListenerApplicationEnd(4L)
+      )
+    log2.setLastModified(clock.getTimeMillis())
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list.head.attempts.size should be (2)
+    }
+
+    // Move the clock forward so log1 exceeds the max age.
+    clock.advance(maxAge)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list.head.attempts.size should be (1)
+      list.head.attempts.head.attemptId should be ("attempt2")
+    }
+    assert(!log1.exists())
+
+    // Do the same for the other log.
+    clock.advance(maxAge)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (0)
+    }
+    assert(!log2.exists())
+  }
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -294,6 +339,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   private def updateAndCheck(provider: FsHistoryProvider)
       (checkFn: Seq[ApplicationHistoryInfo] => Unit): Unit = {
     provider.checkForLogs()
+    provider.cleanLogs()
     checkFn(provider.getListing().toSeq)
   }
 

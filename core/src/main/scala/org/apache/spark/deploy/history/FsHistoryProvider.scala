@@ -32,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
@@ -40,8 +40,12 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  * This provider checks for new finished applications in the background periodically and
  * renders the history application UI by parsing the associated event logs.
  */
-private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
-  with Logging {
+private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
+  extends ApplicationHistoryProvider with Logging {
+
+  def this(conf: SparkConf) = {
+    this(conf, new SystemClock())
+  }
 
   import FsHistoryProvider._
 
@@ -75,8 +79,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
-  // List of applications to be deleted by event log cleaner.
-  private var appsToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
+  // List of application logs to be deleted by event log cleaner.
+  private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
   // Constants used to parse Spark 1.0.0 log directories.
   private[history] val LOG_PREFIX = "EVENT_LOG_"
@@ -289,42 +293,51 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   /**
    * Delete event logs from the log directory according to the clean policy defined by the user.
    */
-  private def cleanLogs(): Unit = {
+  private[history] def cleanLogs(): Unit = {
     try {
       val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
 
-      val now = System.currentTimeMillis()
+      val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+
+      def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
+        now - attempt.lastUpdated > maxAge && attempt.completed
+      }
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
-      applications.values.foreach { info =>
-        if (now - info.attempts.head.lastUpdated <= maxAge || !info.attempts.head.completed) {
-          appsToRetain += (info.id -> info)
-        } else {
-          appsToClean += info
+      applications.values.foreach { app =>
+        val toClean = app.attempts.filter(shouldClean)
+        attemptsToClean ++= toClean
+
+        if (toClean.isEmpty) {
+          appsToRetain += (app.id -> app)
+        } else if (toClean.size < app.attempts.size) {
+          appsToRetain += (app.id ->
+            new FsApplicationHistoryInfo(app.id, app.name,
+              app.attempts.filter(!shouldClean(_)).toList))
         }
       }
 
       applications = appsToRetain
 
-      val leftToClean = new mutable.ListBuffer[FsApplicationHistoryInfo]
-      appsToClean.foreach { info =>
+      val leftToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+      attemptsToClean.foreach { attempt =>
         try {
-          val path = new Path(logDir, info.logPath)
+          val path = new Path(logDir, attempt.logPath)
           if (fs.exists(path)) {
             fs.delete(path, true)
           }
         } catch {
           case e: AccessControlException =>
-            logInfo(s"No permission to delete ${info.logPath}, ignoring.")
+            logInfo(s"No permission to delete ${attempt.logPath}, ignoring.")
           case t: IOException =>
-            logError(s"IOException in cleaning logs of ${info.logPath}", t)
-            leftToClean += info
+            logError(s"IOException in cleaning ${attempt.logPath}", t)
+            leftToClean += attempt
         }
       }
 
-      appsToClean = leftToClean
+      attemptsToClean = leftToClean
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
