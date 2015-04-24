@@ -151,7 +151,8 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     try {
       Utils.removeShutdownHook(shutdownHook)
     } catch {
-      case e: IllegalStateException => None
+      case e: Exception => 
+        logError(s"Exception while removing shutdown hook.", e)
     }
     doStop()
   }
