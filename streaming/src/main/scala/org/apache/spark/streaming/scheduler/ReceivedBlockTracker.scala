@@ -209,7 +209,7 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Write an update to the tracker to the write ahead log */
   private def writeToLog(record: ReceivedBlockTrackerLogEvent) {
-    if (isLogManagerEnabled) {
+    if (isWriteAheadLogEnabled) {
       logDebug(s"Writing to log $record")
       writeAheadLogOption.foreach { logManager =>
         logManager.write(ByteBuffer.wrap(Utils.serialize(record)), clock.getTimeMillis())
@@ -240,8 +240,8 @@ private[streaming] class ReceivedBlockTracker(
     }
   }
 
-  /** Check if the log manager is enabled. This is only used for testing purposes. */
-  private[streaming] def isLogManagerEnabled: Boolean = writeAheadLogOption.nonEmpty
+  /** Check if the write ahead log is enabled. This is only used for testing purposes. */
+  private[streaming] def isWriteAheadLogEnabled: Boolean = writeAheadLogOption.nonEmpty
 }
 
 private[streaming] object ReceivedBlockTracker {
