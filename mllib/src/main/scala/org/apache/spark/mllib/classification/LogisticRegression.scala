@@ -262,6 +262,32 @@ object LogisticRegressionWithSGD {
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
+   * gradient descent are initialized using the initial weights provided.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param regParam Regularization parameter used on default L2-regularized=r.
+   * @param featureScaling Set feature scaling to improve the convergence during optimization.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
+      regParam: Double,
+      featureScaling: Boolean): LogisticRegressionModel = {
+    new LogisticRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
+      .setFeatureScaling(featureScaling)
+      .run(input)
+  }
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
