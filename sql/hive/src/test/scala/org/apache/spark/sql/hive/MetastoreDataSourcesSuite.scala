@@ -441,7 +441,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    val expectedPath = catalog.hiveTableFilePath("ctasJsonTable")
+    val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
     val filesystemPath = new Path(expectedPath)
     val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
     if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
@@ -559,7 +559,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // Drop table will also delete the data.
     sql("DROP TABLE savedJsonTable")
     intercept[InvalidInputException] {
-      jsonFile(catalog.hiveTableFilePath("savedJsonTable"))
+      jsonFile(catalog.hiveDefaultTableFilePath("savedJsonTable"))
     }
 
     // Create an external table by specifying the path.
@@ -775,7 +775,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     tbl.setProperty("spark.sql.sources.schema", schema.json)
     tbl.setProperty("EXTERNAL", "FALSE")
     tbl.setTableType(TableType.MANAGED_TABLE)
-    tbl.setSerdeParam("path", catalog.hiveTableFilePath(tableName))
+    tbl.setSerdeParam("path", catalog.hiveDefaultTableFilePath(tableName))
     catalog.synchronized {
       catalog.client.createTable(tbl)
     }

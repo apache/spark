@@ -127,7 +127,7 @@ case class CreateMetastoreDataSource(
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveTableFilePath(tableIdents))
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdents))
       } else {
         options
       }
@@ -160,7 +160,7 @@ case class CreateMetastoreDataSourceAsSelect(
       if (!options.contains("path")) {
         isExternal = false
         options +
-          ("path" -> hiveContext.catalog.hiveTableFilePath(tableName))
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
       } else {
         options
       }

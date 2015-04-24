@@ -175,7 +175,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
-  def hiveTableFilePath(tableName: String): String = synchronized {
+  def hiveDefaultTableFilePath(tableName: String): String = synchronized {
     val (databaseName, tblName) = getDBAndTableName(tableName.split("\\."))
     val db = client.getDatabase(databaseName)
 
