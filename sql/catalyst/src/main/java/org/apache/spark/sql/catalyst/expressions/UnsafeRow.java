@@ -311,19 +311,26 @@ public final class UnsafeRow implements MutableRow {
   }
 
   public UTF8String getUTF8String(int i) {
-    // TODO: this is inefficient; just doing this to make some tests pass for now; will fix later
     assertIndexIsValid(i);
-    return UTF8String.apply(getString(i));
+    final UTF8String str = new UTF8String();
+    final long offsetToStringSize = getLong(i);
+    final int stringSizeInBytes =
+      (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
+    final byte[] strBytes = new byte[stringSizeInBytes];
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset + offsetToStringSize + 8,  // The  +8 is to skip past the size to get the data,
+      strBytes,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      stringSizeInBytes
+    );
+    str.set(strBytes);
+    return str;
   }
 
   @Override
   public String getString(int i) {
-    assertIndexIsValid(i);
-    final long offsetToStringSize = getLong(i);
-    final long stringSizeInBytes =
-      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
-    // TODO: ugly cast; figure out whether we'll support mega long strings
-    return UTF8StringMethods.toJavaString(baseObject, baseOffset + offsetToStringSize + 8, (int) stringSizeInBytes);
+    return getUTF8String(i).toString();
   }
 
   @Override
