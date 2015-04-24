@@ -19,12 +19,15 @@ package org.apache.spark.sql.hive
 
 import java.rmi.server.UID
 import java.util.{Properties, ArrayList => JArrayList}
+import java.io.{OutputStream, InputStream}
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Input
+import com.esotericsoftware.kryo.io.Output
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -47,6 +50,7 @@ import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.types.{Decimal, DecimalType, UTF8String}
+import org.apache.spark.util.Utils._
 
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
@@ -62,18 +66,11 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   // for Serialization
   def this() = this(null)
 
-
-  import java.io.{OutputStream, InputStream}
-
-  import com.esotericsoftware.kryo.io.Input
-  import com.esotericsoftware.kryo.io.Output
-
-  import org.apache.spark.util.Utils._
-
   @transient
-  private def deserializeObjectByKryo[T: ClassTag](kryo: Kryo,
-                                                   in: InputStream,
-                                                   clazz: Class[_]): T = {
+  def deserializeObjectByKryo[T: ClassTag](
+              kryo: Kryo,
+              in: InputStream,
+              clazz: Class[_]): T = {
     val inp = new Input(in)
     val t: T = kryo.readObject(inp,clazz).asInstanceOf[T]
     inp.close()
@@ -81,9 +78,10 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
   }
 
   @transient
-  private def serializeObjectByKryo(kryo: Kryo,
-                                    plan: Object,
-                                    out: OutputStream ) {
+  def serializeObjectByKryo(
+              kryo: Kryo,
+              plan: Object,
+              out: OutputStream ) {
     val output: Output = new Output(out)
     kryo.writeObject(output, plan)
     output.close()
