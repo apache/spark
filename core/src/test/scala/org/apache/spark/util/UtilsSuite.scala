@@ -174,17 +174,10 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("600gb This breaks")
     }
-
+    
     intercept[NumberFormatException] {
       Utils.byteStringAsBytes("This 123mb breaks")
     }
-    
-//    // Test overflow
-//    intercept[NumberFormatException] {
-//      
-//
-//      ByteUnit.convertTo(0x7fffffffffffffffL, ByteUnit.KiB)
-//    }
   }
   
   test("bytesToString") {

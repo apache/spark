@@ -39,8 +39,8 @@ public enum ByteUnit {
     if (multiplier > u.multiplier) {
       long ratio = multiplier / u.multiplier;
       if (Long.MAX_VALUE / ratio < d) {
-        throw new IllegalArgumentException("Conversion of" + d + "exceeds Long.MAX_VALUE in "
-          + name() + ". Try a larger suffix (e.g. MiB instead of KiB)");
+        throw new IllegalArgumentException("Conversion of " + d + " exceeds Long.MAX_VALUE in "
+          + name() + ". Try a larger unit (e.g. MiB instead of KiB)");
       }
       return d * ratio;
     } else {
