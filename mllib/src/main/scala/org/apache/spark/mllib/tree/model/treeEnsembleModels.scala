@@ -278,6 +278,44 @@ private[tree] sealed class TreeEnsembleModel(
   }
 
   /**
+   * Predict values and probability for a single data point using the model trained.
+   *
+   * @param features array representing a single data point
+   * @return predict value and probability from the trained model
+   */
+  def probability(features: Vector): Predict = {
+    val treePredictions = trees.map(_.probability(features)).map{x =>
+      Array(Math.abs(x.predict - x.prob), Math.abs((1.0 - x.predict) - x.prob))
+    }
+    val class0 = blas.ddot(numTrees, treePredictions.map(_(0)), 1, treeWeights, 1)/numTrees
+    val class1 = blas.ddot(numTrees, treePredictions.map(_(1)), 1, treeWeights, 1)/numTrees
+    var prob = 0.0
+    var predict = 0.0
+    if(class0 > class1){
+      prob = class0
+    }else if(class1 > class0){
+      prob = class1
+      predict = 1.0
+    }
+    new Predict(predict, prob)
+  }
+
+  /**
+   * Predict values and probability for the given data set.
+   *
+   * @param features RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  def probability(features: RDD[Vector]): RDD[Predict] = features.map(x => probability(x))
+
+  /**
+   * Java-friendly version of [[org.apache.spark.mllib.tree.model.TreeEnsembleModel#predict]].
+   */
+  def probability(features: JavaRDD[Vector]): JavaRDD[Predict] = {
+    probability(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[Predict]]
+  }
+
+  /**
    * Predict values for a single data point using the model trained.
    *
    * @param features array representing a single data point
