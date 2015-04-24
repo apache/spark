@@ -127,7 +127,6 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   private def instantiateClass(cls: Class[WriteAheadLog], conf: SparkConf): WriteAheadLog = {
     try {
       cls.getConstructor(classOf[SparkConf]).newInstance(conf)
-      //new FileBasedWriteAheadLog(conf, Utils.createTempDir().toString, new Configuration(), 1, 1)
     } catch {
       case nsme: NoSuchMethodException =>
         cls.getConstructor().newInstance()
