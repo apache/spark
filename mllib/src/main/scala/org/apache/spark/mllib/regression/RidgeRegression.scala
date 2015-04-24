@@ -171,7 +171,7 @@ object RidgeRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       regParam: Double): RidgeRegressionModel = {
-    train(input, numIterations, stepSize, regParam, 0.01)
+    train(input, numIterations, stepSize, regParam, 1.0)
   }
 
   /**
