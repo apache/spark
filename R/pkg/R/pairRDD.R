@@ -206,8 +206,8 @@ setMethod("partitionBy",
                                    get(name, .broadcastNames) })
             jrdd <- getJRDD(x)
 
-            # We create a PairwiseRRDD that extends RDD[(Array[Byte],
-            # Array[Byte])], where the key is the hashed split, the value is
+            # We create a PairwiseRRDD that extends RDD[(Int, Array[Byte])],
+            # where the key is the target partition number, the value is
             # the content (key-val pairs).
             pairwiseRRDD <- newJObject("org.apache.spark.api.r.PairwiseRRDD",
                                        callJMethod(jrdd, "rdd"),
@@ -866,8 +866,8 @@ setMethod("sampleByKey",
             }
 
             # The sampler: takes a partition and returns its sampled version.
-            samplingFunc <- function(split, part) {
-              set.seed(bitwXor(seed, split))
+            samplingFunc <- function(partIndex, part) {
+              set.seed(bitwXor(seed, partIndex))
               res <- vector("list", length(part))
               len <- 0
 

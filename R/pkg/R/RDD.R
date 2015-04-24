@@ -91,8 +91,8 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     # NOTE: We use prev_serializedMode to track the serialization mode of prev_JRDD
     # prev_serializedMode is used during the delayed computation of JRDD in getJRDD
   } else {
-    pipelinedFunc <- function(split, iterator) {
-      func(split, prev@func(split, iterator))
+    pipelinedFunc <- function(partIndex, part) {
+      func(partIndex, prev@func(partIndex, part))
     }
     .Object@func <- cleanClosure(pipelinedFunc)
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
@@ -306,7 +306,7 @@ setMethod("numPartitions",
           signature(x = "RDD"),
           function(x) {
             jrdd <- getJRDD(x)
-            partitions <- callJMethod(jrdd, "splits")
+            partitions <- callJMethod(jrdd, "partitions")
             callJMethod(partitions, "size")
           })
 
@@ -452,8 +452,8 @@ setMethod("countByValue",
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            func <- function(split, iterator) {
-              lapply(iterator, FUN)
+            func <- function(partIndex, part) {
+              lapply(part, FUN)
             }
             lapplyPartitionsWithIndex(X, func)
           })
@@ -538,8 +538,8 @@ setMethod("mapPartitions",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 5L)
-#' prod <- lapplyPartitionsWithIndex(rdd, function(split, part) {
-#'                                          split * Reduce("+", part) })
+#' prod <- lapplyPartitionsWithIndex(rdd, function(partIndex, part) {
+#'                                          partIndex * Reduce("+", part) })
 #' collect(prod, flatten = FALSE) # 0, 7, 22, 45, 76
 #'}
 #' @rdname lapplyPartitionsWithIndex
@@ -813,7 +813,7 @@ setMethod("distinct",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10) # ensure each num is in its own split
+#' rdd <- parallelize(sc, 1:10)
 #' collect(sampleRDD(rdd, FALSE, 0.5, 1618L)) # ~5 distinct elements
 #' collect(sampleRDD(rdd, TRUE, 0.5, 9L)) # ~5 elements possibly with duplicates
 #'}
@@ -825,14 +825,14 @@ setMethod("sampleRDD",
           function(x, withReplacement, fraction, seed) {
 
             # The sampler: takes a partition and returns its sampled version.
-            samplingFunc <- function(split, part) {
+            samplingFunc <- function(partIndex, part) {
               set.seed(seed)
               res <- vector("list", length(part))
               len <- 0
 
               # Discards some random values to ensure each partition has a
               # different random seed.
-              runif(split)
+              runif(partIndex)
 
               for (elem in part) {
                 if (withReplacement) {
@@ -989,8 +989,8 @@ setMethod("coalesce",
            function(x, numPartitions, shuffle = FALSE) {
              numPartitions <- numToInt(numPartitions)
              if (shuffle || numPartitions > SparkR::numPartitions(x)) {
-               func <- function(s, part) {
-                 set.seed(s)  # split as seed
+               func <- function(partIndex, part) {
+                 set.seed(partIndex)  # partIndex as seed
                  start <- as.integer(sample(numPartitions, 1) - 1)
                  lapply(seq_along(part),
                         function(i) {
@@ -1035,7 +1035,7 @@ setMethod("saveAsObjectFile",
 #' Save this RDD as a text file, using string representations of elements.
 #'
 #' @param x The RDD to save
-#' @param path The directory where the splits of the text file are saved
+#' @param path The directory where the partitions of the text file are saved
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1335,10 +1335,10 @@ setMethod("zipWithUniqueId",
           function(x) {
             n <- numPartitions(x)
 
-            partitionFunc <- function(split, part) {
+            partitionFunc <- function(partIndex, part) {
               mapply(
                 function(item, index) {
-                  list(item, (index - 1) * n + split)
+                  list(item, (index - 1) * n + partIndex)
                 },
                 part,
                 seq_along(part),
@@ -1382,11 +1382,11 @@ setMethod("zipWithIndex",
               startIndices <- Reduce("+", nums, accumulate = TRUE)
             }
 
-            partitionFunc <- function(split, part) {
-              if (split == 0) {
+            partitionFunc <- function(partIndex, part) {
+              if (partIndex == 0) {
                 startIndex <- 0
               } else {
-                startIndex <- startIndices[[split]]
+                startIndex <- startIndices[[partIndex]]
               }
 
               mapply(
