@@ -967,7 +967,7 @@ setMethod("keyBy",
 setMethod("repartition",
           signature(x = "RDD", numPartitions = "numeric"),
           function(x, numPartitions) {
-            coalesce(x, numToInt(numPartitions), TRUE)
+            coalesce(x, numPartitions, TRUE)
           })
 
 #' Return a new RDD that is reduced into numPartitions partitions.
