@@ -95,30 +95,6 @@ class DAGScheduler(
 
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
-
-  // The maximum number of times to retry a stage before aborting
-  val maxStageFailures = sc.conf.getInt("spark.stage.maxFailures", 5)
-  
-  // To avoid cyclical stage failures (see SPARK-5945) we limit the number of times that a stage
-  // may be retried. However, it only makes sense to limit the number of times that a stage fails
-  // if it's failing for the same reason every time. Therefore, track why a stage fails as well as 
-  // how many times it has failed.
-  private[scheduler] case class StageFailure(failureReason : String) {
-    var count = 1
-    def fail(): Unit = { count += 1 }
-    def shouldAbort(): Boolean = { count >= maxStageFailures }
-
-    override def equals(other: Any): Boolean =
-      other match {
-        case that: StageFailure => that.failureReason.equals(this.failureReason)
-        case _ => false
-      }
-
-    override def hashCode: Int = failureReason.hashCode()
-  }
-  
-  // Map to track failure reasons for a given stage (indexed by stage ID)
-  private[scheduler] val stageFailureReasons = new HashMap[Stage, HashSet[StageFailure]]
   
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
@@ -483,10 +459,6 @@ class DAGScheduler(
                 if (failedStages.contains(stage)) {
                   logDebug("Removing stage %d from failed set.".format(stageId))
                   failedStages -= stage
-                }
-                if (stageFailureReasons.contains(stage)) {
-                  logDebug("Removing stage %d from failure reasons set.".format(stageId))
-                  stageFailureReasons -= stage
                 }
               }
               // data structures based on StageId
@@ -969,31 +941,6 @@ class DAGScheduler(
   }
 
   /**
-   * Check whether we should abort the failedStage due to multiple failures for the same reason.
-   * This method updates the running count of failures for a particular stage and returns 
-   * true if the number of failures for any single reason exceeds the allowable number
-   * of failures. 
-   * @return An Option that contains the failure reason that caused the abort
-   */
-  private[scheduler] 
-  def shouldAbortStage(failedStage: Stage, failureReason: String): Option[String] = {
-    if (!stageFailureReasons.contains(failedStage)) {
-      stageFailureReasons.put(failedStage, new HashSet[StageFailure]())
-    }
-    
-    val failures = stageFailureReasons.get(failedStage).get
-    val failure = StageFailure(failureReason)
-    failures.find(s => s.equals(failure)) match {
-      case Some(f) => f.fail()
-      case None => failures.add(failure)
-    }
-    failures.find(_.shouldAbort()) match {
-      case Some(f) => Some(f.failureReason)
-      case None => None
-    }
-  }
-
-  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
@@ -1021,6 +968,10 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
+        // Clear failure count for this stage, now that it's succeeded. This ensures that even if 
+        // subsequent stages fail, triggering a recompute of this stage, we abort because of 
+        // those failures. 
+        stage.clearFailures()
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
           event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
@@ -1136,13 +1087,12 @@ class DAGScheduler(
           markStageAsFinished(failedStage, Some(failureMessage))
         }
 
-        val shouldAbort = shouldAbortStage(failedStage, failureMessage)
         if (disallowStageRetryForTest) {
           abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
-        } else if (shouldAbort.isDefined) {
+        } else if (failedStage.failAndShouldAbort()) {
           abortStage(failedStage, s"Fetch failure - aborting stage. Stage ${failedStage.name} " +
-            s"has failed the maximum allowable number of times: ${maxStageFailures}. " +
-            s"Failure reason: ${shouldAbort.get}")
+            s"has failed the maximum allowable number of times: ${failedStage.maxStageFailures}. " +
+            s"Failure reason: ${failureMessage}")
         } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled.
