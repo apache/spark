@@ -403,7 +403,7 @@ build_apache_spark()
 
 detect_binary_inop_with_mima()
 
-# run_scala_tests(test_suite)
+run_scala_tests(test_suite)
 
 run_python_tests()
 
