@@ -32,15 +32,15 @@ import org.apache.spark.unsafe.memory.*;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
- *
- * This class is not thread-safe.
- *
+ * <p>
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
- *
+ * <p>
  * Note that even though we use long for indexing, the map can support up to 2^31 keys because
  * we use 32 bit MurmurHash. In either case, if the key cardinality is so high, you should probably
  * be using sorting instead of hashing for better cache locality.
+ * <p>
+ * This class is not thread safe.
  */
 public final class BytesToBytesMap {
 
@@ -389,21 +389,21 @@ public final class BytesToBytesMap {
      * Store a new key and value. This method may only be called once for a given key; if you want
      * to update the value associated with a key, then you can directly manipulate the bytes stored
      * at the value address.
-     *
+     * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
-     *
+     * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
      * will return information on the data stored by this `putNewKey` call.
-     *
+     * <p>
      * As an example usage, here's the proper way to store a new key:
-     *
-     * <code>
+     * <p>
+     * <pre>
      *   Location loc = map.lookup(keyBaseOffset, keyBaseObject, keyLengthInBytes);
      *   if (!loc.isDefined()) {
      *     loc.putNewKey(keyBaseOffset, keyBaseObject, keyLengthInBytes, ...)
      *   }
-     * </code>
-     *
+     * </pre>
+     * <p>
      * Unspecified behavior if the key is not defined.
      */
     public void putNewKey(
