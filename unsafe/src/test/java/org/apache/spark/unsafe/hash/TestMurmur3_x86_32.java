@@ -30,7 +30,7 @@ import org.junit.Test;
  */
 public class TestMurmur3_x86_32 {
 
-  private static Murmur3_x86_32 hasher = new Murmur3_x86_32(0);
+  private static final Murmur3_x86_32 hasher = new Murmur3_x86_32(0);
 
   @Test
   public void testKnownIntegerInputs() {

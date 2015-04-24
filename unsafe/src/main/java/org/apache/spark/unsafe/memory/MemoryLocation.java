@@ -26,9 +26,9 @@ import javax.annotation.Nullable;
 public class MemoryLocation {
 
   @Nullable
-  protected Object obj;
+  Object obj;
 
-  protected long offset;
+  long offset;
 
   public MemoryLocation(@Nullable Object obj, long offset) {
     this.obj = obj;
@@ -41,10 +41,6 @@ public class MemoryLocation {
 
   public void setObjAndOffset(Object newObj, long newOffset) {
     this.obj = newObj;
-    this.offset = newOffset;
-  }
-
-  public void setOffset(long newOffset) {
     this.offset = newOffset;
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TestLongArray {
 
-  private LongArray createTestData() {
+  private static LongArray createTestData() {
     byte[] bytes = new byte[16];
     LongArray arr = new LongArray(MemoryBlock.fromByteArray(bytes));
     arr.set(0, 1L);

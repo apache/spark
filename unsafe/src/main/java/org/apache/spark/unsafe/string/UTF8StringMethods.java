@@ -107,7 +107,7 @@ public final class UTF8StringMethods {
   }
 
   public static String toJavaString(Object baseObject, long baseOffset, int lengthInBytes) {
-    final byte[] bytes = new byte[(int) lengthInBytes];
+    final byte[] bytes = new byte[lengthInBytes];
     PlatformDependent.UNSAFE.copyMemory(
       baseObject,
       baseOffset,
@@ -129,8 +129,11 @@ public final class UTF8StringMethods {
    *
    * @return the number of bytes written, including the space for tracking the string's length.
    */
-  public static int createFromJavaString(Object baseObject, long baseOffset, String str) {
-    final byte[] strBytes = str.getBytes();
+  public static int createFromJavaString(
+      Object baseObject,
+      long baseOffset,
+      String str) throws UnsupportedEncodingException {
+    final byte[] strBytes = str.getBytes("utf-8");
     final int strLengthInBytes = strBytes.length;
     PlatformDependent.copyMemory(
       strBytes,
@@ -159,7 +162,7 @@ public final class UTF8StringMethods {
    * number of tailing bytes in a UTF8 sequence for a code point
    * see http://en.wikipedia.org/wiki/UTF-8, 192-256 of Byte 1
    */
-  private static int[] bytesOfCodePointInUTF8 = new int[] {
+  private static final int[] bytesOfCodePointInUTF8 = new int[] {
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,

@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public class MemoryBlock extends MemoryLocation {
 
-  final long length;
+  private final long length;
 
   MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);

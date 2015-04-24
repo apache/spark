@@ -29,7 +29,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  */
 public final class LongArray {
 
-  private static final int WIDTH = 8;
+  // This is a long so that we perform long multiplications when computing offsets.
+  private static final long WIDTH = 8;
 
   private final MemoryBlock memory;
   private final Object baseObj;

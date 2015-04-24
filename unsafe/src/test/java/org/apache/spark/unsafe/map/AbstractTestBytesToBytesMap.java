@@ -17,28 +17,28 @@
 
 package org.apache.spark.unsafe.map;
 
+import java.lang.Exception;
+import java.nio.ByteBuffer;
+import java.util.*;
+
+import org.junit.Assert;
+import org.junit.Test;
+
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
-import org.junit.Assert;
-import org.junit.Test;
-
-import java.lang.Exception;
-import java.lang.IllegalStateException;
-import java.nio.ByteBuffer;
-import java.util.*;
 
 public abstract class AbstractTestBytesToBytesMap {
 
-  protected final Random rand = new Random(42);
+  private final Random rand = new Random(42);
 
-  protected final MemoryAllocator allocator = getMemoryAllocator();
+  private final MemoryAllocator allocator = getMemoryAllocator();
 
   protected abstract MemoryAllocator getMemoryAllocator();
 
-  protected byte[] getByteArray(MemoryLocation loc, int size) {
+  private static byte[] getByteArray(MemoryLocation loc, int size) {
     final byte[] arr = new byte[size];
     PlatformDependent.UNSAFE.copyMemory(
       loc.getBaseObject(),
@@ -50,7 +50,7 @@ public abstract class AbstractTestBytesToBytesMap {
     return arr;
   }
 
-  protected byte[] getRandomByteArray(int numWords) {
+  private byte[] getRandomByteArray(int numWords) {
     Assert.assertTrue(numWords > 0);
     final int lengthInBytes = numWords * 8;
     final byte[] bytes = new byte[lengthInBytes];
@@ -62,7 +62,7 @@ public abstract class AbstractTestBytesToBytesMap {
    * Fast equality checking for byte arrays, since these comparisons are a bottleneck
    * in our stress tests.
    */
-  protected boolean arrayEquals(
+  private static boolean arrayEquals(
       byte[] expected,
       MemoryLocation actualAddr,
       long actualLengthBytes) {

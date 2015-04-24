@@ -176,9 +176,13 @@ public final class BytesToBytesMap {
   }
 
   @Override
-  public void finalize() {
-    // In case the programmer forgot to call `free()`, try to perform that cleanup now:
-    free();
+  protected void finalize() throws Throwable {
+    try {
+      // In case the programmer forgot to call `free()`, try to perform that cleanup now:
+      free();
+    } finally {
+      super.finalize();
+    }
   }
 
   /**
