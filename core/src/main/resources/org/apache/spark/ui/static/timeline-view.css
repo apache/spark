@@ -124,3 +124,7 @@ tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
 .control-panel {
   margin-bottom: 5px;
 }
+
+span.expand-application-timeline, span.expand-job-timeline {
+  cursor: pointer;
+}

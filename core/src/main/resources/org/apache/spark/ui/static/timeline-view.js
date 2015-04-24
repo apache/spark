@@ -103,10 +103,16 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
 
     $(this).hover(
       function() {
-        $("#stage-" + getStageId(this)).addClass("corresponding-item-hover");
+        var idAndAttempt = getStageIdAndAttempt(this);
+        var id = idAndAttempt[0];
+        var attempt = idAndAttempt[1];
+        $("#stage-" + id + "-" + attempt).addClass("corresponding-item-hover");
       },
       function() {
-        $("#stage-" + getStageId(this)).removeClass("corresponding-item-hover");
+        var idAndAttempt = getStageIdAndAttempt(this);
+        var id = idAndAttempt[0];
+        var attempt = idAndAttempt[1];
+        $("#stage-" + id + "-" + attempt).removeClass("corresponding-item-hover");
       }
     );
   });
