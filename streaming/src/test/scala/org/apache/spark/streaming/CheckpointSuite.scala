@@ -209,7 +209,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
 
-    val newCpConf = newCp.sparkConf
+    val newCpConf = newCp.createSparkConf()
     assert(newCpConf.contains("spark.driver.host"))
     assert(newCpConf.contains("spark.driver.port"))
     assert(newCpConf.get("spark.driver.host") === "localhost")

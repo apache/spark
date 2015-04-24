@@ -43,7 +43,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll.filterNot { kv =>
     (!ssc.sc.isDriverHostSetByUser && kv._1 == "spark.driver.host") ||
-      (!ssc.sc.isDriverPortSetByUser && kv._1 == "spark.driver.port")
+      (!ssc.sc.isDriverPortSetByUser && kv._1 == "spark.driver.port") }
 
   def createSparkConf(): SparkConf = {
 
