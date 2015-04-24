@@ -26,8 +26,8 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This class manages write ahead log files.
@@ -44,15 +44,15 @@ import org.apache.spark.util.ThreadUtils
 private[streaming] class FileBasedWriteAheadLog(
     conf: SparkConf,
     logDirectory: String,
-    hadoopConf: Configuration
+    hadoopConf: Configuration,
+    rollingIntervalSecs: Int,
+    maxFailures: Int
   ) extends WriteAheadLog with Logging {
 
   import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
   private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
-  private val rollingIntervalSecs = conf.getInt(ROLLING_INTERVAL_SECS_CONF_KEY, 60)
-  private val maxFailures = conf.getInt(MAX_FAILURES_CONF_KEY, 3)
 
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
   implicit private val executionContext = ExecutionContext.fromExecutorService(
@@ -221,9 +221,6 @@ private[streaming] class FileBasedWriteAheadLog(
 private[streaming] object FileBasedWriteAheadLog {
 
   case class LogInfo(startTime: Long, endTime: Long, path: String)
-
-  val ROLLING_INTERVAL_SECS_CONF_KEY = "FileBasedWriteAheadLog.rollingIntervalSecs"
-  val MAX_FAILURES_CONF_KEY = "FileBasedWriteAheadLog.maxFailures"
 
   val logFileRegex = """log-(\d+)-(\d+)""".r
 

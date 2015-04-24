@@ -224,7 +224,7 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Optionally create the write ahead log manager only if the feature is enabled */
   private def createWriteAheadLog(): Option[WriteAheadLog] = {
-    if (conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+    if (WriteAheadLogUtils.enableReceiverLog(conf)) {
       if (checkpointDirOption.isEmpty) {
         throw new SparkException(
           "Cannot enable receiver write-ahead log without checkpoint directory set. " +
@@ -232,12 +232,8 @@ private[streaming] class ReceivedBlockTracker(
             "See documentation for more details.")
       }
       val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDirOption.get)
-      val rollingIntervalSecs = conf.getInt(
-        "spark.streaming.driver.writeAheadLog.rotationIntervalSecs", 60)
-      val maxFailures = conf.getInt(
-        "spark.streaming.driver.writeAheadLog.maxFailures", 3)
-      val log = WriteAheadLogUtils.createLogForDriver(
-        conf, logDir, hadoopConf, rollingIntervalSecs, maxFailures)
+
+      val log = WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
       Some(log)
     } else {
       None

@@ -30,9 +30,8 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.streaming.util.FileBasedWriteAheadLog._
+import org.apache.spark.{SparkConf, SparkException}
 
 class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
@@ -56,6 +55,50 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   after {
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("WriteAheadLogUtils - log selection and creation") {
+    val logDir = Utils.createTempDir().getAbsolutePath()
+
+    def assertDriverLogClass[T <: WriteAheadLog: ClassTag](conf: SparkConf): WriteAheadLog = {
+      val log = WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
+      assert(log.getClass === implicitly[ClassTag[T]].runtimeClass)
+      log
+    }
+
+    def assertReceiverLogClass[T: ClassTag](conf: SparkConf): WriteAheadLog = {
+      val log = WriteAheadLogUtils.createLogForReceiver(conf, logDir, hadoopConf)
+      assert(log.getClass === implicitly[ClassTag[T]].runtimeClass)
+      log
+    }
+
+    val emptyConf = new SparkConf()  // no log configuration
+    assertDriverLogClass[FileBasedWriteAheadLog](emptyConf)
+    assertReceiverLogClass[FileBasedWriteAheadLog](emptyConf)
+
+    // Verify setting driver WAL class
+    val conf1 = new SparkConf().set("spark.streaming.driver.writeAheadLog.class",
+      classOf[MockWriteAheadLog0].getName())
+    assertDriverLogClass[MockWriteAheadLog0](conf1)
+    assertReceiverLogClass[FileBasedWriteAheadLog](conf1)
+
+    // Verify setting receiver WAL class
+    val receiverWALConf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
+      classOf[MockWriteAheadLog0].getName())
+    assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf)
+    assertReceiverLogClass[MockWriteAheadLog0](receiverWALConf)
+
+    // Verify setting receiver WAL class with 1-arg constructor
+    val receiverWALConf2 = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
+      classOf[MockWriteAheadLog1].getName())
+    assertReceiverLogClass[MockWriteAheadLog1](receiverWALConf2)
+
+    // Verify failure setting receiver WAL class with 2-arg constructor
+    intercept[SparkException] {
+      val receiverWALConf3 = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
+        classOf[MockWriteAheadLog2].getName())
+      assertReceiverLogClass[MockWriteAheadLog1](receiverWALConf3)
+    }
   }
 
   test("FileBasedWriteAheadLogWriter - writing data") {
@@ -245,43 +288,11 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val readData = readDataUsingWriteAheadLog(testDir)
     assert(readData === dataToWrite2)
   }
-
-  test("WriteAheadLogUtils - log creation") {
-    val logDir = Utils.createTempDir().getAbsolutePath
-
-    def assertLogClass[T: ClassTag](conf: SparkConf, forDriver: Boolean): Unit = {
-      val log = if (forDriver) {
-        WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf, 1, 1)
-      } else {
-        WriteAheadLogUtils.createLogForReceiver(conf, logDir, hadoopConf, 1, 1)
-      }
-      assert(log.isInstanceOf[T])
-    }
-
-    val emptyConf = new SparkConf()  // no log configuration
-    assertLogClass[FileBasedWriteAheadLog](emptyConf, forDriver = true)
-    assertLogClass[FileBasedWriteAheadLog](emptyConf, forDriver = false)
-
-    val driverWALConf = new SparkConf().set("spark.streaming.driver.writeAheadLog.class",
-      classOf[MockWriteAheadLog1].getCanonicalName)
-    assertLogClass[MockWriteAheadLog1](emptyConf, forDriver = true)
-    assertLogClass[FileBasedWriteAheadLog](emptyConf, forDriver = false)
-
-    val receiverWALConf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
-      classOf[MockWriteAheadLog1].getCanonicalName)
-    assertLogClass[FileBasedWriteAheadLog](emptyConf, forDriver = true)
-    assertLogClass[MockWriteAheadLog1](emptyConf, forDriver = false)
-
-    val receiverWALConf2 = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
-      classOf[MockWriteAheadLog2].getCanonicalName)
-    assertLogClass[FileBasedWriteAheadLog](emptyConf, forDriver = true)
-    assertLogClass[MockWriteAheadLog2](emptyConf, forDriver = false)
-  }
 }
 
 object WriteAheadLogSuite {
 
-  class MockWriteAheadLog1(val conf: SparkConf, val checkpointDir: String) extends WriteAheadLog {
+  class MockWriteAheadLog0() extends WriteAheadLog {
     override def write(record: ByteBuffer, time: Long): WriteAheadLogSegment = { null }
     override def read(segment: WriteAheadLogSegment): ByteBuffer = { null }
     override def readAll(): util.Iterator[ByteBuffer] = { null }
@@ -289,13 +300,10 @@ object WriteAheadLogSuite {
     override def close(): Unit = { }
   }
 
-  class MockWriteAheadLog2(val conf: SparkConf) extends WriteAheadLog {
-    override def write(record: ByteBuffer, time: Long): WriteAheadLogSegment = { null }
-    override def read(segment: WriteAheadLogSegment): ByteBuffer = { null }
-    override def readAll(): util.Iterator[ByteBuffer] = { null }
-    override def cleanup(threshTime: Long, waitForCompletion: Boolean): Unit = { }
-    override def close(): Unit = { }
-  }
+  class MockWriteAheadLog1(val conf: SparkConf) extends MockWriteAheadLog0()
+
+  class MockWriteAheadLog2(val conf: SparkConf, x: Int) extends MockWriteAheadLog0()
+
 
   private val hadoopConf = new Configuration()
 
@@ -337,10 +345,7 @@ object WriteAheadLogSuite {
       closeLog: Boolean = true
     ): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
-
-    val conf = new SparkConf()
-    conf.set(ROLLING_INTERVAL_SECS_CONF_KEY, "1")
-    val wal = new FileBasedWriteAheadLog(conf, logDirectory, hadoopConf)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
     
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
@@ -400,7 +405,7 @@ object WriteAheadLogSuite {
   /** Read all the data in the log file in a directory using the WriteAheadLog class. */
   def readDataUsingWriteAheadLog(logDirectory: String): Seq[String] = {
     import scala.collection.JavaConversions._
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf)
+    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
     val data = wal.readAll().map(byteBufferToString).toSeq
     wal.close()
     data

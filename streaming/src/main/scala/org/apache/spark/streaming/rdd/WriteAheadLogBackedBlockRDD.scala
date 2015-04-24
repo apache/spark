@@ -16,7 +16,12 @@
  */
 package org.apache.spark.streaming.rdd
 
+import java.nio.ByteBuffer
+
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
+
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
@@ -94,16 +99,26 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         logDebug(s"Read partition data of $this from block manager, block $blockId")
         iterator
       case None => // Data not found in Block Manager, grab it from write ahead log file
-        val dataRead = {
-          var writeAheadLog: WriteAheadLog = null
-          try {
-            writeAheadLog = WriteAheadLogUtils.createLogForReceiver(conf, null, hadoopConf)
-            writeAheadLog.read(partition.segment)
-          } finally {
-            if (writeAheadLog != null) {
-              writeAheadLog.close()
-            }
+        var dataRead: ByteBuffer = null
+        var writeAheadLog: WriteAheadLog = null
+        try {
+          val dummyDirectory = FileUtils.getTempDirectoryPath()
+          writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
+            SparkEnv.get.conf, dummyDirectory, hadoopConf)
+          dataRead = writeAheadLog.read(partition.segment)
+        } catch {
+          case NonFatal(e) =>
+            throw new SparkException(
+              s"Could not read data from write ahead log segment ${partition.segment}", e)
+        } finally {
+          if (writeAheadLog != null) {
+            writeAheadLog.close()
           }
+        }
+        if (dataRead == null) {
+          throw new SparkException(
+            s"Could not read data from write ahead log segment ${partition.segment}, " +
+              s"read returned null")
         }
         logInfo(s"Read partition data of $this from write ahead log, segment ${partition.segment}")
         if (storeInBlockManager) {

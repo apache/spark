@@ -116,10 +116,6 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   private val blockStoreTimeout = conf.getInt(
     "spark.streaming.receiver.blockStoreTimeout", 30).seconds
-  private val rollingIntervalSecs = conf.getInt(
-    "spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", 60)
-  private val maxFailures = conf.getInt(
-    "spark.streaming.receiver.writeAheadLog.maxFailures", 3)
 
   private val effectiveStorageLevel = {
     if (storageLevel.deserialized) {
@@ -141,8 +137,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   // Write ahead log manages
   private val writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
-    conf, checkpointDirToLogDir(checkpointDir, streamId), hadoopConf,
-    rollingIntervalSecs, maxFailures)
+    conf, checkpointDirToLogDir(checkpointDir, streamId), hadoopConf)
 
   // For processing futures used in parallel block storing into block manager and write ahead log
   // # threads = 2, so that both writing to BM and WAL can proceed in parallel
