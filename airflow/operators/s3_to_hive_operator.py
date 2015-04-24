@@ -37,6 +37,9 @@ class S3ToHiveTransfer(BaseOperator):
     :param partition: target partition as a dict of partition columns
         and values
     :type partition: dict
+    :param headers: whether the file contains column names on the first
+        line
+    :type headers: bool
     :param delimiter: field delimiter in the file
     :type delimiter: str
     :param s3_conn_id: source s3 connection
@@ -84,17 +87,47 @@ class S3ToHiveTransfer(BaseOperator):
             raise Exception("The key {0} does not exists".format(self.s3_key))
         s3_key_object = self.s3.get_key(self.s3_key)
         with NamedTemporaryFile("w") as f:
-            logging.info("Dumping S3 file {0}"
-                " contents to local file {1}".format(self.s3_key, f.name))
+            logging.info("Dumping S3 file {0} contents to local"
+                         " file {1}".format(self.s3_key, f.name))
             s3_key_object.get_contents_to_file(f)
             f.flush()
             self.s3.connection.close()
-            logging.info("Loading file into Hive")
-            self.hive.load_file(
-                f.name,
-                self.hive_table,
-                field_dict=self.field_dict,
-                create=self.create,
-                partition=self.partition,
-                delimiter=self.delimiter,
-                recreate=self.recreate)
+            if not self.headers:
+                logging.info("Loading file into Hive")
+                self.hive.load_file(
+                    f.name,
+                    self.hive_table,
+                    field_dict=self.field_dict,
+                    create=self.create,
+                    partition=self.partition,
+                    delimiter=self.delimiter,
+                    recreate=self.recreate)
+            else:
+                f.seek(0)
+                header_l = f.readline()
+                header_line = header_l.replace('\n','')
+                header_list = header_line.split(self.delimiter)
+                field_names = list(self.field_dict.keys())
+                test_field_match = [h1.lower() == h2.lower() for h1, h2
+                                    in zip(header_list, field_names)]
+                if not all(test_field_match):
+                    logging.warning("Headers do not match field names"
+                                    "File headers:\n {header_list}\n"
+                                    "Field names: \n {field_names}\n"
+                                    "".format(**locals()))
+                    raise Exception("The headers do not match the field names")
+                with NamedTemporaryFile("w") as fnoheaders:
+                    f.seek(0)
+                    next(f)
+                    for line in f:
+                        fnoheaders.write(line)
+                    fnoheaders.flush()
+                    logging.info("Loading file without headers into Hive")
+                    self.hive.load_file(
+                        fnoheaders.name,
+                        self.hive_table,
+                        field_dict=self.field_dict,
+                        create=self.create,
+                        partition=self.partition,
+                        delimiter=self.delimiter,
+                        recreate=self.recreate)
