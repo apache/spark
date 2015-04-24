@@ -54,7 +54,7 @@
 ...     def zero(self, value):
 ...         return [0.0] * len(value)
 ...     def addInPlace(self, val1, val2):
-...         for i in xrange(len(val1)):
+...         for i in range(len(val1)):
 ...              val1[i] += val2[i]
 ...         return val1
 >>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
@@ -83,12 +83,16 @@ Py4JJavaError:...
 >>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
 Traceback (most recent call last):
     ...
-Exception:...
+TypeError:...
 """
 
+import sys
 import select
 import struct
-import SocketServer
+if sys.version < '3':
+    import SocketServer
+else:
+    import socketserver as SocketServer
 import threading
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
@@ -247,6 +251,7 @@ class AccumulatorServer(SocketServer.TCPServer):
     def shutdown(self):
         self.server_shutdown = True
         SocketServer.TCPServer.shutdown(self)
+        self.server_close()
 
 
 def _start_update_server():

@@ -67,6 +67,8 @@ private[spark] class MesosSchedulerBackend(
 
   // The listener bus to publish executor added/removed events.
   val listenerBus = sc.listenerBus
+  
+  private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
   @volatile var appId: String = _
 
@@ -139,7 +141,7 @@ private[spark] class MesosSchedulerBackend(
       .setName("cpus")
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder()
-        .setValue(scheduler.CPUS_PER_TASK).build())
+        .setValue(mesosExecutorCores).build())
       .build()
     val memory = Resource.newBuilder()
       .setName("mem")
@@ -220,10 +222,9 @@ private[spark] class MesosSchedulerBackend(
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        // TODO(pwendell): Should below be 1 + scheduler.CPUS_PER_TASK?
         (mem >= MemoryUtils.calculateTotalMemory(sc) &&
           // need at least 1 for executor, 1 for task
-          cpus >= 2 * scheduler.CPUS_PER_TASK) ||
+          cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)) ||
           (slaveIdsWithExecutors.contains(slaveId) &&
             cpus >= scheduler.CPUS_PER_TASK)
       }
@@ -232,10 +233,9 @@ private[spark] class MesosSchedulerBackend(
         val cpus = if (slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
           getResource(o.getResourcesList, "cpus").toInt
         } else {
-          // If the executor doesn't exist yet, subtract CPU for executor
-          // TODO(pwendell): Should below just subtract "1"?
-          getResource(o.getResourcesList, "cpus").toInt -
-            scheduler.CPUS_PER_TASK
+          // If the Mesos executor has not been started on this slave yet, set aside a few
+          // cores for the Mesos executor by offering fewer cores to the Spark executor
+          (getResource(o.getResourcesList, "cpus") - mesosExecutorCores).toInt
         }
         new WorkerOffer(
           o.getSlaveId.getValue,

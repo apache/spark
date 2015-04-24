@@ -117,5 +117,17 @@ class TreeNodeSuite extends FunSuite {
     assert(transformed.origin.startPosition.isDefined)
   }
 
+  test("foreach up") {
+    val actual = new ArrayBuffer[String]()
+    val expected = Seq("1", "2", "3", "4", "-", "*", "+")
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    expression foreachUp {
+      case b: BinaryExpression => actual.append(b.symbol);
+      case l: Literal => actual.append(l.toString);
+    }
+
+    assert(expected === actual)
+  }
+
 
 }

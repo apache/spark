@@ -193,8 +193,8 @@ df.groupBy("age").count().show()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sc: JavaSparkContext // An existing SparkContext.
-val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+JavaSparkContext sc // An existing SparkContext.
+SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // Create the DataFrame
 DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
@@ -308,8 +308,8 @@ val df = sqlContext.sql("SELECT * FROM table")
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-val sqlContext = ...  // An existing SQLContext
-val df = sqlContext.sql("SELECT * FROM table")
+SQLContext sqlContext = ...  // An existing SQLContext
+DataFrame df = sqlContext.sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
 
@@ -435,7 +435,7 @@ DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AN
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -555,13 +555,16 @@ by `SQLContext`.
 
 For example:
 {% highlight java %}
-// Import factory methods provided by DataType.
-import org.apache.spark.sql.types.DataType;
+import org.apache.spark.api.java.function.Function;
+// Import factory methods provided by DataTypes.
+import org.apache.spark.sql.types.DataTypes;
 // Import StructType and StructField
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructField;
 // Import Row.
 import org.apache.spark.sql.Row;
+// Import RowFactory.
+import org.apache.spark.sql.RowFactory;
 
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -575,16 +578,16 @@ String schemaString = "name age";
 // Generate the schema based on the string of schema
 List<StructField> fields = new ArrayList<StructField>();
 for (String fieldName: schemaString.split(" ")) {
-  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+  fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
-StructType schema = DataType.createStructType(fields);
+StructType schema = DataTypes.createStructType(fields);
 
 // Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
   new Function<String, Row>() {
     public Row call(String record) throws Exception {
       String[] fields = record.split(",");
-      return Row.create(fields[0], fields[1].trim());
+      return RowFactory.create(fields[0], fields[1].trim());
     }
   });
 
@@ -599,7 +602,7 @@ DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> names = results.map(new Function<Row, String>() {
+List<String> names = results.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -860,7 +863,7 @@ DataFrame parquetFile = sqlContext.parquetFile("people.parquet");
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -1361,7 +1364,7 @@ the Data Sources API.  The following options are supported:
   <tr>
     <td><code>driver</code></td>
     <td>
-      The class name of the JDBC driver needed to connect to this URL.  This class with be loaded
+      The class name of the JDBC driver needed to connect to this URL.  This class will be loaded
       on the master and workers before running an JDBC commands to allow the driver to
       register itself with the JDBC subsystem.
     </td>
