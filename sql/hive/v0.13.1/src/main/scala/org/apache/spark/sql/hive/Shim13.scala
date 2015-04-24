@@ -68,9 +68,9 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
 
   @transient
   def deserializeObjectByKryo[T: ClassTag](
-              kryo: Kryo,
-              in: InputStream,
-              clazz: Class[_]): T = {
+      kryo: Kryo,
+      in: InputStream,
+      clazz: Class[_]): T = {
     val inp = new Input(in)
     val t: T = kryo.readObject(inp,clazz).asInstanceOf[T]
     inp.close()
@@ -79,9 +79,9 @@ private[hive] case class HiveFunctionWrapper(var functionClassName: String)
 
   @transient
   def serializeObjectByKryo(
-              kryo: Kryo,
-              plan: Object,
-              out: OutputStream ) {
+      kryo: Kryo,
+      plan: Object,
+      out: OutputStream ) {
     val output: Output = new Output(out)
     kryo.writeObject(output, plan)
     output.close()
