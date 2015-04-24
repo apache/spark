@@ -1013,6 +1013,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def unsafeEnabled: Boolean = self.conf.unsafeEnabled
 
+    def unsafeUseOffHeap: Boolean = self.conf.unsafeUseOffHeap
+
     def numPartitions: Int = self.conf.numShufflePartitions
 
     def strategies: Seq[Strategy] =

@@ -141,8 +141,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               groupingExpressions,
               partialComputation,
               planLater(child),
-              unsafeEnabled),
-          unsafeEnabled) :: Nil
+              unsafeEnabled,
+              unsafeUseOffHeap),
+          unsafeEnabled,
+          unsafeUseOffHeap) :: Nil
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(

@@ -43,6 +43,7 @@ case class AggregateEvaluation(
  * @param aggregateExpressions expressions that are computed for each group.
  * @param child the input data source.
  * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
+ * @param useOffHeap whether to use off-heap allocation (only takes effect if unsafeEnabled=true)
  */
 @DeveloperApi
 case class GeneratedAggregate(
@@ -50,7 +51,8 @@ case class GeneratedAggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan,
-    unsafeEnabled: Boolean)
+    unsafeEnabled: Boolean,
+    useOffHeap: Boolean)
   extends UnaryNode {
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -289,7 +291,7 @@ case class GeneratedAggregate(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
-          MemoryAllocator.UNSAFE,
+          if (useOffHeap) MemoryAllocator.UNSAFE else MemoryAllocator.HEAP,
           1024 * 16,
           false
         )
