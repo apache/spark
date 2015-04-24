@@ -203,8 +203,8 @@ private[spark] class ExecutorAllocationManager(
    * The number of executors we would have if the cluster manager were to fulfill all our existing
    * requests.
    */
-  private def targetNumExecutors(): Int =
-    numExecutorsPending + executorIds.size - executorsPendingToRemove.size
+  private def targetNumExecutors(): Int = math.max(numExecutorsPending + executorIds.size -
+    executorsPendingToRemove.size, minNumExecutors)
 
   /**
    * The maximum number of executors we would need under the current load to satisfy all running
