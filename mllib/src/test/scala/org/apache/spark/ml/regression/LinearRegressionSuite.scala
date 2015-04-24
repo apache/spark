@@ -20,9 +20,9 @@ package org.apache.spark.ml.regression
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.DenseVector
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{SQLContext, DataFrame}
+import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.{Row, SQLContext, DataFrame}
 
 class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -73,12 +73,11 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().map {instance =>
-      val features = instance(0).asInstanceOf[DenseVector].toArray
-      val prediction1 = instance(1).asInstanceOf[Double]
-      val prediction2 =
-        features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      assert(prediction1 ~== prediction2 relTol 1E-5)
+    model.transform(dataset).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 =
+          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+        assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
@@ -102,12 +101,11 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().map {instance =>
-      val features = instance(0).asInstanceOf[DenseVector].toArray
-      val prediction1 = instance(1).asInstanceOf[Double]
-      val prediction2 =
-        features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      assert(prediction1 ~== prediction2 relTol 1E-5)
+    model.transform(dataset).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 =
+          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+        assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
@@ -131,12 +129,11 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().map {instance =>
-      val features = instance(0).asInstanceOf[DenseVector].toArray
-      val prediction1 = instance(1).asInstanceOf[Double]
-      val prediction2 =
-        features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      assert(prediction1 ~== prediction2 relTol 1E-5)
+    model.transform(dataset).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 =
+          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+        assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
@@ -160,12 +157,11 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().map { instance =>
-      val features = instance(0).asInstanceOf[DenseVector].toArray
-      val prediction1 = instance(1).asInstanceOf[Double]
-      val prediction2 =
-        features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-      assert(prediction1 ~== prediction2 relTol 1E-5)
+    model.transform(dataset).select("features", "prediction").collect().foreach {
+      case Row(features: DenseVector, prediction1: Double) =>
+        val prediction2 =
+          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+        assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 }
