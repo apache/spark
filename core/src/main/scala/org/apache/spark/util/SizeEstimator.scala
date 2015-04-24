@@ -204,34 +204,12 @@ private[spark] object SizeEstimator extends Logging {
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
-        var s1 = 0L
-        var s2 = 0L
+        // To exclude the shared objects that the array elements may link, sample twice
+        // and use the min one to caculate array size.
         val rand = new Random(42)
-        val drawn = new OpenHashSet[Int](2*ARRAY_SAMPLE_SIZE)
-        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
-           var index = 0
-           do {
-             index = rand.nextInt(length)
-          } while (drawn.contains(index))
-          drawn.add(index)
-          val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
-          if(null != obj) {
-            s1 += SizeEstimator.estimate(obj, state.visited).toLong
-          }
-        }
-        
-        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
-          var index = 0
-          do {
-            index = rand.nextInt(length)
-          } while (drawn.contains(index))
-          drawn.add(index)
-          val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
-          if(null != obj) {
-            s2 += SizeEstimator.estimate(obj, state.visited).toLong
-          }
-        }
-
+        val drawn = new OpenHashSet[Int](2 * ARRAY_SAMPLE_SIZE)
+        val s1 = sampleArray(array, state, rand, drawn, length)
+        val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
         state.size += math.max(s1, s2) + 
           (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
@@ -239,6 +217,23 @@ private[spark] object SizeEstimator extends Logging {
     }
   }
 
+  private def sampleArray(array: AnyRef, state: SearchState, 
+    rand: Random, drawn: OpenHashSet[Int], length: Int): Long = {
+    var size = 0L
+    for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+      var index = 0
+      do {
+        index = rand.nextInt(length)
+      } while (drawn.contains(index))
+      drawn.add(index)
+      val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
+      if(null != obj) {
+        size += SizeEstimator.estimate(obj, state.visited).toLong
+      }
+    }
+    size
+  }
+  
   private def primitiveSize(cls: Class[_]): Long = {
     if (cls == classOf[Byte]) {
       BYTE_SIZE
