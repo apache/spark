@@ -137,6 +137,15 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ser.serialize(union.partitions.head).limit() < 2000)
   }
 
+  test("UnionRDD missing partitioner exception") {
+    val rdd1 = sc.parallelize(Seq(1->true,2->true,3->false)).partitionBy(new HashPartitioner(1))
+    // With no partitioner
+    val rdd2 = sc.parallelize(Seq(1->true))
+    intercept[IllegalArgumentException] {
+      sc.union(rdd1, rdd2).count()
+    }
+  }
+
   test("aggregate") {
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
