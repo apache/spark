@@ -136,13 +136,22 @@ class HiveStatsCollectionOperator(BaseOperator):
         logging.info("Deleting rows from previous runs if they exist")
         mysql = MySqlHook(self.mysql_conn_id)
         sql = """
-        DELETE FROM hive_stats
+        SELECT 1 FROM hive_stats
         WHERE
             table_name='{self.table}' AND
             partition_repr='{part_json}' AND
-            dttm='{self.dttm}';
+            dttm='{self.dttm}'
+        LIMIT 1;
         """.format(**locals())
-        mysql.run(sql)
+        if mysql.get_records(sql):
+            sql = """
+            DELETE FROM hive_stats
+            WHERE
+                table_name='{self.table}' AND
+                partition_repr='{part_json}' AND
+                dttm='{self.dttm}';
+            """.format(**locals())
+            mysql.run(sql)
 
         logging.info("Pivoting and loading cells into the Airflow db")
         rows = [
