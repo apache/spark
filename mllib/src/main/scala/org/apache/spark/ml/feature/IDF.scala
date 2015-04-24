@@ -75,7 +75,7 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = extractParamMap(paramMap)
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val idf = new feature.IDF(getMinDocFreq).fit(input)
+    val idf = new feature.IDF(map(minDocFreq)).fit(input)
     val model = new IDFModel(this, map, idf)
     Params.inheritValues(map, this, model)
     model
