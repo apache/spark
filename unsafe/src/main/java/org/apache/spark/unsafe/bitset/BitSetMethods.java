@@ -19,8 +19,6 @@ package org.apache.spark.unsafe.bitset;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
-import java.lang.Object;
-
 /**
  * Methods for working with fixed-size uncompressed bitsets.
  *

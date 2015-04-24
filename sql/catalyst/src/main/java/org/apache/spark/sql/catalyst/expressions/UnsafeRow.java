@@ -24,10 +24,7 @@ import scala.collection.mutable.ArraySeq;
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.sql.Date;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.DataType;
@@ -73,7 +70,7 @@ public final class UnsafeRow implements MutableRow {
   private StructType schema;
 
   private long getFieldOffset(int ordinal) {
-   return baseOffset + bitSetWidthInBytes + ordinal * 8;
+   return baseOffset + bitSetWidthInBytes + ordinal * 8L;
   }
 
   public static int calculateBitSetWidthInBytes(int numFields) {
@@ -91,21 +88,25 @@ public final class UnsafeRow implements MutableRow {
   public static final Set<DataType> readableFieldTypes;
 
   static {
-    settableFieldTypes = new HashSet<DataType>(Arrays.asList(new DataType[] {
-      IntegerType,
-      LongType,
-      DoubleType,
-      BooleanType,
-      ShortType,
-      ByteType,
-      FloatType
-    }));
+    settableFieldTypes = Collections.unmodifiableSet(
+      new HashSet<DataType>(
+        Arrays.asList(new DataType[] {
+          IntegerType,
+          LongType,
+          DoubleType,
+          BooleanType,
+          ShortType,
+          ByteType,
+          FloatType
+    })));
 
     // We support get() on a superset of the types for which we support set():
-    readableFieldTypes = new HashSet<DataType>(Arrays.asList(new DataType[] {
-      StringType
-    }));
-    readableFieldTypes.addAll(settableFieldTypes);
+    final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
+      Arrays.asList(new DataType[]{
+        StringType
+      }));
+    _readableFieldTypes.addAll(settableFieldTypes);
+    readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
   }
 
   /**
@@ -156,9 +157,6 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public void update(int ordinal, Object value) {
-    assert schema != null : "schema cannot be null when calling the generic update()";
-    final DataType type = schema.fields()[ordinal].dataType();
-    // TODO: match based on the type, then set.  This will be slow.
     throw new UnsupportedOperationException();
   }
 
@@ -240,6 +238,7 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public Object get(int i) {
     assertIndexIsValid(i);
+    assert (schema != null) : "Schema must be defined when calling generic get() method";
     final DataType dataType = schema.fields()[i].dataType();
     // The ordering of these `if` statements is intentional: internally, it looks like this only
     // gets invoked in JoinedRow when trying to access UTF8String columns. It's extremely unlikely

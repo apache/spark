@@ -237,6 +237,7 @@ public final class UnsafeFixedWidthAggregationMap {
     map.free();
   }
 
+  @SuppressWarnings("UseOfSystemOutOrSystemErr")
   public void printPerfMetrics() {
     if (!enablePerfMetrics) {
       throw new IllegalStateException("Perf metrics not enabled");
