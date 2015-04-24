@@ -21,6 +21,7 @@ import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Elem, Node, Unparsed}
+import scala.util.parsing.json.{JSONArray, JSONObject}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -58,7 +59,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
-      val graphData = scala.collection.mutable.Map[String, String]()
+      val graphData = scala.collection.mutable.Map[String, JSONArray]()
 
       val numCompleted = tasks.count(_.taskInfo.finished)
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
@@ -235,7 +236,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val deserializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.executorDeserializeTime.toDouble
           }
-          graphData("Task Deserialization Time") = deserializationTimes.mkString(",")
+          graphData("Task Deserialization Time") = JSONArray(deserializationTimes.toList)
 
           val deserializationQuantiles =
             <td>
@@ -253,7 +254,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val gcTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.jvmGCTime.toDouble
           }
-          graphData("GC Time") = gcTimes.mkString(",")
+          graphData("GC Time") = JSONArray(gcTimes.toList)
 
           val gcQuantiles =
             <td>
@@ -265,7 +266,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val serializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.resultSerializationTime.toDouble
           }
-          graphData("Result Serialization Time") = serializationTimes.mkString(",")
+          graphData("Result Serialization Time") = JSONArray(serializationTimes.toList)
 
           val serializationQuantiles =
             <td>
@@ -278,7 +279,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
             getGettingResultTime(info).toDouble
           }
-          graphData("Getting Result Time") = gettingResultTimes.mkString(",")
+          graphData("Getting Result Time") = JSONArray(gettingResultTimes.toList)
 
           val gettingResultQuantiles =
             <td>
@@ -294,17 +295,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val schedulerDelays = validTasks.map { case TaskUIData(info, metrics, _) =>
             getSchedulerDelay(info, metrics.get).toDouble
           }
-          graphData("Scheduler Delay") = schedulerDelays.mkString(",")
+          graphData("Scheduler Delay") = JSONArray(schedulerDelays.toList)
 
           val launchTimes = validTasks.map { case TaskUIData(info, metrics, _) =>
             info.launchTime
           }
-          graphData("launchtime") = launchTimes.mkString(",")
+          graphData("Launch Time") = JSONArray(launchTimes.toList)
 
           val durations = validTasks.map { case TaskUIData(info, metrics, _) => if (info.status == "RUNNING") 
             info.timeRunning(System.currentTimeMillis()) else metrics.map(_.executorRunTime).getOrElse(1L)
           }
-          graphData("Duration") = durations.mkString(",")
+          graphData("Duration") = JSONArray(durations.toList)
 
           val schedulerDelayTitle = <td><span data-toggle="tooltip"
             title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler Delay</span></td>
@@ -452,6 +453,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val maybeAccumulableTable: Seq[Node] =
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
+      val graphJSON = JSONObject(graphData.toMap)
+
       val showVisualization =
         <div>
           <span class="expand-visualization" onclick="render();">
@@ -460,7 +463,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </span>
           <div id="chartContainer" class="container"></div>
           <script type="text/javascript">
-            {Unparsed(s"function render() {renderJobsGraphs(${scala.util.parsing.json.JSONObject(graphData.toMap).toString()})}")}
+            {Unparsed(s"function render() {renderJobsGraphs(${graphJSON})}")}
           </script>
         </div>
 
