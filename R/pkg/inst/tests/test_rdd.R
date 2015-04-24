@@ -760,7 +760,7 @@ test_that("collectAsMap() on a pairwise RDD", {
 })
 
 test_that("show()", {
-  rdd <- parallelize(sc, list())    
+  rdd <- parallelize(sc, list(1:10))    
   expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
 })
 
