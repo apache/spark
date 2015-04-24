@@ -909,12 +909,47 @@ class SQLQuerySuite extends QueryTest {
   }
 }
 
-class SQLQuerySuite2 extends SQLQuerySuite with BeforeAndAfter {
+// TODO ideally we should make this class inherit from SQLQuerySuite.
+// However the tables/configuration cannot be reset, which causes
+// exceptions like the table already existed etc.
+class SQLNewUDAFQuerySuite extends QueryTest with BeforeAndAfter {
   def beforeAll() {
     TestHive.setConf(SQLConf.AGGREGATE_2, "true")
   }
 
   def afterAll() {
     TestHive.setConf(SQLConf.AGGREGATE_2, "false")
+  }
+
+  test("ordering not in agg") {
+    checkAnswer(
+      sql("SELECT key FROM src GROUP BY key, value ORDER BY value"),
+      sql( """
+        SELECT key
+        FROM (
+          SELECT key, value
+          FROM src
+          GROUP BY key, value
+          ORDER BY value) a""").collect().toSeq)
+  }
+
+  test("SPARK-2554 SumDistinct partial aggregation") {
+    checkAnswer(sql("SELECT sum( distinct key) FROM src group by key order by key"),
+      sql("SELECT distinct key FROM src order by key").collect().toSeq)
+  }
+
+  test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
+    val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
+      Row("str-1", 1970))
+
+    dropTempTable("data")
+
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
+
+    dropTempTable("data")
   }
 }

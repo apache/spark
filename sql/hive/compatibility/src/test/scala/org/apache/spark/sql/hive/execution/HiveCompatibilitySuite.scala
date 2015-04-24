@@ -1008,7 +1008,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   )
 }
 
-class HiveCompatibilitySuite2 extends HiveCompatibilitySuite {
+class HiveNewUDAFCompatibilitySuite extends HiveCompatibilitySuite {
   override def beforeAll() {
     super.beforeAll()
     TestHive.setConf(SQLConf.AGGREGATE_2, "true")

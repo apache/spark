@@ -1366,7 +1366,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 }
 
-class SQLQuerySuite2 extends SQLQuerySuite {
+class SQLNewUDAFQuerySuite extends SQLQuerySuite {
   override def beforeAll() {
     super.beforeAll()
     sqlCtx.setConf(SQLConf.AGGREGATE_2, "true")
