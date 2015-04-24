@@ -44,7 +44,8 @@ public enum ByteUnit {
       }
       return d * ratio;
     } else {
-      // Perform operations in this order to avoid potential overflow when computing d * multiplier
+      // Perform operations in this order to avoid potential overflow 
+      // when computing d * multiplier
       return d / (u.multiplier / multiplier);
     }
   }
