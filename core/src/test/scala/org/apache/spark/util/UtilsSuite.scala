@@ -128,7 +128,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
     // This demonstrates that we can have e.g 1024^3 PB without overflowing. 
-    assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))                                  
+    assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
     
     // Run this to confirm it doesn't throw an exception
