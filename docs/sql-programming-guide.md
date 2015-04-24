@@ -1364,7 +1364,7 @@ the Data Sources API.  The following options are supported:
   <tr>
     <td><code>driver</code></td>
     <td>
-      The class name of the JDBC driver needed to connect to this URL.  This class with be loaded
+      The class name of the JDBC driver needed to connect to this URL.  This class will be loaded
       on the master and workers before running an JDBC commands to allow the driver to
       register itself with the JDBC subsystem.
     </td>
