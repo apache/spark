@@ -17,8 +17,6 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.lang.Long;
-import java.lang.Object;
 import java.lang.Override;
 import java.lang.UnsupportedOperationException;
 import java.util.Iterator;

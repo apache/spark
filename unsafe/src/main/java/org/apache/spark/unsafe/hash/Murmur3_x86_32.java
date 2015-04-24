@@ -45,8 +45,7 @@ public final class Murmur3_x86_32 {
   }
 
   public int hashUnsafeWords(Object baseObject, long baseOffset, int lengthInBytes) {
-    // See https://code.google.com/p/guava-libraries/source/browse/guava/src/com/google/common/hash/Murmur3_32HashFunction.java#167
-    // TODO(josh) veryify that this was implemented correctly
+    // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
     int h1 = seed;
     for (int offset = 0; offset < lengthInBytes; offset += 4) {

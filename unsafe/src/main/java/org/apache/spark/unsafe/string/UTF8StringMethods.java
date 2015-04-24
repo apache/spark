@@ -18,8 +18,6 @@
 package org.apache.spark.unsafe.string;
 
 import java.io.UnsupportedEncodingException;
-import java.lang.Object;
-import java.lang.String;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;

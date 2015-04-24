@@ -19,20 +19,14 @@ package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
-import java.lang.Object;
-
 public class ByteArrayMethods {
-
-  // TODO: there are substantial opportunities for optimization here and we should investigate them.
-  // See the fast comparisions in Guava's UnsignedBytes, for instance:
-  // https://code.google.com/p/guava-libraries/source/browse/guava/src/com/google/common/primitives/UnsignedBytes.java
 
   private ByteArrayMethods() {
     // Private constructor, since this class only contains static methods.
   }
 
   public static int roundNumberOfBytesToNearestWord(int numBytes) {
-    int remainder = numBytes % 8;
+    int remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
     if (remainder == 0) {
       return numBytes;
     } else {
@@ -50,6 +44,8 @@ public class ByteArrayMethods {
       Object rightBaseObject,
       long rightBaseOffset,
       long arrayLengthInBytes) {
+    // TODO: this can be optimized by comparing words and falling back to individual byte
+    // comparison only at the end of the array (Guava's UnsignedBytes has an implementation of this)
     for (int i = 0; i < arrayLengthInBytes; i++) {
       final byte left =
         PlatformDependent.UNSAFE.getByte(leftBaseObject, leftBaseOffset + i);
