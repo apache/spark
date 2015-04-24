@@ -67,7 +67,14 @@ class ClosureCleanerSuite extends FunSuite {
 
 // A non-serializable class we create in closures to make sure that we aren't
 // keeping references to unneeded variables from our outer closures.
-class NonSerializable {}
+class NonSerializable(val id: Int = -1) {
+  override def equals(other: Any): Boolean = {
+    other match {
+      case o: NonSerializable => id == o.id
+      case _ => false
+    }
+  }
+}
 
 object TestObject {
   def run(): Int = {

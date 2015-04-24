@@ -29,7 +29,7 @@ import org.apache.spark.{Logging, SparkEnv, SparkException}
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
  */
-private[spark] object ClosureCleaner extends Logging {
+object ClosureCleaner extends Logging {
 
   // Get an ASM class reader for a given class from the JAR that loaded it
   def getClassReader(cls: Class[_]): ClassReader = {
@@ -182,11 +182,19 @@ private[spark] object ClosureCleaner extends Logging {
     val outerClasses = getOuterClasses(func)
     val outerObjects = getOuterObjects(func)
 
-    logDebug(s" + inner classes: " + innerClasses.size)
+    // For logging purposes only
+    val declaredFields = func.getClass.getDeclaredFields
+    val declaredMethods = func.getClass.getDeclaredMethods
+
+    logDebug(" + declared fields: " + declaredFields.size)
+    declaredFields.foreach { f => logDebug("     " + f) }
+    logDebug(" + declared methods: " + declaredMethods.size)
+    declaredMethods.foreach { m => logDebug("     " + m) }
+    logDebug(" + inner classes: " + innerClasses.size)
     innerClasses.foreach { c => logDebug("     " + c.getName) }
-    logDebug(s" + outer classes: " + outerClasses.size)
+    logDebug(" + outer classes: " + outerClasses.size)
     outerClasses.foreach { c => logDebug("     " + c.getName) }
-    logDebug(s" + outer objects: " + outerObjects.size)
+    logDebug(" + outer objects: " + outerObjects.size)
     outerObjects.foreach { o => logDebug("     " + o) }
 
     // Fail fast if we detect return statements in closures
@@ -388,6 +396,7 @@ class FieldAccessFinder(
               fields(cl) += name
             }
             // Visit other methods to find fields that are transitively referenced
+            // FIXME: This could lead to infinite cycles!!
             if (findTransitively) {
               ClosureCleaner.getClassReader(cl)
                 .accept(new FieldAccessFinder(fields, Set(name), findTransitively), 0)
