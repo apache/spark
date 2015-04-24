@@ -1,22 +1,21 @@
 TODO
 -----
 #### UI
-* Backfill wizard
-
-#### unittests
-* Increase coverage, now 85ish%
+* Run / backfill wizard
+* Add templating to adhoc queries
+* Charts: better error handling
 
 #### Command line
 * `airflow task_state dag_id task_id YYYY-MM-DD`
+* Backfill, better logging, prompt with details about what it's about to do
 
 #### More Operators!
-* BaseDataTransferOperator
-* File2MySqlOperator
 * PIG
+* MR
+* Merge Cascading
 
 #### Backend
-* Make authentication universal
-* Callbacks
+* Pickle all the THINGS!
 * Master auto dag refresh at time intervals
 * Prevent timezone chagne on import
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
@@ -24,3 +23,5 @@ TODO
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library
 * Pause flag at the task level
+* Task callbacks as tasks?
+* Increase unit test coverage
