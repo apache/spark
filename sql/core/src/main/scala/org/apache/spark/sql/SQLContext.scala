@@ -193,7 +193,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser(sql, false)
+  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
 
@@ -206,8 +206,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @transient
   protected[sql] val defaultSession = createSession()
-
-  // Sub class may need to overwrite the following 2 functions custom sql dialect parser support
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultDialect].getCanonicalName

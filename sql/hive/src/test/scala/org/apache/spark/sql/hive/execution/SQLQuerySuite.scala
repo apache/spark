@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.DefaultDialect
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.MetastoreRelation
@@ -256,7 +257,7 @@ class SQLQuerySuite extends QueryTest {
     getSQLDialect().getClass === classOf[HiveQLDialect]
 
     sql("SET spark.sql.dialect=MyTestClass")
-    intercept[Exception] {
+    intercept[DialectException] {
       sql("SELECT 1")
     }
     // test if the dialect set back to HiveQLDialect
