@@ -303,7 +303,7 @@ private[spark] object ClosureCleaner extends Logging {
       // other than to set its fields, so use its constructor
       val cons = cls.getConstructors()(0)
       val params = cons.getParameterTypes.map(createNullValue).toArray
-      if (enclosingObject!= null) {
+      if (enclosingObject != null) {
         params(0) = enclosingObject // First param is always enclosing object
       }
       return cons.newInstance(params: _*).asInstanceOf[AnyRef]
@@ -345,7 +345,7 @@ class ReturnStatementFinder extends ClassVisitor(ASM4) {
  * Find the fields accessed by a given class.
  *
  * The fields are stored in the mutable map passed in by the class that contains them.
- * This map is assumed to have its keys already populated by the classes of interest.
+ * This map is assumed to have its keys already populated with the classes of interest.
  *
  * @param fields the mutable map that stores the fields to return
  * @param specificMethodNames if not empty, only visit methods whose names are in this set

@@ -61,7 +61,7 @@ class ClosureCleanerSuite extends FunSuite {
 
   test("return statements from named functions nested in closures don't raise exceptions") {
     val result = TestObjectWithNestedReturns.run()
-    assert(result == 1)
+    assert(result === 1)
   }
 }
 
