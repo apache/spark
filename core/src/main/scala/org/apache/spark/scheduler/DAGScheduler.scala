@@ -95,7 +95,7 @@ class DAGScheduler(
 
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
-  
+
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   /**
