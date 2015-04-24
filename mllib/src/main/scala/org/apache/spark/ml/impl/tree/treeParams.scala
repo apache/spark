@@ -120,7 +120,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxDepth(value: Int): this.type = {
     require(value >= 0, s"maxDepth parameter must be >= 0.  Given bad value: $value")
     set(maxDepth, value)
-    this
   }
 
   /** @group getParam */
@@ -130,7 +129,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxBins(value: Int): this.type = {
     require(value >= 2, s"maxBins parameter must be >= 2.  Given bad value: $value")
     set(maxBins, value)
-    this
   }
 
   /** @group getParam */
@@ -140,17 +138,13 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMinInstancesPerNode(value: Int): this.type = {
     require(value >= 1, s"minInstancesPerNode parameter must be >= 1.  Given bad value: $value")
     set(minInstancesPerNode, value)
-    this
   }
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = getOrDefault(minInstancesPerNode)
 
   /** @group setParam */
-  def setMinInfoGain(value: Double): this.type = {
-    set(minInfoGain, value)
-    this
-  }
+  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
   final def getMinInfoGain: Double = getOrDefault(minInfoGain)
@@ -159,17 +153,13 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setMaxMemoryInMB(value: Int): this.type = {
     require(value > 0, s"maxMemoryInMB parameter must be > 0.  Given bad value: $value")
     set(maxMemoryInMB, value)
-    this
   }
 
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = getOrDefault(maxMemoryInMB)
 
   /** @group expertSetParam */
-  def setCacheNodeIds(value: Boolean): this.type = {
-    set(cacheNodeIds, value)
-    this
-  }
+  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = getOrDefault(cacheNodeIds)
@@ -178,7 +168,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   def setCheckpointInterval(value: Int): this.type = {
     require(value >= 1, s"checkpointInterval parameter must be >= 1.  Given bad value: $value")
     set(checkpointInterval, value)
-    this
   }
 
   /** @group expertGetParam */
@@ -231,7 +220,6 @@ private[ml] trait TreeClassifierParams extends Params {
       s"Tree-based classifier was given unrecognized impurity: $value." +
       s"  Supported options: ${TreeClassifierParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this
   }
 
   /** @group getParam */
@@ -279,7 +267,6 @@ private[ml] trait TreeRegressorParams extends Params {
       s"Tree-based regressor was given unrecognized impurity: $value." +
         s"  Supported options: ${TreeRegressorParams.supportedImpurities.mkString(", ")}")
     set(impurity, impurityStr)
-    this
   }
 
   /** @group getParam */
@@ -326,17 +313,13 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
     require(value > 0.0 && value <= 1.0,
       s"Subsampling rate must be in range (0,1]. Bad rate: $value")
     set(subsamplingRate, value)
-    this
   }
 
   /** @group getParam */
   final def getSubsamplingRate: Double = getOrDefault(subsamplingRate)
 
   /** @group setParam */
-  def setSeed(value: Long): this.type = {
-    set(seed, value)
-    this
-  }
+  def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -363,7 +346,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   /**
    * Number of trees to train (>= 1).
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
-   * TODO: Change to always do bootstrapping (simpler).
+   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
    * @group param
    */
@@ -403,7 +386,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   def setNumTrees(value: Int): this.type = {
     require(value >= 1, s"Random Forest numTrees parameter cannot be $value; it must be >= 1.")
     set(numTrees, value)
-    this
   }
 
   /** @group getParam */
@@ -416,7 +398,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
       s"RandomForestParams was given unrecognized featureSubsetStrategy: $value. Supported" +
         s" options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
     set(featureSubsetStrategy, strategyStr)
-    this
   }
 
   /** @group getParam */
@@ -447,7 +428,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
     " learning rate) in interval (0, 1] for shrinking the contribution of each estimator")
 
-  /* TODO: Add this doc when we add this param.
+  /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
    * If the error rate on the validation input changes by less than the validationTol,
    * then learning will stop early (before [[numIterations]]).
@@ -464,7 +445,6 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   def setMaxIter(value: Int): this.type = {
     require(value >= 1, s"Gradient Boosting maxIter parameter cannot be $value; it must be >= 1.")
     set(maxIter, value)
-    this
   }
 
   /** @group setParam */
@@ -472,7 +452,6 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
     require(value > 0.0 && value <= 1.0,
       s"GBT given invalid step size ($value).  Value should be in (0,1].")
     set(stepSize, value)
-    this
   }
 
   /** @group getParam */

@@ -120,8 +120,8 @@ object DecisionTreeExample {
         .required()
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
-        if (params.fracTest < 0 || params.fracTest > 1) {
-          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
+        if (params.fracTest < 0 || params.fracTest >= 1) {
+          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1).")
         } else {
           success
         }
@@ -319,7 +319,7 @@ object DecisionTreeExample {
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model
    *
-   * TODO: Change model type to ClassificationModel once that API is public.
+   * TODO: Change model type to ClassificationModel once that API is public. SPARK-5995
    */
   private[ml] def evaluateClassificationModel(
       model: Transformer,
@@ -344,7 +344,7 @@ object DecisionTreeExample {
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model
    *
-   * TODO: Change model type to RegressionModel once that API is public.
+   * TODO: Change model type to RegressionModel once that API is public. SPARK-5995
    */
   private[ml] def evaluateRegressionModel(
       model: Transformer,

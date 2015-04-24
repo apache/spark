@@ -55,28 +55,28 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-        LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
     // This tests setters. Training with various options is tested in Scala.
     RandomForestRegressor rf = new RandomForestRegressor()
-        .setMaxDepth(2)
-        .setMaxBins(10)
-        .setMinInstancesPerNode(5)
-        .setMinInfoGain(0.0)
-        .setMaxMemoryInMB(256)
-        .setCacheNodeIds(false)
-        .setCheckpointInterval(10)
-        .setSubsamplingRate(1.0)
-        .setSeed(1234)
-        .setNumTrees(3)
-        .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < RandomForestRegressor.supportedImpurities().length; ++i) {
-      rf.setImpurity(RandomForestRegressor.supportedImpurities()[i]);
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setMinInstancesPerNode(5)
+      .setMinInfoGain(0.0)
+      .setMaxMemoryInMB(256)
+      .setCacheNodeIds(false)
+      .setCheckpointInterval(10)
+      .setSubsamplingRate(1.0)
+      .setSeed(1234)
+      .setNumTrees(3)
+      .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
+    for (String impurity: RandomForestRegressor.supportedImpurities()) {
+      rf.setImpurity(impurity);
     }
-    for (int i = 0; i < RandomForestRegressor.supportedFeatureSubsetStrategies().length; ++i) {
-      rf.setFeatureSubsetStrategy(RandomForestRegressor.supportedFeatureSubsetStrategies()[i]);
+    for (String featureSubsetStrategy: RandomForestRegressor.supportedFeatureSubsetStrategies()) {
+      rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
     RandomForestRegressionModel model = rf.fit(dataFrame);
 
@@ -87,7 +87,7 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     model.treeWeights();
 
     /*
-    // TODO: Add test once save/load are implemented.
+    // TODO: Add test once save/load are implemented.   SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {

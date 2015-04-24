@@ -77,11 +77,12 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("alternating categorical and continuous features with multiclass labels to test indexing") {
-    val arr = new Array[LabeledPoint](4)
-    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0))
-    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0))
-    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0))
-    arr(3) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0)),
+      LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
+    )
     val rdd = sc.parallelize(arr)
     val categoricalFeatures = Map(0 -> 3, 2 -> 2, 4 -> 4)
     val numClasses = 3
@@ -117,7 +118,7 @@ class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented
+  // TODO: Reinstate test once save/load are implemented  SPARK-6725
   /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()

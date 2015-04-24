@@ -55,26 +55,26 @@ public class JavaGBTClassifierSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-        LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.
     GBTClassifier rf = new GBTClassifier()
-        .setMaxDepth(2)
-        .setMaxBins(10)
-        .setMinInstancesPerNode(5)
-        .setMinInfoGain(0.0)
-        .setMaxMemoryInMB(256)
-        .setCacheNodeIds(false)
-        .setCheckpointInterval(10)
-        .setSubsamplingRate(1.0)
-        .setSeed(1234)
-        .setMaxIter(3)
-        .setStepSize(0.1)
-        .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < GBTClassifier.supportedLossTypes().length; ++i) {
-      rf.setLossType(GBTClassifier.supportedLossTypes()[i]);
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setMinInstancesPerNode(5)
+      .setMinInfoGain(0.0)
+      .setMaxMemoryInMB(256)
+      .setCacheNodeIds(false)
+      .setCheckpointInterval(10)
+      .setSubsamplingRate(1.0)
+      .setSeed(1234)
+      .setMaxIter(3)
+      .setStepSize(0.1)
+      .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
+    for (String lossType: GBTClassifier.supportedLossTypes()) {
+      rf.setLossType(lossType);
     }
     GBTClassificationModel model = rf.fit(dataFrame);
 
@@ -85,7 +85,7 @@ public class JavaGBTClassifierSuite implements Serializable {
     model.treeWeights();
 
     /*
-    // TODO: Add test once save/load are implemented.
+    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {

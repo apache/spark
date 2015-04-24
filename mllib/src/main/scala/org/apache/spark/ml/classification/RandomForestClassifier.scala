@@ -89,8 +89,9 @@ final class RandomForestClassifier
     val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("RandomForestClassifier was given input" +
-        s" with invalid label column, without the number of classes specified.")
-      // TODO: Automatically index labels.
+        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        " specified. See StringIndexer.")
+      // TODO: Automatically index labels: SPARK-7126
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy =
@@ -132,13 +133,13 @@ final class RandomForestClassificationModel private[ml] (
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
-  lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+  private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.
-    // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
+    // TODO: Override transform() to broadcast model.  SPARK-7127
+    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = mutable.Map.empty[Int, Double]

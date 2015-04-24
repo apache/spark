@@ -120,13 +120,13 @@ final class RandomForestRegressionModel private[ml] (
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
-  lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+  private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.
-    // TODO: When we add a generic Bagging class, handle transform there. Skip single-Row predict.
+    // TODO: Override transform() to broadcast model.  SPARK-7127
+    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
     _trees.map(_.rootNode.predict(features)).sum / numTrees

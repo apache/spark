@@ -72,8 +72,9 @@ final class DecisionTreeClassifier
     val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column, without the number of classes specified.")
-        // TODO: Automatically index labels.
+        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        " specified. See StringIndexer.")
+        // TODO: Automatically index labels: SPARK-7126
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, paramMap)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)

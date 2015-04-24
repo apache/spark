@@ -175,7 +175,8 @@ final class GBTRegressionModel(
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.
+    // TODO: Override transform() to broadcast model. SPARK-7127
+    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predict(features))
     val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)

@@ -125,8 +125,8 @@ object RandomForestExample {
         .required()
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
-        if (params.fracTest < 0 || params.fracTest > 1) {
-          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
+        if (params.fracTest < 0 || params.fracTest >= 1) {
+          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1).")
         } else {
           success
         }

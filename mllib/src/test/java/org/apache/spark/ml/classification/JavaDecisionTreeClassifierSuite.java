@@ -55,7 +55,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-        LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
@@ -69,8 +69,8 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (int i = 0; i < DecisionTreeClassifier.supportedImpurities().length; ++i) {
-      dt.setImpurity(DecisionTreeClassifier.supportedImpurities()[i]);
+    for (String impurity: DecisionTreeClassifier.supportedImpurities()) {
+      dt.setImpurity(impurity);
     }
     DecisionTreeClassificationModel model = dt.fit(dataFrame);
 
@@ -80,7 +80,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     model.toDebugString();
 
     /*
-    // TODO: Add test once save/load are implemented.
+    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {

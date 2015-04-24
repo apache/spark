@@ -66,7 +66,7 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  // TODO: Reinstate test once runWithValidation is implemented
+  // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132
   /*
   test("runWithValidation stops early and performs better on a validation dataset") {
     val categoricalFeatures = Map.empty[Int, Int]
@@ -88,7 +88,7 @@ class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented
+  // TODO: Reinstate test once save/load are implemented  SPARK-6725
   /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()

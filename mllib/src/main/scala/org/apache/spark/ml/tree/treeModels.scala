@@ -21,7 +21,7 @@ package org.apache.spark.ml.tree
 /**
  * Abstraction for Decision Tree models.
  *
- * TODO: Add support for predicting probabilities and raw predictions
+ * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
 private[ml] trait DecisionTreeModel {
 
@@ -57,7 +57,7 @@ private[ml] trait DecisionTreeModel {
 /**
  * Abstraction for models which are ensembles of decision trees
  *
- * TODO: Add support for predicting probabilities and raw predictions
+ * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
 private[ml] trait TreeEnsembleModel {
 

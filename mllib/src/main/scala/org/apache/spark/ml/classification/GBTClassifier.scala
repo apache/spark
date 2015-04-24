@@ -137,8 +137,9 @@ final class GBTClassifier
     val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema(paramMap(labelCol))) match {
       case Some(n: Int) => n
       case None => throw new IllegalArgumentException("GBTClassifier was given input" +
-        s" with invalid label column, without the number of classes specified.")
-      // TODO: Automatically index labels.
+        s" with invalid label column ${paramMap(labelCol)}, without the number of classes" +
+        " specified. See StringIndexer.")
+      // TODO: Automatically index labels: SPARK-7126
     }
     require(numClasses == 2,
       s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
@@ -184,7 +185,8 @@ final class GBTClassificationModel(
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.
+    // TODO: Override transform() to broadcast model: SPARK-7127
+    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
     val treePredictions = _trees.map(_.rootNode.predict(features))
     val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
