@@ -52,7 +52,9 @@ abstract class DataType {
     case _ => false
   }
 
-  /** The default size of a value of this data type. */
+  /**
+   * The default size of a value of this data type, used internally for size estimation.
+   */
   def defaultSize: Int
 
   /** Name of the type used in JSON serialization. */
