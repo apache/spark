@@ -58,3 +58,6 @@ class BinaryType private() extends AtomicType {
 
   private[spark] override def asNullable: BinaryType = this
 }
+
+
+case object BinaryType extends BinaryType

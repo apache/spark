@@ -55,23 +55,29 @@ abstract class DataType {
   /** The default size of a value of this data type. */
   def defaultSize: Int
 
+  /** Name of the type used in JSON serialization. */
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
   private[sql] def jsonValue: JValue = typeName
 
+  /** The compact JSON representation of this data type. */
   def json: String = compact(render(jsonValue))
 
+  /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))
 
+  /** Readable string representation for the type. */
   def simpleString: String = typeName
 
-  /** Check if `this` and `other` are the same data type when ignoring nullability
-   *  (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+  /**
+   * Check if `this` and `other` are the same data type when ignoring nullability
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
     DataType.equalsIgnoreNullability(this, other)
 
-  /** Returns the same data type but set all nullability fields are true
+  /**
+   * Returns the same data type but set all nullability fields are true
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def asNullable: DataType
