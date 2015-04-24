@@ -50,7 +50,7 @@ class ClosureCleanerSuite extends FunSuite {
     val obj = new TestClassWithNesting(1)
     assert(obj.run() === 96) // 4 * (1+2+3+4) + 4 * (1+2+3+4) + 16 * 1
   }
-  
+
   test("toplevel return statements in closures are identified at cleaning time") {
     val ex = intercept[SparkException] {
       TestObjectWithBogusReturns.run()
