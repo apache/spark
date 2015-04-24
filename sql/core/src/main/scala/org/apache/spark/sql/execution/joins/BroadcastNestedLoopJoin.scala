@@ -59,7 +59,7 @@ case class BroadcastNestedLoopJoin(
   }
 
   @transient private lazy val boundCondition =
-    condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   override def execute(): RDD[Row] = {
     val broadcastedRelation =
