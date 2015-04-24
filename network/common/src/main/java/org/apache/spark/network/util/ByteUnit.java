@@ -17,36 +17,36 @@
 package org.apache.spark.network.util;
 
 public enum ByteUnit {
-  BYTE (1, "Bytes"),
-  KiB (1024, "KiB"),
-  MiB (Math.pow(1024, 2), "MiB"),
-  GiB (Math.pow(1024, 3), "GiB"),
-  TiB (Math.pow(1024, 4), "TiB"),
-  PiB (Math.pow(1024, 5), "PiB");
+  BYTE (1),
+  KiB (1024L),
+  MiB ((long) Math.pow(1024L, 2L)),
+  GiB ((long) Math.pow(1024L, 3L)),
+  TiB ((long) Math.pow(1024L, 4L)),
+  PiB ((long) Math.pow(1024L, 5L));
 
-  private ByteUnit(double multiplier, String name) {
+  private ByteUnit(long multiplier) {
     this.multiplier = multiplier;
-    this.name = name;
   }
 
   // Interpret the provided number (d) with suffix (u) as this unit type.
   // E.g. KiB.interpret(1, MiB) interprets 1MiB as its KiB representation = 1024k
   public long convertFrom(long d, ByteUnit u) {
-    double converted = u.toBytes(d) / multiplier;
-    if (converted > Long.MAX_VALUE)
-      throw new IllegalArgumentException("Converted value (" + converted + ") " +
-        "exceeds Long.MAX_VALUE for " + name + ". Try a larger suffix (e.g. MiB instead of KiB)");
-    return (long) converted;  
+    return u.convertTo(d, this);
   }
   
   // Convert the provided number (d) interpreted as this unit type to unit type (u). 
   public long convertTo(long d, ByteUnit u) {
-    double converted = toBytes(d) / u.multiplier;
-    if (converted > Long.MAX_VALUE)
-      throw new IllegalArgumentException("Converted value (" + converted + ") " +
-        "exceeds Long.MAX_VALUE for " + u.name + ". Try a larger suffix (e.g. MiB instead of KiB)");
-
-    return (long) converted;
+    if (multiplier > u.multiplier) {
+      long ratio = multiplier / u.multiplier;
+      if (Long.MAX_VALUE / ratio < d) {
+        throw new IllegalArgumentException("Conversion of" + d + "exceeds Long.MAX_VALUE in "
+          + name() + ". Try a larger suffix (e.g. MiB instead of KiB)");
+      }
+      return d * ratio;
+    } else {
+      // Perform operations in this order to avoid potential overflow when computing d * multiplier
+      return d / (u.multiplier / multiplier);
+    }
   }
 
   public double toBytes(long d) {
@@ -62,6 +62,5 @@ public enum ByteUnit {
   public long toTiB(long d) { return convertTo(d, TiB); }
   public long toPiB(long d) { return convertTo(d, PiB); }
   
-  private double multiplier = 0;
-  private String name = "";
+  private final long multiplier;
 }
