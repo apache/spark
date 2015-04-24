@@ -17,20 +17,24 @@
 
 package org.apache.spark.unsafe.string;
 
+import java.io.UnsupportedEncodingException;
+import java.lang.String;
+
 import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import java.lang.String;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 public class TestUTF8String {
 
   @Test
-  public void toStringTest() {
+  public void toStringTest() throws UnsupportedEncodingException {
     final String javaStr = "Hello, World!";
     final byte[] javaStrBytes = javaStr.getBytes();
-    final int paddedSizeInWords = javaStrBytes.length / 8 + (javaStrBytes.length % 8 == 0 ? 0 : 1);
+    final int paddedSizeInWords =
+      ByteArrayMethods.roundNumberOfBytesToNearestWord(javaStrBytes.length);
     final MemoryLocation memory = MemoryBlock.fromLongArray(new long[paddedSizeInWords]);
     final int bytesWritten = UTF8StringMethods.createFromJavaString(
       memory.getBaseObject(),

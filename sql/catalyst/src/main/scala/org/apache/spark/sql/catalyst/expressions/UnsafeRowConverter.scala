@@ -87,7 +87,7 @@ private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter[UTF8
       numBytes
     )
     row.setLong(columnNumber, appendCursor)
-    8 + ((numBytes / 8) + (if (numBytes % 8 == 0) 0 else 1)) * 8
+    8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 }
 private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
