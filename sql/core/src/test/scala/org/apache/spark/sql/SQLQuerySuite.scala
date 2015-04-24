@@ -398,6 +398,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
+  test("SPARK-6927 sorting with codegen on") {
+    val externalbefore = conf.externalSortEnabled
+    val codegenbefore = conf.codegenEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+  }
+
+  test("SPARK-6927 external sorting with codegen on") {
+    val externalbefore = conf.externalSortEnabled
+    val codegenbefore = conf.codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+  }
+
   test("limit") {
     checkAnswer(
       sql("SELECT * FROM testData LIMIT 10"),

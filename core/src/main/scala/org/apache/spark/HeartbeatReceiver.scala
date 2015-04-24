@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
 
@@ -25,7 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -76,11 +76,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
-  private val timeoutCheckingThread = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("heartbeat-timeout-checking-thread"))
+  private val timeoutCheckingThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("heartbeat-timeout-checking-thread")
 
-  private val killExecutorThread = Executors.newSingleThreadExecutor(
-    Utils.namedThreadFactory("kill-executor-thread"))
+  private val killExecutorThread = ThreadUtils.newDaemonSingleThreadExecutor("kill-executor-thread")
 
   override def onStart(): Unit = {
     timeoutCheckingTask = timeoutCheckingThread.scheduleAtFixedRate(new Runnable {

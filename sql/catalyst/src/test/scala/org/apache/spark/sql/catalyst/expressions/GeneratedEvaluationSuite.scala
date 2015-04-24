@@ -29,7 +29,7 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
     val plan = try {
-      GenerateMutableProjection(Alias(expression, s"Optimized($expression)")() :: Nil)()
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
     } catch {
       case e: Throwable =>
         val evaluated = GenerateProjection.expressionEvaluator(expression)
@@ -56,10 +56,10 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
 
     val futures = (1 to 20).map { _ =>
       future {
-        GeneratePredicate(EqualTo(Literal(1), Literal(1)))
-        GenerateProjection(EqualTo(Literal(1), Literal(1)) :: Nil)
-        GenerateMutableProjection(EqualTo(Literal(1), Literal(1)) :: Nil)
-        GenerateOrdering(Add(Literal(1), Literal(1)).asc :: Nil)
+        GeneratePredicate.generate(EqualTo(Literal(1), Literal(1)))
+        GenerateProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
+        GenerateMutableProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
+        GenerateOrdering.generate(Add(Literal(1), Literal(1)).asc :: Nil)
       }
     }
 

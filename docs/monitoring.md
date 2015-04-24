@@ -86,10 +86,10 @@ follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.update.interval.seconds</td>
-    <td>10</td>
+    <td>spark.history.fs.update.interval</td>
+    <td>10s</td>
     <td>
-      The period, in seconds, at which information displayed by this history server is updated.
+      The period at which information displayed by this history server is updated.
       Each update checks for any changes made to the event logs in persisted storage.
     </td>
   </tr>
@@ -153,19 +153,18 @@ follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.cleaner.interval.seconds</td>
-    <td>86400</td>
+    <td>spark.history.fs.cleaner.interval</td>
+    <td>1d</td>
     <td>
-      How often the job history cleaner checks for files to delete, in seconds. Defaults to 86400 (one day).
-      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.seconds.
+      How often the job history cleaner checks for files to delete.
+      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.cleaner.maxAge.seconds</td>
-    <td>3600 * 24 * 7</td>
+    <td>spark.history.fs.cleaner.maxAge</td>
+    <td>7d</td>
     <td>
-      Job history files older than this many seconds will be deleted when the history cleaner runs.
-      Defaults to 3600 * 24 * 7 (1 week).
+      Job history files older than this will be deleted when the history cleaner runs.
     </td>
   </tr>
 </table>

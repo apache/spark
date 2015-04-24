@@ -27,7 +27,7 @@ import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{SerializerInstance, Serializer}
 import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
@@ -105,6 +105,8 @@ final class ShuffleBlockFetcherIterator(
   private[this] var bytesInFlight = 0L
 
   private[this] val shuffleMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
+
+  private[this] val serializerInstance: SerializerInstance = serializer.newInstance()
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
@@ -299,7 +301,7 @@ final class ShuffleBlockFetcherIterator(
         // the scheduler gets a FetchFailedException.
         Try(buf.createInputStream()).map { is0 =>
           val is = blockManager.wrapForCompression(blockId, is0)
-          val iter = serializer.newInstance().deserializeStream(is).asIterator
+          val iter = serializerInstance.deserializeStream(is).asIterator
           CompletionIterator[Any, Iterator[Any]](iter, {
             // Once the iterator is exhausted, release the buffer and set currentResult to null
             // so we don't release it again in cleanup.

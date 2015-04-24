@@ -107,6 +107,19 @@ class StreamingContext private[streaming] (
    */
   def this(path: String) = this(path, new Configuration)
 
+  /**
+   * Recreate a StreamingContext from a checkpoint file using an existing SparkContext.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   * @param sparkContext Existing SparkContext
+   */
+  def this(path: String, sparkContext: SparkContext) = {
+    this(
+      sparkContext,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
+      null)
+  }
+
+
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
@@ -115,10 +128,12 @@ class StreamingContext private[streaming] (
   private[streaming] val isCheckpointPresent = (cp_ != null)
 
   private[streaming] val sc: SparkContext = {
-    if (isCheckpointPresent) {
+    if (sc_ != null) {
+      sc_
+    } else if (isCheckpointPresent) {
       new SparkContext(cp_.createSparkConf())
     } else {
-      sc_
+      throw new SparkException("Cannot create StreamingContext without a SparkContext")
     }
   }
 
@@ -129,7 +144,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val conf = sc.conf
 
-  private[streaming] val env = SparkEnv.get
+  private[streaming] val env = sc.env
 
   private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
@@ -174,7 +189,9 @@ class StreamingContext private[streaming] (
 
   /** Register streaming source to metrics system */
   private val streamingSource = new StreamingSource(this)
-  SparkEnv.get.metricsSystem.registerSource(streamingSource)
+  assert(env != null)
+  assert(env.metricsSystem != null)
+  env.metricsSystem.registerSource(streamingSource)
 
   /** Enumeration to identify current state of the StreamingContext */
   private[streaming] object StreamingContextState extends Enumeration {
@@ -621,17 +638,57 @@ object StreamingContext extends Logging {
       hadoopConf: Configuration = new Configuration(),
       createOnError: Boolean = false
     ): StreamingContext = {
-    val checkpointOption = try {
-      CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf)
-    } catch {
-      case e: Exception =>
-        if (createOnError) {
-          None
-        } else {
-          throw e
-        }
-    }
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, new SparkConf(), hadoopConf, createOnError)
     checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
+  }
+
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
+   * that the SparkConf configuration in the checkpoint data will not be restored as the
+   * SparkContext has already been created.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
+   * @param sparkContext   SparkContext using which the StreamingContext will be created
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: SparkContext => StreamingContext,
+      sparkContext: SparkContext
+    ): StreamingContext = {
+    getOrCreate(checkpointPath, creatingFunc, sparkContext, createOnError = false)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc` on the provided `sparkContext`. Note
+   * that the SparkConf configuration in the checkpoint data will not be restored as the
+   * SparkContext has already been created.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext using the given SparkContext
+   * @param sparkContext   SparkContext using which the StreamingContext will be created
+   * @param createOnError  Whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: SparkContext => StreamingContext,
+      sparkContext: SparkContext,
+      createOnError: Boolean
+    ): StreamingContext = {
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, sparkContext.conf, sparkContext.hadoopConfiguration, createOnError)
+    checkpointOption.map(new StreamingContext(sparkContext, _, null))
+                    .getOrElse(creatingFunc(sparkContext))
   }
 
   /**
