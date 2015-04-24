@@ -294,7 +294,7 @@ case class HiveScriptIOSchema (
         case LongType => data.toLong
         case FloatType => data.toFloat
         case DoubleType => data.toDouble
-        case StringType => data
+        case StringType => UTF8String(data)
         case _ => sys.error(s"ScriptTransformation doesn't support output type $dt")
       }
     } catch {
