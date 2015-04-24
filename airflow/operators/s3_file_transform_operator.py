@@ -27,8 +27,8 @@ class S3FileTransformOperator(BaseOperator):
     :type dest_s3_key: str
     :param dest_s3_conn_id: destination s3 connection
     :type dest_s3_conn_id: str
-    :param replace_destination: Replace dest S3 key if it already exists
-    :type replace_destination: bool
+    :param replace: Replace dest S3 key if it already exists
+    :type replace: bool
     :param transform_executor: location of the executor of the transformation script 
     :type transform_executor: str    
     :param transform_script: location of the transformation script
@@ -51,14 +51,14 @@ class S3FileTransformOperator(BaseOperator):
             transform_script,
             source_s3_conn_id='s3_default',
             dest_s3_conn_id='s3_default',
-            replace_destination=False,
+            replace=False,
             *args, **kwargs):
         super(S3FileTransformOperator, self).__init__(*args, **kwargs)
         self.source_s3_key = source_s3_key
         self.source_s3_conn_id = source_s3_conn_id
         self.dest_s3_key = dest_s3_key
         self.dest_s3_conn_id = dest_s3_conn_id
-        self.replace_destination = replace_destination
+        self.replace = replace
         self.transform_executor = transform_executor
         self.transform_script = transform_script
         self.source_s3 = S3Hook(s3_conn_id=source_s3_conn_id)
@@ -81,13 +81,14 @@ class S3FileTransformOperator(BaseOperator):
             if transform_script_process.returncode > 0:
                 raise Exception("Transform script failed " + transform_script_stderrdata)
             else:
-                logging.info("Transform script successful. Output located at {0}".format(f_dest.name))
+                logging.info("Transform script successful. Output temporarily located at {0}".format(f_dest.name))
             logging.info("Uploading transformed file to S3")
+            f_dest.flush()
             self.dest_s3.load_file(
                 filename=f_dest.name, 
                 key=self.dest_s3_key, 
-                replace=self.replace_destination
+                replace=self.replace
                 )
-            f_dest.flush()
+            logging.info("Upload successful")
             self.dest_s3.connection.close()
 
