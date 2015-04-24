@@ -33,24 +33,24 @@ import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
   private val STAGES_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <rect class="completed-stage-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="17px">Completed</text>
-      <rect x="5px" y="30px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
+      <rect class="failed-stage-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="42px">Failed</text>
-      <rect x="5px" y="55px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
+      <rect class="active-stage-legend"
+        x="5px" y="55px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="67px">Active</text>
     </svg></div>.toString.filter(_ != '\n')
 
   private val EXECUTORS_LEGEND =
     <div class="legend-area"><svg width="150px" height="55px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <rect class="executor-added-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="17px">Executor Added</text>
-      <rect x="5px" y="30px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
+      <rect class="executor-removed-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="42px">Executor Removed</text>
     </svg></div>.toString.filter(_ != '\n')
 

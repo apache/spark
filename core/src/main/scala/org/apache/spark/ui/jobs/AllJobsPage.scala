@@ -31,24 +31,24 @@ import org.apache.spark.JobExecutionStatus
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <rect class="succeeded-job-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="17px">Succeeded</text>
-      <rect x="5px" y="30px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FF5475"></rect>
+      <rect class="failed-job-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="42px">Failed</text>
-      <rect x="5px" y="55px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#FDFFCA"></rect>
+      <rect class="running-job-legend"
+        x="5px" y="55px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="67px">Running</text>
     </svg></div>.toString.filter(_ != '\n')
 
   private val EXECUTORS_LEGEND =
     <div class="legend-area"><svg width="150px" height="55px">
-      <rect x="5px" y="5px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#D5DDF6"></rect>
+      <rect class="executor-added-legend"
+        x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="17px">Added</text>
-      <rect x="5px" y="30px" width="20px" height="15px"
-            rx="2px" ry="2px" stroke="#97B0F8" fill="#EBCA59"></rect>
+      <rect class="executor-removed-legend"
+        x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
       <text x="35px" y="42px">Removed</text>
     </svg></div>.toString.filter(_ != '\n')
 

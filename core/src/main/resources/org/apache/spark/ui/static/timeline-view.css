@@ -27,6 +27,10 @@ div#application-timeline, div#job-timeline {
   width: 100%;
 }
 
+.vis.timeline .item.stage {
+  cursor: pointer;
+}
+
 .vis.timeline .item.stage.succeeded {
   background-color: #D5DDF6;
 }
@@ -37,8 +41,9 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
-.vis.timeline .item.stage {
-  cursor: pointer;
+.legend-area rect.completed-stage-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
 }
 
 .vis.timeline .item.stage.failed {
@@ -51,6 +56,11 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
+.legend-area rect.failed-stage-legend {
+  fill: #FF5475;
+  stroke: #97B0F8;
+}
+
 .vis.timeline .item.stage.running {
    background-color: #FDFFCA;
 }
@@ -59,6 +69,11 @@ div#application-timeline, div#job-timeline {
    background-color: #FDFFCA;
    border-color: #97B0F8;
    z-index: auto;
+}
+
+.legend-area rect.active-stage-legend {
+  fill: #FDFFCA;
+  stroke: #97B0F8;
 }
 
 .vis.timeline .item.job {
@@ -75,6 +90,11 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
+.legend-area rect.succeeded-job-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
+}
+
 .vis.timeline .item.job.failed {
    background-color: #FF5475;
 }
@@ -83,6 +103,11 @@ div#application-timeline, div#job-timeline {
    background-color: #FF5475;
    border-color: #97B0F8;
    z-index: auto;
+}
+
+.legend-area rect.failed-job-legend {
+  fill: #FF5475;
+  stroke: #97B0F8;
 }
 
 .vis.timeline .item.job.running {
@@ -95,12 +120,27 @@ div#application-timeline, div#job-timeline {
    z-index: auto;
 }
 
+.legend-area rect.running-job-legend {
+  fill: #FDFFCA;
+  stroke: #97B0F8;
+}
+
 .vis.timeline .item.executor.added {
   background-color: #D5DDF6;
 }
 
+.legend-area rect.executor-added-legend {
+  fill: #D5DDF6;
+  stroke: #97B0F8;
+}
+
 .vis.timeline .item.executor.removed {
   background-color: #EBCA59;
+}
+
+.legend-area rect.executor-removed-legend {
+  fill: #EBCA59;
+  stroke: #97B0F8;
 }
 
 .vis.timeline .item.executor.selected {
