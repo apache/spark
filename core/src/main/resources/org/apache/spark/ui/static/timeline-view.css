@@ -168,3 +168,15 @@ tr.corresponding-item-hover>td, tr.corresponding-item-hover>th {
 span.expand-application-timeline, span.expand-job-timeline {
   cursor: pointer;
 }
+
+.control-panel input+span {
+  cursor: pointer;
+}
+
+.vis.timeline .item.range .content {
+  position: unset;
+}
+
+.vis.timeline .item .tooltip-inner {
+  max-width: unset !important;
+}

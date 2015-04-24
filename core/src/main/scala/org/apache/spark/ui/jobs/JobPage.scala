@@ -48,10 +48,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     <div class="legend-area"><svg width="150px" height="55px">
       <rect class="executor-added-legend"
         x="5px" y="5px" width="20px" height="15px" rx="2px" ry="2px"></rect>
-      <text x="35px" y="17px">Executor Added</text>
+      <text x="35px" y="17px">Added</text>
       <rect class="executor-removed-legend"
         x="5px" y="30px" width="20px" height="15px" rx="2px" ry="2px"></rect>
-      <text x="35px" y="42px">Executor Removed</text>
+      <text x="35px" y="42px">Removed</text>
     </svg></div>.toString.filter(_ != '\n')
 
   private def makeStageEvent(stageInfos: Seq[StageInfo]): Seq[String] = {
@@ -69,17 +69,19 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
          |  'group': 'stages',
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
-         |  'content': '<div class="job-timeline-content">' +
+         |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
+         |   'data-placement="top" data-html="true"' +
+         |   'data-title="${name} (Stage ${stageId}.${attemptId})<br>' +
+         |   'Status: ${status.toUpperCase}<br>' +
+         |   'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+         |   '${
+                 if (status != "running") {
+                   s"""<br>Completion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                 } else {
+                   ""
+                 }
+              }">' +
          |    '${name} (Stage ${stageId}.${attemptId})</div>',
-         |  'title': '${name} (Stage ${stageId}.${attemptId})\\nStatus: ${status.toUpperCase}\\n' +
-         |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
-         |    '${
-        if (status != "running") {
-          s"""\\nCompletion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
-        } else {
-          ""
-        }
-      }'
          |}
        """.stripMargin
     }
@@ -89,38 +91,44 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     val events = ListBuffer[String]()
     executorUIDatas.foreach {
       case (executorId, event) =>
-      val addedEvent =
-        s"""
-           |{
-           |  'className': 'executor added',
-           |  'group': 'executors',
-           |  'start': new Date(${event.startTime}),
-           |  'content': '<div>Executor ${executorId} added</div>',
-           |  'title': 'Added at ${UIUtils.formatDate(new Date(event.startTime))}'
-           |}
-         """.stripMargin
-      events += addedEvent
-
-      if (event.finishTime.isDefined) {
-        val removedEvent =
+        val addedEvent =
           s"""
+             |{
+             |  'className': 'executor added',
+             |  'group': 'executors',
+             |  'start': new Date(${event.startTime}),
+             |  'content': '<div class="executor-event-content"' +
+             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-title="Executor ${executorId}<br>' +
+             |    'Added at ${UIUtils.formatDate(new Date(event.startTime))}"' +
+             |    'data-html="true">Executor ${executorId} added</div>'
+             |}
+           """.stripMargin
+        events += addedEvent
+
+        if (event.finishTime.isDefined) {
+          val removedEvent =
+            s"""
                |{
                |  'className': 'executor removed',
                |  'group': 'executors',
                |  'start': new Date(${event.finishTime.get}),
-               |  'content': '<div>Executor ${executorId} removed</div>',
-               |  'title': 'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
+               |  'content': '<div class="executor-event-content"' +
+               |    'data-toggle="tooltip" data-placement="bottom"' +
+               |    'data-title="Executor ${executorId}<br>' +
+               |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""\\nReason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get}"""
                         } else {
                           ""
                         }
-                     }'
+                     }"' +
+               |    'data-html="true">Executor ${executorId} removed</div>'
                |}
              """.stripMargin
-        events += removedEvent
-      }
+            events += removedEvent
+        }
     }
     events.toSeq
   }
@@ -128,7 +136,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
   private def  makeTimeline(
       stages: Seq[StageInfo],
       executors: HashMap[String, ExecutorUIData],
-      jobStartTime: Long): Seq[Node] = {
+      appStartTime: Long): Seq[Node] = {
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
     val executorsJsonAsStrSeq = makeExecutorEvent(executors)
@@ -163,7 +171,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       </div>
     </div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${jobStartTime});")}
+      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${appStartTime});")}
     </script>
   }
 
@@ -293,10 +301,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         </div>
 
       var content = summary
-      val jobStartTime = jobData.submissionTime.get
+      val appStartTime = listener.startTime
       val executorListener = parent.executorListener
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
-          executorListener.executorIdToData, jobStartTime)
+          executorListener.executorIdToData, appStartTime)
 
       if (shouldShowActiveStages) {
         content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++

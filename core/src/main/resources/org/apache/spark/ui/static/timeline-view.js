@@ -35,27 +35,34 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   applicationTimeline.setItems(items);
 
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
+  setupExecutorEventAction();
 
-  $(".item.range.job.application-timeline-object").each(function() {
-    var getJobId = function(baseElem) {
-      var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
-      var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
-      return jobId;
-    };
+  function setupJobEventAction() {
+    $(".item.range.job.application-timeline-object").each(function() {
+      var getJobId = function(baseElem) {
+        var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
+        var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
+       return jobId;
+      };
 
-    $(this).click(function() {
-      window.location.href = "job/?id=" + getJobId(this);
+      $(this).click(function() {
+        window.location.href = "job/?id=" + getJobId(this);
+      });
+
+      $(this).hover(
+        function() {
+          $("#job-" + getJobId(this)).addClass("corresponding-item-hover");
+          $($(this).find("div.application-timeline-content")[0]).tooltip("show");
+        },
+        function() {
+          $("#job-" + getJobId(this)).removeClass("corresponding-item-hover");
+          $($(this).find("div.application-timeline-content")[0]).tooltip("hide");
+        }
+      );
     });
+  }
 
-    $(this).hover(
-      function() {
-        $("#job-" + getJobId(this)).addClass("corresponding-item-hover");
-      },
-      function() {
-        $("#job-" + getJobId(this)).removeClass("corresponding-item-hover");
-      }
-    );
-  });
+  setupJobEventAction();
 
   $("span.expand-application-timeline").click(function() {
     $("#application-timeline").toggleClass('collapsed');
@@ -86,36 +93,43 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   jobTimeline.setItems(items);
 
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
+  setupExecutorEventAction();
 
-  $(".item.range.stage.job-timeline-object").each(function() {
-    var getStageIdAndAttempt = function(baseElem) {
-      var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
-      var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
-      return stageIdAndAttempt;
-    };
+  function setupStageEventAction() {
+    $(".item.range.stage.job-timeline-object").each(function() {
+      var getStageIdAndAttempt = function(baseElem) {
+        var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
+        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
+        return stageIdAndAttempt;
+      };
 
-    $(this).click(function() {
-      var idAndAttempt = getStageIdAndAttempt(this);
-      var id = idAndAttempt[0];
-      var attempt = idAndAttempt[1];
-      window.location.href = "../../stages/stage/?id=" + id + "&attempt=" + attempt;
+      $(this).click(function() {
+        var idAndAttempt = getStageIdAndAttempt(this);
+        var id = idAndAttempt[0];
+        var attempt = idAndAttempt[1];
+        window.location.href = "../../stages/stage/?id=" + id + "&attempt=" + attempt;
+      });
+
+      $(this).hover(
+        function() {
+          var idAndAttempt = getStageIdAndAttempt(this);
+          var id = idAndAttempt[0];
+          var attempt = idAndAttempt[1];
+          $("#stage-" + id + "-" + attempt).addClass("corresponding-item-hover");
+          $($(this).find("div.job-timeline-content")[0]).tooltip("show");
+        },
+        function() {
+          var idAndAttempt = getStageIdAndAttempt(this);
+          var id = idAndAttempt[0];
+          var attempt = idAndAttempt[1];
+          $("#stage-" + id + "-" + attempt).removeClass("corresponding-item-hover");
+          $($(this).find("div.job-timeline-content")[0]).tooltip("hide");
+        }
+      );
     });
+  }
 
-    $(this).hover(
-      function() {
-        var idAndAttempt = getStageIdAndAttempt(this);
-        var id = idAndAttempt[0];
-        var attempt = idAndAttempt[1];
-        $("#stage-" + id + "-" + attempt).addClass("corresponding-item-hover");
-      },
-      function() {
-        var idAndAttempt = getStageIdAndAttempt(this);
-        var id = idAndAttempt[0];
-        var attempt = idAndAttempt[1];
-        $("#stage-" + id + "-" + attempt).removeClass("corresponding-item-hover");
-      }
-    );
-  });
+  setupStageEventAction();
 
   $("span.expand-job-timeline").click(function() {
     $("#job-timeline").toggleClass('collapsed');
@@ -123,6 +137,19 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-closed');
+  });
+}
+
+function setupExecutorEventAction() {
+  $(".item.box.executor").each(function () {
+    $(this).hover(
+      function() {
+        $($(this).find(".executor-event-content")[0]).tooltip("show");
+      },
+      function() {
+        $($(this).find(".executor-event-content")[0]).tooltip("hide");
+      }
+    );
   });
 }
 

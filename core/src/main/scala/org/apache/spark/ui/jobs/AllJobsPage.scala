@@ -88,17 +88,18 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'group': 'jobs',
            |  'start': new Date(${submissionTime}),
            |  'end': new Date(${completionTime}),
-           |  'content': '<div class="application-timeline-content">' +
-           |    '${displayJobDescription} (Job ${jobId})</div>',
-           |  'title': '${displayJobDescription} (Job ${jobId})\\nStatus: ${status}\\n' +
-           |    'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
-           |    '${
-          if (status != JobExecutionStatus.RUNNING) {
-            s"""\\nCompletion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
-          } else {
-            ""
-          }
-        }'
+           |  'content': '<div class="application-timeline-content"' +
+           |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
+           |     'data-title="${displayJobDescription} (Job ${jobId})<br>Status: ${status}<br>' +
+           |     'Submission Time: ${UIUtils.formatDate(new Date(submissionTime))}' +
+           |     '${
+                     if (status != JobExecutionStatus.RUNNING) {
+                       s"""<br>Completion Time: ${UIUtils.formatDate(new Date(completionTime))}"""
+                     } else {
+                       ""
+                     }
+                  }">' +
+           |    '${displayJobDescription} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
@@ -109,38 +110,44 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val events = ListBuffer[String]()
     executorUIDatas.foreach {
       case (executorId, event) =>
-      val addedEvent =
-        s"""
-           |{
-           |  'className': 'executor added',
-           |  'group': 'executors',
-           |  'start': new Date(${event.startTime}),
-           |  'content': '<div>Executor ${executorId} added</div>',
-           |  'title': 'Added at ${UIUtils.formatDate(new Date(event.startTime))}'
-           |}
-         """.stripMargin
-      events += addedEvent
-
-      if (event.finishTime.isDefined) {
-        val removedEvent =
+        val addedEvent =
           s"""
+             |{
+             |  'className': 'executor added',
+             |  'group': 'executors',
+             |  'start': new Date(${event.startTime}),
+             |  'content': '<div class="executor-event-content"' +
+             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-title="Executor ${executorId}<br>' +
+             |    'Added at ${UIUtils.formatDate(new Date(event.startTime))}"' +
+             |    'data-html="true">Executor ${executorId} added</div>'
+             |}
+           """.stripMargin
+        events += addedEvent
+
+        if (event.finishTime.isDefined) {
+          val removedEvent =
+            s"""
                |{
                |  'className': 'executor removed',
                |  'group': 'executors',
                |  'start': new Date(${event.finishTime.get}),
-               |  'content': '<div>Executor ${executorId} removed</div>',
-               |  'title': 'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
+               |  'content': '<div class="executor-event-content"' +
+               |    'data-toggle="tooltip" data-placement="bottom"' +
+               |    'data-title="Executor ${executorId}<br>' +
+               |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""\\nReason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get}"""
                         } else {
                           ""
                         }
-                     }'
+                     }"' +
+               |    'data-html="true">Executor ${executorId} removed</div>'
                |}
              """.stripMargin
-        events += removedEvent
-      }
+          events += removedEvent
+        }
     }
     events.toSeq
   }
