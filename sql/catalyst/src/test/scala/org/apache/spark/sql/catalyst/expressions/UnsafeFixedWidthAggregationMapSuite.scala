@@ -46,7 +46,8 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
       aggBufferSchema,
       groupKeySchema,
       MemoryAllocator.HEAP,
-      1024
+      1024,
+      false
     )
     assert(!map.iterator().hasNext)
     map.free()
@@ -58,7 +59,8 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
       aggBufferSchema,
       groupKeySchema,
       MemoryAllocator.HEAP,
-      1024
+      1024,
+      false
     )
     val groupKey = new GenericRow(Array[Any](UTF8String("cats")))
 
@@ -76,6 +78,5 @@ class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers {
 
     map.free()
   }
-
 
 }

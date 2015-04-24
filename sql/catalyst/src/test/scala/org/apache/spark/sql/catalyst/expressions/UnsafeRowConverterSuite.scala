@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.scalatest.{FunSuite, Matchers}
+
 import org.apache.spark.sql.types.{StringType, DataType, LongType, IntegerType}
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.scalatest.{FunSuite, Matchers}
-
 
 class UnsafeRowConverterSuite extends FunSuite with Matchers {
 

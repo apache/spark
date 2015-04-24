@@ -69,8 +69,6 @@ public final class BytesToBytesMap {
    */
   private final List<MemoryBlock> dataPages = new LinkedList<MemoryBlock>();
 
-  private static final long PAGE_SIZE_BYTES = 64000000;
-
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
    * page becomes full, a new page will be allocated and this pointer will change to point to that
@@ -102,16 +100,20 @@ public final class BytesToBytesMap {
   /**
    * The number of entries in the page table.
    */
-  private static final int PAGE_TABLE_SIZE = 8096;  // Use the upper 13 bits to address the table.
+  private static final int PAGE_TABLE_SIZE = (int) 1L << 13;
 
-  // TODO: This page table size places a limit on the maximum page size. We should account for this
-  // somewhere as part of final cleanup in this file.
+  /**
+   * The size of the data pages that hold key and value data. Map entries cannot span multiple
+   * pages, so this limits the maximum entry size.
+   */
+  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
+  // This choice of page table size and page size means that we can address up to 500 gigabytes
+  // of memory.
 
   /**
    * A single array to store the key and value.
    *
-   * // TODO this comment may be out of date; fix it:
    * Position {@code 2 * i} in the array is used to track a pointer to the key at index {@code i},
    * while position {@code 2 * i + 1} in the array holds the upper bits of the key's hashcode plus
    * the relative offset from the key pointer to the value at index {@code i}.
@@ -131,17 +133,24 @@ public final class BytesToBytesMap {
    */
   private int size;
 
+  /**
+   * The map will be expanded once the number of keys exceeds this threshold.
+   */
   private int growthThreshold;
 
+  /**
+   * Mask for truncating hashcodes so that they do not exceed the long array's size.
+   */
   private int mask;
 
+  /**
+   * Return value of {@link BytesToBytesMap#lookup(Object, long, int)}.
+   */
   private final Location loc;
 
   private final boolean enablePerfMetrics;
 
   private long timeSpentResizingMs = 0;
-
-  private int numResizes = 0;
 
   private long numProbes = 0;
 
@@ -191,7 +200,7 @@ public final class BytesToBytesMap {
   /**
    * Returns an iterator for iterating over the entries of this map.
    *
-   * For efficiency, all calls to `next()` will return the same `Location` object.
+   * For efficiency, all calls to `next()` will return the same {@link Location} object.
    *
    * If any other lookups or operations are performed on this map while iterating over it, including
    * `lookup()`, the behavior of the returned iterator is undefined.
@@ -479,6 +488,12 @@ public final class BytesToBytesMap {
     }
   }
 
+  /**
+   * Allocate new data structures for this map. When calling this outside of the constructor,
+   * make sure to keep references to the old data structures so that you can free them.
+   *
+   * @param capacity the new map capacity
+   */
   private void allocate(int capacity) {
     capacity = Math.max((int) Math.min(Integer.MAX_VALUE, nextPowerOf2(capacity)), 64);
     longArray = new LongArray(allocator.allocate(capacity * 8 * 2));
@@ -553,7 +568,6 @@ public final class BytesToBytesMap {
   private void growAndRehash() {
     long resizeStartTime = -1;
     if (enablePerfMetrics) {
-      numResizes++;
       resizeStartTime = System.currentTimeMillis();
     }
     // Store references to the old data structures to be used when we re-hash
@@ -587,9 +601,6 @@ public final class BytesToBytesMap {
         }
       }
     }
-
-    // TODO: we should probably have a try-finally block here to make sure that we free the allocated
-    // memory even if an error occurs.
 
     // Deallocate the old data structures.
     allocator.free(oldLongArray.memoryBlock());

@@ -33,10 +33,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
-import org.apache.spark.unsafe.string.UTF8StringMethods;
-
-// TODO: pick a better name for this class, since this is potentially confusing.
-// Maybe call it UnsafeMutableRow?
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -58,6 +54,7 @@ public final class UnsafeRow implements MutableRow {
 
   private Object baseObject;
   private long baseOffset;
+  /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
@@ -74,7 +71,7 @@ public final class UnsafeRow implements MutableRow {
   }
 
   public static int calculateBitSetWidthInBytes(int numFields) {
-    return ((numFields / 64) + ((numFields % 64 == 0 ? 0 : 1))) * 8;
+    return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
   }
 
   /**
@@ -211,7 +208,6 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public void setString(int ordinal, String value) {
-    // TODO: need to ensure that array has been suitably sized.
     throw new UnsupportedOperationException();
   }
 
@@ -240,23 +236,14 @@ public final class UnsafeRow implements MutableRow {
     assertIndexIsValid(i);
     assert (schema != null) : "Schema must be defined when calling generic get() method";
     final DataType dataType = schema.fields()[i].dataType();
-    // The ordering of these `if` statements is intentional: internally, it looks like this only
-    // gets invoked in JoinedRow when trying to access UTF8String columns. It's extremely unlikely
-    // that internal code will call this on non-string-typed columns, but we support that anyways
-    // just for the sake of completeness.
-    // TODO: complete this for the remaining types?
+    // UnsafeRow is only designed to be invoked by internal code, which only invokes this generic
+    // get() method when trying to access UTF8String-typed columns. If we refactor the codebase to
+    // separate the internal and external row interfaces, then internal code can fetch strings via
+    // a new getUTF8String() method and we'll be able to remove this method.
     if (isNullAt(i)) {
       return null;
     } else if (dataType == StringType) {
       return getUTF8String(i);
-    } else if (dataType == IntegerType) {
-      return getInt(i);
-    } else if (dataType == LongType) {
-      return getLong(i);
-    } else if (dataType == DoubleType) {
-      return getDouble(i);
-    } else if (dataType == FloatType) {
-      return getFloat(i);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -319,7 +306,7 @@ public final class UnsafeRow implements MutableRow {
     final byte[] strBytes = new byte[stringSizeInBytes];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + offsetToStringSize + 8,  // The  +8 is to skip past the size to get the data,
+      baseOffset + offsetToStringSize + 8,  // The `+ 8` is to skip past the size to get the data
       strBytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,
       stringSizeInBytes
@@ -335,31 +322,26 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public BigDecimal getDecimal(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public Date getDate(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <T> Seq<T> getSeq(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <T> List<T> getList(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <K, V> Map<K, V> getMap(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
@@ -370,19 +352,16 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public <K, V> java.util.Map<K, V> getJavaMap(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public Row getStruct(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
   @Override
   public <T> T getAs(int i) {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
@@ -398,7 +377,6 @@ public final class UnsafeRow implements MutableRow {
 
   @Override
   public Row copy() {
-    // TODO
     throw new UnsupportedOperationException();
   }
 
