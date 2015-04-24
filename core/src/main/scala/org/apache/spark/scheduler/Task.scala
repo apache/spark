@@ -87,10 +87,17 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   // initialized when kill() is invoked.
   @volatile @transient private var _killed = false
 
+  protected var _executorDeserializeTime: Long = 0
+
   /**
    * Whether the task has been killed.
    */
   def killed: Boolean = _killed
+
+  /**
+   * Returns the amount of time spent deserializing the RDD and function to be run.
+   */
+  def executorDeserializeTime: Long = _executorDeserializeTime
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark

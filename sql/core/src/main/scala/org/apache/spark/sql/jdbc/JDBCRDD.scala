@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
+import org.apache.spark.util.Utils
 
 private[sql] object JDBCRDD extends Logging {
   /**
@@ -152,7 +153,7 @@ private[sql] object JDBCRDD extends Logging {
   def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
     () => {
       try {
-        if (driver != null) Class.forName(driver)
+        if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
       } catch {
         case e: ClassNotFoundException => {
           logWarning(s"Couldn't find class $driver", e);
