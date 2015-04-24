@@ -593,7 +593,6 @@ public final class BytesToBytesMap {
     allocator.free(oldLongArray.memoryBlock());
     allocator.free(oldBitSet.memoryBlock());
     if (enablePerfMetrics) {
-      System.out.println("Resizing took " + (System.currentTimeMillis() - resizeStartTime) + " ms");
       timeSpentResizingMs += System.currentTimeMillis() - resizeStartTime;
     }
   }
