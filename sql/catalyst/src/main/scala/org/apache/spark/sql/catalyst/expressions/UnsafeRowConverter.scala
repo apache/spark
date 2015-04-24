@@ -74,7 +74,6 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
     while (fieldNumber < writers.length) {
       if (row.isNullAt(fieldNumber)) {
         unsafeRow.setNullAt(fieldNumber)
-        // TODO: type-specific null value writing?
       } else {
         appendCursor += writers(fieldNumber).write(
           row(fieldNumber),
@@ -122,11 +121,6 @@ private abstract class UnsafeColumnWriter[T] {
 }
 
 private object UnsafeColumnWriter {
-  private object IntUnsafeColumnWriter extends IntUnsafeColumnWriter
-  private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
-  private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
-  private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
-  private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
 
   def forType(dataType: DataType): UnsafeColumnWriter[_] = {
     dataType match {
@@ -142,6 +136,12 @@ private object UnsafeColumnWriter {
 }
 
 // ------------------------------------------------------------------------------------------------
+
+private object IntUnsafeColumnWriter extends IntUnsafeColumnWriter
+private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
+private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
+private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
+private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter[T] extends UnsafeColumnWriter[T] {
   def getSize(value: T): Int = 0
@@ -205,12 +205,12 @@ private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter[UTF8
   }
 
   override def write(
-    value: UTF8String,
-    columnNumber: Int,
-    row: UnsafeRow,
-    baseObject: Object,
-    baseOffset: Long,
-    appendCursor: Int): Int = {
+      value: UTF8String,
+      columnNumber: Int,
+      row: UnsafeRow,
+      baseObject: Object,
+      baseOffset: Long,
+      appendCursor: Int): Int = {
     val numBytes = value.getBytes.length
     PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + appendCursor, numBytes)
     PlatformDependent.copyMemory(

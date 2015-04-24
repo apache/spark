@@ -145,6 +145,10 @@ public final class UnsafeRow implements MutableRow {
   public void setNullAt(int i) {
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
+    // To preserve row equality, zero out the value when setting the column to null.
+    // Since this row does does not currently support updates to variable-length values, we don't
+    // have to worry about zeroing out that data.
+    PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), 0);
   }
 
   private void setNotNullAt(int i) {
@@ -288,13 +292,21 @@ public final class UnsafeRow implements MutableRow {
   @Override
   public float getFloat(int i) {
     assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(i));
+    if (isNullAt(i)) {
+      return Float.NaN;
+    } else {
+      return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(i));
+    }
   }
 
   @Override
   public double getDouble(int i) {
     assertIndexIsValid(i);
-    return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
+    if (isNullAt(i)) {
+      return Float.NaN;
+    } else {
+      return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
+    }
   }
 
   public UTF8String getUTF8String(int i) {
