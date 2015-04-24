@@ -87,7 +87,9 @@ object PolynomialExpansion {
     if (multiplier == 0.0) {
       // do nothing
     } else if (degree == 0 || lastIdx < 0) {
-      polyValues(curPolyIdx) = multiplier
+      if (curPolyIdx >= 0) { // skip the very first 1
+        polyValues(curPolyIdx) = multiplier
+      }
     } else {
       val v = values(lastIdx)
       val lastIdx1 = lastIdx - 1
@@ -116,8 +118,10 @@ object PolynomialExpansion {
     if (multiplier == 0.0) {
       // do nothing
     } else if (degree == 0 || lastIdx < 0) {
-      polyIndices += curPolyIdx
-      polyValues += multiplier
+      if (curPolyIdx >= 0) { // skip the very first 1
+        polyIndices += curPolyIdx
+        polyValues += multiplier
+      }
     } else {
       // Skip all zeros at the tail.
       val v = values(lastIdx)
@@ -139,8 +143,8 @@ object PolynomialExpansion {
   private def expand(dv: DenseVector, degree: Int): DenseVector = {
     val n = dv.size
     val polySize = getPolySize(n, degree)
-    val polyValues = new Array[Double](polySize)
-    expandDense(dv.values, n - 1, degree, 1.0, polyValues, 0)
+    val polyValues = new Array[Double](polySize - 1)
+    expandDense(dv.values, n - 1, degree, 1.0, polyValues, -1)
     new DenseVector(polyValues)
   }
 
@@ -149,12 +153,12 @@ object PolynomialExpansion {
     val nnz = sv.values.length
     val nnzPolySize = getPolySize(nnz, degree)
     val polyIndices = mutable.ArrayBuilder.make[Int]
-    polyIndices.sizeHint(nnzPolySize)
+    polyIndices.sizeHint(nnzPolySize - 1)
     val polyValues = mutable.ArrayBuilder.make[Double]
-    polyValues.sizeHint(nnzPolySize)
+    polyValues.sizeHint(nnzPolySize - 1)
     expandSparse(
-      sv.indices, sv.values, nnz - 1, sv.size - 1, degree, 1.0, polyIndices, polyValues, 0)
-    new SparseVector(polySize, polyIndices.result(), polyValues.result())
+      sv.indices, sv.values, nnz - 1, sv.size - 1, degree, 1.0, polyIndices, polyValues, -1)
+    new SparseVector(polySize - 1, polyIndices.result(), polyValues.result())
   }
 
   def expand(v: Vector, degree: Int): Vector = {
