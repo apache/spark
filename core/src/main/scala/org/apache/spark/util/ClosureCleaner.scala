@@ -58,10 +58,13 @@ object ClosureCleaner extends Logging {
   private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
-      if (isClosure(f.getType)) {
-        return f.getType :: getOuterClasses(f.get(obj))
-      } else {
-        return f.getType :: Nil // Stop at the first $outer that is not a closure
+      val outer = f.get(obj)
+      if (outer != null) {
+        if (isClosure(f.getType)) {
+          return f.getType :: getOuterClasses(f.get(obj))
+        } else {
+          return f.getType :: Nil // Stop at the first $outer that is not a closure
+        }
       }
     }
     Nil
@@ -71,10 +74,13 @@ object ClosureCleaner extends Logging {
   private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
-      if (isClosure(f.getType)) {
-        return f.get(obj) :: getOuterObjects(f.get(obj))
-      } else {
-        return f.get(obj) :: Nil // Stop at the first $outer that is not a closure
+      val outer = f.get(obj)
+      if (outer != null) {
+        if (isClosure(f.getType)) {
+          return f.get(obj) :: getOuterObjects(f.get(obj))
+        } else {
+          return f.get(obj) :: Nil // Stop at the first $outer that is not a closure
+        }
       }
     }
     Nil
@@ -167,10 +173,14 @@ object ClosureCleaner extends Logging {
       func: AnyRef,
       checkSerializable: Boolean,
       cleanTransitively: Boolean,
-      accessedFields: Map[Class[_], Set[String]]) {
+      accessedFields: Map[Class[_], Set[String]]): Unit = {
 
     // TODO: clean all inner closures first. This requires us to find the inner objects.
     // TODO: cache outerClasses / innerClasses / accessedFields
+
+    if (func == null) {
+      return
+    }
 
     logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}}) +++")
 
