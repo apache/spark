@@ -33,8 +33,8 @@ class ElementwiseProduct extends UnaryTransformer[Vector, Vector, ElementwisePro
 
   /** the vector to multiply with input vectors */
   val scalingVec : Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
-  def setScalingVec(value: Vector) = set(scalingVec, value)
-  def getScalingVec: Vector = get(scalingVec)
+  def setScalingVec(value: Vector): this.type = set(scalingVec, value)
+  def getScalingVec: Vector = getOrDefault(scalingVec)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
     val elemScaler = new feature.ElementwiseProduct(paramMap(scalingVec))
