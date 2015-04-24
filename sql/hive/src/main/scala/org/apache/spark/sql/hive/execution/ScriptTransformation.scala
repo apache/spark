@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
@@ -113,6 +113,21 @@ case class ScriptTransformation(
           }
         }
 
+        def makeRow(dataList: Seq[String]): Row = {
+          val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+
+          var i = 0
+          dataList.foreach( element => {
+            if (element == null) {
+              mutableRow.setNullAt(i)
+            } else {
+              mutableRow(i) = ioschema.parseScriptOutput(element, output(i).dataType)
+            }
+            i += 1
+          })
+          return mutableRow
+        }
+
         override def next(): Row = {
           if (!hasNext) {
             throw new NoSuchElementException
@@ -122,9 +137,8 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
-                .asInstanceOf[Array[Any]])
+              makeRow(prevLine.split(
+                ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
             } else {
               new GenericRow(CatalystTypeConverters.convertToCatalyst(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
@@ -267,6 +281,24 @@ case class HiveScriptIOSchema (
       outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
     } else {
       null
+    }
+  }
+
+  def parseScriptOutput(data: String, dt: DataType): Any = {
+    try {
+      dt match {
+        case BooleanType => data.toBoolean
+        case ByteType => data.toByte
+        case ShortType => data.toShort
+        case IntegerType => data.toInt
+        case LongType => data.toLong
+        case FloatType => data.toFloat
+        case DoubleType => data.toDouble
+        case StringType => data
+        case _ => sys.error(s"ScriptTransformation doesn't support output type $dt")
+      }
+    } catch {
+      case nfe: NumberFormatException => sys.error(s"$data is not in type $dt")
     }
   }
 }

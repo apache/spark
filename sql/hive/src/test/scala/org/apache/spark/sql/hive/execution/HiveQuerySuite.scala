@@ -401,6 +401,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
+  test("SPARK-7119: ScriptTransform should consider the output data type") {
+    val s = sql("""
+                  |SELECT tKey + 1 FROM (SELECT TRANSFORM (key) USING 'cat'
+                  |AS (tKey INT) FROM src) t
+                """.stripMargin).collect()
+    val t = sql("SELECT key + 1 FROM src").collect()
+    assert(s === t)
+  }
+
   createQueryTest("schema-less transform",
     """
       |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
