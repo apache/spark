@@ -681,8 +681,8 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+val df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -691,8 +691,8 @@ df.select("name", "age").save("namesAndAges.parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.parquet");
-df.select("name", "age").save("namesAndAges.parquet");
+DataFrame df = sqlContext.load("examples/src/main/resources/users.parquet");
+df.select("name", "favorite_color").save("namesAndFavColors.parquet");
 
 {% endhighlight %}
 
@@ -702,8 +702,8 @@ df.select("name", "age").save("namesAndAges.parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.parquet")
-df.select("name", "age").save("namesAndAges.parquet")
+df = sqlContext.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 
 {% endhighlight %}
 
@@ -722,7 +722,7 @@ using this syntax.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("people.json", "json")
+val df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 {% endhighlight %}
 
@@ -732,7 +732,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("people.json", "json");
+DataFrame df = sqlContext.load("examples/src/main/resources/people.json", "json");
 df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% endhighlight %}
@@ -743,7 +743,7 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("people.json", "json")
+df = sqlContext.load("examples/src/main/resources/people.json", "json")
 df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
