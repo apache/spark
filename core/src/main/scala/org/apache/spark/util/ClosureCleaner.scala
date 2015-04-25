@@ -363,24 +363,24 @@ private class ReturnStatementFinder extends ClassVisitor(ASM4) {
 }
 
 /** Helper class to identify a method. */
-private case class MethodIdentifier(cls: Class[_], name: String, desc: String)
+private case class MethodIdentifier[T](cls: Class[T], name: String, desc: String)
 
 /**
  * Find the fields accessed by a given class.
  *
- * The fields are stored in the mutable map passed in by the class that contains them.
+ * The resulting fields are stored in the mutable map passed in through the constructor.
  * This map is assumed to have its keys already populated with the classes of interest.
  *
  * @param fields the mutable map that stores the fields to return
- * @param findTransitively if true, find fields indirectly referenced in other classes
- * @param specificMethod if not empty, visit only this method
- * @param visitedMethods a list of visited methods to avoid cycles
+ * @param findTransitively if true, find fields indirectly referenced through method calls
+ * @param specificMethod if not empty, visit only this specific method
+ * @param visitedMethods a set of visited methods to avoid cycles
  */
 private[util] class FieldAccessFinder(
     fields: Map[Class[_], Set[String]],
     findTransitively: Boolean,
-    specificMethod: Option[MethodIdentifier] = None,
-    visitedMethods: Set[MethodIdentifier] = Set.empty)
+    specificMethod: Option[MethodIdentifier[_]] = None,
+    visitedMethods: Set[MethodIdentifier[_]] = Set.empty)
   extends ClassVisitor(ASM4) {
 
   override def visitMethod(
@@ -390,7 +390,7 @@ private[util] class FieldAccessFinder(
       sig: String,
       exceptions: Array[String]): MethodVisitor = {
 
-    // Ignore this method unless we are told to visit it
+    // If we are told to visit only a certain method and this is not the one, ignore it
     if (specificMethod.isDefined &&
         (specificMethod.get.name != name || specificMethod.get.desc != desc)) {
       return null
@@ -412,7 +412,7 @@ private[util] class FieldAccessFinder(
           if (op == INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer")) {
             fields(cl) += name
           }
-          // Visit other methods to find fields that are transitively referenced
+          // Optionally visit other methods to find fields that are transitively referenced
           if (findTransitively) {
             val m = MethodIdentifier(cl, name, desc)
             if (!visitedMethods.contains(m)) {
@@ -430,6 +430,11 @@ private[util] class FieldAccessFinder(
 
 private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
+
+  // TODO: Recursively find inner closures that we indirectly reference, e.g.
+  //   val closure1 = () = { () => 1 }
+  //   val closure2 = () => { (1 to 5).map(closure1) }
+  // The second closure technically has two inner closures, but this finder only finds one
 
   override def visit(version: Int, access: Int, name: String, sig: String,
       superName: String, interfaces: Array[String]) {
