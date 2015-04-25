@@ -45,7 +45,7 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   // Check whether a class represents a Scala closure
-  private[util] def isClosure(cls: Class[_]): Boolean = {
+  private def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }
 
@@ -55,7 +55,7 @@ private[spark] object ClosureCleaner extends Logging {
   // for outer objects beyond that because cloning the user's object is probably
   // not a good idea (whereas we can clone closure objects just fine since we
   // understand how all their fields are used).
-  private[util] def getOuterClasses(obj: AnyRef): List[Class[_]] = {
+  private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
@@ -72,7 +72,7 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   // Get a list of the outer objects for a given closure object.
-  private[util] def getOuterObjects(obj: AnyRef): List[AnyRef] = {
+  private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
@@ -91,7 +91,7 @@ private[spark] object ClosureCleaner extends Logging {
   /**
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
-  private[util] def getInnerClasses(obj: AnyRef): List[Class[_]] = {
+  private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
