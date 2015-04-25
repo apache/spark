@@ -94,9 +94,9 @@ class UISuite extends FunSuite {
 
     val sparkConf = new SparkConf()
       .set("spark.ui.https.enabled", "true")
-      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
-      .set("spark.ui.ssl.server.keystore.password", "123456")
-      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
+      .set("spark.ui.https.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ui.https.keyStorePassword", "123456")
+      .set("spark.ui.https.keyPassword", "123456")
     val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf, "server1")
     val serverInfo2 = JettyUtils.startJettyServer(
@@ -128,9 +128,9 @@ class UISuite extends FunSuite {
   test("jetty with https binds to port 0 correctly") {
     val sparkConf = new SparkConf()
       .set("spark.ui.https.enabled", "false")
-      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
-      .set("spark.ui.ssl.server.keystore.password", "123456")
-      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
+      .set("spark.ui.https.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ui.https.keyStorePassword", "123456")
+      .set("spark.ui.https.keyPassword", "123456")
     val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), sparkConf)
     val server = serverInfo.server
