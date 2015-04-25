@@ -17,21 +17,14 @@
 # limitations under the License.
 #
 
-FROM ubuntu
+FROM mesosphere/mesos:0.20.1
 
-# Update the base ubuntu image with dependencies needed for Spark and Mesos
+# Update the base ubuntu image with dependencies needed for Spark
 RUN apt-get update && \
-    apt-get install -y python libnss3 openjdk-7-jre-headless
+    apt-get install -y python libnss3 openjdk-7-jre-headless curl
 
-# A Spark distribution tarball is needed, one can be built from the root
-# of the Spark source repository with `make-distribution.sh --tgz`
-ADD spark-1.3.0.tar.gz /opt
-RUN ln -s /opt/spark-1.3.0 /opt/spark
+RUN mkdir /opt/spark && \
+    curl http://www.apache.org/dyn/closer.cgi/spark/spark-1.4.0/spark-1.4.0-bin-hadoop2.4.tgz \
+    | tar -xzC /opt
 ENV SPARK_HOME /opt/spark
-
-# The correct version of the Mesos shared library will be needed by this image
-# One simple way to ensure you always have the correct version is to mount the
-# system shared library into the image.
-# In this example the shared library has been mounted to the volume:
-# /host/usr/local/lib
-ENV MESOS_NATIVE_JAVA_LIBRARY /host/usr/local/lib/libmesos.so
+ENV MESOS_NATIVE_JAVA_LIBRARY /usr/local/lib/libmesos.so
