@@ -45,8 +45,11 @@ private[spark] case class SSLOptions(
     keyStore: Option[File] = None,
     keyStorePassword: Option[String] = None,
     keyPassword: Option[String] = None,
+    keyStoreType: Option[String] = None,
+    needAuth: Boolean = false,
     trustStore: Option[File] = None,
     trustStorePassword: Option[String] = None,
+    trustStoreType: Option[String] = None,
     protocol: Option[String] = None,
     enabledAlgorithms: Set[String] = Set.empty) {
 
@@ -63,7 +66,9 @@ private[spark] case class SSLOptions(
       trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       protocol.foreach(sslContextFactory.setProtocol)
-      sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      if (enabledAlgorithms.nonEmpty) {
+        sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      }
 
       Some(sslContextFactory)
     } else {
@@ -149,11 +154,19 @@ private[spark] object SSLOptions extends Logging {
     val keyPassword = conf.getOption(s"$ns.keyPassword")
         .orElse(defaults.flatMap(_.keyPassword))
 
+    val keyStoreType = conf.getOption(s"$ns.keyStoreType")
+        .orElse(defaults.flatMap(_.keyStoreType))
+
+    val needAuth = conf.getBoolean(s"$ns.needAuth", defaultValue = defaults.exists(_.needAuth))
+
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
         .orElse(defaults.flatMap(_.trustStore))
 
     val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
         .orElse(defaults.flatMap(_.trustStorePassword))
+
+    val trustStoreType = conf.getOption(s"$ns.trustStoreType")
+        .orElse(defaults.flatMap(_.trustStoreType))
 
     val protocol = conf.getOption(s"$ns.protocol")
         .orElse(defaults.flatMap(_.protocol))
@@ -168,8 +181,11 @@ private[spark] object SSLOptions extends Logging {
       keyStore,
       keyStorePassword,
       keyPassword,
+      keyStoreType,
+      needAuth,
       trustStore,
       trustStorePassword,
+      trustStoreType,
       protocol,
       enabledAlgorithms)
   }

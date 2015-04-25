@@ -21,23 +21,21 @@ import java.net.URL
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.mutable.StringBuilder
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{Request, Connector, Server}
+import org.eclipse.jetty.server.{Connector, Request, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
-import org.eclipse.jetty.http.HttpStatus
-import org.eclipse.jetty.util.ssl.SslContextFactory
 
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SSLOptions, Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -217,27 +215,31 @@ private[spark] object JettyUtils extends Logging {
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server
+      val connectors = new ArrayBuffer[Connector]
       // Create a connector on port currentPort to listen for HTTP requests
       val httpConnector = new SelectChannelConnector()
       httpConnector.setPort(currentPort)
-      httpConnector.setHost(hostName)
+      connectors += httpConnector
 
-      if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
-        // / If the new port wraps around, do not try a privilege port
-        val securePort = (currentPort + 1 - 1024) % (65536 - 1024) + 1024
+      val sslContextFactory =
+        SSLOptions.parse(conf, "spark.ui.https").createJettySslContextFactory()
+      sslContextFactory.foreach { factory =>
+        // If the new port wraps around, do not try a privilege port
+        val securePort = (currentPort + 400 - 1024) % (65536 - 1024) + 1024
         val scheme = "https"
         // Create a connector on port securePort to listen for HTTPS requests
-        val connector = buildSslSelectChannelConnector(securePort, conf)
-        connector.setHost(hostName)
-        server.setConnectors(Seq(httpConnector,connector).toArray)
+        val connector = new SslSelectChannelConnector(factory)
+        connector.setPort(securePort)
+        connectors += connector
 
         // redirect the HTTP requests to HTTPS port
-        val newHandlers = Seq(createRedirectHttpsHandler(securePort, scheme)) ++ handlers
-        collection.setHandlers(newHandlers.toArray)
-      } else {
-        server.addConnector(httpConnector)
-        collection.setHandlers(handlers.toArray)
+        collection.addHandler(createRedirectHttpsHandler(securePort, scheme))
       }
+
+      handlers.foreach(collection.addHandler)
+      connectors.foreach(_.setHost(hostName))
+      server.setConnectors(connectors.toArray)
+
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
@@ -301,32 +303,6 @@ private[spark] object JettyUtils extends Logging {
   private def attachPrefix(basePath: String, relativePath: String): String = {
     if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
   }
-
-  private def buildSslSelectChannelConnector(port: Int, conf: SparkConf): Connector =  {
-    val ctxFactory = new SslContextFactory()
-    conf.getAll
-      .filter { case (k, v) => k.startsWith("spark.ui.ssl.") }
-      .foreach { case (k, v) => setSslContextFactoryProps(k, v, ctxFactory) }
-
-    val connector = new SslSelectChannelConnector(ctxFactory)
-    connector.setPort(port)
-    connector
-  }
-
-  private def setSslContextFactoryProps(
-      key: String, value: String, ctxFactory: SslContextFactory) = {
-    key match {
-      case "spark.ui.ssl.client.https.needAuth" => ctxFactory.setNeedClientAuth(value.toBoolean)
-      case "spark.ui.ssl.server.keystore.keypassword" => ctxFactory.setKeyManagerPassword(value)
-      case "spark.ui.ssl.server.keystore.location" => ctxFactory.setKeyStorePath(value)
-      case "spark.ui.ssl.server.keystore.password" => ctxFactory.setKeyStorePassword(value)
-      case "spark.ui.ssl.server.keystore.type" => ctxFactory.setKeyStoreType(value)
-      case "spark.ui.ssl.server.truststore.location" => ctxFactory.setTrustStore(value)
-      case "spark.ui.ssl.server.truststore.password" => ctxFactory.setTrustStorePassword(value)
-      case "spark.ui.ssl.server.truststore.type" => ctxFactory.setTrustStoreType(value)
-    }
-  }
-
 }
 
 private[spark] case class ServerInfo(

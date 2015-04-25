@@ -33,44 +33,58 @@ Spark use SSL(Secure Sockets Layer) to establish an encrypted link between UI se
     <td>Whether to enable https in web ui.</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.server.keystore.keypassword</td>
+      <td>spark.ui.https.keyStore</td>
+      <td>(none)</td>
+      <td>The file or URL of the SSL Key store.</td>
+  </tr>
+  <tr>
+      <td>spark.ui.https.keyStorePassword</td>
+      <td>(none)</td>
+      <td>The password for the key store.</td>
+  </tr>
+  <tr>
+    <td>spark.ui.https.keyPassword</td>
     <td>(none)</td>
     <td>The password for the specific key within the key store.</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.server.keystore.location</td>
-    <td>(none)</td>
-    <td>The file or URL of the SSL Key store.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.ssl.server.keystore.password</td>
-    <td>(none)</td>
-    <td>The password for the key store.</td>
-  </tr>
-  <tr>
-    <td>spark.ui.ssl.server.keystore.type</td>
+    <td>spark.ui.https.keyStoreType</td>
     <td>JKS</td>
     <td>The type of the key store (default "JKS").</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.client.https.needAuth</td>
+    <td>spark.ui.https.needAuth</td>
     <td>(none)</td>
     <td>Set true if SSL needs client authentication.</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.server.truststore.location</td>
+    <td>spark.ui.https.trustStore</td>
     <td>(none)</td>
     <td>The file name or URL of the trust store location.</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.server.truststore.password</td>
+    <td>spark.ui.https.trustStorePassword</td>
     <td>(none)</td>
     <td>The password for the trust store</td>
   </tr>
   <tr>
-    <td>spark.ui.ssl.server.truststore.type</td>
-    <td>JKS</td>
-    <td>The type of the trust store (default "JKS")</td>
+    <td>spark.ui.https.protocol</td>
+    <td>None</td>
+    <td>
+        A protocol name. The protocol must be supported by JVM. The reference list of protocols
+        one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+        page.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.ui.https.enabledAlgorithms</td>
+    <td>Empty</td>
+    <td>A comma separated list of ciphers. The specified ciphers must be supported by JVM.
+        The reference list of protocols one can find on
+        <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+        page.
+        Note: If not set, it will use the default cipher suites of JVM.
+    </td>
   </tr>
 </table>
 

@@ -199,7 +199,7 @@ private[worker] class Worker(
     for (masterAkkaUrl <- masterAkkaUrls) {
       logInfo("Connecting to master " + masterAkkaUrl + "...")
       val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      actor ! RegisterWorker(workerId, host, port, cores, memory, workerWebUiUrl)
     }
   }
 
@@ -238,7 +238,7 @@ private[worker] class Worker(
          */
         if (master != null) {
           master ! RegisterWorker(
-            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+            workerId, host, port, cores, memory, workerWebUiUrl)
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()
