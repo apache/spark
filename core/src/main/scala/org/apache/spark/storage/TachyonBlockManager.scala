@@ -58,7 +58,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
 
     rootDirs = s"$storeDir/$appFolderName/$executorId"
     master = blockManager.conf.get(ExternalBlockStore.MASTER_URL, "tachyon://localhost:19998")
-    client = if (master != null && master != "") TachyonFS.get(master) else null
+    client = if (master != null && master != "") TachyonFS.get(new TachyonURI(master)) else null
     // original implementation call System.exit, we change it to run without extblkstore support
     if (client == null) {
       logError("Failed to connect to the Tachyon as the master address is not configured")
@@ -132,7 +132,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     client.exist(new TachyonURI(file.getPath()))
   }
 
-  private def getFile(filename: String): TachyonFile = {
+  def getFile(filename: String): TachyonFile = {
     // Figure out which tachyon directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % tachyonDirs.length
@@ -162,7 +162,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     file
   }
 
-  private def getFile(blockId: BlockId): TachyonFile = getFile(blockId.name)
+  def getFile(blockId: BlockId): TachyonFile = getFile(blockId.name)
 
   // TODO: Some of the logic here could be consolidated/de-duplicated with that in the DiskStore.
   private def createTachyonDirs(): Array[TachyonFile] = {
