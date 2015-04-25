@@ -52,7 +52,7 @@ sealed trait Vector extends Serializable {
 
   override def equals(other: Any): Boolean = {
     other match {
-      case v2: Vector => {
+      case v2: Vector =>
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
@@ -63,13 +63,13 @@ sealed trait Vector extends Serializable {
             Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
-      }
       case _ => false
     }
   }
 
   override def hashCode(): Int = {
     var result: Int = size + 31
+    var i = 0
     this.foreachActive { case (index, value) =>
       // ignore explict 0 for comparison between sparse and dense
       if (value != 0) {
@@ -77,6 +77,11 @@ sealed trait Vector extends Serializable {
         // refer to {@link java.util.Arrays.equals} for hash algorithm
         val bits = java.lang.Double.doubleToLongBits(value)
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
+        i += 1
+        // only scan the first 16 nonzeros
+        if (i > 16) {
+          return result
+        }
       }
     }
     result
