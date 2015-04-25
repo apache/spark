@@ -391,14 +391,27 @@ private[spark] class Client(
     // From SPARK-1920 and SPARK-1520 we know PySpark on Yarn can not work when the assembly jar are
     // package by JDK 1.7+, so we ship PySpark archives to executors as assembly jar, and add this
     // path to PYTHONPATH.
-    var pysparkArchives = new ArrayBuffer[String]()
-    for ((resLink, res) <- localResources) {
-      if (resLink.contains("pyspark") || resLink.contains("py4j")) {
-        pysparkArchives.+=(resLink)
-      }
+    val pysparkArchives = new ArrayBuffer[String]()
+    sys.env.get("PYSPARK_ARCHIVES_PATH") match {
+      case Some(archivesPath) =>
+        archivesPath.split(",").foreach { path =>
+          val uri = new URI(path)
+          if (uri.getScheme == LOCAL_SCHEME) {
+            pysparkArchives.+=(uri.getPath)
+          } else {
+            pysparkArchives.+=(new File(path).getName)
+          }
+        }
+      case None =>
+        for ((resLink, res) <- localResources) {
+          if (resLink.contains("pyspark") || resLink.contains("py4j")) {
+            pysparkArchives.+=(resLink)
+          }
+        }
     }
-    launchEnv("PYTHONPATH") = pysparkArchives.toArray.mkString(File.pathSeparator)
-    sparkConf.setExecutorEnv("PYTHONPATH", pysparkArchives.toArray.mkString(File.pathSeparator))
+    val pythonPath = pysparkArchives.toArray.mkString(File.pathSeparator)
+    launchEnv("PYTHONPATH") = pythonPath
+    sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
 
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
