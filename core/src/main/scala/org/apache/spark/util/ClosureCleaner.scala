@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkEnv, SparkException}
 private[spark] object ClosureCleaner extends Logging {
 
   // Get an ASM class reader for a given class from the JAR that loaded it
-  def getClassReader(cls: Class[_]): ClassReader = {
+  private[util] def getClassReader(cls: Class[_]): ClassReader = {
     // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
@@ -45,7 +45,7 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   // Check whether a class represents a Scala closure
-  private def isClosure(cls: Class[_]): Boolean = {
+  private[util] def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }
 
@@ -55,10 +55,11 @@ private[spark] object ClosureCleaner extends Logging {
   // for outer objects beyond that because cloning the user's object is probably
   // not a good idea (whereas we can clone closure objects just fine since we
   // understand how all their fields are used).
-  private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
+  private[util] def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
+      // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
           return f.getType :: getOuterClasses(f.get(obj))
@@ -71,10 +72,11 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   // Get a list of the outer objects for a given closure object.
-  private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
+  private[util] def getOuterObjects(obj: AnyRef): List[AnyRef] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
       val outer = f.get(obj)
+      // The outer pointer may be null if we have cleaned this closure before
       if (outer != null) {
         if (isClosure(f.getType)) {
           return f.get(obj) :: getOuterObjects(f.get(obj))
@@ -89,7 +91,7 @@ private[spark] object ClosureCleaner extends Logging {
   /**
    * Return a list of classes that represent closures enclosed in the given closure object.
    */
-  private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
+  private[util] def getInnerClasses(obj: AnyRef): List[Class[_]] = {
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
@@ -372,7 +374,7 @@ private case class MethodIdentifier(cls: Class[_], name: String, desc: String)
  * @param specificMethod if not empty, visit only this method
  * @param visitedMethods a list of visited methods to avoid cycles
  */
-private class FieldAccessFinder(
+private[util] class FieldAccessFinder(
     fields: Map[Class[_], Set[String]],
     findTransitively: Boolean,
     specificMethod: Option[MethodIdentifier] = None,
@@ -387,8 +389,8 @@ private class FieldAccessFinder(
       exceptions: Array[String]): MethodVisitor = {
 
     // Ignore this method unless we are told to visit it
-    if (specificMethod.nonEmpty &&
-        specificMethod.get.name != name || specificMethod.get.desc != desc) {
+    if (specificMethod.isDefined &&
+        (specificMethod.get.name != name || specificMethod.get.desc != desc)) {
       return null
     }
 

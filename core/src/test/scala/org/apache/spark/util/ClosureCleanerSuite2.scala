@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
+import scala.collection.mutable
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.{SparkContext, SparkException}
@@ -91,6 +93,250 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll {
       if (serializableAfter) { throw new SparkException("no-op") }
     }
     assertSerializable(closure, serializableAfter)
+  }
+
+  /**
+   * Return the fields accessed by the given closure by class.
+   * This also optionally finds the fields transitively referenced through methods
+   * that belong to other classes.
+   */
+  private def findAccessedFields(
+      closure: AnyRef,
+      outerClasses: Seq[Class[_]],
+      findTransitively: Boolean): Map[Class[_], Set[String]] = {
+    val fields = new mutable.HashMap[Class[_], mutable.Set[String]]
+    outerClasses.foreach { c => fields(c) = new mutable.HashSet[String] }
+    ClosureCleaner.getClassReader(closure.getClass)
+      .accept(new FieldAccessFinder(fields, findTransitively), 0)
+    fields.mapValues(_.toSet).toMap
+  }
+
+  test("get inner classes") {
+    val closure1 = () => 1
+    val closure2 = () => { () => 1 }
+    val closure3 = (i: Int) => {
+      (1 to i).map { x => x + 1 }.filter { x => x > 5 }
+    }
+    val closure4 = (j: Int) => {
+      (1 to j).flatMap { x =>
+        (1 to x).flatMap { y =>
+          (1 to y).map { z => z + 1 }
+        }
+      }
+    }
+    val inner1 = ClosureCleaner.getInnerClasses(closure1)
+    val inner2 = ClosureCleaner.getInnerClasses(closure2)
+    val inner3 = ClosureCleaner.getInnerClasses(closure3)
+    val inner4 = ClosureCleaner.getInnerClasses(closure4)
+    assert(inner1.isEmpty)
+    assert(inner2.size === 1)
+    assert(inner3.size === 2)
+    assert(inner4.size === 3)
+    assert(inner2.forall(ClosureCleaner.isClosure))
+    assert(inner3.forall(ClosureCleaner.isClosure))
+    assert(inner4.forall(ClosureCleaner.isClosure))
+  }
+
+  test("get outer classes and objects") {
+    val localValue = someSerializableValue
+    val closure1 = () => 1
+    val closure2 = () => localValue
+    val closure3 = () => someSerializableValue
+    val closure4 = () => someSerializableMethod()
+    val outerClasses1 = ClosureCleaner.getOuterClasses(closure1)
+    val outerClasses2 = ClosureCleaner.getOuterClasses(closure2)
+    val outerClasses3 = ClosureCleaner.getOuterClasses(closure3)
+    val outerClasses4 = ClosureCleaner.getOuterClasses(closure4)
+    val outerObjects1 = ClosureCleaner.getOuterObjects(closure1)
+    val outerObjects2 = ClosureCleaner.getOuterObjects(closure2)
+    val outerObjects3 = ClosureCleaner.getOuterObjects(closure3)
+    val outerObjects4 = ClosureCleaner.getOuterObjects(closure4)
+
+    // The classes and objects should have the same size
+    assert(outerClasses1.size === outerObjects1.size)
+    assert(outerClasses2.size === outerObjects2.size)
+    assert(outerClasses3.size === outerObjects3.size)
+    assert(outerClasses4.size === outerObjects4.size)
+
+    // These do not have $outer pointers because they reference only local variables
+    assert(outerClasses1.isEmpty)
+    assert(outerClasses2.isEmpty)
+
+    // These closures do have $outer pointers because they ultimately reference `this`
+    // The first $outer pointer refers to the closure defines this test (see FunSuite#test)
+    // The second $outer pointer refers to ClosureCleanerSuite2
+    assert(outerClasses3.size === 2)
+    assert(outerClasses4.size === 2)
+    assert(ClosureCleaner.isClosure(outerClasses3(0)))
+    assert(ClosureCleaner.isClosure(outerClasses4(0)))
+    assert(outerClasses3(0) === outerClasses4(0)) // part of the same "FunSuite#test" scope
+    assert(outerClasses3(1) === this.getClass)
+    assert(outerClasses4(1) === this.getClass)
+    assert(outerObjects3(1) === this)
+    assert(outerObjects4(1) === this)
+  }
+
+  test("get outer classes and objects with nesting") {
+    val localValue = someSerializableValue
+
+    val test1 = () => {
+      val x = 1
+      val closure1 = () => 1
+      val closure2 = () => x
+      val outerClasses1 = ClosureCleaner.getOuterClasses(closure1)
+      val outerClasses2 = ClosureCleaner.getOuterClasses(closure2)
+      val outerObjects1 = ClosureCleaner.getOuterObjects(closure1)
+      val outerObjects2 = ClosureCleaner.getOuterObjects(closure2)
+      assert(outerClasses1.size === outerObjects1.size)
+      assert(outerClasses2.size === outerObjects2.size)
+      // These inner closures only reference local variables, and so do not have $outer pointer
+      assert(outerClasses1.isEmpty)
+      assert(outerClasses2.isEmpty)
+    }
+
+    val test2 = () => {
+      def y = 1
+      val closure1 = () => 1
+      val closure2 = () => y
+      val closure3 = () => localValue
+      val outerClasses1 = ClosureCleaner.getOuterClasses(closure1)
+      val outerClasses2 = ClosureCleaner.getOuterClasses(closure2)
+      val outerClasses3 = ClosureCleaner.getOuterClasses(closure3)
+      val outerObjects1 = ClosureCleaner.getOuterObjects(closure1)
+      val outerObjects2 = ClosureCleaner.getOuterObjects(closure2)
+      val outerObjects3 = ClosureCleaner.getOuterObjects(closure3)
+      assert(outerClasses1.size === outerObjects1.size)
+      assert(outerClasses2.size === outerObjects2.size)
+      assert(outerClasses3.size === outerObjects3.size)
+      // Same as above, this closure only references local variables
+      assert(outerClasses1.isEmpty)
+      // This closure references the "test2" scope because it needs to find the method `y`
+      // Scope hierarchy: "test2" < "FunSuite#test" < ClosureCleanerSuite2
+      assert(outerClasses2.size === 3)
+      // This closure references the "test2" scope because it needs to find the
+      // `localValue` defined outside of this scope
+      assert(outerClasses3.size === 3)
+      assert(ClosureCleaner.isClosure(outerClasses2(0)))
+      assert(ClosureCleaner.isClosure(outerClasses3(0)))
+      assert(ClosureCleaner.isClosure(outerClasses2(1)))
+      assert(ClosureCleaner.isClosure(outerClasses3(1)))
+      assert(outerClasses2(0) === outerClasses3(0)) // part of the same "test2" scope
+      assert(outerClasses2(1) === outerClasses3(1)) // part of the same "FunSuite#test" scope
+      assert(outerClasses2(2) === this.getClass)
+      assert(outerClasses3(2) === this.getClass)
+      assert(outerObjects2(2) === this)
+      assert(outerObjects3(2) === this)
+    }
+
+    test1()
+    test2()
+  }
+
+  test("find accessed fields") {
+    val localValue = someSerializableValue
+    val closure1 = () => 1
+    val closure2 = () => localValue
+    val closure3 = () => someSerializableValue
+    val outerClasses1 = ClosureCleaner.getOuterClasses(closure1)
+    val outerClasses2 = ClosureCleaner.getOuterClasses(closure2)
+    val outerClasses3 = ClosureCleaner.getOuterClasses(closure3)
+
+    val fields1 = findAccessedFields(closure1, outerClasses1, findTransitively = false)
+    val fields2 = findAccessedFields(closure2, outerClasses2, findTransitively = false)
+    val fields3 = findAccessedFields(closure3, outerClasses3, findTransitively = false)
+    assert(fields1.isEmpty)
+    assert(fields2.isEmpty)
+    assert(fields3.size === 2)
+    // This corresponds to the "FunSuite#test" closure. This is empty because the
+    // field `closure3` references belongs to its parent (i.e. ClosureCleanerSuite2)
+    assert(fields3(outerClasses3(0)).isEmpty)
+    // This corresponds to the ClosureCleanerSuite2. This is also empty, however,
+    // because we did not find fields transitively (i.e. beyond 1 enclosing scope)
+    assert(fields3(outerClasses3(1)).isEmpty)
+
+    val fields1t = findAccessedFields(closure1, outerClasses1, findTransitively = true)
+    val fields2t = findAccessedFields(closure2, outerClasses2, findTransitively = true)
+    val fields3t = findAccessedFields(closure3, outerClasses3, findTransitively = true)
+    assert(fields1t.isEmpty)
+    assert(fields2t.isEmpty)
+    assert(fields3t.size === 2)
+    // Because we find fields transitively now, we are able to detect that we need the
+    // $outer pointer to get the field from the ClosureCleanerSuite2.
+    assert(fields3t(outerClasses3(0)).size === 1)
+    assert(fields3t(outerClasses3(0)).head === "$outer")
+    assert(fields3t(outerClasses3(1)).size === 1)
+    assert(fields3t(outerClasses3(1)).head.contains("someSerializableValue"))
+  }
+
+  test("find accessed fields with nesting") {
+    val localValue = someSerializableValue
+
+    val test1 = () => {
+      def a = localValue + 1
+      val closure1 = () => 1
+      val closure2 = () => a
+      val closure3 = () => localValue
+      val closure4 = () => someSerializableValue
+      val outerClasses1 = ClosureCleaner.getOuterClasses(closure1)
+      val outerClasses2 = ClosureCleaner.getOuterClasses(closure2)
+      val outerClasses3 = ClosureCleaner.getOuterClasses(closure3)
+      val outerClasses4 = ClosureCleaner.getOuterClasses(closure4)
+
+      // First, find only fields the closures directly access
+      val fields1 = findAccessedFields(closure1, outerClasses1, findTransitively = false)
+      val fields2 = findAccessedFields(closure2, outerClasses2, findTransitively = false)
+      val fields3 = findAccessedFields(closure3, outerClasses3, findTransitively = false)
+      val fields4 = findAccessedFields(closure4, outerClasses4, findTransitively = false)
+      assert(fields1.isEmpty)
+      // "test1" < "FunSuite#test" < ClosureCleanerSuite2
+      assert(fields2.size === 3)
+      assert(fields2(outerClasses2(0)).isEmpty) // `def a` is not a field
+      assert(fields2(outerClasses2(1)).isEmpty)
+      assert(fields2(outerClasses2(2)).isEmpty)
+      assert(fields3.size === 3)
+      // Note that `localValue` is a field of the "test1" closure because `def a` needs it
+      // Further note that it is NOT a field of the "FunSuite#test" closure but a local variable
+      assert(fields3(outerClasses3(0)).size === 1)
+      assert(fields3(outerClasses3(0)).head.contains("localValue"))
+      assert(fields3(outerClasses3(1)).isEmpty)
+      assert(fields3(outerClasses3(2)).isEmpty)
+      assert(fields4.size === 3)
+      assert(fields4(outerClasses4(0)).isEmpty)
+      assert(fields4(outerClasses4(1)).isEmpty)
+      // Because `someSerializableValue` is a val, even an explicit reference here actually
+      // involves a method call to access the underlying value of the variable. Because we are
+      // not finding fields transitively here, we do not consider the fields accessed by this
+      // "method" (i.e. the val's accessor).
+      assert(fields4(outerClasses4(2)).isEmpty)
+
+      // Now do the same, but find fields that the closures transitively reference
+      val fields1t = findAccessedFields(closure1, outerClasses1, findTransitively = true)
+      val fields2t = findAccessedFields(closure2, outerClasses2, findTransitively = true)
+      val fields3t = findAccessedFields(closure3, outerClasses3, findTransitively = true)
+      val fields4t = findAccessedFields(closure4, outerClasses4, findTransitively = true)
+      assert(fields1t.isEmpty)
+      assert(fields2t.size === 3)
+      // This closure transitively references `localValue` because `def a` uses it
+      assert(fields2t(outerClasses2(0)).size === 1)
+      assert(fields2t(outerClasses2(0)).head.contains("localValue"))
+      assert(fields2t(outerClasses2(1)).isEmpty)
+      assert(fields2t(outerClasses2(2)).isEmpty)
+      assert(fields3t.size === 3)
+      assert(fields3t(outerClasses3(0)).size === 1) // as before
+      assert(fields3t(outerClasses3(0)).head.contains("localValue"))
+      assert(fields3t(outerClasses3(1)).isEmpty)
+      assert(fields3t(outerClasses3(2)).isEmpty)
+      assert(fields4t.size === 3)
+      // Through a series of method calls, we are able to detect that we ultimately access
+      // ClosureCleanerSuite2's field `someSerializableValue`. Along the way, we also accessed
+      // a few $outer parent pointers to get to the outermost object.
+      assert(fields4t(outerClasses4(0)) === Set("$outer"))
+      assert(fields4t(outerClasses4(1)) === Set("$outer"))
+      assert(fields4t(outerClasses4(2)).size === 1)
+      assert(fields4t(outerClasses4(2)).head.contains("someSerializableValue"))
+    }
+
+    test1()
   }
 
   test("clean basic serializable closures") {
