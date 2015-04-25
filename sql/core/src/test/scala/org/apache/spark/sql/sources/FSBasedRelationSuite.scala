@@ -262,7 +262,7 @@ class FSBasedRelationSuite extends DataSourceTest {
     intercept[IOException] {
       testDF.save(
         source = classOf[SimpleFSBasedSource].getCanonicalName,
-        mode = SaveMode.Overwrite,
+        mode = SaveMode.ErrorIfExists,
         options = Map(
           "path" -> basePath.toString,
           "schema" -> dataSchema.json),
@@ -273,7 +273,7 @@ class FSBasedRelationSuite extends DataSourceTest {
   ignore("save() - partitioned table - Ignore") {
     testDF.save(
       source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
+      mode = SaveMode.Ignore,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json),
@@ -374,7 +374,7 @@ class FSBasedRelationSuite extends DataSourceTest {
     testDF.saveAsTable(
       tableName = "t",
       source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
+      mode = SaveMode.ErrorIfExists,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json),
@@ -406,7 +406,7 @@ class FSBasedRelationSuite extends DataSourceTest {
     testDF.saveAsTable(
       tableName = "t",
       source = classOf[SimpleFSBasedSource].getCanonicalName,
-      mode = SaveMode.Overwrite,
+      mode = SaveMode.Ignore,
       options = Map(
         "path" -> basePath.toString,
         "schema" -> dataSchema.json),
