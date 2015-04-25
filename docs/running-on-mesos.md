@@ -187,10 +187,12 @@ using `conf.set("spark.cores.max", "10")` (for example).
 # Mesos Docker Support
 
 Spark can make use of a Mesos Docker containerizer by setting the property `spark.mesos.executor.docker.image`
-in your [SparkConf](configuration.html#spark-properties)
+in your [SparkConf](configuration.html#spark-properties).
 
-The Docker Image used must have an appropriate version of Spark already part of the image, or you can
+The Docker image used must have an appropriate version of Spark already part of the image, or you can
 have Mesos download Spark via the usual methods.
+
+Requires Mesos version 0.20.1 or later.
 
 # Running Alongside Hadoop
 
@@ -249,11 +251,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.docker.image</code></td>
   <td>(none)</td>
   <td>
-    Set the docker image in which the Spark executors will run when using Mesos. The selected
+    Set the name of the docker image that the Spark executors will run in. The selected
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
     the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
-    Mesos Docker support requires Mesos version 0.20.1 or later.
   </td>
 </tr>
 <tr>
@@ -265,8 +266,6 @@ See the [configuration page](configuration.html) for information on Spark config
     mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
 
     <pre>[host_path:]container_path[:ro|:rw]</pre>
-
-    Mesos Docker volume support requires Mesos version 0.20.1 or later.
   </td>
 </tr>
 <tr>
@@ -278,8 +277,6 @@ See the [configuration page](configuration.html) for information on Spark config
     mappings which take the form:
 
     <pre>host_port:container_port[:tcp|:udp]</pre>
-
-    Mesos Docker portmap support requires Mesos version 0.20.1 or later.
   </td>
 </tr>
 <tr>
