@@ -42,8 +42,7 @@ import org.apache.spark.sql.DataFrame
 @AlphaComponent
 final class DecisionTreeRegressor
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams
-  with TreeRegressorParams {
+  with DecisionTreeParams with TreeRegressorParams {
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -60,8 +59,7 @@ final class DecisionTreeRegressor
 
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
-  override def setCheckpointInterval(value: Int): this.type =
-    super.setCheckpointInterval(value)
+  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
@@ -78,15 +76,13 @@ final class DecisionTreeRegressor
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 0)
-    strategy.algo = OldAlgo.Regression
-    strategy.setImpurity(getOldImpurity)
-    strategy
+    super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity,
+      subsamplingRate = 1.0)
   }
 }
 
 object DecisionTreeRegressor {
-  /** Accessor for supported impurities */
+  /** Accessor for supported impurities: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 }
 
