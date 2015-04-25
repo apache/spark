@@ -440,7 +440,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (Or(l, l1), r) if (l1 fastEquals Not(r)) => And(l, r)
         case (Or(l1, l), r) if (l1 fastEquals Not(r)) => And(l, r)
         // (a || b) && (a || c)  =>  a || (b && c)
-       case _ =>
+        case _ =>
           // 1. Split left and right to get the disjunctive predicates,
           //   i.e. lhs = (a, b), rhs = (a, c)
           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
