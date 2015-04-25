@@ -28,8 +28,8 @@ import org.apache.spark.{Logging, SparkConf}
  */
 private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**
-   * Parse a volume spec in the form passed to 'docker run -v'
-   * which is [host-dir:][container-dir][:rw|ro]
+   * Parse a comma-delimited list of volume specs, each of which
+   * takes the form [host-dir:]container-dir[:rw|:ro].
    */
   def parseVolumesSpec(volumes: String): List[Volume] = {
     volumes.split(",").map(_.split(":")).flatMap { spec =>
@@ -55,7 +55,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
               .setHostPath(host_path)
               .setMode(Volume.Mode.RO))
           case spec => {
-            logWarning("parseVolumeSpec: unparseable: " + spec.mkString(":"))
+            logWarning(s"Unable to parse volume specs: $volumes. "
+              + "Expected form: \"[host-dir:]container-dir[:rw|:ro](, ...)\"")
             None
           }
       }
@@ -65,8 +66,9 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   /**
-   * Parse a portmap spec, similar to the form passed to 'docker run -p'
-   * the form accepted is host_port:container_port[:proto]
+   * Parse a comma-delimited list of port mapping specs, each of which
+   * takes the form host_port:container_port[:udp|:tcp]
+   *
    * Note:
    * the docker form is [ip:]host_port:container_port, but the DockerInfo
    * message has no field for 'ip', and instead has a 'protocol' field.
@@ -88,7 +90,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
             .setContainerPort(container_port.toInt)
             .setProtocol(protocol))
         case spec => {
-          logWarning("parsePortMappingSpec: unparseable: " + spec.mkString(":"))
+          logWarning(s"Unable to parse port mapping specs: $portmaps. "
+            + "Expected form: \"host_port:container_port[:udp|:tcp](, ...)\"")
           None
         }
       }
