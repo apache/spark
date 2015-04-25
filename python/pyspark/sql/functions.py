@@ -30,7 +30,7 @@ from pyspark.sql.types import StringType
 from pyspark.sql.dataframe import Column, _to_java_column, _to_seq
 
 
-__all__ = ['countDistinct', 'approxCountDistinct', 'udf']
+__all__ = ['countDistinct', 'approxCountDistinct', 'udf', 'coalesce']
 
 
 def _create_function(name, doc=""):
@@ -73,6 +73,26 @@ for _name, _doc in _functions.items():
 del _name, _doc
 __all__ += _functions.keys()
 __all__.sort()
+
+
+def coalesce(*cols):
+    """Returns the first column that is not null.
+
+    >>> df.select(coalesce(df["a"], df["b"])).show()
+    Coalesce(a,b)
+    1
+    3
+    5
+
+    >>> df.select('*', coalesce(df["a"], lit(0.0))).show()
+    a    b    Coalesce(a,0.0)
+    1    2    1.0
+    null 3    0.0
+    5    null 5.0
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
 
 
 def countDistinct(col, *cols):
