@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.classification;
+package org.apache.spark.ml.regression;
 
 import java.io.Serializable;
 import java.util.HashMap;
@@ -27,19 +27,19 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
+import org.apache.spark.ml.impl.TreeTests;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 
 
-public class JavaDecisionTreeClassifierSuite implements Serializable {
+public class JavaRandomForestRegressorSuite implements Serializable {
 
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
+    sc = new JavaSparkContext("local", "JavaRandomForestRegressorSuite");
   }
 
   @After
@@ -57,10 +57,10 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
+    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
     // This tests setters. Training with various options is tested in Scala.
-    DecisionTreeClassifier dt = new DecisionTreeClassifier()
+    RandomForestRegressor rf = new RandomForestRegressor()
       .setMaxDepth(2)
       .setMaxBins(10)
       .setMinInstancesPerNode(5)
@@ -68,26 +68,32 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       .setMaxMemoryInMB(256)
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
+      .setSubsamplingRate(1.0)
+      .setSeed(1234)
+      .setNumTrees(3)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: DecisionTreeClassifier.supportedImpurities()) {
-      dt.setImpurity(impurity);
+    for (String impurity: RandomForestRegressor.supportedImpurities()) {
+      rf.setImpurity(impurity);
     }
-    DecisionTreeClassificationModel model = dt.fit(dataFrame);
+    for (String featureSubsetStrategy: RandomForestRegressor.supportedFeatureSubsetStrategies()) {
+      rf.setFeatureSubsetStrategy(featureSubsetStrategy);
+    }
+    RandomForestRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
-    model.numNodes();
-    model.depth();
+    model.totalNumNodes();
     model.toDebugString();
+    model.trees();
+    model.treeWeights();
 
     /*
-    // TODO: Add test once save/load are implemented.  SPARK-6725
+    // TODO: Add test once save/load are implemented.   SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model3.save(sc.sc(), path);
-      DecisionTreeClassificationModel sameModel =
-        DecisionTreeClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+      model2.save(sc.sc(), path);
+      RandomForestRegressionModel sameModel = RandomForestRegressionModel.load(sc.sc(), path);
+      TreeTests.checkEqual(model2, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }
