@@ -33,13 +33,13 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 
 
-public class JavaDecisionTreeClassifierSuite implements Serializable {
+public class JavaRandomForestClassifierSuite implements Serializable {
 
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
+    sc = new JavaSparkContext("local", "JavaRandomForestClassifierSuite");
   }
 
   @After
@@ -60,7 +60,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.
-    DecisionTreeClassifier dt = new DecisionTreeClassifier()
+    RandomForestClassifier rf = new RandomForestClassifier()
       .setMaxDepth(2)
       .setMaxBins(10)
       .setMinInstancesPerNode(5)
@@ -68,16 +68,23 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       .setMaxMemoryInMB(256)
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
+      .setSubsamplingRate(1.0)
+      .setSeed(1234)
+      .setNumTrees(3)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: DecisionTreeClassifier.supportedImpurities()) {
-      dt.setImpurity(impurity);
+    for (String impurity: RandomForestClassifier.supportedImpurities()) {
+      rf.setImpurity(impurity);
     }
-    DecisionTreeClassificationModel model = dt.fit(dataFrame);
+    for (String featureSubsetStrategy: RandomForestClassifier.supportedFeatureSubsetStrategies()) {
+      rf.setFeatureSubsetStrategy(featureSubsetStrategy);
+    }
+    RandomForestClassificationModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
-    model.numNodes();
-    model.depth();
+    model.totalNumNodes();
     model.toDebugString();
+    model.trees();
+    model.treeWeights();
 
     /*
     // TODO: Add test once save/load are implemented.  SPARK-6725
@@ -85,8 +92,8 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     String path = tempDir.toURI().toString();
     try {
       model3.save(sc.sc(), path);
-      DecisionTreeClassificationModel sameModel =
-        DecisionTreeClassificationModel.load(sc.sc(), path);
+      RandomForestClassificationModel sameModel =
+          RandomForestClassificationModel.load(sc.sc(), path);
       TreeTests.checkEqual(model3, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
