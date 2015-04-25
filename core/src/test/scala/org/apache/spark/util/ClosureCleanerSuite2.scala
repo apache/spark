@@ -526,8 +526,8 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
       testClean(inner1, serializableBefore = false, serializableAfter = false)
 
       // This closure is no longer serializable because it now has a pointer to the outer closure,
-      // which is itself not serializable because it has a pointer to the ClosureCleanerSuite.
-      // If we do not clean transitively, we will not null out this parent pointer.
+      // which is itself not serializable because it has a pointer to the ClosureCleanerSuite2.
+      // If we do not clean transitively, we will not null out this indirect reference.
       testClean(inner2, serializableBefore = false, serializableAfter = false, transitive = false)
 
       // If we clean transitively, we will find that method `a` does not actually reference the

@@ -138,14 +138,16 @@ private[spark] object ClosureCleaner extends Logging {
    * The mechanism is to traverse the hierarchy of enclosing closures and null out any
    * references along the way that are not actually used by the starting closure, but are
    * nevertheless included in the compiled anonymous classes. Note that it is unsafe to
-   * simply mutate the enclosing closures, as other code paths may depend on them. Instead,
-   * we clone each enclosing closure and set the parent pointers accordingly.
+   * simply mutate the enclosing closures in place, as other code paths may depend on them.
+   * Instead, we clone each enclosing closure and set the parent pointers accordingly.
    *
    * By default, closures are cleaned transitively. This means we detect whether enclosing
    * objects are actually referenced by the starting one, either directly or transitively,
    * and, if not, sever these closures from the hierarchy. In other words, in addition to
    * nulling out unused field references, we also null out any parent pointers that refer
-   * to enclosing objects not actually needed by the starting closure.
+   * to enclosing objects not actually needed by the starting closure. We determine
+   * transitivity by tracing through the tree of all methods ultimately invoked by the
+   * inner closure and record all the fields referenced in the process.
    *
    * For instance, transitive cleaning is necessary in the following scenario:
    *
@@ -160,10 +162,10 @@ private[spark] object ClosureCleaner extends Logging {
    *   }
    *
    * In this example, scope "two" is not serializable because it references scope "one", which
-   * references SomethingNotSerializable. Note that, however, scope "two" does not actually
-   * depend on SomethingNotSerializable. This means we can null out the parent pointer of
-   * a cloned scope "one" and set it the parent of scope "two", such that scope "two" no longer
-   * references SomethingNotSerializable transitively.
+   * references SomethingNotSerializable. Note that, however, the body of scope "two" does not
+   * actually depend on SomethingNotSerializable. This means we can safely null out the parent
+   * pointer of a cloned scope "one" and set it the parent of scope "two", such that scope "two"
+   * no longer references SomethingNotSerializable transitively.
    *
    * @param func the starting closure to clean
    * @param checkSerializable whether to verify that the closure is serializable after cleaning
