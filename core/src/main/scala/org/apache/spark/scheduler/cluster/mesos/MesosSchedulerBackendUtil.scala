@@ -32,7 +32,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * which is [host-dir:][container-dir][:rw|ro]
    */
   def parseVolumesSpec(volumes: String): List[Volume] = {
-    volumes.split(",").map(_.split(":")).map { spec =>
+    volumes.split(",").map(_.split(":")).flatMap { spec =>
         val vol: Volume.Builder = Volume
           .newBuilder()
           .setMode(Volume.Mode.RW)
@@ -43,24 +43,24 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
             Some(vol.setContainerPath(container_path))
           case Array(container_path, "ro") =>
             Some(vol.setContainerPath(container_path)
-                    .setMode(Volume.Mode.RO))
+              .setMode(Volume.Mode.RO))
           case Array(host_path, container_path) => 
             Some(vol.setContainerPath(container_path)
-                    .setHostPath(host_path))
+              .setHostPath(host_path))
           case Array(host_path, container_path, "rw") =>
             Some(vol.setContainerPath(container_path)
-                    .setHostPath(host_path))
+              .setHostPath(host_path))
           case Array(host_path, container_path, "ro") =>
             Some(vol.setContainerPath(container_path)
-                    .setHostPath(host_path)
-                    .setMode(Volume.Mode.RO))
+              .setHostPath(host_path)
+              .setMode(Volume.Mode.RO))
           case spec => {
             logWarning("parseVolumeSpec: unparseable: " + spec.mkString(":"))
             None
           }
       }
     }
-    .flatMap { _.map(_.build) }
+    .map { _.build() }
     .toList
   }
 
@@ -75,25 +75,25 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * and leaves open the chance for mesos to begin to accept an 'ip' field
    */
   def parsePortMappingsSpec(portmaps: String): List[DockerInfo.PortMapping] = {
-    portmaps.split(",").map(_.split(":")).map { spec: Array[String] =>
+    portmaps.split(",").map(_.split(":")).flatMap { spec: Array[String] =>
       val portmap: DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
         .newBuilder()
         .setProtocol("tcp")
       spec match {
         case Array(host_port, container_port) =>
           Some(portmap.setHostPort(host_port.toInt)
-                      .setContainerPort(container_port.toInt))
+            .setContainerPort(container_port.toInt))
         case Array(host_port, container_port, protocol) =>
           Some(portmap.setHostPort(host_port.toInt)
-                      .setContainerPort(container_port.toInt)
-                      .setProtocol(protocol))
+            .setContainerPort(container_port.toInt)
+            .setProtocol(protocol))
         case spec => {
           logWarning("parsePortMappingSpec: unparseable: " + spec.mkString(":"))
           None
         }
       }
     }
-    .flatMap { _.map(_.build) }
+    .map { _.build() }
     .toList
   }
 
