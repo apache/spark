@@ -20,13 +20,13 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.mesos.Protos.{ContainerInfo, Volume}
 import org.apache.mesos.Protos.ContainerInfo.DockerInfo
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * A collection of utility functions which can be used by both the
  * MesosSchedulerBackend and the CoarseMesosSchedulerBackend.
  */
-private[spark] object MesosSchedulerBackendUtil extends Logging {
+private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**
    * Parse a volume spec in the form passed to 'docker run -v'
    * which is [host-dir:][container-dir][:rw|ro]
@@ -97,7 +97,10 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def withDockerInfo(
+  /**
+   * Construct a DockerInfo structure and insert it into a ContainerInfo
+   */
+  def addDockerInfo(
       container: ContainerInfo.Builder,
       image: String,
       volumes: Option[List[Volume]] = None,
@@ -105,13 +108,32 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
       portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None):Unit = {
 
     val docker = ContainerInfo.DockerInfo.newBuilder().setImage(image)
-    network.map(docker.setNetwork _)
-    portmaps.map(_.map(docker.addPortMappings _))
 
+    network.foreach(docker.setNetwork)
+    portmaps.foreach(_.foreach(docker.addPortMappings))
     container.setType(ContainerInfo.Type.DOCKER)
     container.setDocker(docker.build())
-    volumes.map(_.map(container.addVolumes _))
+    volumes.foreach(_.foreach(container.addVolumes))
+  }
 
-    logInfo("withDockerInfo: using docker image: " + image)
+  /**
+   * Setup a docker containerizer
+   */
+  def setupContainerBuilderDockerInfo(
+    imageName: String,
+    conf: SparkConf,
+    builder: ContainerInfo.Builder): Unit = {
+    val volumes = conf
+      .getOption("spark.mesos.executor.docker.volumes")
+      .map(parseVolumesSpec)
+    val portmaps = conf
+      .getOption("spark.mesos.executor.docker.portmaps")
+      .map(parsePortMappingsSpec)
+    addDockerInfo(
+      builder,
+      imageName,
+      volumes = volumes,
+      portmaps = portmaps)
+    logDebug("setupContainerDockerInfo: using docker image: " + imageName)
   }
 }
