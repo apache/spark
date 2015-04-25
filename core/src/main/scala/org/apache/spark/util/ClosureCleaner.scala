@@ -29,7 +29,7 @@ import org.apache.spark.{Logging, SparkEnv, SparkException}
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
  */
-object ClosureCleaner extends Logging {
+private[spark] object ClosureCleaner extends Logging {
 
   // Get an ASM class reader for a given class from the JAR that loaded it
   def getClassReader(cls: Class[_]): ClassReader = {
@@ -341,8 +341,7 @@ object ClosureCleaner extends Logging {
   }
 }
 
-private[spark]
-class ReturnStatementFinder extends ClassVisitor(ASM4) {
+private class ReturnStatementFinder extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     if (name.contains("apply")) {
@@ -369,8 +368,7 @@ class ReturnStatementFinder extends ClassVisitor(ASM4) {
  * @param specificMethodNames if not empty, only visit methods whose names are in this set
  * @param findTransitively if true, find fields indirectly referenced in other classes
  */
-private[spark]
-class FieldAccessFinder(
+private class FieldAccessFinder(
     fields: Map[Class[_], Set[String]],
     specificMethodNames: Set[String] = Set.empty,
     findTransitively: Boolean = true)
@@ -426,7 +424,7 @@ class FieldAccessFinder(
   }
 }
 
-private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
+private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
 
   override def visit(version: Int, access: Int, name: String, sig: String,
