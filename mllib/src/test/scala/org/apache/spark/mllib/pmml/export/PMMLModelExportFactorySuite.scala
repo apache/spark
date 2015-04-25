@@ -73,6 +73,18 @@ class PMMLModelExportFactorySuite extends FunSuite {
 
     assert(logisticRegressionModelExport.isInstanceOf[LogisticRegressionPMMLModelExport])
   }
+  
+  test("PMMLModelExportFactory throw IllegalArgumentException "
+    + "when passing a Multinomial Logistic Regression") {
+    /** 3 classes, 2 features */
+    val multiclassLogisticRegressionModel = new LogisticRegressionModel(
+      weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0, 
+      numFeatures = 2, numClasses = 3)
+    
+    intercept[IllegalArgumentException] {
+      PMMLModelExportFactory.createPMMLModelExport(multiclassLogisticRegressionModel)
+    }
+  }
 
   test("PMMLModelExportFactory throw IllegalArgumentException when passing an unsupported model") {
     val invalidModel = new Object

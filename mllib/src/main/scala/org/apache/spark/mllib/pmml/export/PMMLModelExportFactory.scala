@@ -44,7 +44,11 @@ private[mllib] object PMMLModelExportFactory {
         new GeneralizedLinearPMMLModelExport(svm,
           "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
       case logistic: LogisticRegressionModel =>
-        new LogisticRegressionPMMLModelExport(logistic, "logistic regression")
+        if(logistic.numClasses == 2)
+          new LogisticRegressionPMMLModelExport(logistic, "logistic regression")
+        else
+          throw new IllegalArgumentException(
+            "PMML Export not supported for Multinomial Logistic Regression")
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)
