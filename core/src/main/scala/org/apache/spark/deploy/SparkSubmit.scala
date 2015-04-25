@@ -366,7 +366,7 @@ object SparkSubmit {
           val py4jPath = Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip")
             .mkString(File.separator)
           args.files = mergeFileLists(args.files, Utils.resolveURIs(archives.getAbsolutePath),
-            py4jPath)
+            Utils.resolveURIs(py4jPath))
         }
       }
     }
