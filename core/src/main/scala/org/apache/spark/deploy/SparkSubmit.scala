@@ -39,7 +39,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+import org.apache.spark.util.{Utils, ChildFirstURLClassLoader, MutableURLClassLoader}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -328,12 +328,40 @@ object SparkSubmit {
       }
     }
 
-    // In yarn mode for a python app, if PYSPARK_ARCHIVES_PATH is in the user environment
-    // add pyspark archives to files that can be distributed with the job
-    if (args.isPython && clusterManager == YARN){
-      sys.env.get("PYSPARK_ARCHIVES_PATH").map { archives =>
-        args.files = mergeFileLists(args.files, Utils.resolveURIs(archives))
+    // In yarn mode for a python app, add pyspark archives to files
+    // that can be distributed with the job
+    if (args.isPython && clusterManager == YARN) {
+      var pyArchives: String = null
+      if (sys.env.contains("PYSPARK_ARCHIVES_PATH")) {
+        pyArchives = sys.env.get("PYSPARK_ARCHIVES_PATH").get
+      } else {
+        if (!sys.env.contains("SPARK_HOME")) {
+          printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
+        }
+        val pythonPath = new ArrayBuffer[String]
+        for (sparkHome <- sys.env.get("SPARK_HOME")) {
+          val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
+          val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+          if (!pyArchivesFile.exists()) {
+            val pySrc = new File(Seq(sparkHome, "python", "pyspark").mkString(File.separator))
+            Utils.zipRecursive(pySrc, pyArchivesFile)
+          }
+          pythonPath += pyArchivesFile.getAbsolutePath
+          pythonPath += Seq(pyLibPath, "py4j-0.8.2.1-src.zip").mkString(File.separator)
+        }
+        pyArchives = pythonPath.mkString(",")
       }
+
+      pyArchives = pyArchives.split(",").map( localPath=> {
+        val localURI = Utils.resolveURI(localPath)
+        if (localURI.getScheme != "local") {
+          args.files = mergeFileLists(args.files, localURI.toString)
+          (new Path(localPath)).getName
+        } else {
+          localURI.getPath.toString
+        }
+      }).mkString(File.pathSeparator)
+      sysProps("spark.submit.pyArchives") = pyArchives
     }
 
     // If we're running a R app, set the main class to our specific R runner

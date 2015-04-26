@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.util.zip._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
@@ -998,6 +999,40 @@ private[spark] object Utils extends Logging {
     }
 
     !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())
+  }
+
+  /**
+    * recursively add files to the zip file
+    */
+  def addFilesToZip(parent: String, source: File, output: ZipOutputStream): Unit = {
+    if (source.isDirectory()) {
+      output.putNextEntry(new ZipEntry(parent + source.getName()))
+      for (file <- source.listFiles()) {
+        addFilesToZip(parent + source.getName + File.separator, file, output)
+      }
+    } else {
+      val in = new FileInputStream(source)
+      output.putNextEntry(new ZipEntry(parent + source.getName()))
+      val buf = new Array[Byte](8192)
+      var n = 0
+      while (n != -1) {
+        n = in.read(buf)
+        if (n != -1) {
+          output.write(buf, 0, n)
+        }
+      }
+      in.close()
+    }
+  }
+
+  /**
+   * zip source file to dest ZipFile
+   */
+  def zipRecursive(source: File, destZipFile: File) = {
+    val destOutput = new ZipOutputStream(new FileOutputStream(destZipFile))
+    addFilesToZip("", source, destOutput)
+    destOutput.flush()
+    destOutput.close()
   }
 
   /**
