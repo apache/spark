@@ -18,11 +18,14 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{DoubleParam, ParamMap}
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.{Metadata, StructField, StructType, DataType}
+import org.apache.spark.sql.functions._
 
 /**
  * :: AlphaComponent ::
@@ -31,24 +34,81 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class VectorSlicer extends UnaryTransformer[Vector, Vector, VectorSlicer] {
 
-  /**
-   * Normalization in L^p^ space, p = 2 by default.
-   * @group param
-   */
-  val p = new DoubleParam(this, "p", "the p norm value")
+  private type FeatureSelector = Either[Array[Int], Array[String]]
 
-  /** @group getParam */
-  def getP: Double = getOrDefault(p)
+  val selectedFeatures = new Param[FeatureSelector](this, "selectedFeatures", "")
+  setDefault(selectedFeatures -> Left(Array.empty[Int]))
 
-  /** @group setParam */
-  def setP(value: Double): this.type = set(p, value)
+  private val selectedFeaturesIndices = new Param[Array[Int]](this, "selectedFeaturesIndices", "")
+  private val selectedFeaturesIndicesSet = new Param[Set[Int]](this, "selectedFeaturesIndicesSet", "")
 
-  setDefault(p -> 2.0)
+  def getSelectedFeatures: FeatureSelector = getOrDefault(selectedFeatures)
 
-  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
-    val normalizer = new feature.Normalizer(paramMap(p))
-    normalizer.transform
+  private def setSelectedFeatures(value: FeatureSelector): this.type = set(selectedFeatures, value)
+
+  def setSelectedFeatures(value: Array[String]) = setSelectedFeatures(Right(value))
+
+  def setSelectedFeatures(value: String*) = setSelectedFeatures(value.toArray)
+
+  def setSelectedFeatures(value: Array[Int]) = setSelectedFeatures(Left(value))
+
+  def setSelectedFeatures(value: Int*) = setSelectedFeatures(value.toArray)
+
+  private def selectColumns(indices: Array[Int], features: DenseVector): Vector = {
+    Vectors.dense(indices.map(features.apply))
+  }
+
+  private def selectColumns(indices: Set[Int], features: SparseVector): Vector = {
+    Vectors.sparse(
+      indices.size, features.indices.zip(features.values).filter(x => indices.contains(x._1)))
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    transformSchema(dataset.schema, paramMap, logging = true)
+    val metadata = extractMetadata(dataset.schema, paramMap)
+    val map = extractParamMap(paramMap)
+    val slicer = udf { features: Vector => this.createTransformFunc(map)(features) }
+    dataset.select(col("*"), slicer(dataset(map(inputCol))).as(map(outputCol), metadata))
+  }
+
+  private def extractMetadata(schema: StructType, paramMap: ParamMap): Metadata = {
+    ???
+  }
+
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = extractParamMap(paramMap)
+    val inputType = schema(map(inputCol)).dataType
+    validateInputType(inputType)
+    val attr = AttributeGroup.fromStructField(schema(map(inputCol)))
+    val names = map(selectedFeatures) match {
+      case Left(indices) =>
+        assert(indices.max < attr.size, "Selected feature index exceeds length of vector.")
+        paramMap.put(selectedFeaturesIndices, indices)
+        paramMap.put(selectedFeaturesIndicesSet, indices.toSet)
+        indices.map(index => attr.getAttr(index).name)
+      case Right(names) =>
+        names.foreach { name =>
+          assert(attr.hasAttr(name), "Selected feature does not belong in the vector.")
+        }
+        val indices = names.map(name => attr.indexOf(name))
+        paramMap.put(selectedFeaturesIndices, indices)
+        paramMap.put(selectedFeaturesIndicesSet, indices.toSet)
+        names
+    }
+    // name will be used to extract attrs, index will be use to index values.
+    if (schema.fieldNames.contains(map(outputCol))) {
+      throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
+    }
+
+    val outputFields = schema.fields :+
+      StructField(map(outputCol), outputDataType, nullable = false)
+    StructType(outputFields)
+  }
+
+  override protected def createTransformFunc(paramMap: ParamMap): (Vector) => Vector = {
+    case vec: DenseVector => selectColumns(paramMap(selectedFeaturesIndices), vec)
+    case vec: SparseVector => selectColumns(paramMap(selectedFeaturesIndicesSet), vec)
+  }
 }
