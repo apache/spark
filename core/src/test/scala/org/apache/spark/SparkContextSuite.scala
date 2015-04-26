@@ -25,7 +25,9 @@ import com.google.common.io.Files
 
 import org.scalatest.FunSuite
 
-import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
@@ -209,6 +211,32 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
       // SparkContext to shutdown, so the following assertion will fail.
       assert(sc.parallelize(1 to 10).count() == 10L)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Comma separated paths could be used for hadoopFile and newAPIHadoopFile (SPARK-7155)") {
+    // Regression test for SPARK-7155
+    val dir = Utils.createTempDir()
+
+    val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+    val absolutePath1 = file1.getAbsolutePath
+
+    val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+    val absolutePath2 = file2.getAbsolutePath
+
+    try {
+      // Create two text files.
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
+
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+      // Test textFile, hadoopFile, and newAPIHadoopFile
+      assert(sc.textFile(absolutePath1+","+absolutePath2).count() == 5L)
+      assert(sc.hadoopFile(absolutePath1+","+absolutePath2, classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      assert(sc.newAPIHadoopFile(absolutePath1+","+absolutePath2, classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
     } finally {
       sc.stop()
     }
