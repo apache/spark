@@ -46,6 +46,7 @@ from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler
+from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext
 
@@ -787,6 +788,29 @@ class StandardScalerTests(MLlibTestCase):
         ]
         model = StandardScaler().fit(self.sc.parallelize(data))
         self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
+
+
+class MLUtilsTests(MLlibTestCase):
+    def test_append_bias(self):
+        data = [1.0, 2.0, 3.0]
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret[3], 1.0)
+
+    def test_load_vectors(self):
+        import shutil
+        data = [
+            [1.0, 2.0, 3.0],
+            [1.0, 2.0, 3.0]
+        ]
+        try:
+            self.sc.parallelize(data).saveAsTextFile("test_load_vectors")
+            ret_rdd = MLUtils.loadVectors(self.sc, "test_load_vectors")
+            ret = ret_rdd.collect()
+            self.assertEqual(len(ret), 2)
+            self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
+            self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
+        finally:
+            shutil.rmtree("test_load_vectors")
 
 
 if __name__ == "__main__":
