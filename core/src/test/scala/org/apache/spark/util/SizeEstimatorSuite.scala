@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
 
 class DummyClass1 {}
