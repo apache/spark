@@ -78,7 +78,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
   test("starting state") {
     sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(executorIds(manager).isEmpty)
     assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
@@ -91,42 +91,42 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     // Keep adding until the limit is reached
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 1)
+    assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsPending(manager) === 3)
+    assert(numExecutorsTarget(manager) === 3)
     assert(numExecutorsToAdd(manager) === 4)
     assert(addExecutors(manager) === 4)
-    assert(numExecutorsPending(manager) === 7)
+    assert(numExecutorsTarget(manager) === 7)
     assert(numExecutorsToAdd(manager) === 8)
     assert(addExecutors(manager) === 3) // reached the limit of 10
-    assert(numExecutorsPending(manager) === 10)
+    assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 0)
-    assert(numExecutorsPending(manager) === 10)
+    assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
 
     // Register previously requested executors
     onExecutorAdded(manager, "first")
-    assert(numExecutorsPending(manager) === 9)
+    assert(numExecutorsTarget(manager) === 10)
     onExecutorAdded(manager, "second")
     onExecutorAdded(manager, "third")
     onExecutorAdded(manager, "fourth")
-    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsTarget(manager) === 10)
     onExecutorAdded(manager, "first") // duplicates should not count
     onExecutorAdded(manager, "second")
-    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsTarget(manager) === 10)
 
     // Try adding again
     // This should still fail because the number pending + running is still at the limit
     assert(addExecutors(manager) === 0)
-    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 0)
-    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
   }
 
@@ -136,49 +136,49 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 5)))
 
     // Verify that we're capped at number of tasks in the stage
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 1)
+    assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsPending(manager) === 3)
+    assert(numExecutorsTarget(manager) === 3)
     assert(numExecutorsToAdd(manager) === 4)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsPending(manager) === 5)
+    assert(numExecutorsTarget(manager) === 5)
     assert(numExecutorsToAdd(manager) === 1)
 
-    // Verify that running a task reduces the cap
+    // Verify that running a task doesn't affect the target
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 3)))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
       0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
-    assert(numExecutorsPending(manager) === 4)
+    assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 5)
+    assert(numExecutorsTarget(manager) === 6)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsPending(manager) === 7)
+    assert(numExecutorsTarget(manager) === 8)
     assert(numExecutorsToAdd(manager) === 4)
     assert(addExecutors(manager) === 0)
-    assert(numExecutorsPending(manager) === 7)
+    assert(numExecutorsTarget(manager) === 8)
     assert(numExecutorsToAdd(manager) === 1)
 
-    // Verify that re-running a task doesn't reduce the cap further
+    // Verify that re-running a task doesn't blow things up
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 3)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(1, 0, "executor-1")))
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 8)
+    assert(numExecutorsTarget(manager) === 9)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 9)
+    assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that running a task once we're at our limit doesn't blow things up
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(0, 1, "executor-1")))
     assert(addExecutors(manager) === 0)
-    assert(numExecutorsPending(manager) === 9)
+    assert(numExecutorsTarget(manager) === 10)
   }
 
   test("cancel pending executors when no longer needed") {
@@ -186,13 +186,13 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     val manager = sc.executorAllocationManager.get
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 5)))
 
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    assert(numExecutorsPending(manager) === 1)
+    assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 2)
     assert(addExecutors(manager) === 2)
-    assert(numExecutorsPending(manager) === 3)
+    assert(numExecutorsTarget(manager) === 3)
 
     val task1Info = createTaskInfo(0, 0, "executor-1")
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, task1Info))
@@ -286,7 +286,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     assert(executorIds(manager).size === 5)
 
     // Add until limit
-    assert(addExecutors(manager) === 5) // upper limit reached
+    assert(addExecutors(manager) === 3) // upper limit reached
     assert(addExecutors(manager) === 0)
     assert(!removeExecutor(manager, "3")) // still at lower limit
     assert(!removeExecutor(manager, "4"))
@@ -303,15 +303,13 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     assert(removeExecutor(manager, "5"))
     assert(removeExecutor(manager, "6"))
     assert(executorIds(manager).size === 10)
-    assert(addExecutors(manager) === 1)
+    assert(addExecutors(manager) === 0)
     onExecutorRemoved(manager, "3")
     onExecutorRemoved(manager, "4")
     assert(executorIds(manager).size === 8)
 
-    // Add succeeds again, now that we are no longer at the upper limit
-    // Number of executors added restarts at 1
-    assert(addExecutors(manager) === 2)
-    assert(addExecutors(manager) === 1) // upper limit reached
+    // Number of executors pending restarts at 1
+    assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 0)
     assert(executorIds(manager).size === 8)
     onExecutorRemoved(manager, "5")
@@ -323,6 +321,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     onExecutorAdded(manager, "15")
     onExecutorAdded(manager, "16")
     assert(executorIds(manager).size === 10)
+    assert(numExecutorsTarget(manager) === 10)
   }
 
   test("starting/canceling add timer") {
@@ -411,22 +410,22 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     manager.setClock(clock)
 
     // No events - we should not be adding or removing
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(100L)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(1000L)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.advance(10000L)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsTarget(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -441,43 +440,43 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext wit
     onSchedulerBacklogged(manager)
     clock.advance(schedulerBacklogTimeout * 1000 / 2)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 0) // timer not exceeded yet
+    assert(numExecutorsTarget(manager) === 0) // timer not exceeded yet
     clock.advance(schedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 1) // first timer exceeded
+    assert(numExecutorsTarget(manager) === 1) // first timer exceeded
     clock.advance(sustainedSchedulerBacklogTimeout * 1000 / 2)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 1) // second timer not exceeded yet
+    assert(numExecutorsTarget(manager) === 1) // second timer not exceeded yet
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 1 + 2) // second timer exceeded
+    assert(numExecutorsTarget(manager) === 1 + 2) // second timer exceeded
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 1 + 2 + 4) // third timer exceeded
+    assert(numExecutorsTarget(manager) === 1 + 2 + 4) // third timer exceeded
 
     // Scheduler queue drained
     onSchedulerQueueEmpty(manager)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 7) // timer is canceled
+    assert(numExecutorsTarget(manager) === 7) // timer is canceled
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 7)
+    assert(numExecutorsTarget(manager) === 7)
 
     // Scheduler queue backlogged again
     onSchedulerBacklogged(manager)
     clock.advance(schedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 7 + 1) // timer restarted
+    assert(numExecutorsTarget(manager) === 7 + 1) // timer restarted
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 7 + 1 + 2)
+    assert(numExecutorsTarget(manager) === 7 + 1 + 2)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 7 + 1 + 2 + 4)
+    assert(numExecutorsTarget(manager) === 7 + 1 + 2 + 4)
     clock.advance(sustainedSchedulerBacklogTimeout * 1000)
     schedule(manager)
-    assert(numExecutorsPending(manager) === 20) // limit reached
+    assert(numExecutorsTarget(manager) === 20) // limit reached
   }
 
   test("mock polling loop remove behavior") {
@@ -713,7 +712,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
    * ------------------------------------------------------- */
 
   private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
-  private val _numExecutorsPending = PrivateMethod[Int]('numExecutorsPending)
+  private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
   private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
   private val _executorsPendingToRemove =
     PrivateMethod[collection.Set[String]]('executorsPendingToRemove)
@@ -735,8 +734,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _numExecutorsToAdd()
   }
 
-  private def numExecutorsPending(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _numExecutorsPending()
+  private def numExecutorsTarget(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _numExecutorsTarget()
   }
 
   private def executorsPendingToRemove(
