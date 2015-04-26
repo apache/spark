@@ -1355,7 +1355,8 @@ admin.add_view(mv)
 
 
 class TaskInstanceModelView(ModelViewOnly):
-    column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
+    column_filters = (
+        'dag_id', 'task_id', 'state', 'execution_date', 'hostname')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
