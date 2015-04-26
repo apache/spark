@@ -561,4 +561,12 @@ class SQLQuerySuite extends QueryTest {
     sql("select d from dn union all select d * 2 from dn")
       .queryExecution.analyzed
   }
+
+  test("test script transform") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(100000 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
+      .queryExecution.toRdd.count())
+  }
 }

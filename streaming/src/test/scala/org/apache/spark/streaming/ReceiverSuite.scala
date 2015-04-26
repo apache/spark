@@ -155,7 +155,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     assert(recordedData.toSet === generatedData.toSet)
   }
 
-  test("block generator throttling") {
+  ignore("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockIntervalMs = 100
     val maxRate = 1001

@@ -453,22 +453,43 @@ class DataFrame(object):
         return [f.name for f in self.schema.fields]
 
     @ignore_unicode_prefix
+    def alias(self, alias):
+        """Returns a new :class:`DataFrame` with an alias set.
+
+        >>> from pyspark.sql.functions import *
+        >>> df_as1 = df.alias("df_as1")
+        >>> df_as2 = df.alias("df_as2")
+        >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
+        >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
+        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        """
+        assert isinstance(alias, basestring), "alias should be a string"
+        return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
+
+    @ignore_unicode_prefix
     def join(self, other, joinExprs=None, joinType=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: Join expression
+        :param joinExprs: a string for join column name, or a join expression (Column).
+            If joinExprs is a string indicating the name of the join column,
+            the column must exist on both sides, and this performs an inner equi-join.
         :param joinType: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name').select(df.name, df2.height).collect()
+        [Row(name=u'Bob', height=85)]
         """
 
         if joinExprs is None:
             jdf = self._jdf.join(other._jdf)
+        elif isinstance(joinExprs, basestring):
+            jdf = self._jdf.join(other._jdf, joinExprs)
         else:
             assert isinstance(joinExprs, Column), "joinExprs should be Column"
             if joinType is None:
