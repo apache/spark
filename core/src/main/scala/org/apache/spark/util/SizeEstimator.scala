@@ -217,8 +217,12 @@ private[spark] object SizeEstimator extends Logging {
     }
   }
 
-  private def sampleArray(array: AnyRef, state: SearchState, 
-    rand: Random, drawn: OpenHashSet[Int], length: Int): Long = {
+  private def sampleArray(
+      array: AnyRef,
+      state: SearchState, 
+      rand: Random,
+      drawn: OpenHashSet[Int],
+      length: Int): Long = {
     var size = 0L
     for (i <- 0 until ARRAY_SAMPLE_SIZE) {
       var index = 0
@@ -227,7 +231,7 @@ private[spark] object SizeEstimator extends Logging {
       } while (drawn.contains(index))
       drawn.add(index)
       val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
-      if(null != obj) {
+      if(obj != null) {
         size += SizeEstimator.estimate(obj, state.visited).toLong
       }
     }
