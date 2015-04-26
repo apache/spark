@@ -435,7 +435,7 @@ class ClosureCleanerSuite2 extends FunSuite with BeforeAndAfterAll with PrivateM
   }
 
   test("clean basic nested non-serializable closures") {
-    def localSerializableMethod() = someSerializableValue
+    def localSerializableMethod(): Int = someSerializableValue
     val localNonSerializableValue = someNonSerializableValue
     // These closures ultimately reference the ClosureCleanerSuite2
     // Note that even accessing `val` that is an instance variable involves a method call
