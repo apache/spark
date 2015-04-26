@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.util.zip._
+import java.util.zip.{ZipOutputStream, ZipEntry}
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
