@@ -33,14 +33,13 @@ import org.apache.spark.sql.{DataFrame, Row}
  * Params for [[Word2Vec]] and [[Word2VecModel]].
  */
 private[feature] trait Word2VecBase extends Params
-  with HasInputCol with HasOutputCol with HasMaxIter with HasStepSize {
+  with HasInputCol with HasOutputCol with HasMaxIter with HasStepSize with HasSeed {
 
   /**
    * The dimension of the code that you want to transform from words.
    */
   final val vectorSize = new IntParam(
     this, "vectorSize", "the dimension of codes after transforming from words")
-
   setDefault(vectorSize -> 100)
 
   /** @group getParam */
@@ -51,21 +50,10 @@ private[feature] trait Word2VecBase extends Params
    */
   final val numPartitions = new IntParam(
     this, "numPartitions", "number of partitions for sentences of words")
-
   setDefault(numPartitions -> 1)
 
   /** @group getParam */
   def getNumPartitions: Int = getOrDefault(numPartitions)
-
-  /**
-   * A random seed to random an initial vector.
-   */
-  final val seed = new LongParam(this, "seed", "a random seed to random an initial vector")
-
-  setDefault(seed -> 42L)
-
-  /** @group getParam */
-  def getSeed: Long = getOrDefault(seed)
 
   /**
    * The minimum number of times a token must appear to be included in the word2vec model's
@@ -73,7 +61,6 @@ private[feature] trait Word2VecBase extends Params
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
     "appear to be included in the word2vec model's vocabulary")
-
   setDefault(minCount -> 5)
 
   /** @group getParam */
@@ -81,6 +68,7 @@ private[feature] trait Word2VecBase extends Params
 
   setDefault(stepSize -> 0.025)
   setDefault(maxIter -> 1)
+  setDefault(seed -> 42L)
 
   /**
    * Validate and transform the input schema.
