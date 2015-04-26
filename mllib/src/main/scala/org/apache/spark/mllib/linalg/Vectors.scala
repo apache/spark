@@ -73,10 +73,11 @@ sealed trait Vector extends Serializable {
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
+    // Subclasses should override it with optimized implementation.
     var result: Int = 31 + size
     this.foreachActive { (index, value) =>
       if (index < 16) {
-        // ignore explict 0 for comparison between sparse and dense
+        // ignore explicit 0 for comparison between sparse and dense
         if (value != 0) {
           result = 31 * result + index
           val bits = java.lang.Double.doubleToLongBits(value)
