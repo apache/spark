@@ -2172,7 +2172,7 @@ private [util] class SparkShutdownHookManager {
   def runAll(): Unit = synchronized {
     shuttingDown = true
     while (!hooks.isEmpty()) {
-      Utils.logUncaughtExceptions(hooks.poll().run())
+      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
     }
   }
 
@@ -2184,7 +2184,6 @@ private [util] class SparkShutdownHookManager {
   }
 
   def remove(ref: AnyRef): Boolean = synchronized {
-    checkState()
     hooks.remove(ref)
   }
 
