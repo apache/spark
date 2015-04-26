@@ -39,7 +39,8 @@ class InformationGainStats(
     val rightPredict: Predict) extends Serializable {
 
   override def toString: String = {
-    s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, right impurity = $rightImpurity"
+    s"gain = $gain, impurity = $impurity, left impurity = $leftImpurity, " +
+      s"right impurity = $rightImpurity"
   }
 
   override def equals(o: Any): Boolean = o match {
