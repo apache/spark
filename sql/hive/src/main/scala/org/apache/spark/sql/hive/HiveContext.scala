@@ -119,7 +119,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (conf.dialect == "sql") {
       super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      DataFrame(this, parseSql(sqlText))
+      DataFrame(this, parseSql(substituted))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
