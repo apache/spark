@@ -134,6 +134,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the YARN Application Master to listen on.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.queue</code></td>
   <td>default</td>
   <td>
