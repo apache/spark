@@ -140,7 +140,7 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
   new NoSuchElementException(msg),
     Response
       .status(Response.Status.NOT_FOUND)
-      .entity(msg)
+      .entity(ErrorWrapper(msg))
       .build()
 )
 
@@ -148,10 +148,12 @@ private[v1] class BadParameterException(msg: String) extends WebApplicationExcep
   new IllegalArgumentException(msg),
   Response
     .status(Response.Status.BAD_REQUEST)
-    .entity(msg)
+    .entity(ErrorWrapper(msg))
     .build()
 ) {
   def this(param: String, exp: String, actual: String) = {
     this(raw"""Bad value for parameter "$param".  Expected a $exp, got "$actual"""")
   }
 }
+
+private[v1] case class ErrorWrapper(s: String)

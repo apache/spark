@@ -20,17 +20,17 @@ import java.io.OutputStream
 import java.lang.annotation.Annotation
 import java.lang.reflect.Type
 import java.text.SimpleDateFormat
-import java.util.{SimpleTimeZone, Calendar}
+import java.util.{Calendar, SimpleTimeZone}
 import javax.ws.rs.Produces
-import javax.ws.rs.core.{MultivaluedMap, MediaType}
-import javax.ws.rs.ext.{Provider, MessageBodyWriter}
+import javax.ws.rs.core.{MediaType, MultivaluedMap}
+import javax.ws.rs.ext.{MessageBodyWriter, Provider}
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.databind.{SerializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))
-class JacksonMessageWriter extends MessageBodyWriter[Object]{
+private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
 
   val mapper = new ObjectMapper() {
     override def writeValueAsString(t: Any): String = {
@@ -58,7 +58,10 @@ class JacksonMessageWriter extends MessageBodyWriter[Object]{
     mediaType: MediaType,
     multivaluedMap: MultivaluedMap[String, AnyRef],
     outputStream: OutputStream): Unit = {
-    mapper.writeValue(outputStream, t)
+    t match {
+      case ErrorWrapper(err) => outputStream.write(err.getBytes("utf-8"))
+      case _ => mapper.writeValue(outputStream, t)
+    }
   }
 
   override def getSize(
