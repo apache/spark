@@ -128,7 +128,8 @@ class SaslEncryption {
 
   }
 
-  private static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
+  @VisibleForTesting
+  static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
 
     private final SaslEncryptionBackend backend;
     private final boolean isByteBuf;
@@ -139,6 +140,7 @@ class SaslEncryption {
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
     private long currentChunkSize;
+    private long currentReportedBytes;
     private long unencryptedChunkSize;
     private long transferred;
 
@@ -199,7 +201,8 @@ class SaslEncryption {
 
       Preconditions.checkArgument(position == transfered(), "Invalid position.");
 
-      long written = 0;
+      long reportedWritten = 0L;
+      long actuallyWritten = 0L;
       do {
         if (currentChunk == null) {
           nextChunk();
@@ -208,26 +211,43 @@ class SaslEncryption {
         if (currentHeader.readableBytes() > 0) {
           int bytesWritten = target.write(currentHeader.nioBuffer());
           currentHeader.skipBytes(bytesWritten);
+          actuallyWritten += bytesWritten;
           if (currentHeader.readableBytes() > 0) {
             // Break out of loop if there are still header bytes left to write.
             break;
           }
         }
 
-        target.write(currentChunk);
+        actuallyWritten += target.write(currentChunk);
         if (!currentChunk.hasRemaining()) {
           // Only update the count of written bytes once a full chunk has been written.
           // See method javadoc.
-          written += unencryptedChunkSize;
+          long chunkBytesRemaining = unencryptedChunkSize - currentReportedBytes;
+          reportedWritten += chunkBytesRemaining;
+          transferred += chunkBytesRemaining;
           currentHeader.release();
           currentHeader = null;
           currentChunk = null;
           currentChunkSize = 0;
+          currentReportedBytes = 0;
         }
-      } while (currentChunk == null && transfered() + written < count());
+      } while (currentChunk == null && transfered() + reportedWritten < count());
 
-      transferred += written;
-      return written;
+      // Returning 0 triggers a backoff mechanism in netty which may harm performance. Instead,
+      // we return 1 until we can (i.e. until the reported count would actually match the size
+      // of the current chunk), at which point we resort to returning 0 so that the counts still
+      // match, at the cost of some performance. That situation should be rare, though.
+      if (reportedWritten != 0L) {
+        return reportedWritten;
+      }
+
+      if (actuallyWritten > 0 && currentReportedBytes < currentChunkSize - 1) {
+        transferred += 1L;
+        currentReportedBytes += 1L;
+        return 1L;
+      }
+
+      return 0L;
     }
 
     private void nextChunk() throws IOException {

@@ -33,6 +33,8 @@ import javax.security.sasl.SaslException;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -53,6 +55,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -149,6 +152,51 @@ public class SparkSaslSuite {
       assertEquals("Pong", new String(response, UTF_8));
     } finally {
       ctx.close();
+    }
+  }
+
+  @Test
+  public void testEncryptedMessage() throws Exception {
+    SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
+    byte[] data = new byte[1024];
+    new Random().nextBytes(data);
+    when(backend.wrap(any(byte[].class), anyInt(), anyInt())).thenReturn(data);
+
+    ByteBuf msg = Unpooled.buffer();
+    try {
+      msg.writeBytes(data);
+
+      // Create a channel with a really small buffer compared to the data. This means that on each
+      // call, the outbound data will not be fully written, so the write() method should return a
+      // dummy count to keep the channel alive when possible.
+      ByteArrayWritableChannel channel = new ByteArrayWritableChannel(32);
+
+      SaslEncryption.EncryptedMessage emsg =
+        new SaslEncryption.EncryptedMessage(backend, msg, 1024);
+      long count = emsg.transferTo(channel, emsg.transfered());
+      assertTrue(count < 1024);
+      assertTrue(count > 0);
+
+      // Here, the output buffer is full so nothing should be transferred.
+      assertEquals(0, emsg.transferTo(channel, emsg.transfered()));
+
+      // Now there's room in the buffer, but not enough to transfer all the remaining data,
+      // so the dummy count should be returned.
+      channel.reset();
+      assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
+
+      // Eventually, the whole message should be transferred.
+      for (int i = 0; i < data.length / 32 - 2; i++) {
+        channel.reset();
+        assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
+      }
+
+      channel.reset();
+      count = emsg.transferTo(channel, emsg.transfered());
+      assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
+      assertEquals(data.length, emsg.transfered());
+    } finally {
+      msg.release();
     }
   }
 
