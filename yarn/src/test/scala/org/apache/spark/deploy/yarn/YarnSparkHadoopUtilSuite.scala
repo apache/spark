@@ -46,11 +46,11 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     logWarning("Cannot execute bash, skipping bash tests.")
   }
 
-  def bashTest(name: String)(fn: => Unit) =
+  def bashTest(name: String)(fn: => Unit): Unit =
     if (hasBash) test(name)(fn) else ignore(name)(fn)
 
   bashTest("shell script escaping") {
-    val scriptFile = File.createTempFile("script.", ".sh")
+    val scriptFile = File.createTempFile("script.", ".sh", Utils.createTempDir())
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
       val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")

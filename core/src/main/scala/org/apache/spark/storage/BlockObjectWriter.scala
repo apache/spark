@@ -21,8 +21,9 @@ import java.io.{BufferedOutputStream, FileOutputStream, File, OutputStream}
 import java.nio.channels.FileChannel
 
 import org.apache.spark.Logging
-import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.serializer.{SerializerInstance, SerializationStream}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.util.Utils
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
@@ -70,7 +71,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
     file: File,
-    serializer: Serializer,
+    serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
@@ -82,11 +83,13 @@ private[spark] class DiskBlockObjectWriter(
 {
   /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
   private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
-    def write(i: Int): Unit = callWithTiming(out.write(i))
-    override def write(b: Array[Byte]) = callWithTiming(out.write(b))
-    override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
-    override def close() = out.close()
-    override def flush() = out.flush()
+    override def write(i: Int): Unit = callWithTiming(out.write(i))
+    override def write(b: Array[Byte]): Unit = callWithTiming(out.write(b))
+    override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+      callWithTiming(out.write(b, off, len))
+    }
+    override def close(): Unit = out.close()
+    override def flush(): Unit = out.flush()
   }
 
   /** The file channel, used for repositioning / truncating the file. */
@@ -131,20 +134,24 @@ private[spark] class DiskBlockObjectWriter(
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
-    objOut = serializer.newInstance().serializeStream(bs)
+    objOut = serializerInstance.serializeStream(bs)
     initialized = true
     this
   }
 
   override def close() {
     if (initialized) {
-      if (syncWrites) {
-        // Force outstanding writes to disk and track how long it takes
-        objOut.flush()
-        def sync = fos.getFD.sync()
-        callWithTiming(sync)
+      Utils.tryWithSafeFinally {
+        if (syncWrites) {
+          // Force outstanding writes to disk and track how long it takes
+          objOut.flush()
+          callWithTiming {
+            fos.getFD.sync()
+          }
+        }
+      } {
+        objOut.close()
       }
-      objOut.close()
 
       channel = null
       bs = null

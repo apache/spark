@@ -101,9 +101,11 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     socketRemoteConnectionManagerId
   }
 
-  def key() = channel.keyFor(selector)
+  def key(): SelectionKey = channel.keyFor(selector)
 
-  def getRemoteAddress() = channel.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]
+  def getRemoteAddress(): InetSocketAddress = {
+    channel.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]
+  }
 
   // Returns whether we have to register for further reads or not.
   def read(): Boolean = {
@@ -179,7 +181,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     buffer.get(bytes)
     bytes.foreach(x => print(x + " "))
     buffer.position(curPosition)
-    print(" (" + bytes.size + ")")
+    print(" (" + bytes.length + ")")
   }
 
   def printBuffer(buffer: ByteBuffer, position: Int, length: Int) {
@@ -280,7 +282,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
   /* channel.socket.setSendBufferSize(256 * 1024) */
 
-  override def getRemoteAddress() = address
+  override def getRemoteAddress(): InetSocketAddress = address
 
   val DEFAULT_INTEREST = SelectionKey.OP_READ
 

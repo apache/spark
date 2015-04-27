@@ -151,15 +151,14 @@ class ExternalAppendOnlyMap[K, V, C](
   override protected[this] def spill(collection: SizeTracker): Unit = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
-      curWriteMetrics)
+    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
 
     // Flush the disk writer's contents to disk, and update relevant variables
-    def flush() = {
+    def flush(): Unit = {
       val w = writer
       writer = null
       w.commitAndClose()
@@ -179,8 +178,7 @@ class ExternalAppendOnlyMap[K, V, C](
         if (objectsWritten == serializerBatchSize) {
           flush()
           curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
-            curWriteMetrics)
+          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
@@ -355,7 +353,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def isEmpty = pairs.length == 0
+      def isEmpty: Boolean = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {

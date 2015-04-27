@@ -49,7 +49,7 @@ private[sql] object JsonRDD extends Logging {
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
       if (schemaData.isEmpty()) {
-        Set.empty[(String,DataType)]
+        Set.empty[(String, DataType)]
       } else {
         parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
       }
@@ -183,7 +183,7 @@ private[sql] object JsonRDD extends Logging {
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
     // For Integer values, use LongType by default.
     val useLongType: PartialFunction[Any, DataType] = {
-      case value: IntegerType.JvmType => LongType
+      case value: IntegerType.InternalType => LongType
     }
 
     useLongType orElse ScalaReflection.typeOfObject orElse {
@@ -391,7 +391,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       // only support string as date
       case value: java.lang.String =>
-        DateUtils.millisToDays(DataTypeConversions.stringToTime(value).getTime)
+        DateUtils.millisToDays(DateUtils.stringToTime(value).getTime)
       case value: java.sql.Date => DateUtils.fromJavaDate(value)
     }
   }
@@ -400,7 +400,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
       case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
     }
   }
 
@@ -409,13 +409,13 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case StringType => toString(value)
+        case StringType => UTF8String(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
-        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
+        case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
-        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
+        case BooleanType => value.asInstanceOf[BooleanType.InternalType]
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))

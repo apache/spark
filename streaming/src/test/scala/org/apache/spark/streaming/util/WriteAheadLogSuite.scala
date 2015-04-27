@@ -291,7 +291,7 @@ object WriteAheadLogSuite {
     manager
   }
 
-  /** Read data from a segments of a log file directly and return the list of byte buffers.*/
+  /** Read data from a segments of a log file directly and return the list of byte buffers. */
   def readDataManually(segments: Seq[WriteAheadLogFileSegment]): Seq[String] = {
     segments.map { segment =>
       val reader = HdfsUtils.getInputStream(segment.path, hadoopConf)

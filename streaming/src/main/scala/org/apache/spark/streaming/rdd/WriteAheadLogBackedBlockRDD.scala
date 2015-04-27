@@ -117,8 +117,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockLocations = getBlockIdLocations().get(partition.blockId)
-    def segmentLocations = HdfsUtils.getFileSegmentLocations(
-      partition.segment.path, partition.segment.offset, partition.segment.length, hadoopConfig)
-    blockLocations.getOrElse(segmentLocations)
+    blockLocations.getOrElse(
+      HdfsUtils.getFileSegmentLocations(
+        partition.segment.path, partition.segment.offset, partition.segment.length, hadoopConfig))
   }
 }

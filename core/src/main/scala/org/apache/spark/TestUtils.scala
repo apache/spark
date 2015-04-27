@@ -107,7 +107,7 @@ private[spark] object TestUtils {
 
   private class JavaSourceFromString(val name: String, val code: String)
     extends SimpleJavaFileObject(createURI(name), SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean) = code
+    override def getCharContent(ignoreEncodingErrors: Boolean): String = code
   }
 
   /** Creates a compiled class with the given name. Class file will be placed in destDir. */
