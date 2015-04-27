@@ -132,16 +132,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.apply(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
 
   @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback(_))
+    new SparkSQLParser(fallback.parse(_))
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
-    ddlParser(sql, false).getOrElse(sqlParser(sql))
+    ddlParser.parse(sql, false).getOrElse(sqlParser.parse(sql))
   }
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
@@ -1120,12 +1120,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
     def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
-    lazy val analyzed: LogicalPlan = analyzer(logical)
+    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
-    lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
+    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
@@ -1134,7 +1134,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
+    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[Row] = executedPlan.execute()

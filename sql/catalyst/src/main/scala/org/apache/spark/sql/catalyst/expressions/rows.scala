@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{UTF8String, DataType, StructType, NativeType}
+import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -227,9 +227,9 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
         return if (order.direction == Ascending) 1 else -1
       } else {
         val comparison = order.dataType match {
-          case n: NativeType if order.direction == Ascending =>
+          case n: AtomicType if order.direction == Ascending =>
             n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case n: NativeType if order.direction == Descending =>
+          case n: AtomicType if order.direction == Descending =>
             n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case other => sys.error(s"Type $other does not support ordered operations")
         }

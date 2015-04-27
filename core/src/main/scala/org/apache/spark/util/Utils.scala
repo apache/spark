@@ -35,7 +35,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
 import com.google.common.net.InetAddresses
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -43,6 +42,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+
+import tachyon.TachyonURI
 import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
@@ -897,34 +898,6 @@ private[spark] object Utils extends Logging {
     hostPortParseResults.get(hostPort)
   }
 
-  private val daemonThreadFactoryBuilder: ThreadFactoryBuilder =
-    new ThreadFactoryBuilder().setDaemon(true)
-
-  /**
-   * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
-   */
-  def namedThreadFactory(prefix: String): ThreadFactory = {
-    daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
-  }
-
-  /**
-   * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
-  def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = namedThreadFactory(prefix)
-    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
-  /**
-   * Wrapper over newFixedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
-  def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = namedThreadFactory(prefix)
-    Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
   /**
    * Return the string to tell how long has passed in milliseconds.
    */
@@ -984,7 +957,7 @@ private[spark] object Utils extends Logging {
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(dir.getPath(), true)) {
+    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
       throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
@@ -2199,7 +2172,7 @@ private [util] class SparkShutdownHookManager {
   def runAll(): Unit = synchronized {
     shuttingDown = true
     while (!hooks.isEmpty()) {
-      Utils.logUncaughtExceptions(hooks.poll().run())
+      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
     }
   }
 
@@ -2211,7 +2184,6 @@ private [util] class SparkShutdownHookManager {
   }
 
   def remove(ref: AnyRef): Boolean = synchronized {
-    checkState()
     hooks.remove(ref)
   }
 

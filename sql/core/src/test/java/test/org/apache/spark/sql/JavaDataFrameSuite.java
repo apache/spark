@@ -162,7 +162,7 @@ public class JavaDataFrameSuite {
     Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.asJavaList(outputBuffer)));
+      Ints.toArray(JavaConversions.bufferAsJavaList(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
