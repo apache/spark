@@ -103,7 +103,7 @@ private[spark] object JsonRootResource {
  */
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
-  def getApplicationInfoList: Seq[ApplicationInfo]
+  def getApplicationInfoList: Iterator[ApplicationInfo]
 
   /**
    * Get the spark UI with the given appID, and apply a function

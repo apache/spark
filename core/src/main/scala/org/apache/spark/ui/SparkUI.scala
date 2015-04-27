@@ -92,8 +92,8 @@ private[spark] class SparkUI private (
     if (appId == appName) Some(this) else None
   }
 
-  def getApplicationInfoList: Seq[ApplicationInfo] = {
-    Seq(new ApplicationInfo(
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+    Iterator(new ApplicationInfo(
       id = appName,
       name = appName,
       startTime = new Date(startTime),

@@ -31,7 +31,7 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
     @QueryParam("status") status: JList[ApplicationStatus],
     @DefaultValue("2010-01-01") @QueryParam("minDate") minDate: SimpleDateParam,
     @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam
-  ): Seq[ApplicationInfo] = {
+  ): Iterator[ApplicationInfo] = {
     val allApps = uiRoot.getApplicationInfoList
     val adjStatus = {
       if (status.isEmpty) {

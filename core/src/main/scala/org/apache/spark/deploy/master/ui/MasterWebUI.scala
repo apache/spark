@@ -66,12 +66,12 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     ui.getHandlers.foreach(detachHandler)
   }
 
-  def getApplicationInfoList: Seq[ApplicationInfo] = {
+  def getApplicationInfoList: Iterator[ApplicationInfo] = {
     val state = masterPage.getMasterState
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    activeApps.map { ApplicationsListResource.convertApplicationInfo(_, false) } ++
-      completedApps.map { ApplicationsListResource.convertApplicationInfo(_, true) }
+    activeApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, false) } ++
+      completedApps.iterator.map { ApplicationsListResource.convertApplicationInfo(_, true) }
   }
 
   def getSparkUI(appId: String): Option[SparkUI] = {
