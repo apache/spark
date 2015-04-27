@@ -224,7 +224,6 @@ private[hive] object HiveASTNodeUtil {
     node
   }
 
-  /** todo: add comment here*/
   def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
     var remainingNodes = nodeList
     val clauses = clauseNames.map { clauseName =>
