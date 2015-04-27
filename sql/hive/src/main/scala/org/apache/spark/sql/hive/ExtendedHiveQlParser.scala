@@ -38,7 +38,7 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     restInput ^^ {
-      case statement => HiveQl.createPlan(statement.trim)
+      case statement => HiveQlConverter.createPlan(statement.trim)
     }
 
   protected lazy val dfs: Parser[LogicalPlan] =

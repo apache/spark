@@ -81,11 +81,37 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertCTAS: Boolean =
     getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
+  /* A catalyst metadata catalog that points to the Hive Metastore. */
+  @transient
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+
+  // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
+  override protected[sql] lazy val functionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry {
+      def caseSensitive: Boolean = false
+    }
+
+  /* An analyzer that uses the Hive metastore. */
+  @transient
+  override protected[sql] lazy val analyzer =
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedResolutionRules =
+        catalog.ParquetConversions ::
+          catalog.CreateTables ::
+          catalog.PreInsertionCasts ::
+          ExtractPythonUdfs ::
+          sources.PreInsertCastAndRename ::
+          Nil
+    }
+
+  override protected[sql] val sqlParser = {
+    val fallback = new ExtendedHiveQlParser
+    new SparkSQLParser(fallback.parse(_))
+  }
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
-
-  @transient
-  protected[sql] val ddlParserWithHiveQL = new DDLParser(HiveQl.parseSql(_))
 
   override def sql(sqlText: String): DataFrame = {
     val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
@@ -93,8 +119,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (conf.dialect == "sql") {
       super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      val ddlPlan = ddlParserWithHiveQL.parse(sqlText, exceptionOnError = false)
-      DataFrame(this, ddlPlan.getOrElse(HiveQl.parseSql(substituted)))
+      DataFrame(this, parseSql(sqlText))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
@@ -228,30 +253,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     super.setConf(key, value)
     runSqlHive(s"SET $key=$value")
   }
-
-  /* A catalyst metadata catalog that points to the Hive Metastore. */
-  @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
-
-  // Note that HiveUDFs will be overridden by functions registered in this context.
-  @transient
-  override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive: Boolean = false
-    }
-
-  /* An analyzer that uses the Hive metastore. */
-  @transient
-  override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
-      override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        ExtractPythonUdfs ::
-        sources.PreInsertCastAndRename ::
-        Nil
-    }
 
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
