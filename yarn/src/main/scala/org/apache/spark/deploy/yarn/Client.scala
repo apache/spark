@@ -40,7 +40,7 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
-import org.apache.hadoop.util.StringUtils
+import org.apache.hadoop.util.{ShutdownHookManager, StringUtils}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -109,6 +109,22 @@ private[spark] class Client(
     // Finally, submit and monitor the application
     logInfo(s"Submitting application ${appId.getId} to ResourceManager")
     yarnClient.submitApplication(appContext)
+
+    // In YARN Cluster mode, AM is not killed when the client is terminated by default.
+    // But if spark.yarn.am.force.shutdown is set true, AM is force shutdown.
+    if (isClusterMode && sparkConf.getBoolean("spark.yarn.am.force.shutdown", false)) {
+      val shutdownHook = new Runnable {
+        override def run() {
+          val report = getApplicationReport(appId)
+          if (report.getYarnApplicationState == YarnApplicationState.ACCEPTED ||
+              report.getYarnApplicationState == YarnApplicationState.RUNNING) {
+            yarnClient.killApplication(appId)
+          }
+        }
+      }
+      ShutdownHookManager.get().addShutdownHook(shutdownHook, 0)
+    }
+
     appId
   }
 
