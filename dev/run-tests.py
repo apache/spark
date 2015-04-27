@@ -142,8 +142,8 @@ def determine_java_executable():
 
 
 def determine_java_version(java_exe):
-    """Given a valid java executable will return its version in tuple format as:
-    [<major-version>, <minor-version>, <patch-version>, <update-version>]"""
+    """Given a valid java executable will return its version in named tuple format
+    with accessors '.major', '.minor', '.patch', '.update'"""
 
     raw_output = subprocess.check_output([java_exe, "-version"], 
                                          stderr=subprocess.STDOUT)
