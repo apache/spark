@@ -41,16 +41,17 @@ import org.apache.spark.network.util.TransportConf;
 class SaslRpcHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
+  /** Transport configuration. */
+  private final TransportConf conf;
+
+  /** The client channel. */
+  private final Channel channel;
+
   /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
 
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
-
-  /** The client channel. */
-  private final Channel channel;
-
-  private final TransportConf conf;
 
   private SparkSaslServer saslServer;
   private boolean isComplete;

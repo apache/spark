@@ -56,7 +56,6 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     this.expectedQop = encrypt ? QOP_AUTH_CONF : QOP_AUTH;
 
     Map<String, String> saslProps = ImmutableMap.<String, String>builder()
-      .putAll(SASL_PROPS)
       .put(Sasl.QOP, expectedQop)
       .build();
     try {

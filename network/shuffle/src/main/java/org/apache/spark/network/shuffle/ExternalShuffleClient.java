@@ -63,8 +63,8 @@ public class ExternalShuffleClient extends ShuffleClient {
       boolean saslEnabled,
       boolean saslEncryptionEnabled) {
     Preconditions.checkArgument(
-        !saslEncryptionEnabled || saslEnabled,
-        "SASL encryption can only be enabled if SASL is also enabled.");
+      !saslEncryptionEnabled || saslEnabled,
+      "SASL encryption can only be enabled if SASL is also enabled.");
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.saslEnabled = saslEnabled;

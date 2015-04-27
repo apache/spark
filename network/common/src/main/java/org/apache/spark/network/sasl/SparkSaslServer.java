@@ -60,21 +60,14 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   static final String DIGEST = "DIGEST-MD5";
 
   /**
-   * QOP value that includes encryption.
+   * Quality of protection value that includes encryption.
    */
   static final String QOP_AUTH_CONF = "auth-conf";
 
   /**
-   * QOP value that does not include encryption.
+   * Quality of protection value that does not include encryption.
    */
   static final String QOP_AUTH = "auth";
-
-  /**
-   * Common SASL config properties for both client and server.
-   */
-  static final Map<String, String> SASL_PROPS = ImmutableMap.<String, String>builder()
-    .put(Sasl.SERVER_AUTH, "true")
-    .build();
 
   /** Identifier for a certain secret key within the secretKeyHolder. */
   private final String secretKeyId;
@@ -88,9 +81,12 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
 
+    // Sasl.QOP is a comma-separated list of supported values. The value that allows encryption
+    // is listed first since it's preferred over the non-encrypted one (if the client also
+    // lists both in the request).
     String qop = alwaysEncrypt ? QOP_AUTH_CONF : String.format("%s,%s", QOP_AUTH_CONF, QOP_AUTH);
     Map<String, String> saslProps = ImmutableMap.<String, String>builder()
-      .putAll(SASL_PROPS)
+      .put(Sasl.SERVER_AUTH, "true")
       .put(Sasl.QOP, qop)
       .build();
     try {

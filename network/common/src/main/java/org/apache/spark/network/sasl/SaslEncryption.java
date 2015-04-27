@@ -38,6 +38,10 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
+/**
+ * Provides SASL-based encription for transport channels. The single method exposed by this
+ * class installs the needed channel handlers on a connected channel.
+ */
 class SaslEncryption {
 
   @VisibleForTesting

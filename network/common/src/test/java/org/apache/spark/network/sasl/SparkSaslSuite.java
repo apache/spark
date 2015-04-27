@@ -128,6 +128,30 @@ public class SparkSaslSuite {
     testBasicSasl(true);
   }
 
+  private void testBasicSasl(boolean encrypt) throws Exception {
+    RpcHandler rpcHandler = mock(RpcHandler.class);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          byte[] message = (byte[]) invocation.getArguments()[1];
+          RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
+          assertEquals("Ping", new String(message, UTF_8));
+          cb.onSuccess("Pong".getBytes(UTF_8));
+          return null;
+        }
+      })
+      .when(rpcHandler)
+      .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
+
+    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
+    try {
+      byte[] response = ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", new String(response, UTF_8));
+    } finally {
+      ctx.close();
+    }
+  }
+
   @Test
   public void testFileRegionEncryption() throws Exception {
     final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSizeKb";
@@ -227,30 +251,6 @@ public class SparkSaslSuite {
       if (ctx != null) {
         ctx.close();
       }
-    }
-  }
-
-  private void testBasicSasl(boolean encrypt) throws Exception {
-    RpcHandler rpcHandler = mock(RpcHandler.class);
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) {
-          byte[] message = (byte[]) invocation.getArguments()[1];
-          RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-          assertEquals("Ping", new String(message, UTF_8));
-          cb.onSuccess("Pong".getBytes(UTF_8));
-          return null;
-        }
-      })
-      .when(rpcHandler)
-      .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
-
-    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
-    try {
-      byte[] response = ctx.client.sendRpcSync("Ping".getBytes(UTF_8), TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", new String(response, UTF_8));
-    } finally {
-      ctx.close();
     }
   }
 
