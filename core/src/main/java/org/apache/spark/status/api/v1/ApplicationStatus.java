@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.api.v1;
 
-import org.apache.spark.status.api.EnumUtil;
+import org.apache.spark.util.EnumUtil;
 
 public enum ApplicationStatus {
   COMPLETED,

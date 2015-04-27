@@ -14,11 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api;
+package org.apache.spark.util;
 
 import com.google.common.base.Joiner;
-
-import java.util.Arrays;
 
 public class EnumUtil {
   public static <E extends Enum<E>> E parseIgnoreCase(Class<E> clz, String str) {
