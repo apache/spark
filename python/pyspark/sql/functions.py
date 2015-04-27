@@ -75,6 +75,20 @@ __all__ += _functions.keys()
 __all__.sort()
 
 
+def approxCountDistinct(col, rsd=None):
+    """Returns a new :class:`Column` for approximate distinct count of ``col``.
+
+    >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
+    [Row(c=2)]
+    """
+    sc = SparkContext._active_spark_context
+    if rsd is None:
+        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
+    else:
+        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
@@ -89,18 +103,16 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
-def approxCountDistinct(col, rsd=None):
-    """Returns a new :class:`Column` for approximate distinct count of ``col``.
+def sparkPartitionId():
+    """Returns a column for partition ID of the Spark task.
 
-    >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
-    [Row(c=2)]
+    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+
+    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    [Row(pid=0), Row(pid=0)]
     """
     sc = SparkContext._active_spark_context
-    if rsd is None:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
-    else:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
-    return Column(jc)
+    return Column(sc._jvm.functions.sparkPartitionId())
 
 
 class UserDefinedFunction(object):
