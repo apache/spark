@@ -17,7 +17,9 @@
 package org.apache.spark.util;
 
 import com.google.common.base.Joiner;
+import org.apache.spark.annotation.DeveloperApi;
 
+@DeveloperApi
 public class EnumUtil {
   public static <E extends Enum<E>> E parseIgnoreCase(Class<E> clz, String str) {
     E[] constants = clz.getEnumConstants();

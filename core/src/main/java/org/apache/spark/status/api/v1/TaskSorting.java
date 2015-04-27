@@ -17,11 +17,13 @@
 
 package org.apache.spark.status.api.v1;
 
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.util.EnumUtil;
 
 import java.util.HashSet;
 import java.util.Set;
 
+@DeveloperApi
 public enum TaskSorting {
   ID,
   IncreasingRuntime("runtime"),
