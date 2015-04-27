@@ -81,6 +81,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
 
   private val killExecutorThread = ThreadUtils.newDaemonSingleThreadExecutor("kill-executor-thread")
 
+  private val reportExecutorHeartbeatReceived =
+    ThreadUtils.newDaemonSingleThreadExecutor("heartbeat-receiver-report-heartbeat")
+
   override def onStart(): Unit = {
     timeoutCheckingTask = timeoutCheckingThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
@@ -99,11 +102,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
-        val unknownExecutor = !scheduler.executorHeartbeatReceived(
-          executorId, taskMetrics, blockManagerId)
-        val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
         executorLastSeen(executorId) = System.currentTimeMillis()
-        context.reply(response)
+        reportExecutorHeartbeatReceived.submit(new Runnable {
+          override def run(): Unit = {
+            val unknownExecutor = !scheduler.executorHeartbeatReceived(
+              executorId, taskMetrics, blockManagerId)
+            val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+            context.reply(response)
+          }
+        })
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
         // case rarely happens. However, if it really happens, log it and ask the executor to
@@ -137,6 +144,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel(true)
     }
+    reportExecutorHeartbeatReceived.shutdownNow()
     timeoutCheckingThread.shutdownNow()
     killExecutorThread.shutdownNow()
   }
