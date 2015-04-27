@@ -90,7 +90,7 @@ class HierarchicalClustering private (
     this
   }
 
-  def getSubIterations: Int = this.maxIterations
+  def getMaxIterations: Int = this.maxIterations
 
   /**
    * Sets the number of maximum retries of each clustering step

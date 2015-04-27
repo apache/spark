@@ -170,9 +170,9 @@ class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
 
   test("setSubIterations") {
     val algo = new HierarchicalClustering()
-    assert(algo.getSubIterations == 20)
+    assert(algo.getMaxIterations == 20)
     algo.setMaxIterations(15)
-    assert(algo.getSubIterations == 15)
+    assert(algo.getMaxIterations == 15)
   }
 
   test("setNumRetries") {
