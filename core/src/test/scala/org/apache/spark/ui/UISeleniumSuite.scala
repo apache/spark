@@ -37,7 +37,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.api.v1.{StageStatus, CustomObjectMapper}
+import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
 
 /**
  * Selenium tests for the Spark Web UI.
@@ -580,7 +580,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   }
 
   def parseDate(json: JValue): Long = {
-    CustomObjectMapper.makeISODateFormat.parse(json.extract[String]).getTime
+    JacksonMessageWriter.makeISODateFormat.parse(json.extract[String]).getTime
   }
 
   def getJson(ui: SparkUI, path: String): JValue = {

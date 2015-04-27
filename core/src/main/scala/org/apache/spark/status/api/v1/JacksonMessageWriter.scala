@@ -16,18 +16,22 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.io.OutputStream
+import java.lang.annotation.Annotation
+import java.lang.reflect.Type
 import java.text.SimpleDateFormat
-import java.util.{Calendar, SimpleTimeZone}
+import java.util.{SimpleTimeZone, Calendar}
 import javax.ws.rs.Produces
-import javax.ws.rs.core.MediaType
-import javax.ws.rs.ext.{ContextResolver, Provider}
+import javax.ws.rs.core.{MultivaluedMap, MediaType}
+import javax.ws.rs.ext.{Provider, MessageBodyWriter}
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
+import com.fasterxml.jackson.databind.{SerializationFeature, ObjectMapper}
 
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class CustomObjectMapper extends ContextResolver[ObjectMapper]{
+class JacksonMessageWriter extends MessageBodyWriter[Object]{
+
   val mapper = new ObjectMapper() {
     override def writeValueAsString(t: Any): String = {
       super.writeValueAsString(t)
@@ -36,14 +40,38 @@ private[v1] class CustomObjectMapper extends ContextResolver[ObjectMapper]{
   mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
   mapper.enable(SerializationFeature.INDENT_OUTPUT)
   mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
-  mapper.setDateFormat(CustomObjectMapper.makeISODateFormat)
+  mapper.setDateFormat(JacksonMessageWriter.makeISODateFormat)
 
-  override def getContext(tpe: Class[_]): ObjectMapper = {
-    mapper
+  override def isWriteable(
+    aClass: Class[_],
+    `type`: Type,
+    annotations: Array[Annotation],
+    mediaType: MediaType): Boolean = {
+    true
+  }
+
+  override def writeTo(
+    t: Object,
+    aClass: Class[_],
+    `type`: Type,
+    annotations: Array[Annotation],
+    mediaType: MediaType,
+    multivaluedMap: MultivaluedMap[String, AnyRef],
+    outputStream: OutputStream): Unit = {
+    mapper.writeValue(outputStream, t)
+  }
+
+  override def getSize(
+    t: Object,
+    aClass: Class[_],
+    `type`: Type,
+    annotations: Array[Annotation],
+    mediaType: MediaType): Long = {
+    -1L
   }
 }
 
-private[spark] object CustomObjectMapper {
+private[spark] object JacksonMessageWriter {
   def makeISODateFormat: SimpleDateFormat = {
     val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'")
     val cal = Calendar.getInstance(new SimpleTimeZone(0, "GMT"))
