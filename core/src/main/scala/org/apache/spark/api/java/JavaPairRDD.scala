@@ -836,6 +836,32 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     rdd.saveAsHadoopDataset(conf)
   }
 
+  /*
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
+   * `OutputFormat` class supporting the key and value types K and V in this RDD.
+   *
+   * Example:
+   * [('N', 'Nick'), ('N', 'Nancy'), ('B', 'Bob'), ('B', 'Ben'), ('F', 'Frankie')]
+   * /path/prefix/B [/part-1, /part-2, etc]
+   * /path/prefix/F [/part-1, /part-2, etc]
+   * /path/prefix/N [/part-1, /part-2, etc]
+   *
+   * @param path - The path for the parent directory
+   * @param numPartitions - The number of partitions to partition to
+   */
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
+      (implicit fm: ClassTag[F]) {
+    rdd.saveAsHadoopFileByKey(path, numPartitions)
+  }
+
+  /*
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
+   * `OutputFormat` class supporting the key and value types K and V in this RDD.
+   */
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    rdd.saveAsHadoopFileByKey(path)
+  }
+
   /**
    * Repartition the RDD according to the given partitioner and, within each resulting partition,
    * sort records by their keys.

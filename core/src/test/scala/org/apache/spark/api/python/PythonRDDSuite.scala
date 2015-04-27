@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
+import org.apache.spark.SharedSparkContext
 import org.scalatest.FunSuite
 
 class PythonRDDSuite extends FunSuite {
