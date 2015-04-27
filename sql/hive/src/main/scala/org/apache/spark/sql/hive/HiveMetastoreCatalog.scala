@@ -731,50 +731,24 @@ private[hive] case class MetastoreRelation
       }
 
       val sc = sqlContext.asInstanceOf[HiveContext]
-      val PARQUET_METADATA_FILE: String = "_metadata"
 
-      // get sizes of partitions already stored, for others
-      // compute and store the value
-      def calculatePartSize(fs: FileSystem, path: Path): Long = {
-        val fileStatus = fs.getFileStatus(path)
-        val statuses = fs.listStatus(path)
-        // Handling for parquet metadata files as well
-        val children = statuses.filterNot { status =>
-          val name = status.getPath.getName
-          (name(0) == '.' || name(0) == '_' || name == PARQUET_METADATA_FILE)
-        }
-
-        children.map(fileStatus => fileStatus.getLen).sum
-      }
-
-      def sumParts(fs: FileSystem): Long = {
+      def sumParts(): Long = {
         var size: Long = 0
         refParts.foreach { refPart =>
           // get size of the partition
           val partParams = refPart.getParameters
-          val oldSize =
+          val partSize =
             Option(partParams.get(HiveShim.getStatsSetupConstTotalSize))
               .map(_.toLong)
               .getOrElse(0L)
-          if (oldSize == 0) {
-            val path = new Path(refPart.getLocation)
-            val partSize = calculatePartSize(fs, path)
-            if (partSize > 0) {
-              size += partSize
-              val tableFullName = hiveQlTable.getDbName + "." + hiveQlTable.getTableName
-              partParams.put(HiveShim.getStatsSetupConstTotalSize, partSize.toString)
-              refPart.getTPartition.setParameters(partParams)
 
-              // store this in metastore
-              sc.catalog.synchronized {
-                try sc.catalog.client.alterPartition(tableFullName, refPart) catch {
-                  case e: Throwable => // Do nothing !
-                }
-              }
-            }
-          }
-
-          size += oldSize
+          // It is unlikely that partition size is 0 and still files are present in the
+          // partition location. This is because both alter table add partition and
+          // insert overwrite partition commands modify the total size of the partition
+          // in the metastore. For other cases its better to call analyze command for
+          // updating the metastore partition total size param, instead of calculating
+          // the size here and then storing the parameter from here.
+          size += partSize
 
           if (size > sqlContext.conf.autoBroadcastJoinThreshold) {
             return sqlContext.conf.defaultSizeInBytes
@@ -785,9 +759,7 @@ private[hive] case class MetastoreRelation
       }
 
       if (refParts.size > 0) {
-        val fp = new Path(refParts.head.getLocation)
-        val fs = fp.getFileSystem(sc.hiveconf)
-        val size = sumParts(fs)
+        val size = sumParts()
         newStatistics = Option(BigInt(size))
       }
     }
