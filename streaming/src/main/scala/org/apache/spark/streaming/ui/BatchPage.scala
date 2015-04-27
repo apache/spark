@@ -182,9 +182,15 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * Generate the job table for the batch.
    */
   private def generateJobTable(batchUIData: BatchUIData): Seq[Node] = {
+    val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_._1).toSeq.
+      sortBy(_._1). // sorted by OutputOpId
+      map { case (outputOpId, outputOpIdAndSparkJobIdPairs) =>
+        // sort SparkJobIds for each OutputOpId
+        (outputOpId, outputOpIdAndSparkJobIdPairs.map(_._2).sorted)
+      }
     sparkListener.synchronized {
       val outputOpIdWithJobs: Seq[(OutputOpId, Seq[JobUIData])] =
-        batchUIData.outputOpIdToSparkJobIds.map { case (outputOpId, sparkJobIds) =>
+        outputOpIdToSparkJobIds.map { case (outputOpId, sparkJobIds) =>
           // Filter out spark Job ids that don't exist in sparkListener
           (outputOpId, sparkJobIds.flatMap(getJobData))
         }
@@ -248,7 +254,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       </div>
 
     val jobTable =
-      if (batchUIData.outputOpIdToSparkJobIds.isEmpty) {
+      if (batchUIData.outputOpIdSparkJobIdPairs.isEmpty) {
         <div>Cannot find any job for Batch {formattedBatchTime}.</div>
       } else {
         generateJobTable(batchUIData)

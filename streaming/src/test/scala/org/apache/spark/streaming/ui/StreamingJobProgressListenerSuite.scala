@@ -107,7 +107,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     val batchUIData = listener.getBatchUIData(Time(1000))
     assert(batchUIData != None)
     assert(batchUIData.get.batchInfo === batchInfoStarted)
-    assert(batchUIData.get.outputOpIdToSparkJobIds === Seq(0 -> Seq(0, 1), 1 -> Seq(0, 1)))
+    assert(batchUIData.get.outputOpIdSparkJobIdPairs === Seq((0, 0), (0, 1), (1, 0), (1, 1)))
 
     // onBatchCompleted
     val batchInfoCompleted = BatchInfo(Time(1000), receivedBlockInfo, 1000, Some(2000), None)
@@ -198,7 +198,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
     // We still can see the info retrieved from onJobStart
     listener.getBatchUIData(Time(1000 + limit * 100)) should be
-      Some(BatchUIData(batchInfoSubmitted, Seq((0, Seq(0)))))
+      Some(BatchUIData(batchInfoSubmitted, Seq(0 -> 0)))
 
 
     // A lot of "onBatchCompleted"s happen before "onJobStart"
@@ -220,7 +220,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     }
 
     // We should not leak memory
-    listener.batchTimeToOutputOpIdToSparkJobIds.size() should be <=
+    listener.batchTimeToOutputOpIdSparkJobIdPair.size() should be <=
       (listener.waitingBatches.size + listener.runningBatches.size +
         listener.retainedCompletedBatches.size + 10)
   }

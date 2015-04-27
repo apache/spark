@@ -21,11 +21,7 @@ package org.apache.spark.streaming.ui
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
-/**
- * The data in outputOpIdToSparkJobIds are sorted by `OutputOpId` in ascending order, and for each
- * `OutputOpId`, the corresponding SparkJobId`s are sorted in ascending order.
- */
 private[ui] case class BatchUIData(
     batchInfo: BatchInfo,
-    outputOpIdToSparkJobIds: Seq[(OutputOpId, Seq[SparkJobId])]) {
+    outputOpIdSparkJobIdPairs: Seq[(OutputOpId, SparkJobId)]) {
 }
