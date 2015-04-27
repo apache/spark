@@ -1547,7 +1547,7 @@ class Variable(Base):
     __tablename__ = "variable"
 
     id = Column(Integer, primary_key=True)
-    key = Column(String(512))
+    key = Column(String(ID_LEN), unique=True)
     val = Column(Text)
 
     def __repr__(self):

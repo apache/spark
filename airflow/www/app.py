@@ -1198,7 +1198,7 @@ class Airflow(BaseView):
                     session = settings.Session()
                     var = models.Variable(key=form, val=json.dumps(data))
                     session.add(var)
-                    session.commit() 
+                    session.commit()
                 return ""
             else:
                 return self.render(
@@ -1622,7 +1622,7 @@ admin.add_view(mv)
 '''
 
 class VariableView(LoginMixin, ModelView):
-    pass
+    column_list = ('key',)
 
 mv = VariableView(
     models.Variable, Session, name="Variables", category="Admin")
