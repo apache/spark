@@ -284,9 +284,20 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
+   * 
+   * Deprecated in favor of the version with the arguments reversed
    */
+  @deprecated("Use the same function with the arguments reversed", "1.4.0")
   def reduceByKey(partitioner: Partitioner, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
-    fromRDD(rdd.reduceByKey(partitioner, func))
+    fromRDD(rdd.reduceByKey(func, partitioner))
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce.
+   */
+  def reduceByKey(func: JFunction2[V, V, V], partitioner: Partitioner): JavaPairRDD[K, V] =
+    fromRDD(rdd.reduceByKey(func, partitioner))
 
   /**
    * Merge the values for each key using an associative reduce function, but return the results

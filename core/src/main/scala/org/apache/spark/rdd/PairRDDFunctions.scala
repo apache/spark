@@ -53,7 +53,8 @@ import org.apache.spark.util.random.StratifiedSamplingUtils
  */
 class PairRDDFunctions[K, V](self: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
-  extends Logging
+  extends PairRDDLike[K, V, RDD]
+  with Logging
   with SparkHadoopMapReduceUtil
   with Serializable
 {
@@ -70,7 +71,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassTag](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
@@ -105,7 +106,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Simplified version of combineByKey that hash-partitions the output RDD.
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassTag](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = {
@@ -260,18 +261,22 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
+   * 
+   * Deprecated in favor of the version with the arguments reversed, to fit in with all the 
+   * other functions in this class with similar signatures.
    */
+  @deprecated("Use the same function with the arguments reversed", "1.4.0")
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
-    combineByKey[V]((v: V) => v, func, func, partitioner)
+    reduceByKey(func, partitioner)
   }
 
   /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
+   * "combiner" in MapReduce.
    */
-  def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
-    reduceByKey(new HashPartitioner(numPartitions), func)
+  def reduceByKey(func: (V, V) => V, partitioner: Partitioner): RDD[(K, V)] = {
+    combineByKey[V]((v: V) => v, func, func, partitioner)
   }
 
   /**
@@ -548,9 +553,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
+  def combineByKey[C: ClassTag](createCombiner: V => C, mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C)
     : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
+  }
+
+  /**
+   * Simplified version of combineByKey that takes the default map side combiner and serializer
+   */
+  def combineByKey[C: ClassTag](createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      partitioner: Partitioner): RDD[(K, C)] = {
+    combineByKey[C](createCombiner, mergeValue, mergeCombiners, partitioner, true, null)
   }
 
   /**
@@ -668,7 +684,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValues[U](f: V => U): RDD[(K, U)] = {
+  def mapValues[U: ClassTag](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MapPartitionsRDD[(K, U), (K, V)](self,
       (context, pid, iter) => iter.map { case (k, v) => (k, cleanF(v)) },
@@ -679,7 +695,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
-  def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = {
+  def flatMapValues[U: ClassTag](f: V => TraversableOnce[U]): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MapPartitionsRDD[(K, U), (K, V)](self,
       (context, pid, iter) => iter.flatMap { case (k, v) =>

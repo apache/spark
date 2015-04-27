@@ -52,7 +52,7 @@ class WindowedDStream[T: ClassTag](
 
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
-  override def persist(level: StorageLevel): DStream[T] = {
+  override def persist(level: StorageLevel): this.type = {
     // Do not let this windowed DStream be persisted as windowed (union-ed) RDDs share underlying
     // RDDs and persisting the windowed RDDs would store numerous copies of the underlying data.
     // Instead control the persistence of the parent DStream.

@@ -68,7 +68,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
-  override def persist(storageLevel: StorageLevel): DStream[(K,V)] = {
+  override def persist(storageLevel: StorageLevel): this.type = {
     super.persist(storageLevel)
     reducedStream.persist(storageLevel)
     this

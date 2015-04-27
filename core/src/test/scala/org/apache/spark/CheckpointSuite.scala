@@ -200,14 +200,14 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     testRDD(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
-        rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
+        rdd.map(x => (x % 2, 1)).reduceByKey(_ + _, partitioner)
       ))
     })
 
     testRDDPartitions(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
-        rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
+        rdd.map(x => (x % 2, 1)).reduceByKey(_ + _, partitioner)
       ))
     })
 

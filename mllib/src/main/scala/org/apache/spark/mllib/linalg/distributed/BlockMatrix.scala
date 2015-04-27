@@ -352,11 +352,11 @@ class BlockMatrix(
       // Each block of A must be multiplied with the corresponding blocks in each column of B.
       // TODO: Optimize to send block to a partition once, similar to ALS
       val flatA = blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
-        Iterator.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
+        Traversable.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
       }
       // Each block of B must be multiplied with the corresponding blocks in each row of A.
       val flatB = other.blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
-        Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
+        Traversable.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
       }
       val newBlocks: RDD[MatrixBlock] = flatA.cogroup(flatB, resultPartitioner)
         .flatMap { case ((blockRowIndex, blockColIndex, _), (a, b)) =>
@@ -370,9 +370,9 @@ class BlockMatrix(
               case sparse: SparseMatrix => a.head.multiply(sparse.toDense)
               case _ => throw new SparkException(s"Unrecognized matrix type ${b.head.getClass}.")
             }
-            Iterator(((blockRowIndex, blockColIndex), C.toBreeze))
+            Traversable(((blockRowIndex, blockColIndex), C.toBreeze))
           } else {
-            Iterator()
+            Traversable()
           }
       }.reduceByKey(resultPartitioner, (a, b) => a + b)
         .mapValues(Matrices.fromBreeze)

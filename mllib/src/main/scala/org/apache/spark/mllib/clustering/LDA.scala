@@ -443,7 +443,7 @@ private[clustering] object LDA {
       // Add edges for terms with non-zero counts.
       termCounts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
         Edge(docID, term2index(term), cnt)
-      }
+      }.toTraversable
     }
 
     val vocabSize = docs.take(1).head._2.size
