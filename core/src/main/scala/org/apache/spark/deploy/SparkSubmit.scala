@@ -343,10 +343,14 @@ object SparkSubmit {
           val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
           val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
           if (!pyArchivesFile.exists()) {
-            val pySrc = new File(Seq(sparkHome, "python", "pyspark").mkString(File.separator))
-            Utils.zipRecursive(pySrc, pyArchivesFile)
+            printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
           }
-          pythonPath += pyArchivesFile.getAbsolutePath
+          val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+          if (!py4jFile.exists()) {
+            printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
+              "in yarn mode.")
+          }
+          pythonPath += Seq(pyLibPath, "pyspark.zip").mkString(File.separator)
           pythonPath += Seq(pyLibPath, "py4j-0.8.2.1-src.zip").mkString(File.separator)
         }
         pyArchives = pythonPath.mkString(",")
