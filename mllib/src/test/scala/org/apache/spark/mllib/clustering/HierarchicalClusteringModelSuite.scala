@@ -35,11 +35,11 @@ class HierarchicalClusteringModelSuite
     val data = sc.parallelize(localData.map(_._2))
     val model = app.run(data)
 
-    val clusters = model.getClusters()
+    val clusters = model.getClusters
     assert(clusters.isInstanceOf[Array[ClusterTree]])
     assert(clusters.size === 5)
 
-    val centers = model.getCenters().sortBy(_.toArray.sum)
+    val centers = model.getCenters.sortBy(_.toArray.sum)
     assert(centers.size === 5)
     assert(centers(0) === Vectors.dense(0.0, 0.0, 0.0))
     assert(centers(1) === Vectors.dense(1.0, 1.0, 1.0))
@@ -74,11 +74,11 @@ class HierarchicalClusteringModelSuite
     val data = sc.parallelize(localData.map(_._2))
     val model = app.run(data)
 
-    val clusters = model.getClusters()
+    val clusters = model.getClusters
     assert(clusters.isInstanceOf[Array[ClusterTree]])
     assert(clusters.size === 5)
 
-    val centers = model.getCenters().sortBy(_.toArray.sum)
+    val centers = model.getCenters.sortBy(_.toArray.sum)
     assert(centers.size === 5)
     assert(centers(0) === Vectors.sparse(5, Array(), Array()))
     assert(centers(1) === Vectors.sparse(5, Array(1), Array(1.0)))
@@ -113,14 +113,14 @@ class HierarchicalClusteringModelSuite
       // dense version
       val denseData = sc.parallelize(localData.map(_._2), 2)
       val denseModel = app.run(denseData)
-      assert(denseModel.getCenters().size === numClusters)
-      assert(denseModel.getClusters().forall(_.variancesNorm == 0.0))
+      assert(denseModel.getCenters.size === numClusters)
+      assert(denseModel.getClusters.forall(_.variancesNorm == 0.0))
 
       // sparse version
       val sparseData = sc.parallelize(localData.map(_._3), 2)
       val sparseModel = app.run(sparseData)
-      assert(sparseModel.getCenters().size === numClusters)
-      assert(sparseModel.getClusters().forall(_.variancesNorm == 0.0))
+      assert(sparseModel.getCenters.size === numClusters)
+      assert(sparseModel.getClusters.forall(_.variancesNorm == 0.0))
     }
   }
 

@@ -44,9 +44,9 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
     }
   }
 
-  def getClusters(): Array[ClusterTree] = this.tree.getLeavesNodes()
+  def getClusters: Array[ClusterTree] = this.tree.getLeavesNodes
 
-  def getCenters(): Array[Vector] = this.getClusters().map(_.center)
+  def getCenters: Array[Vector] = this.getClusters.map(_.center)
 
   /**
    * Predicts the closest cluster by one point
@@ -55,7 +55,7 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
 
-    val centers = this.getCenters().map(_.toBreeze)
+    val centers = this.getCenters.map(_.toBreeze)
     HierarchicalClustering.findClosestCenter(metric)(centers)(vector.toBreeze)
   }
 
@@ -68,7 +68,7 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
     sc.broadcast(metric)
-    val centers = this.getCenters().map(_.toBreeze)
+    val centers = this.getCenters.map(_.toBreeze)
     sc.broadcast(centers)
 
     data.map{point =>
@@ -86,7 +86,7 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
    * Computes Within Set Sum of Squeared Error(WSSSE)
    */
   def WSSSE(data: RDD[Vector]): Double = {
-    val bvCenters = this.getCenters().map(_.toBreeze)
+    val bvCenters = this.getCenters.map(_.toBreeze)
     data.context.broadcast(bvCenters)
     val distances = data.map {point =>
       val bvPoint = point.toBreeze

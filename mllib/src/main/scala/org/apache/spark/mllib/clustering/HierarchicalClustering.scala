@@ -182,7 +182,7 @@ class HierarchicalClustering private (
 
     // make a hierarchical clustering model
     val model = new HierarchicalClusteringModel(root.get)
-    val leavesNodes = model.getClusters()
+    val leavesNodes = model.getClusters
     if (leavesNodes.size < this.numClusters) {
       log.warn(s"# clusters is less than you have expected: ${leavesNodes.size} / ${numClusters}. ")
     }
@@ -530,7 +530,7 @@ class ClusterTree private (
       case _ => Array(this) ++ this.children.flatMap(child => child.toArray().toIterator)
     }
     array.sortWith { case (a, b) =>
-      a.getDepth() < b.getDepth() && a.variances.toArray.sum < b.variances.toArray.sum
+      a.getDepth < b.getDepth && a.variances.toArray.sum < b.variances.toArray.sum
     }
   }
 
@@ -539,35 +539,35 @@ class ClusterTree private (
    *
    * @return the depth from the root
    */
-  def getDepth(): Int = {
+  def getDepth: Int = {
     this.parent match {
       case None => 0
-      case _ => 1 + this.parent.get.getDepth()
+      case _ => 1 + this.parent.get.getDepth
     }
   }
 
   /**
    * Gets the leaves nodes in the cluster tree
    */
-  def getLeavesNodes(): Array[ClusterTree] = {
-    this.toArray().filter(_.isLeaf()).sortBy(_.center.toArray.sum)
+  def getLeavesNodes: Array[ClusterTree] = {
+    this.toArray().filter(_.isLeaf).sortBy(_.center.toArray.sum)
   }
 
-  def isLeaf(): Boolean = (this.children.size == 0)
+  def isLeaf: Boolean = (this.children.size == 0)
 
-  def getParent(): Option[ClusterTree] = this.parent
+  def getParent: Option[ClusterTree] = this.parent
 
-  def getChildren(): Seq[ClusterTree] = this.children
+  def getChildren: Seq[ClusterTree] = this.children
 
   /**
    * Gets the dendrogram height of the cluster at the cluster tree
    *
    * @return the dendrogram height
    */
-  def getHeight(): Double = {
+  def getHeight: Double = {
     this.children.size match {
       case 0 => 0.0
-      case _ => this.localHeight + this.children.map(_.getHeight()).max
+      case _ => this.localHeight + this.children.map(_.getHeight).max
     }
   }
 
