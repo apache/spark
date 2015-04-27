@@ -200,7 +200,7 @@ private[spark] object JettyUtils extends Logging {
    */
   def startJettyServer(
       hostName: String,
-      port: Int,
+      port: String,
       handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {

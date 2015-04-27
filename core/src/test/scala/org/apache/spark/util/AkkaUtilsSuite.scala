@@ -42,7 +42,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val securityManager = new SecurityManager(conf)
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
     assert(securityManager.isAuthenticationEnabled() === true)
 
@@ -58,7 +58,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === true)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, conf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", conf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerEndpoint =
@@ -76,7 +76,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
@@ -90,7 +90,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     badconf.set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(badconf)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, badconf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", badconf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
@@ -122,7 +122,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -138,7 +138,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerGood.isAuthenticationEnabled() === true)
 
-    val slaveRpcEnv =RpcEnv.create("spark-slave", hostname, 0, goodconf, securityManagerGood)
+    val slaveRpcEnv =RpcEnv.create("spark-slave", hostname, "0", goodconf, securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
@@ -170,7 +170,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -187,7 +187,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, badconf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", badconf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerEndpoint =
@@ -203,7 +203,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
@@ -215,7 +215,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val slaveConf = sparkSSLConfig()
     val securityManagerBad = new SecurityManager(slaveConf)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slaves", hostname, 0, slaveConf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slaves", hostname, "0", slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
@@ -248,7 +248,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -262,7 +262,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     slaveConf.set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(slaveConf)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
@@ -295,7 +295,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -310,7 +310,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     slaveConf.set("spark.authenticate.secret", "bad")
     val securityManagerBad = new SecurityManager(slaveConf)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerEndpoint =
@@ -327,7 +327,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = RpcEnv.create("spark", hostname, 0, conf, securityManager)
+    val rpcEnv = RpcEnv.create("spark", hostname, "0", conf, securityManager)
     System.setProperty("spark.hostPort", rpcEnv.address.hostPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
@@ -339,7 +339,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val slaveConf = sparkSSLConfig()
     val securityManagerBad = new SecurityManager(slaveConf)
 
-    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, "0", slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     try {
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)

@@ -38,7 +38,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf()
-    env = createRpcEnv(conf, "local", 12345)
+    env = createRpcEnv(conf, "local", "12345")
   }
 
   override def afterAll(): Unit = {
@@ -47,7 +47,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv
+  def createRpcEnv(conf: SparkConf, name: String, port: String): RpcEnv
 
   test("send a message locally") {
     @volatile var message: String = null
@@ -75,7 +75,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote" ,13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote" ,"13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "send-remotely")
     try {
@@ -130,7 +130,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-remotely")
     try {
@@ -157,7 +157,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val conf = new SparkConf()
     conf.set("spark.rpc.retry.wait", "0")
     conf.set("spark.rpc.numRetries", "1")
-    val anotherEnv = createRpcEnv(conf, "remote", 13345)
+    val anotherEnv = createRpcEnv(conf, "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
@@ -415,7 +415,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "sendWithReply-remotely")
     try {
@@ -455,7 +455,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-remotely-error")
@@ -495,7 +495,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "network-events")
@@ -524,7 +524,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", "13345")
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-unserializable-error")

@@ -115,7 +115,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   private def findFreePort(): Int = {
     val candidatePort = RandomUtils.nextInt(1024, 65536)
-    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
+    Utils.startServiceOnPort(candidatePort.toString, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)

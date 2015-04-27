@@ -42,7 +42,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 private[nio] class ConnectionManager(
-    port: Int,
+    port: String,
     conf: SparkConf,
     securityManager: SecurityManager,
     name: String = "Connection manager")
@@ -1015,7 +1015,7 @@ private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
     val conf = new SparkConf
-    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
+    val manager = new ConnectionManager("9999", conf, new SecurityManager(conf))
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None

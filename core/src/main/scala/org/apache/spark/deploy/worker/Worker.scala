@@ -44,8 +44,8 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
   */
 private[worker] class Worker(
     host: String,
-    port: Int,
-    webUiPort: Int,
+    port: String,
+    webUiPort: String,
     cores: Int,
     memory: Int,
     masterAkkaUrls: Array[String],
@@ -58,7 +58,6 @@ private[worker] class Worker(
   import context.dispatcher
 
   Utils.checkHost(host, "Expected hostname")
-  assert (port > 0)
 
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  
@@ -197,7 +196,7 @@ private[worker] class Worker(
     for (masterAkkaUrl <- masterAkkaUrls) {
       logInfo("Connecting to master " + masterAkkaUrl + "...")
       val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      actor ! RegisterWorker(workerId, host, port.toInt, cores, memory, webUi.boundPort.toInt, publicAddress)
     }
   }
 
@@ -236,7 +235,7 @@ private[worker] class Worker(
          */
         if (master != null) {
           master ! RegisterWorker(
-            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+            workerId, host, port.toInt, cores, memory, webUi.boundPort.toInt, publicAddress)
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()
@@ -480,7 +479,7 @@ private[worker] class Worker(
       masterDisconnected()
 
     case RequestWorkerState =>
-      sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
+      sender ! WorkerStateResponse(host, port.toInt, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
@@ -539,8 +538,8 @@ private[deploy] object Worker extends Logging {
 
   def startSystemAndActor(
       host: String,
-      port: Int,
-      webUiPort: Int,
+      port: String,
+      webUiPort: String,
       cores: Int,
       memory: Int,
       masterUrls: Array[String],

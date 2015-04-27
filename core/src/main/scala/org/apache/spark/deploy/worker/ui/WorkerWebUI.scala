@@ -34,7 +34,7 @@ private[worker]
 class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
-    requestedPort: Int)
+    requestedPort: String)
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 

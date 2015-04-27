@@ -25,8 +25,8 @@ import org.apache.spark.util.{IntParam, Utils}
  */
 private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
-  var port = 7077
-  var webUiPort = 8080
+  var port = "7077"
+  var webUiPort = "8080"
   var propertiesFile: String = null
 
   // Check for settings in environment variables
@@ -34,10 +34,10 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
   if (System.getenv("SPARK_MASTER_PORT") != null) {
-    port = System.getenv("SPARK_MASTER_PORT").toInt
+    port = System.getenv("SPARK_MASTER_PORT")
   }
   if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
-    webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
+    webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT")
   }
 
   parse(args.toList)
@@ -46,7 +46,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   if (conf.contains("spark.master.ui.port")) {
-    webUiPort = conf.get("spark.master.ui.port").toInt
+    webUiPort = conf.get("spark.master.ui.port")
   }
 
   private def parse(args: List[String]): Unit = args match {
@@ -60,11 +60,11 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
       host = value
       parse(tail)
 
-    case ("--port" | "-p") :: IntParam(value) :: tail =>
+    case ("--port" | "-p") :: value :: tail =>
       port = value
       parse(tail)
 
-    case "--webui-port" :: IntParam(value) :: tail =>
+    case "--webui-port" :: value :: tail =>
       webUiPort = value
       parse(tail)
 

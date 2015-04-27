@@ -29,7 +29,7 @@ import org.apache.spark.storage.BlockManagerId
 class MapOutputTrackerSuite extends FunSuite {
   private val conf = new SparkConf
 
-  def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
+  def createRpcEnv(name: String, host: String = "localhost", port: String = "0",
       securityManager: SecurityManager = new SecurityManager(conf)): RpcEnv = {
     RpcEnv.create(name, host, port, conf, securityManager)
   }
@@ -113,13 +113,13 @@ class MapOutputTrackerSuite extends FunSuite {
 
   test("remote fetch") {
     val hostname = "localhost"
-    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+    val rpcEnv = createRpcEnv("spark", hostname, "0", new SecurityManager(conf))
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
-    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, "0", new SecurityManager(conf))
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)

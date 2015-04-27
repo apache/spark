@@ -44,7 +44,7 @@ class HistoryServer(
     conf: SparkConf,
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
-    port: Int)
+    port: String)
   extends WebUI(securityManager, port, conf) with Logging {
 
   // How many applications to retain
@@ -189,7 +189,7 @@ object HistoryServer extends Logging {
       .newInstance(conf)
       .asInstanceOf[ApplicationHistoryProvider]
 
-    val port = conf.getInt("spark.history.ui.port", 18080)
+    val port = conf.get("spark.history.ui.port", "18080")
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()

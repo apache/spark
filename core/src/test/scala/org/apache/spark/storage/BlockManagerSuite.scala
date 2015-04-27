@@ -73,7 +73,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   }
 
   override def beforeEach(): Unit = {
-    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    rpcEnv = RpcEnv.create("test", "localhost", "0", conf, securityMgr)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")

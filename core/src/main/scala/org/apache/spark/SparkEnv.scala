@@ -182,7 +182,7 @@ object SparkEnv extends Logging {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
-    val port = conf.get("spark.driver.port").toInt
+    val port = conf.get("spark.driver.port")
     create(
       conf,
       SparkContext.DRIVER_IDENTIFIER,
@@ -203,7 +203,7 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       executorId: String,
       hostname: String,
-      port: Int,
+      port: String,
       numCores: Int,
       isLocal: Boolean): SparkEnv = {
     val env = create(
@@ -226,7 +226,7 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       executorId: String,
       hostname: String,
-      port: Int,
+      port: String,
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
@@ -342,7 +342,7 @@ object SparkEnv extends Logging {
 
     val httpFileServer =
       if (isDriver) {
-        val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+        val fileServerPort = conf.get("spark.fileserver.port", "0")
         val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)

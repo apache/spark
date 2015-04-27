@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 private[spark] class HttpFileServer(
     conf: SparkConf,
     securityManager: SecurityManager,
-    requestedPort: Int = 0)
+    requestedPort: String = "0")
   extends Logging {
 
   var baseDir : File = null

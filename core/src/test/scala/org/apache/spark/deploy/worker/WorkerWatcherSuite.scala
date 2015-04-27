@@ -26,7 +26,7 @@ import org.scalatest.FunSuite
 class WorkerWatcherSuite extends FunSuite {
   test("WorkerWatcher shuts down on valid disassociation") {
     val conf = new SparkConf()
-    val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+    val rpcEnv = RpcEnv.create("test", "localhost", "12345", conf, new SecurityManager(conf))
     val targetWorkerUrl = "akka://test@1.2.3.4:1234/user/Worker"
     val targetWorkerAddress = AddressFromURIString(targetWorkerUrl)
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
@@ -40,7 +40,7 @@ class WorkerWatcherSuite extends FunSuite {
 
   test("WorkerWatcher stays alive on invalid disassociation") {
     val conf = new SparkConf()
-    val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+    val rpcEnv = RpcEnv.create("test", "localhost", "12345", conf, new SecurityManager(conf))
     val targetWorkerUrl = "akka://test@1.2.3.4:1234/user/Worker"
     val otherAkkaURL = "akka://test@4.3.2.1:1234/user/OtherActor"
     val otherAkkaAddress = AddressFromURIString(otherAkkaURL)

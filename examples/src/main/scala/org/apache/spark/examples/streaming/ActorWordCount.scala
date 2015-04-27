@@ -113,7 +113,7 @@ object FeederActor {
     val Seq(host, port) = args.toSeq
 
     val conf = new SparkConf
-    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = conf,
+    val actorSystem = AkkaUtils.createActorSystem("test", host, port, conf = conf,
       securityManager = new SecurityManager(conf))._1
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 

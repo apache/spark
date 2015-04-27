@@ -74,9 +74,9 @@ class UISuite extends FunSuite {
     val server = new ServerSocket(0)
     val startPort = server.getLocalPort
     val serverInfo1 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
+      "0.0.0.0", startPort.toString, Seq[ServletContextHandler](), new SparkConf)
     val serverInfo2 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
+      "0.0.0.0", startPort.toString, Seq[ServletContextHandler](), new SparkConf)
     // Allow some wiggle room in case ports on the machine are under contention
     val boundPort1 = serverInfo1.boundPort
     val boundPort2 = serverInfo2.boundPort
@@ -90,7 +90,7 @@ class UISuite extends FunSuite {
 
   test("jetty binds to port 0 correctly") {
     val serverInfo = JettyUtils.startJettyServer(
-      "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
+      "0.0.0.0", "0", Seq[ServletContextHandler](), new SparkConf)
     val server = serverInfo.server
     val boundPort = serverInfo.boundPort
     assert(server.getState === "STARTED")

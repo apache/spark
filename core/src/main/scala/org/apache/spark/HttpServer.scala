@@ -46,12 +46,12 @@ private[spark] class HttpServer(
     conf: SparkConf,
     resourceBase: File,
     securityManager: SecurityManager,
-    requestedPort: Int = 0,
+    requestedPort: String = "0",
     serverName: String = "HTTP server")
   extends Logging {
 
   private var server: Server = null
-  private var port: Int = requestedPort
+  private var port: Int = 0
 
   def start() {
     if (server != null) {

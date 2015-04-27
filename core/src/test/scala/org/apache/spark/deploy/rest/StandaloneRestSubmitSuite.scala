@@ -396,13 +396,13 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val conf = new SparkConf
     val localhost = Utils.localHostName()
     val securityManager = new SecurityManager(conf)
-    val (_actorSystem, _) = AkkaUtils.createActorSystem(name, localhost, 0, conf, securityManager)
+    val (_actorSystem, _) = AkkaUtils.createActorSystem(name, localhost, "0", conf, securityManager)
     val fakeMasterRef = _actorSystem.actorOf(Props(makeFakeMaster))
     val _server =
       if (faulty) {
-        new FaultyStandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new FaultyStandaloneRestServer(localhost, "0", fakeMasterRef, "spark://fake:7077", conf)
       } else {
-        new StandaloneRestServer(localhost, 0, fakeMasterRef, "spark://fake:7077", conf)
+        new StandaloneRestServer(localhost, "0", fakeMasterRef, "spark://fake:7077", conf)
       }
     val port = _server.start()
     // set these to clean them up after every test
@@ -562,7 +562,7 @@ private class SmarterMaster extends Actor {
  */
 private class FaultyStandaloneRestServer(
     host: String,
-    requestedPort: Int,
+    requestedPort: String,
     masterActor: ActorRef,
     masterUrl: String,
     masterConf: SparkConf)

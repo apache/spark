@@ -146,7 +146,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
-      val port = executorConf.getInt("spark.executor.port", 0)
+      val port = executorConf.get("spark.executor.port", "0")
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
         hostname,

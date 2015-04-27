@@ -177,7 +177,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   test ("HttpFileServer should work with SSL") {
     val sparkConf = sparkSSLConfig()
     val sm = new SecurityManager(sparkConf)
-    val server = new HttpFileServer(sparkConf, sm, 0)
+    val server = new HttpFileServer(sparkConf, sm, "0")
     try {
       server.initialize()
 
@@ -193,7 +193,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     sparkConf.set("spark.authenticate.secret", "good")
 
     val sm = new SecurityManager(sparkConf)
-    val server = new HttpFileServer(sparkConf, sm, 0)
+    val server = new HttpFileServer(sparkConf, sm, "0")
     try {
       server.initialize()
 
@@ -209,7 +209,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     sparkConf.set("spark.authenticate.secret", "bad")
 
     val sm = new SecurityManager(sparkConf)
-    val server = new HttpFileServer(sparkConf, sm, 0)
+    val server = new HttpFileServer(sparkConf, sm, "0")
     try {
       server.initialize()
 
@@ -224,7 +224,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   test ("HttpFileServer should not work with SSL when the server is untrusted") {
     val sparkConf = sparkSSLConfigUntrusted()
     val sm = new SecurityManager(sparkConf)
-    val server = new HttpFileServer(sparkConf, sm, 0)
+    val server = new HttpFileServer(sparkConf, sm, "0")
     try {
       server.initialize()
 

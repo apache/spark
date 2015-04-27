@@ -77,7 +77,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
   /** Find a free port */
   private def findFreePort(): Int = {
     val candidatePort = RandomUtils.nextInt(1024, 65536)
-    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
+    Utils.startServiceOnPort(candidatePort.toString, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)

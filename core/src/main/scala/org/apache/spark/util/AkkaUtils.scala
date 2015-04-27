@@ -47,7 +47,7 @@ private[spark] object AkkaUtils extends Logging {
   def createActorSystem(
       name: String,
       host: String,
-      port: Int,
+      port: String,
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
     val startService: Int => (ActorSystem, Int) = { actualPort =>

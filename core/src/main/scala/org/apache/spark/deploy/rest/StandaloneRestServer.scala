@@ -60,7 +60,7 @@ import org.apache.spark.deploy.ClientArguments._
  */
 private[deploy] class StandaloneRestServer(
     host: String,
-    requestedPort: Int,
+    requestedPort: String,
     masterActor: ActorRef,
     masterUrl: String,
     masterConf: SparkConf)

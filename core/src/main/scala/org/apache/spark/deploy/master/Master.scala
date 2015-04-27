@@ -52,7 +52,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger
 private[master] class Master(
     host: String,
     port: Int,
-    webUiPort: Int,
+    webUiPort: String,
     val securityMgr: SecurityManager,
     val conf: SparkConf)
   extends Actor with ActorLogReceive with Logging with LeaderElectable {
@@ -129,7 +129,7 @@ private[master] class Master(
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
   private val restServer =
     if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
+      val port = conf.get("spark.master.rest.port", "6066")
       Some(new StandaloneRestServer(host, port, self, masterUrl, conf))
     } else {
       None
@@ -923,8 +923,8 @@ private[deploy] object Master extends Logging {
    */
   def startSystemAndActor(
       host: String,
-      port: Int,
-      webUiPort: Int,
+      port: String,
+      webUiPort: String,
       conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,

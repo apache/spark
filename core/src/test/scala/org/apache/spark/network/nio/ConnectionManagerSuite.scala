@@ -37,7 +37,7 @@ class ConnectionManagerSuite extends FunSuite {
   test("security default off") {
     val conf = new SparkConf
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
     var receivedMessage = false
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       receivedMessage = true
@@ -62,14 +62,14 @@ class ConnectionManagerSuite extends FunSuite {
     conf.set("spark.authenticate.secret", "good")
     conf.set("spark.app.id", "app-id")
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
     var numReceivedMessages = 0
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       numReceivedMessages += 1
       None
     })
-    val managerServer = new ConnectionManager(0, conf, securityManager)
+    val managerServer = new ConnectionManager("0", conf, securityManager)
     var numReceivedServerMessages = 0
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       numReceivedServerMessages += 1
@@ -99,7 +99,7 @@ class ConnectionManagerSuite extends FunSuite {
     conf.set("spark.app.id", "app-id")
     conf.set("spark.authenticate.secret", "good")
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
     var numReceivedMessages = 0
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
@@ -109,7 +109,7 @@ class ConnectionManagerSuite extends FunSuite {
 
     val badconf = conf.clone.set("spark.authenticate.secret", "bad")
     val badsecurityManager = new SecurityManager(badconf)
-    val managerServer = new ConnectionManager(0, badconf, badsecurityManager)
+    val managerServer = new ConnectionManager("0", badconf, badsecurityManager)
     var numReceivedServerMessages = 0
 
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
@@ -138,7 +138,7 @@ class ConnectionManagerSuite extends FunSuite {
     conf.set("spark.authenticate", "false")
     conf.set("spark.authenticate.secret", "good")
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
     var numReceivedMessages = 0
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
@@ -150,7 +150,7 @@ class ConnectionManagerSuite extends FunSuite {
     badconf.set("spark.authenticate", "true")
     badconf.set("spark.authenticate.secret", "good")
     val badsecurityManager = new SecurityManager(badconf)
-    val managerServer = new ConnectionManager(0, badconf, badsecurityManager)
+    val managerServer = new ConnectionManager("0", badconf, badsecurityManager)
     var numReceivedServerMessages = 0
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       numReceivedServerMessages += 1
@@ -188,7 +188,7 @@ class ConnectionManagerSuite extends FunSuite {
     val conf = new SparkConf
     conf.set("spark.authenticate", "false")
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
     var numReceivedMessages = 0
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
@@ -199,7 +199,7 @@ class ConnectionManagerSuite extends FunSuite {
     val badconf = new SparkConf
     badconf.set("spark.authenticate", "false")
     val badsecurityManager = new SecurityManager(badconf)
-    val managerServer = new ConnectionManager(0, badconf, badsecurityManager)
+    val managerServer = new ConnectionManager("0", badconf, badsecurityManager)
     var numReceivedServerMessages = 0
 
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
@@ -234,8 +234,8 @@ class ConnectionManagerSuite extends FunSuite {
     val conf = new SparkConf
     conf.set("spark.authenticate", "false")
     val securityManager = new SecurityManager(conf)
-    val manager = new ConnectionManager(0, conf, securityManager)
-    val managerServer = new ConnectionManager(0, conf, securityManager)
+    val manager = new ConnectionManager("0", conf, securityManager)
+    val managerServer = new ConnectionManager("0", conf, securityManager)
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       throw new Exception("Custom exception text")
     })
@@ -264,12 +264,12 @@ class ConnectionManagerSuite extends FunSuite {
     clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeoutS}s")
 
     val clientSecurityManager = new SecurityManager(clientConf)
-    val manager = new ConnectionManager(0, clientConf, clientSecurityManager)
+    val manager = new ConnectionManager("0", clientConf, clientSecurityManager)
 
     val serverConf = new SparkConf
     serverConf.set("spark.authenticate", "false")
     val serverSecurityManager = new SecurityManager(serverConf)
-    val managerServer = new ConnectionManager(0, serverConf, serverSecurityManager)
+    val managerServer = new ConnectionManager("0", serverConf, serverSecurityManager)
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       // sleep 60 sec > ack timeout for simulating server slow down or hang up
       Thread.sleep(ackTimeoutS * 3 * 1000)

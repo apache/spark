@@ -38,7 +38,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  */
 private[spark] abstract class WebUI(
     securityManager: SecurityManager,
-    port: Int,
+    port: String,
     conf: SparkConf,
     basePath: String = "",
     name: String = "")

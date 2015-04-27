@@ -89,11 +89,11 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = 4040
+  val DEFAULT_PORT = "4040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 
-  def getUIPort(conf: SparkConf): Int = {
-    conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
+  def getUIPort(conf: SparkConf): String = {
+    conf.get("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
 
   def createLiveUI(
