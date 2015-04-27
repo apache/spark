@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.json
 
+import java.io.StringWriter
 import java.sql.{Date, Timestamp}
 
+import com.fasterxml.jackson.core.JsonFactory
 import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
+import org.apache.spark.sql.json.JsonRDD.compatibleType
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
@@ -44,6 +46,18 @@ class JsonSuite extends QueryTest {
       assert(expected == actual,
         s"Promoted value ${actual}(${actual.getClass}) does not equal the expected value " +
           s"${expected}(${expected.getClass}).")
+    }
+
+    val factory = new JsonFactory()
+    def enforceCorrectType(value: Any, dataType: DataType): Any = {
+      val writer = new StringWriter()
+      val generator = factory.createGenerator(writer)
+      generator.writeObject(value)
+      generator.flush()
+
+      val parser = factory.createParser(writer.toString)
+      parser.nextToken()
+      JsonRDD2.convertField(factory, parser, dataType)
     }
 
     val intNumber: Int = 2147483647
@@ -439,7 +453,7 @@ class JsonSuite extends QueryTest {
     val jsonDF = jsonRDD(primitiveFieldValueTypeConflict)
     jsonDF.registerTempTable("jsonTable")
 
-    // Right now, the analyzer does not promote strings in a boolean expreesion.
+    // Right now, the analyzer does not promote strings in a boolean expression.
     // Number and Boolean conflict: resolve the type as boolean in this query.
     checkAnswer(
       sql("select num_bool from jsonTable where NOT num_bool"),
@@ -508,7 +522,7 @@ class JsonSuite extends QueryTest {
       Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
         Row(null, """{"field":false}""", null, null, "{}") ::
         Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
-        Row(Seq(7), "{}","[str1,str2,33]", Row("str"), """{"field":true}""") :: Nil
+        Row(Seq(7), "{}","""["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil
     )
   }
 
