@@ -965,6 +965,7 @@ class Airflow(BaseView):
                 list(set([op.__class__ for op in dag.tasks])),
                 key=lambda x: x.__name__
             ),
+            root=root,
             dag=dag, data=data, blur=blur)
 
     @expose('/graph')
@@ -1043,6 +1044,7 @@ class Airflow(BaseView):
                 key=lambda x: x.__name__
             ),
             blur=blur,
+            root=root,
             task_instances=json.dumps(task_instances, indent=2),
             tasks=json.dumps(tasks, indent=2),
             nodes=json.dumps(nodes, indent=2),

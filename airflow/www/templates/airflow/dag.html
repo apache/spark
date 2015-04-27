@@ -7,11 +7,16 @@
 {% endblock %}
 
 {% block body %}
+  <h3>
   {% if dag.parent_dag %}
-    <h3><span style='color:#AAA;'>SUBDAG:</span> <span>{{ dag.dag_id }}</span></h3>
+    <span style='color:#AAA;'>SUBDAG:</span> <span>{{ dag.dag_id }}</span>
   {% else %}
-    <h3><span style='color:#AAA;'>DAG:</span> <span>{{ dag.dag_id }}</span></h3>
+    <span style='color:#AAA;'>DAG:</span> <span>{{ dag.dag_id }}</span>
   {% endif %}
+  {% if root %}
+    <span style='color:#AAA;'>ROOT:</span> <span>{{ root }}</span>
+  {% endif %}
+  </h3>
   <ul class="nav nav-pills">
     {% if dag.parent_dag %}
         <li class="never_active"><a href="{{ url_for("airflow.graph", dag_id=dag.parent_dag.dag_id) }}">
@@ -19,10 +24,10 @@
             Back to {{ dag.parent_dag.dag_id }}</a>
         </li>
     {% endif %}
-    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
+    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id, root=root) }}">
         <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
       Graph View</a></li>
-    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}">
+    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25, root=root) }}">
         <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
       Tree View
     </a></li>
