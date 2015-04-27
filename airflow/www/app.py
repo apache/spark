@@ -1187,6 +1187,27 @@ class Airflow(BaseView):
             height=height,
         )
 
+    @expose('/variables/<form>', methods=["GET", "POST"])
+    @login_required
+    def variables(self, form):
+        try:
+            if request.method == 'POST':
+                data = request.json
+                print data
+                if data:
+                    session = settings.Session()
+                    var = models.Variable(key=form, val=json.dumps(data))
+                    session.add(var)
+                    session.commit() 
+                return ""
+            else:
+                return self.render(
+                    'airflow/variables/{}.html'.format(form)
+                )
+        except:
+            return ("Error: form airflow/variables/{}.html "
+                    "not found.").format(form), 404
+
 
 admin.add_view(Airflow(name='DAGs'))
 
@@ -1599,3 +1620,10 @@ mv = KnowEventTypeView(
     Session, name="Known Event Types", category="Manage")
 admin.add_view(mv)
 '''
+
+class VariableView(LoginMixin, ModelView):
+    pass
+
+mv = VariableView(
+    models.Variable, Session, name="Variables", category="Admin")
+admin.add_view(mv)

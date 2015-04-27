@@ -1541,3 +1541,14 @@ class KnownEvent(Base):
 
     def __repr__(self):
         return self.label
+
+
+class Variable(Base):
+    __tablename__ = "variable"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(512))
+    val = Column(Text)
+
+    def __repr__(self):
+        return '{} : {}'.format(self.key, self.val)
