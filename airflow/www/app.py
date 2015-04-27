@@ -1622,5 +1622,5 @@ class VariableView(LoginMixin, ModelView):
     pass
 
 mv = VariableView(
-    models.Variable, Session, name="Variables", category="Browse")
+    models.Variable, Session, name="Variables", category="Admin")
 admin.add_view(mv)

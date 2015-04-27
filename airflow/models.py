@@ -1551,4 +1551,4 @@ class Variable(Base):
     val = Column(Text)
 
     def __repr__(self):
-        return '"{}" : {}'.format(self.key, self.key)
+        return '{} : {}'.format(self.key, self.val)
