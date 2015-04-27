@@ -174,7 +174,7 @@ public class SparkSaslSuite {
       SaslEncryption.EncryptedMessage emsg =
         new SaslEncryption.EncryptedMessage(backend, msg, 1024);
       long count = emsg.transferTo(channel, emsg.transfered());
-      assertTrue(count < 1024);
+      assertTrue(count < data.length);
       assertTrue(count > 0);
 
       // Here, the output buffer is full so nothing should be transferred.

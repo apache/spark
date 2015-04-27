@@ -139,7 +139,6 @@ class SaslEncryption {
     private final FileRegion region;
     private final int maxOutboundBlockSize;
     private final ExposedByteArrayOutputStream byteStream;
-    private final WritableByteChannel byteChannel;
 
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
@@ -157,7 +156,6 @@ class SaslEncryption {
       this.region = isByteBuf ? null : (FileRegion) msg;
       this.maxOutboundBlockSize = maxOutboundBlockSize;
       this.byteStream = new ExposedByteArrayOutputStream(maxOutboundBlockSize);
-      this.byteChannel = Channels.newChannel(byteStream);
     }
 
     /**
@@ -262,6 +260,7 @@ class SaslEncryption {
         int count = Math.min(maxOutboundBlockSize, buf.readableBytes());
         buf.readBytes(byteStream, count);
       } else {
+        WritableByteChannel byteChannel = Channels.newChannel(byteStream);
         region.transferTo(byteChannel, region.transfered());
       }
 
