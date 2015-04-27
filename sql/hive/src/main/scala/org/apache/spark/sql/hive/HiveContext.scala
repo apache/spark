@@ -105,6 +105,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           Nil
     }
 
+  @transient
   override protected[sql] val sqlParser = {
     val fallback = new ExtendedHiveQlParser
     new SparkSQLParser(fallback.parse(_))
