@@ -66,8 +66,8 @@ if __name__ == "__main__":
 
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
     if len(sys.argv) > 3:
-      conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
-        "hbase.mapreduce.inputtable": table}
+        conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
+                "hbase.mapreduce.inputtable": table}
     keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
     valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
 
