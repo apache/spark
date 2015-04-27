@@ -159,7 +159,7 @@ object SparkBuild extends PomBuild {
   // TODO: Add Sql to mima checks
   // TODO: remove launcher from this list after 1.3.
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, launcher).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, launcher, unsafe).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
