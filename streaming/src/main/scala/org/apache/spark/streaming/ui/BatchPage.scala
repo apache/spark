@@ -30,10 +30,6 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.{SparkJobId, OutputOpId}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
-private[ui] case class BatchUIData(
-    var batchInfo: BatchInfo = null,
-    outputOpIdToSparkJobIds: Map[OutputOpId, ArrayBuffer[SparkJobId]] = Map()) {
-}
 
 private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private val streamingListener = parent.listener
@@ -184,18 +180,12 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * Generate the job table for the batch.
    */
   private def generateJobTable(batchUIData: BatchUIData): Seq[Node] = {
-    val outputOpIdWithSparkJobIds: Seq[(OutputOpId, Seq[SparkJobId])] = {
-      batchUIData.outputOpIdToSparkJobIds.toSeq.sortBy(_._1). // sorted by OutputOpId
-        map { case (outputOpId, jobs) =>
-          (outputOpId, jobs.sorted.toSeq) // sort JobIds for each OutputOpId
-        }
-    }
     sparkListener.synchronized {
-      val outputOpIdWithJobs: Seq[(OutputOpId, Seq[JobUIData])] = outputOpIdWithSparkJobIds.map {
-        case (outputOpId, sparkJobIds) =>
+      val outputOpIdWithJobs: Seq[(OutputOpId, Seq[JobUIData])] =
+        batchUIData.outputOpIdToSparkJobIds.map { case (outputOpId, sparkJobIds) =>
           // Filter out spark Job ids that don't exist in sparkListener
           (outputOpId, sparkJobIds.flatMap(getJobData))
-      }
+        }
 
       <table id="batch-job-table" class="table table-bordered table-striped table-condensed">
         <thead>
