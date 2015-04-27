@@ -77,8 +77,8 @@ import org.apache.spark.{Partition, SparkContext}
 private[spark] class DefaultDialect extends Dialect {
   @transient
   protected val sqlParser = {
-    val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback.parse)
+    val catalystSqlParser = new catalyst.SqlParser
+    new SparkSQLParser(catalystSqlParser.parse)
   }
 
   override def parse(sqlText: String): LogicalPlan = {
@@ -189,7 +189,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
         conf.unsetConf(SQLConf.DIALECT)
         // throw out the exception, and the default sql dialect will take effect for next query.
         throw new DialectException(
-          s"Unsupported SQL alias: $dialect, will set it as '${conf.dialect}'", e)
+          s"""Instantiating dialect '$dialect' failed.
+             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
     }
   }
 
