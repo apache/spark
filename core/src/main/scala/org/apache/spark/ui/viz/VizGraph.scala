@@ -134,7 +134,7 @@ private[ui] object VizGraph {
 
   /** Return the dot representation of a node. */
   private def makeDotNode(node: VizNode): String = {
-    s"""${node.id} [label="${node.name}"]"""
+    s"""${node.id} [label="${node.name} (${node.id})"]"""
   }
 
   /** Return the dot representation of a subgraph recursively. */
