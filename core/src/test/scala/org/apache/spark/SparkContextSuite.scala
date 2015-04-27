@@ -272,21 +272,6 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
 
     } finally {
       sc.stop()
-      if (file1.exists()) {
-        file1.delete()
-      }
-      if (file2.exists()) {
-        file2.delete()
-      }
-      if (file3.exists()) {
-        file3.delete()
-      }
-      if (file4.exists()) {
-        file4.delete()
-      }
-      if (file5.exists()) {
-        file5.delete()
-      }
     }
   }
 }
