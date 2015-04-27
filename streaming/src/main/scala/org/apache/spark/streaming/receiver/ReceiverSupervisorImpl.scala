@@ -21,16 +21,18 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
 
+import akka.actor.{ActorRef, Actor, Props}
+import akka.pattern.ask
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{Logging, SparkEnv, SparkException}
-import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -61,23 +63,37 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
 
-  /** Remote RpcEndpointRef for the ReceiverTracker */
-  private val trackerEndpoint = RpcUtils.makeDriverRef("ReceiverTracker", env.conf, env.rpcEnv)
+  /** Remote Akka actor for the ReceiverTracker */
+  private val trackerActor = {
+    val ip = env.conf.get("spark.driver.host", "localhost")
+    val port = env.conf.getInt("spark.driver.port", 7077)
+    val url = AkkaUtils.address(
+      AkkaUtils.protocol(env.actorSystem),
+      SparkEnv.driverActorSystemName,
+      ip,
+      port,
+      "ReceiverTracker")
+    env.actorSystem.actorSelection(url)
+  }
 
-  /** RpcEndpointRef for receiving messages from the ReceiverTracker in the driver */
-  private val endpoint = env.rpcEnv.setupEndpoint(
-    "Receiver-" + streamId + "-" + System.currentTimeMillis(), new ThreadSafeRpcEndpoint {
-      override val rpcEnv: RpcEnv = env.rpcEnv
+  /** Timeout for Akka actor messages */
+  private val askTimeout = AkkaUtils.askTimeout(env.conf)
+
+  /** Akka actor for receiving messages from the ReceiverTracker in the driver */
+  private val actor = env.actorSystem.actorOf(
+    Props(new Actor {
 
       override def receive: PartialFunction[Any, Unit] = {
         case StopReceiver =>
           logInfo("Received stop signal")
-          ReceiverSupervisorImpl.this.stop("Stopped by driver", None)
+          stop("Stopped by driver", None)
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
       }
-    })
+
+      def ref: ActorRef = self
+    }), "Receiver-" + streamId + "-" + System.currentTimeMillis())
 
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
@@ -146,14 +162,15 @@ private[streaming] class ReceiverSupervisorImpl(
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
 
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, blockStoreResult)
-    trackerEndpoint.askWithReply[Boolean](AddBlock(blockInfo))
+    val future = trackerActor.ask(AddBlock(blockInfo))(askTimeout)
+    Await.result(future, askTimeout)
     logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */
   def reportError(message: String, error: Throwable) {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
-    trackerEndpoint.send(ReportError(streamId, message, errorString))
+    trackerActor ! ReportError(streamId, message, errorString)
     logWarning("Reported error " + message + " - " + error)
   }
 
@@ -163,19 +180,22 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override protected def onStop(message: String, error: Option[Throwable]) {
     blockGenerator.stop()
-    env.rpcEnv.stop(endpoint)
+    env.actorSystem.stop(actor)
   }
 
   override protected def onReceiverStart() {
     val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), endpoint)
-    trackerEndpoint.askWithReply[Boolean](msg)
+      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), actor)
+    val future = trackerActor.ask(msg)(askTimeout)
+    Await.result(future, askTimeout)
   }
 
   override protected def onReceiverStop(message: String, error: Option[Throwable]) {
     logInfo("Deregistering receiver " + streamId)
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
-    trackerEndpoint.askWithReply[Boolean](DeregisterReceiver(streamId, message, errorString))
+    val future = trackerActor.ask(
+      DeregisterReceiver(streamId, message, errorString))(askTimeout)
+    Await.result(future, askTimeout)
     logInfo("Stopped receiver " + streamId)
   }
 

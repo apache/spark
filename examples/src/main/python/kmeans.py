@@ -22,7 +22,6 @@ examples/src/main/python/mllib/kmeans.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """
-from __future__ import print_function
 
 import sys
 
@@ -48,12 +47,12 @@ def closestPoint(p, centers):
 if __name__ == "__main__":
 
     if len(sys.argv) != 4:
-        print("Usage: kmeans <file> <k> <convergeDist>", file=sys.stderr)
+        print >> sys.stderr, "Usage: kmeans <file> <k> <convergeDist>"
         exit(-1)
 
-    print("""WARN: This is a naive implementation of KMeans Clustering and is given
+    print >> sys.stderr, """WARN: This is a naive implementation of KMeans Clustering and is given
        as an example! Please refer to examples/src/main/python/mllib/kmeans.py for an example on
-       how to use MLlib's KMeans implementation.""", file=sys.stderr)
+       how to use MLlib's KMeans implementation."""
 
     sc = SparkContext(appName="PythonKMeans")
     lines = sc.textFile(sys.argv[1])
@@ -70,13 +69,13 @@ if __name__ == "__main__":
         pointStats = closest.reduceByKey(
             lambda (x1, y1), (x2, y2): (x1 + x2, y1 + y2))
         newPoints = pointStats.map(
-            lambda xy: (xy[0], xy[1][0] / xy[1][1])).collect()
+            lambda (x, (y, z)): (x, y / z)).collect()
 
         tempDist = sum(np.sum((kPoints[x] - y) ** 2) for (x, y) in newPoints)
 
         for (x, y) in newPoints:
             kPoints[x] = y
 
-    print("Final centers: " + str(kPoints))
+    print "Final centers: " + str(kPoints)
 
     sc.stop()

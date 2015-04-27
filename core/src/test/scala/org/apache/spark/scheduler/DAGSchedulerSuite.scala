@@ -57,18 +57,20 @@ class MyRDD(
     locations: Seq[Seq[String]] = Nil) extends RDD[(Int, Int)](sc, dependencies) with Serializable {
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
-  override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
-    override def index: Int = i
+  override def getPartitions = (0 until numPartitions).map(i => new Partition {
+    override def index = i
   }).toArray
   override def getPreferredLocations(split: Partition): Seq[String] =
-    if (locations.isDefinedAt(split.index)) locations(split.index) else Nil
+    if (locations.isDefinedAt(split.index))
+      locations(split.index)
+    else
+      Nil
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite
-  extends FunSuiteLike with BeforeAndAfter with LocalSparkContext with Timeouts {
+class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -207,8 +209,7 @@ class DAGSchedulerSuite
     assert(taskSet.tasks.size >= results.size)
     for ((result, i) <- results.zipWithIndex) {
       if (i < taskSet.tasks.size) {
-        runEvent(CompletionEvent(
-          taskSet.tasks(i), result._1, result._2, null, createFakeTaskInfo(), null))
+        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, null, createFakeTaskInfo(), null))
       }
     }
   }
@@ -268,23 +269,21 @@ class DAGSchedulerSuite
     submit(new MyRDD(sc, 1, Nil), Array(0))
     complete(taskSets(0), List((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("local job") {
     val rdd = new PairOfIntsRDD(sc, Nil) {
       override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
         Array(42 -> 0).iterator
-      override def getPartitions: Array[Partition] =
-        Array( new Partition { override def index: Int = 0 } )
-      override def getPreferredLocations(split: Partition): List[String] = Nil
-      override def toString: String = "DAGSchedulerSuite Local RDD"
+      override def getPartitions = Array( new Partition { override def index = 0 } )
+      override def getPreferredLocations(split: Partition) = Nil
+      override def toString = "DAGSchedulerSuite Local RDD"
     }
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(
-      JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("local job oom") {
@@ -296,10 +295,9 @@ class DAGSchedulerSuite
       override def toString = "DAGSchedulerSuite Local RDD"
     }
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(
-      JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
     assert(results.size == 0)
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("run trivial job w/ dependency") {
@@ -308,7 +306,7 @@ class DAGSchedulerSuite
     submit(finalRdd, Array(0))
     complete(taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("cache location preferences w/ dependency") {
@@ -321,7 +319,7 @@ class DAGSchedulerSuite
     assertLocations(taskSet, Seq(Seq("hostA", "hostB")))
     complete(taskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("regression test for getCacheLocs") {
@@ -337,7 +335,7 @@ class DAGSchedulerSuite
   }
 
   test("avoid exponential blowup when getting preferred locs list") {
-    // Build up a complex dependency graph with repeated zip operations, without preferred locations
+    // Build up a complex dependency graph with repeated zip operations, without preferred locations.
     var rdd: RDD[_] = new MyRDD(sc, 1, Nil)
     (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
     // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
@@ -359,7 +357,7 @@ class DAGSchedulerSuite
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("trivial job failure") {
@@ -369,7 +367,7 @@ class DAGSchedulerSuite
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("trivial job cancellation") {
@@ -380,7 +378,7 @@ class DAGSchedulerSuite
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("job cancellation no-kill backend") {
@@ -389,20 +387,18 @@ class DAGSchedulerSuite
     val noKillTaskScheduler = new TaskScheduler() {
       override def rootPool: Pool = null
       override def schedulingMode: SchedulingMode = SchedulingMode.NONE
-      override def start(): Unit = {}
-      override def stop(): Unit = {}
-      override def submitTasks(taskSet: TaskSet): Unit = {
+      override def start() = {}
+      override def stop() = {}
+      override def submitTasks(taskSet: TaskSet) = {
         taskSets += taskSet
       }
       override def cancelTasks(stageId: Int, interruptThread: Boolean) {
         throw new UnsupportedOperationException
       }
-      override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
-      override def defaultParallelism(): Int = 2
-      override def executorHeartbeatReceived(
-          execId: String,
-          taskMetrics: Array[(Long, TaskMetrics)],
-          blockManagerId: BlockManagerId): Boolean = true
+      override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
+      override def defaultParallelism() = 2
+      override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+        blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
@@ -426,7 +422,7 @@ class DAGSchedulerSuite
     // When the task set completes normally, state should be correctly updated.
     complete(taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.isEmpty)
@@ -446,7 +442,7 @@ class DAGSchedulerSuite
            Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("run trivial shuffle with fetch failure") {
@@ -469,11 +465,10 @@ class DAGSchedulerSuite
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
-      Array("hostA", "hostB"))
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) === Array("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("trivial shuffle with multiple fetch failures") {
@@ -526,23 +521,19 @@ class DAGSchedulerSuite
     assert(newEpoch > oldEpoch)
     val taskSet = taskSets(0)
     // should be ignored for being too old
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
     // should work because it's a non-failed host
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
     // should be ignored for being too old
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
-    runEvent(CompletionEvent(
-      taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("run shuffle with map stage failure") {
@@ -561,7 +552,7 @@ class DAGSchedulerSuite
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.toSet === Set(0))
 
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   /**
@@ -595,7 +586,7 @@ class DAGSchedulerSuite
     class FailureRecordingJobListener() extends JobListener {
       var failureMessage: String = _
       override def taskSucceeded(index: Int, result: Any) {}
-      override def jobFailed(exception: Exception): Unit = { failureMessage = exception.getMessage }
+      override def jobFailed(exception: Exception) = { failureMessage = exception.getMessage }
     }
     val listener1 = new FailureRecordingJobListener()
     val listener2 = new FailureRecordingJobListener()
@@ -615,7 +606,7 @@ class DAGSchedulerSuite
 
     assert(listener1.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assert(listener2.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("run trivial shuffle with out-of-band failure and retry") {
@@ -638,7 +629,7 @@ class DAGSchedulerSuite
            Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("recursive shuffle failures") {
@@ -667,7 +658,7 @@ class DAGSchedulerSuite
     complete(taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
     complete(taskSets(5), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("cached post-shuffle") {
@@ -699,7 +690,7 @@ class DAGSchedulerSuite
     complete(taskSets(3), Seq((Success, makeMapStatus("hostD", 1))))
     complete(taskSets(4), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
@@ -751,7 +742,7 @@ class DAGSchedulerSuite
   }
 
   test("accumulator not calculated for resubmitted result stage") {
-    // just for register
+    //just for register
     val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam)
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
@@ -763,7 +754,7 @@ class DAGSchedulerSuite
 
     assert(accVal === 1)
 
-    assertDataStructuresEmpty()
+    assertDataStructuresEmpty
   }
 
   /**
@@ -783,7 +774,7 @@ class DAGSchedulerSuite
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)
 
-  private def assertDataStructuresEmpty(): Unit = {
+  private def assertDataStructuresEmpty = {
     assert(scheduler.activeJobs.isEmpty)
     assert(scheduler.failedStages.isEmpty)
     assert(scheduler.jobIdToActiveJob.isEmpty)
@@ -792,7 +783,6 @@ class DAGSchedulerSuite
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
-    assert(scheduler.outputCommitCoordinator.isEmpty)
   }
 
   // Nothing in this test should break if the task info's fields are null, but

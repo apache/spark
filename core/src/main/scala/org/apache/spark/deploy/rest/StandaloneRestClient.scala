@@ -27,7 +27,6 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.Utils
 
 /**
  * A client that submits applications to the standalone Master using a REST protocol.
@@ -149,11 +148,8 @@ private[deploy] class StandaloneRestClient extends Logging {
     conn.setRequestProperty("charset", "utf-8")
     conn.setDoOutput(true)
     val out = new DataOutputStream(conn.getOutputStream)
-    Utils.tryWithSafeFinally {
-      out.write(json.getBytes(Charsets.UTF_8))
-    } {
-      out.close()
-    }
+    out.write(json.getBytes(Charsets.UTF_8))
+    out.close()
     readResponse(conn)
   }
 
@@ -245,7 +241,7 @@ private[deploy] class StandaloneRestClient extends Logging {
       }
     } else {
       val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError(s"Application submission failed$failMessage")
+      logError("Application submission failed" + failMessage)
     }
   }
 

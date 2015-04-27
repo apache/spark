@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -101,16 +101,16 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
   override def toString: String = getClass.getSimpleName.stripSuffix("$")
 }
 
-private[sql] abstract class NativeColumnType[T <: AtomicType](
+private[sql] abstract class NativeColumnType[T <: NativeType](
     val dataType: T,
     typeId: Int,
     defaultSize: Int)
-  extends ColumnType[T, T#InternalType](typeId, defaultSize) {
+  extends ColumnType[T, T#JvmType](typeId, defaultSize) {
 
   /**
    * Scala TypeTag. Can be used to create primitive arrays and hash tables.
    */
-  def scalaTag: TypeTag[dataType.InternalType] = dataType.tag
+  def scalaTag: TypeTag[dataType.JvmType] = dataType.tag
 }
 
 private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
@@ -312,28 +312,26 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     row.getString(ordinal).getBytes("utf-8").length + 4
   }
 
-  override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
-    val stringBytes = v.getBytes
+  override def append(v: String, buffer: ByteBuffer): Unit = {
+    val stringBytes = v.getBytes("utf-8")
     buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
   }
 
-  override def extract(buffer: ByteBuffer): UTF8String = {
+  override def extract(buffer: ByteBuffer): String = {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    UTF8String(stringBytes)
+    new String(stringBytes, "utf-8")
   }
 
-  override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {
-    row.update(ordinal, value)
+  override def setField(row: MutableRow, ordinal: Int, value: String): Unit = {
+    row.setString(ordinal, value)
   }
 
-  override def getField(row: Row, ordinal: Int): UTF8String = {
-    row(ordinal).asInstanceOf[UTF8String]
-  }
+  override def getField(row: Row, ordinal: Int): String = row.getString(ordinal)
 
   override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int): Unit = {
-    to.update(toOrdinal, from(fromOrdinal))
+    to.setString(toOrdinal, from.getString(fromOrdinal))
   }
 }
 

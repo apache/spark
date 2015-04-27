@@ -28,13 +28,10 @@ import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBloc
 import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, WriteAheadLogWriter}
 import org.apache.spark.util.Utils
 
-class WriteAheadLogBackedBlockRDDSuite
-  extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
-
+class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName(this.getClass.getSimpleName)
-
   val hadoopConf = new Configuration()
 
   var sparkContext: SparkContext = null
@@ -89,8 +86,7 @@ class WriteAheadLogBackedBlockRDDSuite
    * @param numPartitionsInWAL Number of partitions to write to the Write Ahead Log
    * @param testStoreInBM Test whether blocks read from log are stored back into block manager
    */
-  private def testRDD(
-      numPartitionsInBM: Int, numPartitionsInWAL: Int, testStoreInBM: Boolean = false) {
+  private def testRDD(numPartitionsInBM: Int, numPartitionsInWAL: Int, testStoreInBM: Boolean = false) {
     val numBlocks = numPartitionsInBM + numPartitionsInWAL
     val data = Seq.fill(numBlocks, 10)(scala.util.Random.nextString(50))
 
@@ -114,7 +110,7 @@ class WriteAheadLogBackedBlockRDDSuite
       "Unexpected blocks in BlockManager"
     )
 
-    // Make sure that the right `numPartitionsInWAL` blocks are in WALs, and other are not
+    // Make sure that the right `numPartitionsInWAL` blocks are in write ahead logs, and other are not
     require(
       segments.takeRight(numPartitionsInWAL).forall(s =>
         new File(s.path.stripPrefix("file://")).exists()),
@@ -156,6 +152,6 @@ class WriteAheadLogBackedBlockRDDSuite
   }
 
   private def generateFakeSegments(count: Int): Seq[WriteAheadLogFileSegment] = {
-    Array.fill(count)(new WriteAheadLogFileSegment("random", 0L, 0))
+    Array.fill(count)(new WriteAheadLogFileSegment("random", 0l, 0))
   }
 }

@@ -177,7 +177,7 @@ class LDA private (
   def getBeta: Double = getTopicConcentration
 
   /** Alias for [[setTopicConcentration()]] */
-  def setBeta(beta: Double): this.type = setTopicConcentration(beta)
+  def setBeta(beta: Double): this.type = setBeta(beta)
 
   /**
    * Maximum number of iterations for learning.

@@ -44,6 +44,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>

@@ -26,7 +26,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
-import org.apache.spark.util.Utils
 
 private[sql] object JDBCRDD extends Logging {
   /**
@@ -61,7 +60,6 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.NCLOB         => StringType
       case java.sql.Types.NULL          => null
       case java.sql.Types.NUMERIC       => DecimalType.Unlimited
-      case java.sql.Types.NVARCHAR      => StringType
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
@@ -153,7 +151,7 @@ private[sql] object JDBCRDD extends Logging {
   def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
     () => {
       try {
-        if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
+        if (driver != null) Class.forName(driver)
       } catch {
         case e: ClassNotFoundException => {
           logWarning(s"Couldn't find class $driver", e);
@@ -235,7 +233,7 @@ private[sql] class JDBCRDD(
    * Converts value to SQL expression.
    */
   private def compileValue(value: Any): Any = value match {
-    case stringValue: UTF8String => s"'${escapeSql(stringValue.toString)}'"
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
     case _ => value
   }
 
@@ -351,14 +349,12 @@ private[sql] class JDBCRDD(
           val pos = i + 1
           conversions(i) match {
             case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            case DateConversion       =>
-              mutableRow.update(i, DateUtils.fromJavaDate(rs.getDate(pos)))
+            case DateConversion       => mutableRow.update(i, rs.getDate(pos))
             case DecimalConversion    => mutableRow.update(i, rs.getBigDecimal(pos))
             case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
             case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
             case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
             case LongConversion       => mutableRow.setLong(i, rs.getLong(pos))
-            // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
             case StringConversion     => mutableRow.setString(i, rs.getString(pos))
             case TimestampConversion  => mutableRow.update(i, rs.getTimestamp(pos))
             case BinaryConversion     => mutableRow.update(i, rs.getBytes(pos))

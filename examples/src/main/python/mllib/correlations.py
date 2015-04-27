@@ -18,7 +18,6 @@
 """
 Correlations using MLlib.
 """
-from __future__ import print_function
 
 import sys
 
@@ -30,7 +29,7 @@ from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     if len(sys.argv) not in [1, 2]:
-        print("Usage: correlations (<file>)", file=sys.stderr)
+        print >> sys.stderr, "Usage: correlations (<file>)"
         exit(-1)
     sc = SparkContext(appName="PythonCorrelations")
     if len(sys.argv) == 2:
@@ -42,20 +41,20 @@ if __name__ == "__main__":
     points = MLUtils.loadLibSVMFile(sc, filepath)\
         .map(lambda lp: LabeledPoint(lp.label, lp.features.toArray()))
 
-    print()
-    print('Summary of data file: ' + filepath)
-    print('%d data points' % points.count())
+    print
+    print 'Summary of data file: ' + filepath
+    print '%d data points' % points.count()
 
     # Statistics (correlations)
-    print()
-    print('Correlation (%s) between label and each feature' % corrType)
-    print('Feature\tCorrelation')
+    print
+    print 'Correlation (%s) between label and each feature' % corrType
+    print 'Feature\tCorrelation'
     numFeatures = points.take(1)[0].features.size
     labelRDD = points.map(lambda lp: lp.label)
     for i in range(numFeatures):
         featureRDD = points.map(lambda lp: lp.features[i])
         corr = Statistics.corr(labelRDD, featureRDD, corrType)
-        print('%d\t%g' % (i, corr))
-    print()
+        print '%d\t%g' % (i, corr)
+    print
 
     sc.stop()

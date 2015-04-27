@@ -23,6 +23,7 @@ import org.apache.spark.{Partition, SharedSparkContext, TaskContext}
 
 class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
 
+
   test("Pruned Partitions inherit locality prefs correctly") {
 
     val rdd = new RDD[Int](sc, Nil) {
@@ -73,6 +74,8 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
 }
 
 class TestPartition(i: Int, value: Int) extends Partition with Serializable {
-  def index: Int = i
-  def testValue: Int = this.value
+  def index = i
+
+  def testValue = this.value
+
 }

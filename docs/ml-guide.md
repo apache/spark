@@ -493,7 +493,7 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.sql import Row, SQLContext
 
 sc = SparkContext(appName="SimpleTextClassificationPipeline")
-sqlContext = SQLContext(sc)
+sqlCtx = SQLContext(sc)
 
 # Prepare training documents, which are labeled.
 LabeledDocument = Row("id", "text", "label")

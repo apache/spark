@@ -84,10 +84,10 @@ private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
   extends BasicColumnBuilder[T, JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
-private[sql] abstract class NativeColumnBuilder[T <: AtomicType](
+private[sql] abstract class NativeColumnBuilder[T <: NativeType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#InternalType](columnStats, columnType)
+  extends BasicColumnBuilder[T, T#JvmType](columnStats, columnType)
   with NullableColumnBuilder
   with AllCompressionSchemes
   with CompressibleColumnBuilder[T]
@@ -153,7 +153,6 @@ private[sql] object ColumnBuilder {
     val builder: ColumnBuilder = dataType match {
       case IntegerType => new IntColumnBuilder
       case LongType => new LongColumnBuilder
-      case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder

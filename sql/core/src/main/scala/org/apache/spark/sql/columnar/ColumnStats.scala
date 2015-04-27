@@ -216,13 +216,13 @@ private[sql] class IntColumnStats extends ColumnStats {
 }
 
 private[sql] class StringColumnStats extends ColumnStats {
-  protected var upper: UTF8String = null
-  protected var lower: UTF8String = null
+  protected var upper: String = null
+  protected var lower: String = null
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[UTF8String]
+      val value = row.getString(ordinal)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += STRING.actualSize(row, ordinal)

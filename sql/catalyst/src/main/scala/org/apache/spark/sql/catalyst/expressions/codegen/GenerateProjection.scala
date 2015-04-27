@@ -31,7 +31,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
+    in.map(ExpressionCanonicalizer(_))
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
@@ -109,56 +109,38 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
     }
 
-    val specificAccessorFunctions = nativeTypes.map { dataType =>
+    val specificAccessorFunctions = NativeType.all.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        // getString() is not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType =>
+        case (e, i) if e.dataType == dataType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
           q"if(i == $i) return $elementName" :: Nil
         case _ => Nil
       }
-      dataType match {
-        // Row() need this interface to compile
-        case StringType =>
-          q"""
-          override def getString(i: Int): String = {
-            $accessorFailure
-          }"""
-        case other =>
-          q"""
-          override def ${accessorForType(dataType)}(i: Int): ${termForType(dataType)} = {
-            ..$ifStatements;
-            $accessorFailure
-          }"""
-      }
+
+      q"""
+      override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
+        ..$ifStatements;
+        $accessorFailure
+      }"""
     }
 
-    val specificMutatorFunctions = nativeTypes.map { dataType =>
+    val specificMutatorFunctions = NativeType.all.map { dataType =>
       val ifStatements = expressions.zipWithIndex.flatMap {
-        // setString() is not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType =>
+        case (e, i) if e.dataType == dataType =>
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
           q"if(i == $i) { nullBits($i) = false; $elementName = value; return }" :: Nil
         case _ => Nil
       }
-      dataType match {
-        case StringType =>
-          // MutableRow() need this interface to compile
-          q"""
-          override def setString(i: Int, value: String) {
-            $accessorFailure
-          }"""
-        case other =>
-          q"""
-          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}) {
-            ..$ifStatements;
-            $accessorFailure
-          }"""
-      }
+
+      q"""
+      override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
+        ..$ifStatements;
+        $accessorFailure
+      }"""
     }
 
     val hashValues = expressions.zipWithIndex.map { case (e,i) =>

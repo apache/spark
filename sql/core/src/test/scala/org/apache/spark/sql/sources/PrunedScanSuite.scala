@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -35,12 +34,12 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   extends BaseRelation
   with PrunedScan {
 
-  override def schema: StructType =
+  override def schema =
     StructType(
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
+  override def buildScan(requiredColumns: Array[String]) = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)

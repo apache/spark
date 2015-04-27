@@ -20,9 +20,6 @@ rem
 rem This is the entry point for running Spark submit. To avoid polluting the
 rem environment, it just launches a new cmd to do the real work.
 
-rem disable randomized hash for string in Python 3.3+
-set PYTHONHASHSEED=0
-
 set CLASS=org.apache.spark.deploy.SparkSubmit
 call %~dp0spark-class2.cmd %CLASS% %*
 set SPARK_ERROR_LEVEL=%ERRORLEVEL%

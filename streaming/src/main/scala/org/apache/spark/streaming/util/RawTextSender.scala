@@ -72,8 +72,7 @@ object RawTextSender extends Logging {
       } catch {
         case e: IOException =>
           logError("Client disconnected")
-      } finally {
-        socket.close()
+          socket.close()
       }
     }
   }

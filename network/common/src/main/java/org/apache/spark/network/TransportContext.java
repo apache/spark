@@ -22,7 +22,6 @@ import java.util.List;
 import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,7 +106,6 @@ public class TransportContext {
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
-        .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
@@ -128,8 +126,7 @@ public class TransportContext {
     TransportClient client = new TransportClient(channel, responseHandler);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler);
-    return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs());
+    return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 
   public TransportConf getConf() { return conf; }

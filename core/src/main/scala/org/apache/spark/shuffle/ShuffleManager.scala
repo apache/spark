@@ -55,10 +55,7 @@ private[spark] trait ShuffleManager {
     */
   def unregisterShuffle(shuffleId: Int): Boolean
 
-  /**
-   * Return a resolver capable of retrieving shuffle block data based on block coordinates.
-   */
-  def shuffleBlockResolver: ShuffleBlockResolver
+  def shuffleBlockManager: ShuffleBlockManager
 
   /** Shut down this ShuffleManager. */
   def stop(): Unit

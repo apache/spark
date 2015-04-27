@@ -21,11 +21,13 @@ import java.io.File
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
+
+import akka.actor.Props
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -60,6 +62,8 @@ private[spark] class Executor(
 
   private val conf = env.conf
 
+  @volatile private var isStopped = false
+
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
@@ -76,7 +80,7 @@ private[spark] class Executor(
   }
 
   // Start worker thread pool
-  private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task launch worker")
+  private val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
   private val executorSource = new ExecutorSource(threadPool, executorId)
 
   if (!isLocal) {
@@ -84,12 +88,15 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
-  // Create an RpcEndpoint for receiving RPCs from the driver
-  private val executorEndpoint = env.rpcEnv.setupEndpoint(
-    ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
+  // Create an actor for receiving RPCs from the driver
+  private val executorActor = env.actorSystem.actorOf(
+    Props(new ExecutorActor(executorId)), "ExecutorActor")
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
+  private val userClassPathFirst: Boolean = {
+    conf.getBoolean("spark.executor.userClassPathFirst",
+      conf.getBoolean("spark.files.userClassPathFirst", false))
+  }
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -108,9 +115,6 @@ private[spark] class Executor(
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
-
-  // Executor for the heartbeat task.
-  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
   startDriverHeartbeater()
 
@@ -135,9 +139,8 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    env.rpcEnv.stop(executorEndpoint)
-    heartbeater.shutdown()
-    heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    env.actorSystem.stop(executorActor)
+    isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
@@ -220,12 +223,8 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          // Deserialization happens in two parts: first, we deserialize a Task object, which
-          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-          m.setExecutorDeserializeTime(
-            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
-          // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
+          m.setExecutorRunTime(taskFinish - taskStart)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
@@ -392,8 +391,11 @@ private[spark] class Executor(
     }
   }
 
+  private val timeout = AkkaUtils.lookupTimeout(conf)
+  private val retryAttempts = AkkaUtils.numRetries(conf)
+  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
   private val heartbeatReceiverRef =
-    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
+    AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
@@ -424,7 +426,8 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
-      val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
+      val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+        retryAttempts, retryIntervalMs, timeout)
       if (response.reregisterBlockManager) {
         logWarning("Told to re-register on heartbeat")
         env.blockManager.reregister()
@@ -435,17 +438,23 @@ private[spark] class Executor(
   }
 
   /**
-   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
+   * Starts a thread to report heartbeat and partial metrics for active tasks to driver.
+   * This thread stops running when the executor is stopped.
    */
   private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
-
-    // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
-
-    val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    val thread = new Thread() {
+      override def run() {
+        // Sleep a random interval so the heartbeats don't end up in sync
+        Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+        while (!isStopped) {
+          reportHeartBeat()
+          Thread.sleep(interval)
+        }
+      }
     }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+    thread.setDaemon(true)
+    thread.setName("driver-heartbeater")
+    thread.start()
   }
 }

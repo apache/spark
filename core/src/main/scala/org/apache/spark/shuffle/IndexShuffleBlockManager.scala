@@ -26,9 +26,6 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
-
-import IndexShuffleBlockManager.NOOP_REDUCE_ID
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -42,18 +39,25 @@ import IndexShuffleBlockManager.NOOP_REDUCE_ID
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getSortBasedShuffleBlockData().
 private[spark]
-class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
+class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
+  /**
+   * Mapping to a single shuffleBlockId with reduce ID 0.
+   * */
+  def consolidateId(shuffleId: Int, mapId: Int): ShuffleBlockId = {
+    ShuffleBlockId(shuffleId, mapId, 0)
+  }
+
   def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, 0))
   }
 
   private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, 0))
   }
 
   /**
@@ -79,17 +83,22 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
-    Utils.tryWithSafeFinally {
+    try {
       // We take in lengths of each block, need to convert it to offsets.
       var offset = 0L
       out.writeLong(offset)
+
       for (length <- lengths) {
         offset += length
         out.writeLong(offset)
       }
-    } {
+    } finally {
       out.close()
     }
+  }
+
+  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+    Some(getBlockData(blockId).nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
@@ -113,12 +122,4 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockResolver {
   }
 
   override def stop(): Unit = {}
-}
-
-private[spark] object IndexShuffleBlockManager {
-  // No-op reduce ID used in interactions with disk store and BlockObjectWriter.
-  // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
-  // shuffle outputs for several reduces are glommed into a single file.
-  // TODO: Avoid this entirely by having the DiskBlockObjectWriter not require a BlockId.
-  val NOOP_REDUCE_ID = 0
 }

@@ -47,9 +47,6 @@ abstract class PipelineStage extends Serializable with Logging {
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
-   *
-   * This should be optimistic.  If it is unclear whether the schema will be valid, then it should
-   * be assumed valid until proven otherwise.
    */
   protected def transformSchema(
       schema: StructType,
@@ -84,7 +81,7 @@ class Pipeline extends Estimator[PipelineModel] {
   /** param for pipeline stages */
   val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
-  def getStages: Array[PipelineStage] = getOrDefault(stages)
+  def getStages: Array[PipelineStage] = get(stages)
 
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
@@ -101,7 +98,7 @@ class Pipeline extends Estimator[PipelineModel] {
    */
   override def fit(dataset: DataFrame, paramMap: ParamMap): PipelineModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     // Search for the last estimator.
     var indexOfLastEstimator = -1
@@ -138,7 +135,7 @@ class Pipeline extends Estimator[PipelineModel] {
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
       "Cannot have duplicate components in a pipeline.")
@@ -177,14 +174,14 @@ class PipelineModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
-    val map = fittingParamMap ++ extractParamMap(paramMap)
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
     transformSchema(dataset.schema, map, logging = true)
     stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
   override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
-    val map = fittingParamMap ++ extractParamMap(paramMap)
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))
   }
 }

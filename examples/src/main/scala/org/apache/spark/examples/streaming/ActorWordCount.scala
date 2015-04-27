@@ -85,13 +85,13 @@ extends Actor with ActorHelper {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
-  override def preStart(): Unit = remotePublisher ! SubscribeReceiver(context.self)
+  override def preStart = remotePublisher ! SubscribeReceiver(context.self)
 
-  def receive: PartialFunction[Any, Unit] = {
+  def receive = {
     case msg => store(msg.asInstanceOf[T])
   }
 
-  override def postStop(): Unit = remotePublisher ! UnsubscribeReceiver(context.self)
+  override def postStop() = remotePublisher ! UnsubscribeReceiver(context.self)
 
 }
 

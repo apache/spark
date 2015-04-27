@@ -22,7 +22,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.rdd.RDD
 
-
 /**
  * :: DeveloperApi ::
  * Trait for adding "pluggable" loss functions for the gradient boosting algorithm.
@@ -32,11 +31,13 @@ trait Loss extends Serializable {
 
   /**
    * Method to calculate the gradients for the gradient boosting calculation.
-   * @param prediction Predicted feature
-   * @param label true label.
+   * @param model Model of the weak learner.
+   * @param point Instance of the training dataset.
    * @return Loss gradient.
    */
-  def gradient(prediction: Double, label: Double): Double
+  def gradient(
+      model: TreeEnsembleModel,
+      point: LabeledPoint): Double
 
   /**
    * Method to calculate error of the base learner for the gradient boosting calculation.
@@ -58,5 +59,6 @@ trait Loss extends Serializable {
    * @param label True label.
    * @return Measure of model error on datapoint.
    */
-  private[mllib] def computeError(prediction: Double, label: Double): Double
+  def computeError(prediction: Double, label: Double): Double
+
 }

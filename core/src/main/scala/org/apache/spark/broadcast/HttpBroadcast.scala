@@ -165,7 +165,7 @@ private[broadcast] object HttpBroadcast extends Logging {
   private def write(id: Long, value: Any) {
     val file = getFile(id)
     val fileOutputStream = new FileOutputStream(file)
-    Utils.tryWithSafeFinally {
+    try {
       val out: OutputStream = {
         if (compress) {
           compressionCodec.compressedOutputStream(fileOutputStream)
@@ -175,13 +175,10 @@ private[broadcast] object HttpBroadcast extends Logging {
       }
       val ser = SparkEnv.get.serializer.newInstance()
       val serOut = ser.serializeStream(out)
-      Utils.tryWithSafeFinally {
-        serOut.writeObject(value)
-      } {
-        serOut.close()
-      }
+      serOut.writeObject(value)
+      serOut.close()
       files += file
-    } {
+    } finally {
       fileOutputStream.close()
     }
   }
@@ -215,11 +212,9 @@ private[broadcast] object HttpBroadcast extends Logging {
     }
     val ser = SparkEnv.get.serializer.newInstance()
     val serIn = ser.deserializeStream(in)
-    Utils.tryWithSafeFinally {
-      serIn.readObject[T]()
-    } {
-      serIn.close()
-    }
+    val obj = serIn.readObject[T]()
+    serIn.close()
+    obj
   }
 
   /**

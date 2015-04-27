@@ -70,9 +70,9 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  override def getStorageLevel: StorageLevel = partitionsRDD.getStorageLevel
+  override def getStorageLevel = partitionsRDD.getStorageLevel
 
-  override def checkpoint(): Unit = {
+  override def checkpoint() = {
     partitionsRDD.checkpoint()
   }
 

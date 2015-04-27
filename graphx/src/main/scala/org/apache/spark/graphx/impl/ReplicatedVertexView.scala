@@ -50,7 +50,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * Return a new `ReplicatedVertexView` where edges are reversed and shipping levels are swapped to
    * match.
    */
-  def reverse(): ReplicatedVertexView[VD, ED] = {
+  def reverse() = {
     val newEdges = edges.mapEdgePartitions((pid, part) => part.reverse)
     new ReplicatedVertexView(newEdges, hasDstId, hasSrcId)
   }

@@ -68,31 +68,20 @@ sealed abstract class Attribute extends Serializable {
    * Converts this attribute to [[Metadata]].
    * @param withType whether to include the type info
    */
-  private[attribute] def toMetadataImpl(withType: Boolean): Metadata
+  private[attribute] def toMetadata(withType: Boolean): Metadata
 
   /**
    * Converts this attribute to [[Metadata]]. For numeric attributes, the type info is excluded to
    * save space, because numeric type is the default attribute type. For nominal and binary
    * attributes, the type info is included.
    */
-  private[attribute] def toMetadataImpl(): Metadata = {
+  private[attribute] def toMetadata(): Metadata = {
     if (attrType == AttributeType.Numeric) {
-      toMetadataImpl(withType = false)
+      toMetadata(withType = false)
     } else {
-      toMetadataImpl(withType = true)
+      toMetadata(withType = true)
     }
   }
-
-  /** Converts to ML metadata with some existing metadata. */
-  def toMetadata(existingMetadata: Metadata): Metadata = {
-    new MetadataBuilder()
-      .withMetadata(existingMetadata)
-      .putMetadata(AttributeKeys.ML_ATTR, toMetadataImpl())
-      .build()
-  }
-
-  /** Converts to ML metadata */
-  def toMetadata(): Metadata = toMetadata(Metadata.empty)
 
   /**
    * Converts to a [[StructField]] with some existing metadata.
@@ -101,7 +90,7 @@ sealed abstract class Attribute extends Serializable {
   def toStructField(existingMetadata: Metadata): StructField = {
     val newMetadata = new MetadataBuilder()
       .withMetadata(existingMetadata)
-      .putMetadata(AttributeKeys.ML_ATTR, withoutName.withoutIndex.toMetadataImpl())
+      .putMetadata(AttributeKeys.ML_ATTR, withoutName.withoutIndex.toMetadata())
       .build()
     StructField(name.get, DoubleType, nullable = false, newMetadata)
   }
@@ -109,7 +98,7 @@ sealed abstract class Attribute extends Serializable {
   /** Converts to a [[StructField]]. */
   def toStructField(): StructField = toStructField(Metadata.empty)
 
-  override def toString: String = toMetadataImpl(withType = true).toString
+  override def toString: String = toMetadata(withType = true).toString
 }
 
 /** Trait for ML attribute factories. */
@@ -221,7 +210,7 @@ class NumericAttribute private[ml] (
   override def isNominal: Boolean = false
 
   /** Convert this attribute to metadata. */
-  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder()
     if (withType) bldr.putString(TYPE, attrType.name)
@@ -364,20 +353,6 @@ class NominalAttribute private[ml] (
   /** Copy without the `numValues`. */
   def withoutNumValues: NominalAttribute = copy(numValues = None)
 
-  /**
-   * Get the number of values, either from `numValues` or from `values`.
-   * Return None if unknown.
-   */
-  def getNumValues: Option[Int] = {
-    if (numValues.nonEmpty) {
-      numValues
-    } else if (values.nonEmpty) {
-      Some(values.get.length)
-    } else {
-      None
-    }
-  }
-
   /** Creates a copy of this attribute with optional changes. */
   private def copy(
       name: Option[String] = name,
@@ -388,7 +363,7 @@ class NominalAttribute private[ml] (
     new NominalAttribute(name, index, isOrdinal, numValues, values)
   }
 
-  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder()
     if (withType) bldr.putString(TYPE, attrType.name)
@@ -490,7 +465,7 @@ class BinaryAttribute private[ml] (
     new BinaryAttribute(name, index, values)
   }
 
-  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+  private[attribute] override def toMetadata(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
     val bldr = new MetadataBuilder
     if (withType) bldr.putString(TYPE, attrType.name)

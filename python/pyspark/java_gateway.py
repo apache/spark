@@ -17,35 +17,23 @@
 
 import atexit
 import os
-import sys
 import select
 import signal
 import shlex
 import socket
 import platform
 from subprocess import Popen, PIPE
-
-if sys.version >= '3':
-    xrange = range
-
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
-from py4j.java_collections import ListConverter
 
 from pyspark.serializers import read_int
 
 
-# patching ListConverter, or it will convert bytearray into Java ArrayList
-def can_convert_list(self, obj):
-    return isinstance(obj, (list, tuple, xrange))
-
-ListConverter.can_convert = can_convert_list
-
-
 def launch_gateway():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
-        SPARK_HOME = os.environ["SPARK_HOME"]
         # Launch the Py4j gateway using Spark's run command so that we pick up the
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
@@ -82,7 +70,7 @@ def launch_gateway():
             if callback_socket in readable:
                 gateway_connection = callback_socket.accept()[0]
                 # Determine which ephemeral port the server started on:
-                gateway_port = read_int(gateway_connection.makefile(mode="rb"))
+                gateway_port = read_int(gateway_connection.makefile())
                 gateway_connection.close()
                 callback_socket.close()
         if gateway_port is None:
@@ -105,7 +93,7 @@ def launch_gateway():
             atexit.register(killChild)
 
     # Connect to the gateway
-    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=True)
+    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False)
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")

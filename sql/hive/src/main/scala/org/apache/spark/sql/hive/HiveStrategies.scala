@@ -17,21 +17,24 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.expressions.Row
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.expressions.{Row, _}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, _}
+import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsing, CreateTableUsingAsSelect, DescribeCommand}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
 import org.apache.spark.sql.types.StringType
 
 
@@ -119,16 +122,16 @@ private[hive] trait HiveStrategies {
             val inputData = new GenericMutableRow(relation.partitionKeys.size)
             val pruningCondition =
               if (codegenEnabled) {
-                GeneratePredicate.generate(castedPredicate)
+                GeneratePredicate(castedPredicate)
               } else {
-                InterpretedPredicate.create(castedPredicate)
+                InterpretedPredicate(castedPredicate)
               }
 
             val partitions = relation.hiveQlPartitions.filter { part =>
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
-                inputData(i) = CatalystTypeConverters.convertToCatalyst(partitionValues(i))
+                inputData(i) = partitionValues(i)
                 i += 1
               }
               pruningCondition(inputData)
@@ -181,14 +184,12 @@ private[hive] trait HiveStrategies {
 
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.InsertIntoTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
+      case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
-      case hive.InsertIntoHiveTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
+          table, partition, planLater(child), overwrite) :: Nil
+      case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
         execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+          table, partition, planLater(child), overwrite) :: Nil
       case _ => Nil
     }
   }

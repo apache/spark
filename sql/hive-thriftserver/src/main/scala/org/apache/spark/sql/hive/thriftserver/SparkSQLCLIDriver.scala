@@ -33,14 +33,13 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils,
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.util.Utils
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -102,7 +101,13 @@ private[hive] object SparkSQLCLIDriver {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    Utils.addShutdownHook { () => SparkSQLEnv.stop() }
+    Runtime.getRuntime.addShutdownHook(
+      new Thread() {
+        override def run() {
+          SparkSQLEnv.stop()
+        }
+      }
+    )
 
     // "-h" option has been passed, so connect to Hive thrift server.
     if (sessionState.getHost != null) {
@@ -139,9 +144,6 @@ private[hive] object SparkSQLCLIDriver {
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
-
-    // use the specified database if specified
-    cli.processSelectDatabase(sessionState);
 
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
@@ -262,8 +264,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
 
       if (proc != null) {
-        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
-          proc.isInstanceOf[AddResourceProcessor]) {
+        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()

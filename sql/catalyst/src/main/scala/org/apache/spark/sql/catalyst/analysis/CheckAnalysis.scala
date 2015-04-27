@@ -38,12 +38,6 @@ trait CheckAnalysis {
     throw new AnalysisException(msg)
   }
 
-  def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => true
-    }).length >= 1
-  }
-
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -52,11 +46,8 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
+              // Throw errors for specific problems with get field.
+              operator.resolveChildren(a.name, resolver, throwErrors = true)
             }
 
             val from = operator.inputSet.map(_.name).mkString(", ")
@@ -115,12 +106,6 @@ trait CheckAnalysis {
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
-
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            failAnalysis(
-              s"""Only a single table generating function is allowed in a SELECT clause, found:
-                 | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
-
 
           case _ => // Analysis successful!
         }

@@ -94,7 +94,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             </li>
             <li>
               <strong>Executor Memory:</strong>
-              {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
+              {Utils.megabytesToString(app.desc.memoryPerSlave)}
             </li>
             <li><strong>Submit Date:</strong> {app.submitDate}</li>
             <li><strong>State:</strong> {app.state}</li>

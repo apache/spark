@@ -91,9 +91,9 @@ class TransformFunctionSerializer(object):
         except Exception:
             traceback.print_exc()
 
-    def loads(self, data):
+    def loads(self, bytes):
         try:
-            f, deserializers = self.serializer.loads(bytes(data))
+            f, deserializers = self.serializer.loads(str(bytes))
             return TransformFunction(self.ctx, f, *deserializers)
         except Exception:
             traceback.print_exc()
@@ -116,7 +116,7 @@ def rddToFileName(prefix, suffix, timestamp):
     """
     if isinstance(timestamp, datetime):
         seconds = time.mktime(timestamp.timetuple())
-        timestamp = int(seconds * 1000) + timestamp.microsecond // 1000
+        timestamp = long(seconds * 1000) + timestamp.microsecond / 1000
     if suffix is None:
         return prefix + "-" + str(timestamp)
     else:

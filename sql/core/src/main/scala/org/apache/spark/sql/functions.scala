@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -277,13 +277,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the absolute value.
-   *
-   * @group normal_funcs
-   */
-  def abs(e: Column): Column = Abs(e.expr)
-
-  /**
    * Returns the first column that is not null.
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
@@ -293,13 +286,6 @@ object functions {
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
-
-  /**
-   * Converts a string exprsesion to lower case.
-   *
-   * @group normal_funcs
-   */
-  def lower(e: Column): Column = Lower(e.expr)
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -331,13 +317,18 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Partition ID of the Spark task.
-   *
-   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   * Converts a string expression to upper case.
    *
    * @group normal_funcs
    */
-  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
+  def upper(e: Column): Column = Upper(e.expr)
+
+  /**
+   * Converts a string exprsesion to lower case.
+   *
+   * @group normal_funcs
+   */
+  def lower(e: Column): Column = Lower(e.expr)
 
   /**
    * Computes the square root of the specified float value.
@@ -347,11 +338,11 @@ object functions {
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
   /**
-   * Converts a string expression to upper case.
+   * Computes the absolutle value.
    *
    * @group normal_funcs
    */
-  def upper(e: Column): Column = Upper(e.expr)
+  def abs(e: Column): Column = Abs(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -614,23 +605,4 @@ object functions {
   }
 
   // scalastyle:on
-
-  /**
-   * Call an user-defined function.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *
-   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", callUdf("simpleUdf", $"value"))
-   * }}}
-   *
-   * @group udf_funcs
-   */
-  def callUdf(udfName: String, cols: Column*): Column = {
-     UnresolvedFunction(udfName, cols.map(_.expr))
-  }
-
 }

@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import sys
 from random import Random
 
@@ -51,20 +49,20 @@ if __name__ == "__main__":
     # the graph to obtain the path (x, z).
 
     # Because join() joins on keys, the edges are stored in reversed order.
-    edges = tc.map(lambda x_y: (x_y[1], x_y[0]))
+    edges = tc.map(lambda (x, y): (y, x))
 
-    oldCount = 0
+    oldCount = 0L
     nextCount = tc.count()
     while True:
         oldCount = nextCount
         # Perform the join, obtaining an RDD of (y, (z, x)) pairs,
         # then project the result to obtain the new (x, z) paths.
-        new_edges = tc.join(edges).map(lambda __a_b: (__a_b[1][1], __a_b[1][0]))
+        new_edges = tc.join(edges).map(lambda (_, (a, b)): (b, a))
         tc = tc.union(new_edges).distinct().cache()
         nextCount = tc.count()
         if nextCount == oldCount:
             break
 
-    print("TC has %i edges" % tc.count())
+    print "TC has %i edges" % tc.count()
 
     sc.stop()

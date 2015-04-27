@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-import array
 from collections import namedtuple
 
 from pyspark import SparkContext
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 from pyspark.mllib.util import JavaLoader, JavaSaveable
-from pyspark.sql import DataFrame
 
 __all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
@@ -79,23 +77,18 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
-    >>> model.predict(2, 2)
-    3.8...
-
-    >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
-    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
-    >>> model.predict(2, 2)
+    >>> model.predict(2,2)
     3.8...
 
     >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
-    >>> model.predict(2, 2)
+    >>> model.predict(2,2)
     0.4...
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = MatrixFactorizationModel.load(sc, path)
-    >>> sameModel.predict(2, 2)
+    >>> sameModel.predict(2,2)
     0.4...
     >>> sameModel.predictAll(testset).collect()
     [Rating(...
@@ -111,14 +104,14 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
         assert len(first) == 2, "user_product should be RDD of (user, product)"
-        user_product = user_product.map(lambda u_p: (int(u_p[0]), int(u_p[1])))
+        user_product = user_product.map(lambda (u, p): (int(u), int(p)))
         return self.call("predict", user_product)
 
     def userFeatures(self):
-        return self.call("getUserFeatures").mapValues(lambda v: array.array('d', v))
+        return self.call("getUserFeatures")
 
     def productFeatures(self):
-        return self.call("getProductFeatures").mapValues(lambda v: array.array('d', v))
+        return self.call("getProductFeatures")
 
     @classmethod
     def load(cls, sc, path):
@@ -131,20 +124,13 @@ class ALS(object):
 
     @classmethod
     def _prepare(cls, ratings):
-        if isinstance(ratings, RDD):
-            pass
-        elif isinstance(ratings, DataFrame):
-            ratings = ratings.rdd
-        else:
-            raise TypeError("Ratings should be represented by either an RDD or a DataFrame, "
-                            "but got %s." % type(ratings))
+        assert isinstance(ratings, RDD), "ratings should be RDD"
         first = ratings.first()
-        if isinstance(first, Rating):
-            pass
-        elif isinstance(first, (tuple, list)):
-            ratings = ratings.map(lambda x: Rating(*x))
-        else:
-            raise TypeError("Expect a Rating or a tuple/list, but got %s." % type(first))
+        if not isinstance(first, Rating):
+            if isinstance(first, (tuple, list)):
+                ratings = ratings.map(lambda x: Rating(*x))
+            else:
+                raise ValueError("rating should be RDD of Rating or tuple/list")
         return ratings
 
     @classmethod
@@ -165,11 +151,8 @@ class ALS(object):
 def _test():
     import doctest
     import pyspark.mllib.recommendation
-    from pyspark.sql import SQLContext
     globs = pyspark.mllib.recommendation.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

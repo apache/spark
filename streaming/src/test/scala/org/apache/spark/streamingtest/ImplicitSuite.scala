@@ -25,8 +25,7 @@ package org.apache.spark.streamingtest
  */
 class ImplicitSuite {
 
-  // We only want to test if `implicit` works well with the compiler,
-  // so we don't need a real DStream.
+  // We only want to test if `implict` works well with the compiler, so we don't need a real DStream.
   def mockDStream[T]: org.apache.spark.streaming.dstream.DStream[T] = null
 
   def testToPairDStreamFunctions(): Unit = {

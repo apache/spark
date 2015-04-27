@@ -17,20 +17,20 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress}
+import akka.actor.{Address, ActorRef}
 
 /**
  * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
  *
- * @param executorEndpoint The ActorRef representing this executor
+ * @param executorActor The ActorRef representing this executor
  * @param executorAddress The network address of this executor
  * @param executorHost The hostname that this executor is running on
  * @param freeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
  */
 private[cluster] class ExecutorData(
-   val executorEndpoint: RpcEndpointRef,
-   val executorAddress: RpcAddress,
+   val executorActor: ActorRef,
+   val executorAddress: Address,
    override val executorHost: String,
    var freeCores: Int,
    override val totalCores: Int,

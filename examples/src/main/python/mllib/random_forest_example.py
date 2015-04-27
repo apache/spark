@@ -22,7 +22,6 @@ Note: This example illustrates binary classification.
       For information on multiclass classification, please refer to the decision_tree_runner.py
       example.
 """
-from __future__ import print_function
 
 import sys
 
@@ -44,7 +43,7 @@ def testClassification(trainingData, testData):
     # Evaluate model on test instances and compute test error
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-    testErr = labelsAndPredictions.filter(lambda v_p: v_p[0] != v_p[1]).count()\
+    testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count()\
         / float(testData.count())
     print('Test Error = ' + str(testErr))
     print('Learned classification forest model:')
@@ -63,8 +62,8 @@ def testRegression(trainingData, testData):
     # Evaluate model on test instances and compute test error
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-    testMSE = labelsAndPredictions.map(lambda v_p1: (v_p1[0] - v_p1[1]) * (v_p1[0] - v_p1[1]))\
-        .sum() / float(testData.count())
+    testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum()\
+        / float(testData.count())
     print('Test Mean Squared Error = ' + str(testMSE))
     print('Learned regression forest model:')
     print(model.toDebugString())
@@ -72,7 +71,7 @@ def testRegression(trainingData, testData):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print("Usage: random_forest_example", file=sys.stderr)
+        print >> sys.stderr, "Usage: random_forest_example"
         exit(1)
     sc = SparkContext(appName="PythonRandomForestExample")
 

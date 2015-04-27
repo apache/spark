@@ -58,7 +58,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, V, _]]
     shuffleMapNumber.putIfAbsent(baseShuffleHandle.shuffleId, baseShuffleHandle.numMaps)
     new SortShuffleWriter(
-      shuffleBlockResolver, baseShuffleHandle, mapId, context)
+      shuffleBlockManager, baseShuffleHandle, mapId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
@@ -66,19 +66,18 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     if (shuffleMapNumber.containsKey(shuffleId)) {
       val numMaps = shuffleMapNumber.remove(shuffleId)
       (0 until numMaps).map{ mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+        shuffleBlockManager.removeDataByMap(shuffleId, mapId)
       }
     }
     true
   }
 
-  override def shuffleBlockResolver: IndexShuffleBlockManager = {
+  override def shuffleBlockManager: IndexShuffleBlockManager = {
     indexShuffleBlockManager
   }
 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
-    shuffleBlockResolver.stop()
+    shuffleBlockManager.stop()
   }
 }
-

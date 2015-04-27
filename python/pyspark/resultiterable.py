@@ -15,16 +15,15 @@
 # limitations under the License.
 #
 
-import collections
-
 __all__ = ["ResultIterable"]
+
+import collections
 
 
 class ResultIterable(collections.Iterable):
 
     """
-    A special result iterable. This is used because the standard
-    iterator can not be pickled
+    A special result iterable. This is used because the standard iterator can not be pickled
     """
 
     def __init__(self, data):

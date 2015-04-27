@@ -49,9 +49,9 @@ private[sql] object DriverQuirks {
    * Fetch the DriverQuirks class corresponding to a given database url.
    */
   def get(url: String): DriverQuirks = {
-    if (url.startsWith("jdbc:mysql")) {
+    if (url.substring(0, 10).equals("jdbc:mysql")) {
       new MySQLQuirks()
-    } else if (url.startsWith("jdbc:postgresql")) {
+    } else if (url.substring(0, 15).equals("jdbc:postgresql")) {
       new PostgresQuirks()
     } else {
       new NoQuirks()

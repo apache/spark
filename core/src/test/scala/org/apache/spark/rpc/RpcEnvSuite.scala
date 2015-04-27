@@ -70,7 +70,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("send-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case msg: String => message = msg
       }
     })
@@ -109,7 +109,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = env.setupEndpoint("ask-locally", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case msg: String => {
           context.reply(msg)
         }
@@ -123,7 +123,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("ask-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case msg: String => {
           context.reply(msg)
         }
@@ -146,7 +146,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("ask-timeout", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case msg: String => {
           Thread.sleep(100)
           context.reply(msg)
@@ -155,8 +155,8 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     })
 
     val conf = new SparkConf()
-    conf.set("spark.rpc.retry.wait", "0")
-    conf.set("spark.rpc.numRetries", "1")
+    conf.set("spark.akka.retry.wait", "0")
+    conf.set("spark.akka.num.retries", "1")
     val anotherEnv = createRpcEnv(conf, "remote", 13345)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
@@ -182,7 +182,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         calledMethods += "start"
       }
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case msg: String =>
       }
 
@@ -206,7 +206,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         throw new RuntimeException("Oops!")
       }
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m =>
       }
 
@@ -225,7 +225,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("onError-onStop", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m =>
       }
 
@@ -250,8 +250,8 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("onError-receive", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
-        case m => throw new RuntimeException("Oops!")
+      override def receive = {
+        case m =>  throw new RuntimeException("Oops!")
       }
 
       override def onError(cause: Throwable): Unit = {
@@ -277,7 +277,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         callSelfSuccessfully = true
       }
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m =>
       }
     })
@@ -294,7 +294,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("self-receive", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m => {
           self
           callSelfSuccessfully = true
@@ -311,28 +311,30 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("self: call in onStop") {
-    @volatile var selfOption: Option[RpcEndpointRef] = null
+    @volatile var e: Throwable = null
 
     val endpointRef = env.setupEndpoint("self-onStop", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m =>
       }
 
       override def onStop(): Unit = {
-        selfOption = Option(self)
+        self
       }
 
       override def onError(cause: Throwable): Unit = {
+        e = cause
       }
     })
 
     env.stop(endpointRef)
 
     eventually(timeout(5 seconds), interval(10 millis)) {
-      // Calling `self` in `onStop` will return null, so selfOption will be None
-      assert(selfOption == None)
+      // Calling `self` in `onStop` is invalid
+      assert(e != null)
+      assert(e.getMessage.contains("Cannot find RpcEndpointRef"))
     }
   }
 
@@ -340,10 +342,10 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     // If a RpcEnv implementation breaks the `receive` contract, hope this test can expose it
     for(i <- 0 until 100) {
       @volatile var result = 0
-      val endpointRef = env.setupEndpoint(s"receive-in-sequence-$i", new ThreadSafeRpcEndpoint {
+      val endpointRef = env.setupThreadSafeEndpoint(s"receive-in-sequence-$i", new RpcEndpoint {
         override val rpcEnv = env
 
-        override def receive: PartialFunction[Any, Unit] = {
+        override def receive = {
           case m => result += 1
         }
 
@@ -372,7 +374,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("stop-reentrant", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case m =>
       }
 
@@ -394,7 +396,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("sendWithReply", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case m => context.reply("ack")
       }
     })
@@ -410,7 +412,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("sendWithReply-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case m => context.reply("ack")
       }
     })
@@ -432,7 +434,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("sendWithReply-error", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case m => context.sendFailure(new SparkException("Oops"))
       }
     })
@@ -450,7 +452,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("sendWithReply-remotely-error", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      override def receiveAndReply(context: RpcCallContext) = {
         case msg: String => context.sendFailure(new SparkException("Oops"))
       }
     })
@@ -473,10 +475,10 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("network events") {
     val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupEndpoint("network-events", new ThreadSafeRpcEndpoint {
+    env.setupThreadSafeEndpoint("network-events", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive = {
         case "hello" =>
         case m => events += "receive" -> m
       }
@@ -514,35 +516,10 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         ("onDisconnected", remoteAddress)))
     }
   }
-
-  test("sendWithReply: unserializable error") {
-    env.setupEndpoint("sendWithReply-unserializable-error", new RpcEndpoint {
-      override val rpcEnv = env
-
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => context.sendFailure(new UnserializableException)
-      }
-    })
-
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
-    // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(
-      "local", env.address, "sendWithReply-unserializable-error")
-    try {
-      val f = rpcEndpointRef.sendWithReply[String]("hello")
-      intercept[TimeoutException] {
-        Await.result(f, 1 seconds)
-      }
-    } finally {
-      anotherEnv.shutdown()
-      anotherEnv.awaitTermination()
-    }
-  }
-
 }
 
-class UnserializableClass
+case object Start
 
-class UnserializableException extends Exception {
-  private val unserializableField = new UnserializableClass
-}
+case class Ping(id: Int)
+
+case class Pong(id: Int)

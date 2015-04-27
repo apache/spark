@@ -35,15 +35,13 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
    * Normalization in L^p^ space, p = 2 by default.
    * @group param
    */
-  val p = new DoubleParam(this, "p", "the p norm value")
+  val p = new DoubleParam(this, "p", "the p norm value", Some(2))
 
   /** @group getParam */
-  def getP: Double = getOrDefault(p)
+  def getP: Double = get(p)
 
   /** @group setParam */
   def setP(value: Double): this.type = set(p, value)
-
-  setDefault(p -> 2.0)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
     val normalizer = new feature.Normalizer(paramMap(p))
@@ -52,3 +50,4 @@ class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
   override protected def outputDataType: DataType = new VectorUDT()
 }
+

@@ -61,7 +61,7 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
   protected def underlyingBuffer = buffer
 }
 
-private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
+private[sql] abstract class NativeColumnAccessor[T <: NativeType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)

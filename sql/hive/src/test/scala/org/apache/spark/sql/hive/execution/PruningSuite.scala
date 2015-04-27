@@ -143,7 +143,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       sql: String,
       expectedOutputColumns: Seq[String],
       expectedScannedColumns: Seq[String],
-      expectedPartValues: Seq[Seq[String]]): Unit = {
+      expectedPartValues: Seq[Seq[String]]) = {
     test(s"$testCaseName - pruning test") {
       val plan = new TestHive.HiveQLQueryExecution(sql).executedPlan
       val actualOutputColumns = plan.output.map(_.name)

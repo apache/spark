@@ -88,10 +88,10 @@ class RandomRDDs(object):
         :param seed: Random seed (default: a random long integer).
         :return: RDD of float comprised of i.i.d. samples ~ N(0.0, 1.0).
 
-        >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1)
+        >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1L)
         >>> stats = x.stats()
         >>> stats.count()
-        1000
+        1000L
         >>> abs(stats.mean() - 0.0) < 0.1
         True
         >>> abs(stats.stdev() - 1.0) < 0.1
@@ -118,10 +118,10 @@ class RandomRDDs(object):
         >>> std = 1.0
         >>> expMean = exp(mean + 0.5 * std * std)
         >>> expStd = sqrt((exp(std * std) - 1.0) * exp(2.0 * mean + std * std))
-        >>> x = RandomRDDs.logNormalRDD(sc, mean, std, 1000, seed=2)
+        >>> x = RandomRDDs.logNormalRDD(sc, mean, std, 1000, seed=2L)
         >>> stats = x.stats()
         >>> stats.count()
-        1000
+        1000L
         >>> abs(stats.mean() - expMean) < 0.5
         True
         >>> from math import sqrt
@@ -145,10 +145,10 @@ class RandomRDDs(object):
         :return: RDD of float comprised of i.i.d. samples ~ Pois(mean).
 
         >>> mean = 100.0
-        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=2)
+        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=2L)
         >>> stats = x.stats()
         >>> stats.count()
-        1000
+        1000L
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
@@ -171,10 +171,10 @@ class RandomRDDs(object):
         :return: RDD of float comprised of i.i.d. samples ~ Exp(mean).
 
         >>> mean = 2.0
-        >>> x = RandomRDDs.exponentialRDD(sc, mean, 1000, seed=2)
+        >>> x = RandomRDDs.exponentialRDD(sc, mean, 1000, seed=2L)
         >>> stats = x.stats()
         >>> stats.count()
-        1000
+        1000L
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
@@ -202,10 +202,10 @@ class RandomRDDs(object):
         >>> scale = 2.0
         >>> expMean = shape * scale
         >>> expStd = sqrt(shape * scale * scale)
-        >>> x = RandomRDDs.gammaRDD(sc, shape, scale, 1000, seed=2)
+        >>> x = RandomRDDs.gammaRDD(sc, shape, scale, 1000, seed=2L)
         >>> stats = x.stats()
         >>> stats.count()
-        1000
+        1000L
         >>> abs(stats.mean() - expMean) < 0.5
         True
         >>> abs(stats.stdev() - expStd) < 0.5
@@ -254,7 +254,7 @@ class RandomRDDs(object):
         :return: RDD of Vector with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
 
         >>> import numpy as np
-        >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1).collect())
+        >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - 0.0) < 0.1
@@ -286,8 +286,8 @@ class RandomRDDs(object):
         >>> std = 1.0
         >>> expMean = exp(mean + 0.5 * std * std)
         >>> expStd = sqrt((exp(std * std) - 1.0) * exp(2.0 * mean + std * std))
-        >>> m = RandomRDDs.logNormalVectorRDD(sc, mean, std, 100, 100, seed=1).collect()
-        >>> mat = np.matrix(m)
+        >>> mat = np.matrix(RandomRDDs.logNormalVectorRDD(sc, mean, std, \
+                               100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - expMean) < 0.1
@@ -315,7 +315,7 @@ class RandomRDDs(object):
 
         >>> import numpy as np
         >>> mean = 100.0
-        >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1)
+        >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1L)
         >>> mat = np.mat(rdd.collect())
         >>> mat.shape
         (100, 100)
@@ -345,7 +345,7 @@ class RandomRDDs(object):
 
         >>> import numpy as np
         >>> mean = 0.5
-        >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1)
+        >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1L)
         >>> mat = np.mat(rdd.collect())
         >>> mat.shape
         (100, 100)
@@ -380,7 +380,8 @@ class RandomRDDs(object):
         >>> scale = 2.0
         >>> expMean = shape * scale
         >>> expStd = sqrt(shape * scale * scale)
-        >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, 100, 100, seed=1).collect())
+        >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, \
+                       100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - expMean) < 0.1

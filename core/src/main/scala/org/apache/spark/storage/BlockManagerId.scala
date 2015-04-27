@@ -60,10 +60,7 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def isDriver: Boolean = {
-    executorId == SparkContext.DRIVER_IDENTIFIER ||
-      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
-  }
+  def isDriver: Boolean = { executorId == SparkContext.DRIVER_IDENTIFIER }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeUTF(executorId_)

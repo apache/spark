@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.{TaskContextHelper, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
@@ -54,7 +54,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   final def run(taskAttemptId: Long, attemptNumber: Int): T = {
     context = new TaskContextImpl(stageId = stageId, partitionId = partitionId,
       taskAttemptId = taskAttemptId, attemptNumber = attemptNumber, runningLocally = false)
-    TaskContext.setTaskContext(context)
+    TaskContextHelper.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
     taskThread = Thread.currentThread()
     if (_killed) {
@@ -64,7 +64,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       runTask(context)
     } finally {
       context.markTaskCompleted()
-      TaskContext.unset()
+      TaskContextHelper.unset()
     }
   }
 
@@ -87,17 +87,10 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   // initialized when kill() is invoked.
   @volatile @transient private var _killed = false
 
-  protected var _executorDeserializeTime: Long = 0
-
   /**
    * Whether the task has been killed.
    */
   def killed: Boolean = _killed
-
-  /**
-   * Returns the amount of time spent deserializing the RDD and function to be run.
-   */
-  def executorDeserializeTime: Long = _executorDeserializeTime
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark

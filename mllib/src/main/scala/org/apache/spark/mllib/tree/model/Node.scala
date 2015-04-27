@@ -51,8 +51,8 @@ class Node (
     var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString: String = {
-    s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +
-      s"split = $split, stats = $stats"
+    "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
+      "impurity =  " + impurity + "split = " + split + ", stats = " + stats
   }
 
   /**
@@ -175,7 +175,7 @@ class Node (
   }
 }
 
-private[spark] object Node {
+private[tree] object Node {
 
   /**
    * Return a node with the given node id (but nothing else set).

@@ -17,20 +17,15 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.json4s.JsonDSL._
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
-
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
  * :: Experimental ::
@@ -43,60 +38,7 @@ import org.apache.spark.{Logging, SparkContext, SparkException}
 @Experimental
 class PowerIterationClusteringModel(
     val k: Int,
-    val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
-
-  override def save(sc: SparkContext, path: String): Unit = {
-    PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
-  }
-
-  override protected def formatVersion: String = "1.0"
-}
-
-object PowerIterationClusteringModel extends Loader[PowerIterationClusteringModel] {
-  override def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
-    PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
-  }
-
-  private[clustering]
-  object SaveLoadV1_0 {
-
-    private val thisFormatVersion = "1.0"
-
-    private[clustering]
-    val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
-
-    def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
-
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
-
-      val dataRDD = model.assignments.toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
-    }
-
-    def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
-      implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
-
-      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
-      assert(className == thisClassName)
-      assert(formatVersion == thisFormatVersion)
-
-      val k = (metadata \ "k").extract[Int]
-      val assignments = sqlContext.parquetFile(Loader.dataPath(path))
-      Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
-
-      val assignmentsRDD = assignments.map {
-        case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
-      }
-
-      new PowerIterationClusteringModel(k, assignmentsRDD)
-    }
-  }
-}
+    val assignments: RDD[PowerIterationClustering.Assignment]) extends Serializable
 
 /**
  * :: Experimental ::
@@ -193,7 +135,7 @@ class PowerIterationClustering private[clustering] (
     val v = powerIter(w, maxIterations)
     val assignments = kMeans(v, k).mapPartitions({ iter =>
       iter.map { case (id, cluster) =>
-        Assignment(id, cluster)
+        new Assignment(id, cluster)
       }
     }, preservesPartitioning = true)
     new PowerIterationClusteringModel(k, assignments)
@@ -210,7 +152,7 @@ object PowerIterationClustering extends Logging {
    * @param cluster assigned cluster id
    */
   @Experimental
-  case class Assignment(id: Long, cluster: Int)
+  class Assignment(val id: Long, val cluster: Int) extends Serializable
 
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).

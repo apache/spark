@@ -19,15 +19,13 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+import org.apache.spark.Accumulator
 import org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,16 +53,11 @@ private[sql] case class InMemoryRelation(
     child: SparkPlan,
     tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    private var _statistics: Statistics = null,
-    private var _batchStats: Accumulable[ArrayBuffer[Row], Row] = null)
+    private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
-    if (_batchStats == null) {
-      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
-    } else {
-      _batchStats
-    }
+  private val batchStats =
+    child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
 
   val partitionStatistics = new PartitionStatistics(output)
 
@@ -168,7 +161,7 @@ private[sql] case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-      _cachedColumnBuffers, statisticsToBePropagated, batchStats)
+      _cachedColumnBuffers, statisticsToBePropagated)
   }
 
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -182,20 +175,13 @@ private[sql] case class InMemoryRelation(
       child,
       tableName)(
       _cachedColumnBuffers,
-      statisticsToBePropagated,
-      batchStats).asInstanceOf[this.type]
+      statisticsToBePropagated).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
-
-  private[sql] def uncache(blocking: Boolean): Unit = {
-    Accumulators.remove(batchStats.id)
-    cachedColumnBuffers.unpersist(blocking)
-    _cachedColumnBuffers = null
-  }
+    Seq(_cachedColumnBuffers, statisticsToBePropagated)
 }
 
 private[sql] case class InMemoryColumnarTableScan(
@@ -258,20 +244,15 @@ private[sql] case class InMemoryColumnarTableScan(
     }
   }
 
-  lazy val enableAccumulators: Boolean =
-    sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
-
   // Accumulators used for testing purposes
-  lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
-  lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
+  val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
+  val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   override def execute(): RDD[Row] = {
-    if (enableAccumulators) {
-      readPartitions.setValue(0)
-      readBatches.setValue(0)
-    }
+    readPartitions.setValue(0)
+    readBatches.setValue(0)
 
     relation.cachedColumnBuffers.mapPartitions { cachedBatchIterator =>
       val partitionFilter = newPredicate(
@@ -321,7 +302,7 @@ private[sql] case class InMemoryColumnarTableScan(
           }
         }
 
-        if (rows.hasNext && enableAccumulators) {
+        if (rows.hasNext) {
           readPartitions += 1
         }
 
@@ -340,9 +321,7 @@ private[sql] case class InMemoryColumnarTableScan(
               logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {
-              if (enableAccumulators) {
-                readBatches += 1
-              }
+              readBatches += 1
               true
             }
           }

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -123,14 +123,6 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     assert(termVertexIds.map(i => LDA.index2term(i.toLong)) === termIds)
     assert(termVertexIds.forall(i => LDA.isTermVertex((i.toLong, 0))))
   }
-
-  test("setter alias") {
-    val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha === 2.0)
-    assert(lda.getDocConcentration === 2.0)
-    assert(lda.getBeta === 3.0)
-    assert(lda.getTopicConcentration === 3.0)
-  }
 }
 
 private[clustering] object LDASuite {
@@ -149,7 +141,7 @@ private[clustering] object LDASuite {
     (terms.toArray, termWeights.toArray)
   }
 
-  def tinyCorpus: Array[(Long, Vector)] = Array(
+  def tinyCorpus = Array(
     Vectors.dense(1, 3, 0, 2, 8),
     Vectors.dense(0, 2, 1, 0, 4),
     Vectors.dense(2, 3, 12, 3, 1),

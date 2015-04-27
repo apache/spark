@@ -35,7 +35,7 @@ private object RidgeRegressionSuite {
 
 class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
-  def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]): Double = {
+  def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
     predictions.zip(input).map { case (prediction, expected) =>
       (prediction - expected.label) * (prediction - expected.label)
     }.reduceLeft(_ + _) / predictions.size

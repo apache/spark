@@ -25,24 +25,25 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkException, SecurityManager, SparkConf}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
  * receives messages. Then [[RpcEnv]] will process messages sent from [[RpcEndpointRef]] or remote
- * nodes, and deliver them to corresponding [[RpcEndpoint]]s. For uncaught exceptions caught by
- * [[RpcEnv]], [[RpcEnv]] will use [[RpcCallContext.sendFailure]] to send exceptions back to the
- * sender, or logging them if no such sender or `NotSerializableException`.
+ * nodes, and deliver them to corresponding [[RpcEndpoint]]s.
  *
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
-  private[spark] val defaultLookupTimeout = RpcUtils.lookupTimeout(conf)
+  private[spark] val defaultLookupTimeout = AkkaUtils.lookupTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
-   * [[RpcEndpoint.self]]. Return `null` if the corresponding [[RpcEndpointRef]] does not exist.
+   * [[RpcEndpoint.self]].
+   *
+   * Note: This method won't return null. `IllegalArgumentException` will be thrown if calling this
+   * on a non-existent endpoint.
    */
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
@@ -56,6 +57,20 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * guarantee thread-safety.
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
+
+  /**
+   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] should
+   * make sure thread-safely sending messages to [[RpcEndpoint]].
+   *
+   * Thread-safety means processing of one message happens before processing of the next message by
+   * the same [[RpcEndpoint]]. In the other words, changes to internal fields of a [[RpcEndpoint]]
+   * are visible when processing the next message, and fields in the [[RpcEndpoint]] need not be
+   * volatile or equivalent.
+   *
+   * However, there is no guarantee that the same thread will be executing the same [[RpcEndpoint]]
+   * for different messages.
+   */
+  def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
    * Retrieve the [[RpcEndpointRef]] represented by `uri` asynchronously.
@@ -166,7 +181,7 @@ private[spark] trait RpcEnvFactory {
  * constructor onStart receive* onStop
  *
  * Note: `receive` can be called concurrently. If you want `receive` is thread-safe, please use
- * [[ThreadSafeRpcEndpoint]]
+ * [[RpcEnv.setupThreadSafeEndpoint]]
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
@@ -180,7 +195,7 @@ private[spark] trait RpcEndpoint {
 
   /**
    * The [[RpcEndpointRef]] of this [[RpcEndpoint]]. `self` will become valid when `onStart` is
-   * called. And `self` will become `null` when `onStop` is called.
+   * called.
    *
    * Note: Because before `onStart`, [[RpcEndpoint]] has not yet been registered and there is not
    * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called.
@@ -258,23 +273,10 @@ private[spark] trait RpcEndpoint {
   final def stop(): Unit = {
     val _self = self
     if (_self != null) {
-      rpcEnv.stop(_self)
+      rpcEnv.stop(self)
     }
   }
 }
-
-/**
- * A trait that requires RpcEnv thread-safely sending messages to it.
- *
- * Thread-safety means processing of one message happens before processing of the next message by
- * the same [[ThreadSafeRpcEndpoint]]. In the other words, changes to internal fields of a
- * [[ThreadSafeRpcEndpoint]] are visible when processing the next message, and fields in the
- * [[ThreadSafeRpcEndpoint]] need not be volatile or equivalent.
- *
- * However, there is no guarantee that the same thread will be executing the same
- * [[ThreadSafeRpcEndpoint]] for different messages.
- */
-trait ThreadSafeRpcEndpoint extends RpcEndpoint
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
@@ -282,9 +284,9 @@ trait ThreadSafeRpcEndpoint extends RpcEndpoint
 private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   extends Serializable with Logging {
 
-  private[this] val maxRetries = RpcUtils.numRetries(conf)
-  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
-  private[this] val defaultAskTimeout = RpcUtils.askTimeout(conf)
+  private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
+  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
+  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -304,8 +306,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    *
    * This method only sends the message once and never retries.
    */
-  def sendWithReply[T: ClassTag](message: Any): Future[T] =
-    sendWithReply(message, defaultAskTimeout)
+  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
@@ -328,7 +329,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultAskTimeout)
+  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
@@ -406,8 +407,7 @@ private[spark] object RpcAddress {
 }
 
 /**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
- * and can be called in any thread.
+ * A callback that [[RpcEndpoint]] can use it to send back a message or failure.
  */
 private[spark] trait RpcCallContext {
 

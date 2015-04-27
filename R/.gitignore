@@ -1,6 +1,0 @@
-*.o
-*.so
-*.Rd
-lib
-pkg/man
-pkg/html

@@ -160,7 +160,7 @@ private[spark] class HttpServer(
       throw new ServerStateException("Server is not started")
     } else {
       val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
-      s"$scheme://${Utils.localHostNameForURI()}:$port"
+      s"$scheme://${Utils.localIpAddress}:$port"
     }
   }
 }

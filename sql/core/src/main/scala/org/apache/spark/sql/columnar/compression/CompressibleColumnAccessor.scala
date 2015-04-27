@@ -19,9 +19,9 @@ package org.apache.spark.sql.columnar.compression
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
-import org.apache.spark.sql.types.AtomicType
+import org.apache.spark.sql.types.NativeType
 
-private[sql] trait CompressibleColumnAccessor[T <: AtomicType] extends ColumnAccessor {
+private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAccessor {
   this: NativeColumnAccessor[T] =>
 
   private var decoder: Decoder[T] = _

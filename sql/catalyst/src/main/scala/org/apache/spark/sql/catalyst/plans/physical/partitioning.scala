@@ -94,9 +94,6 @@ sealed trait Partitioning {
    * only compatible if the `numPartitions` of them is the same.
    */
   def compatibleWith(other: Partitioning): Boolean
-
-  /** Returns the expressions that are used to key the partitioning. */
-  def keyExpressions: Seq[Expression]
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
@@ -109,8 +106,6 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
     case UnknownPartitioning(_) => true
     case _ => false
   }
-
-  override def keyExpressions: Seq[Expression] = Nil
 }
 
 case object SinglePartition extends Partitioning {
@@ -122,8 +117,6 @@ case object SinglePartition extends Partitioning {
     case SinglePartition => true
     case _ => false
   }
-
-  override def keyExpressions: Seq[Expression] = Nil
 }
 
 case object BroadcastPartitioning extends Partitioning {
@@ -135,8 +128,6 @@ case object BroadcastPartitioning extends Partitioning {
     case SinglePartition => true
     case _ => false
   }
-
-  override def keyExpressions: Seq[Expression] = Nil
 }
 
 /**
@@ -166,8 +157,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case h: HashPartitioning if h == this => true
     case _ => false
   }
-
-  override def keyExpressions: Seq[Expression] = expressions
 
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
@@ -210,8 +199,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case r: RangePartitioning if r == this => true
     case _ => false
   }
-
-  override def keyExpressions: Seq[Expression] = ordering.map(_.child)
 
   override def eval(input: Row): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")

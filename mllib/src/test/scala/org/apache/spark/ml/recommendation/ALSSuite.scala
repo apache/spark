@@ -22,7 +22,6 @@ import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.scalatest.FunSuite

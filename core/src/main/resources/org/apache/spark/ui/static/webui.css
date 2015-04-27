@@ -85,11 +85,15 @@ table.sortable td {
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
 
-a.kill-link {
+span.kill-link {
   margin-right: 2px;
   margin-left: 20px;
   color: gray;
   float: right;
+}
+
+span.kill-link a {
+  color: gray;
 }
 
 span.expand-details {

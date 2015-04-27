@@ -62,6 +62,7 @@ object EdgeContext {
    *    , _ + _)
    * }}}
    */
-  def unapply[VD, ED, A](edge: EdgeContext[VD, ED, A]): Some[(VertexId, VertexId, VD, VD, ED)] =
+  def unapply[VD, ED, A](edge: EdgeContext[VD, ED, A]) =
     Some(edge.srcId, edge.dstId, edge.srcAttr, edge.dstAttr, edge.attr)
 }
+

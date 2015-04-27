@@ -85,7 +85,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param f the function to be applied to each node in the tree.
    */
   def foreachUp(f: BaseType => Unit): Unit = {
-    children.foreach(_.foreachUp(f))
+    children.foreach(_.foreach(f))
     f(this)
   }
 

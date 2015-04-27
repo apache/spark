@@ -116,7 +116,7 @@ class MyJavaLogisticRegression
    */
   IntParam maxIter = new IntParam(this, "maxIter", "max number of iterations");
 
-  int getMaxIter() { return (Integer) getOrDefault(maxIter); }
+  int getMaxIter() { return (Integer) get(maxIter); }
 
   public MyJavaLogisticRegression() {
     setMaxIter(100);
@@ -211,7 +211,7 @@ class MyJavaLogisticRegressionModel
   public MyJavaLogisticRegressionModel copy() {
     MyJavaLogisticRegressionModel m =
         new MyJavaLogisticRegressionModel(parent_, fittingParamMap_, weights_);
-    Params$.MODULE$.inheritValues(this.extractParamMap(), this, m);
+    Params$.MODULE$.inheritValues(this.paramMap(), this, m);
     return m;
   }
 }

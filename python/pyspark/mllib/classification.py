@@ -86,7 +86,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
-    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data), iterations=10)
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
     >>> lrm.predict([1.0, 0.0])
     1
     >>> lrm.predict([0.0, 1.0])
@@ -95,7 +95,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     [1, 0]
     >>> lrm.clearThreshold()
     >>> lrm.predict([0.0, 1.0])
-    0.279...
+    0.123...
 
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
@@ -103,7 +103,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
-    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data), iterations=10)
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
     >>> lrm.predict(array([0.0, 1.0]))
     1
     >>> lrm.predict(array([1.0, 0.0]))
@@ -129,8 +129,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(1.0, [1.0, 0.0, 0.0]),
     ...     LabeledPoint(2.0, [0.0, 0.0, 1.0])
     ... ]
-    >>> data = sc.parallelize(multi_class_data)
-    >>> mcm = LogisticRegressionWithLBFGS.train(data, iterations=10, numClasses=3)
+    >>> mcm = LogisticRegressionWithLBFGS.train(data=sc.parallelize(multi_class_data), numClasses=3)
     >>> mcm.predict([0.0, 0.5, 0.0])
     0
     >>> mcm.predict([0.8, 0.0, 0.0])
@@ -299,7 +298,7 @@ class LogisticRegressionWithLBFGS(object):
         ...     LabeledPoint(0.0, [0.0, 1.0]),
         ...     LabeledPoint(1.0, [1.0, 0.0]),
         ... ]
-        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data), iterations=10)
+        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data))
         >>> lrm.predict([1.0, 0.0])
         1
         >>> lrm.predict([0.0, 1.0])
@@ -331,14 +330,14 @@ class SVMModel(LinearClassificationModel):
     ...     LabeledPoint(1.0, [2.0]),
     ...     LabeledPoint(1.0, [3.0])
     ... ]
-    >>> svm = SVMWithSGD.train(sc.parallelize(data), iterations=10)
+    >>> svm = SVMWithSGD.train(sc.parallelize(data))
     >>> svm.predict([1.0])
     1
     >>> svm.predict(sc.parallelize([[1.0]])).collect()
     [1]
     >>> svm.clearThreshold()
     >>> svm.predict(array([1.0]))
-    1.44...
+    1.25...
 
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
@@ -346,7 +345,7 @@ class SVMModel(LinearClassificationModel):
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
-    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data), iterations=10)
+    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
     >>> svm.predict(SparseVector(2, {1: 1.0}))
     1
     >>> svm.predict(SparseVector(2, {0: -1.0}))
@@ -511,10 +510,9 @@ class NaiveBayesModel(Saveable, Loader):
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
             sc._jsc.sc(), path)
-        # Can not unpickle array.array from Pyrolite in Python3 with "bytes"
-        py_labels = _java2py(sc, java_model.labels(), "latin1")
-        py_pi = _java2py(sc, java_model.pi(), "latin1")
-        py_theta = _java2py(sc, java_model.theta(), "latin1")
+        py_labels = _java2py(sc, java_model.labels())
+        py_pi = _java2py(sc, java_model.pi())
+        py_theta = _java2py(sc, java_model.theta())
         return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
 

@@ -23,7 +23,7 @@ import math
 class RDDSamplerBase(object):
 
     def __init__(self, withReplacement, seed=None):
-        self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
         self._withReplacement = withReplacement
         self._random = None
 
@@ -31,7 +31,7 @@ class RDDSamplerBase(object):
         self._random = random.Random(self._seed ^ split)
 
         # mixing because the initial seeds are close to each other
-        for _ in range(10):
+        for _ in xrange(10):
             self._random.randint(0, 1)
 
     def getUniformSample(self):

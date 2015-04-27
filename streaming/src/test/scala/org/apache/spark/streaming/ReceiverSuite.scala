@@ -131,11 +131,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
   test("block generator") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockIntervalMs = 200
-    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
+    val blockInterval = 200
+    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString)
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 5
-    val waitTime = expectedBlocks * blockIntervalMs + (blockIntervalMs / 2)
+    val waitTime = expectedBlocks * blockInterval + (blockInterval / 2)
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
@@ -155,17 +155,17 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     assert(recordedData.toSet === generatedData.toSet)
   }
 
-  ignore("block generator throttling") {
+  test("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockIntervalMs = 100
-    val maxRate = 1001
-    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms").
+    val blockInterval = 100
+    val maxRate = 100
+    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
       set("spark.streaming.receiver.maxRate", maxRate.toString)
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 20
-    val waitTime = expectedBlocks * blockIntervalMs
+    val waitTime = expectedBlocks * blockInterval
     val expectedMessages = maxRate * waitTime / 1000
-    val expectedMessagesPerBlock = maxRate * blockIntervalMs / 1000
+    val expectedMessagesPerBlock = maxRate * blockInterval / 1000
     val generatedData = new ArrayBuffer[Int]
 
     // Generate blocks
@@ -176,6 +176,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       blockGenerator.addData(count)
       generatedData += count
       count += 1
+      Thread.sleep(1)
     }
     blockGenerator.stop()
 
@@ -184,31 +185,25 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     assert(blockGeneratorListener.arrayBuffers.size > 0, "No blocks received")
     assert(recordedData.toSet === generatedData.toSet, "Received data not same")
 
-    // recordedData size should be close to the expected rate; use an error margin proportional to
-    // the value, so that rate changes don't cause a brittle test
-    val minExpectedMessages = expectedMessages - 0.05 * expectedMessages
-    val maxExpectedMessages = expectedMessages + 0.05 * expectedMessages
+    // recordedData size should be close to the expected rate
+    val minExpectedMessages = expectedMessages - 3
+    val maxExpectedMessages = expectedMessages + 1
     val numMessages = recordedData.size
     assert(
       numMessages >= minExpectedMessages && numMessages <= maxExpectedMessages,
       s"#records received = $numMessages, not between $minExpectedMessages and $maxExpectedMessages"
     )
 
-    // XXX Checking every block would require an even distribution of messages across blocks,
-    // which throttling code does not control. Therefore, test against the average.
-    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 0.05 * expectedMessagesPerBlock
-    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 0.05 * expectedMessagesPerBlock
+    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 3
+    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 1
     val receivedBlockSizes = recordedBlocks.map { _.size }.mkString(",")
-
-    // the first and last block may be incomplete, so we slice them out
-    val validBlocks = recordedBlocks.drop(1).dropRight(1)
-    val averageBlockSize = validBlocks.map(block => block.size).sum / validBlocks.size
-
     assert(
-      averageBlockSize >= minExpectedMessagesPerBlock &&
-        averageBlockSize <= maxExpectedMessagesPerBlock,
+      // the first and last block may be incomplete, so we slice them out
+      recordedBlocks.drop(1).dropRight(1).forall { block =>
+        block.size >= minExpectedMessagesPerBlock && block.size <= maxExpectedMessagesPerBlock
+      },
       s"# records in received blocks = [$receivedBlockSizes], not between " +
-        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock, on average"
+        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock"
     )
   }
 
@@ -313,7 +308,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val errors = new ArrayBuffer[Throwable]
 
     /** Check if all data structures are clean */
-    def isAllEmpty: Boolean = {
+    def isAllEmpty = {
       singles.isEmpty && byteBuffers.isEmpty && iterators.isEmpty &&
         arrayBuffers.isEmpty && errors.isEmpty
     }
@@ -325,21 +320,24 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def pushBytes(
         bytes: ByteBuffer,
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]
+      ) {
       byteBuffers += bytes
     }
 
     def pushIterator(
         iterator: Iterator[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]
+      ) {
       iterators += iterator
     }
 
     def pushArrayBuffer(
         arrayBuffer: ArrayBuffer[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]
+      ) {
       arrayBuffers +=  arrayBuffer
     }
 

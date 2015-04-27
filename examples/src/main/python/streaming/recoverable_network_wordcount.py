@@ -35,7 +35,6 @@
  checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  the checkpoint data.
 """
-from __future__ import print_function
 
 import os
 import sys
@@ -47,7 +46,7 @@ from pyspark.streaming import StreamingContext
 def createContext(host, port, outputPath):
     # If you do not see this printed, that means the StreamingContext has been loaded
     # from the new checkpoint
-    print("Creating new context")
+    print "Creating new context"
     if os.path.exists(outputPath):
         os.remove(outputPath)
     sc = SparkContext(appName="PythonStreamingRecoverableNetworkWordCount")
@@ -61,8 +60,8 @@ def createContext(host, port, outputPath):
 
     def echo(time, rdd):
         counts = "Counts at time %s %s" % (time, rdd.collect())
-        print(counts)
-        print("Appending to " + os.path.abspath(outputPath))
+        print counts
+        print "Appending to " + os.path.abspath(outputPath)
         with open(outputPath, 'a') as f:
             f.write(counts + "\n")
 
@@ -71,8 +70,8 @@ def createContext(host, port, outputPath):
 
 if __name__ == "__main__":
     if len(sys.argv) != 5:
-        print("Usage: recoverable_network_wordcount.py <hostname> <port> "
-              "<checkpoint-directory> <output-file>", file=sys.stderr)
+        print >> sys.stderr, "Usage: recoverable_network_wordcount.py <hostname> <port> "\
+                             "<checkpoint-directory> <output-file>"
         exit(-1)
     host, port, checkpoint, output = sys.argv[1:]
     ssc = StreamingContext.getOrCreate(checkpoint,

@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark._
+import org.apache.spark.{Logging, Partition, SerializableWritable, SparkException}
 import org.apache.spark.scheduler.{ResultTask, ShuffleMapTask}
 
 /**
@@ -83,7 +83,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     }
 
     // Create the output path for the checkpoint
-    val path = RDDCheckpointData.rddCheckpointDataPath(rdd.context, rdd.id).get
+    val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id)
     val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
     if (!fs.mkdirs(path)) {
       throw new SparkException("Failed to create checkpoint path " + path)
@@ -92,17 +92,12 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     // Save to file, and reload it as an RDD
     val broadcastedConf = rdd.context.broadcast(
       new SerializableWritable(rdd.context.hadoopConfiguration))
-    val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
-    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
-      rdd.context.cleaner.foreach { cleaner =>
-        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
-      }
-    }
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
-    if (newRDD.partitions.length != rdd.partitions.length) {
+    val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
+    if (newRDD.partitions.size != rdd.partitions.size) {
       throw new SparkException(
-        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.length + ") has different " +
-          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.length + ")")
+        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.size + ") has different " +
+          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
     }
 
     // Change the dependencies and partitions of the RDD
@@ -135,17 +130,5 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   }
 }
 
-private[spark] object RDDCheckpointData {
-  def rddCheckpointDataPath(sc: SparkContext, rddId: Int): Option[Path] = {
-    sc.checkpointDir.map { dir => new Path(dir, "rdd-" + rddId) }
-  }
-
-  def clearRDDCheckpointData(sc: SparkContext, rddId: Int): Unit = {
-    rddCheckpointDataPath(sc, rddId).foreach { path =>
-      val fs = path.getFileSystem(sc.hadoopConfiguration)
-      if (fs.exists(path)) {
-        fs.delete(path, true)
-      }
-    }
-  }
-}
+// Used for synchronization
+private[spark] object RDDCheckpointData

@@ -46,7 +46,7 @@ private[deploy] object JsonProtocol {
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
-    ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
+    ("memoryperslave" -> obj.desc.memoryPerSlave) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
     ("duration" -> obj.duration)
@@ -55,7 +55,7 @@ private[deploy] object JsonProtocol {
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores) ~
-    ("memoryperslave" -> obj.memoryPerExecutorMB) ~
+    ("memoryperslave" -> obj.memoryPerSlave) ~
     ("user" -> obj.user) ~
     ("command" -> obj.command.toString)
   }

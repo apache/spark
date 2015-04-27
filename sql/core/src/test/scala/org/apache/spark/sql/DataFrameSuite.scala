@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, TestSQLContext}
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.sql
@@ -60,14 +60,6 @@ class DataFrameSuite extends QueryTest {
     assert($"test".toString === "test")
   }
 
-  test("rename nested groupby") {
-    val df = Seq((1,(1,1))).toDF()
-
-    checkAnswer(
-      df.groupBy("_1").agg(col("_1"), sum("_2._1")).toDF("key", "total"),
-      Row(1, 1) :: Nil)
-  }
-
   test("invalid plan toString, debug mode") {
     val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
@@ -84,12 +76,6 @@ class DataFrameSuite extends QueryTest {
 
     // Set the flag back to original value before this test.
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
-  }
-
-  test("access complex data") {
-    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
-    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
   test("table scan") {
@@ -109,6 +95,15 @@ class DataFrameSuite extends QueryTest {
     assert(testData.head(2).head.schema === testData.schema)
   }
 
+  test("self join") {
+    val df1 = testData.select(testData("key")).as('df1)
+    val df2 = testData.select(testData("key")).as('df2)
+
+    checkAnswer(
+      df1.join(df2, $"df1.key" === $"df2.key"),
+      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
+  }
+
   test("simple explode") {
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
@@ -118,35 +113,8 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("join - join using") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
-
-    checkAnswer(
-      df.join(df2, "int"),
-      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
-  }
-
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-
-    // self join
-    checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
-  }
-
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+  test("self join with aliases") {
+    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
       df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
@@ -193,14 +161,6 @@ class DataFrameSuite extends QueryTest {
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
-      testData.select('key).collect().toSeq)
-  }
-
-  test("coalesce") {
-    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
-
-    checkAnswer(
-      testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
   }
 
@@ -361,9 +321,8 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0)))
-    // non-partial
     checkAnswer(
-      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
+      decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -472,15 +431,6 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("call udf in SQLContext") {
-    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
-    checkAnswer(
-      df.select($"id", callUdf("simpleUdf", $"value")),
-      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
-  }
-
   test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
@@ -489,14 +439,6 @@ class DataFrameSuite extends QueryTest {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
-  }
-
-  test("replace column using withColumn") {
-    val df2 = TestSQLContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
-    val df3 = df2.withColumn("x", df2("x") + 1)
-    checkAnswer(
-      df3.select("x"),
-      Row(2) :: Row(3) :: Row(4) :: Nil)
   }
 
   test("withColumnRenamed") {
@@ -563,21 +505,5 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
-  }
-
-  test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
-    val rowRDD = TestSQLContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
-    val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
-    val df = TestSQLContext.createDataFrame(rowRDD, schema)
-    df.rdd.collect()
-  }
-
-  test("SPARK-6899") {
-    val originalValue = TestSQLContext.conf.codegenEnabled
-    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
-    checkAnswer(
-      decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
-    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 }

@@ -60,18 +60,6 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-6510 Add a Graph#minus method acting as Set#difference
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.minus")
-          ) ++ Seq(
-            // SPARK-6492 Fix deadlock in SparkContext.stop()
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$" +
-                "apache$spark$SparkContext$$SPARK_CONTEXT_CONSTRUCTOR_LOCK")
-          )++ Seq(
-            // SPARK-6693 add tostring with max lines and width for matrix
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.toString")
-          )++ Seq(
-            // SPARK-6703 Add getOrCreate method to SparkContext
-            ProblemFilters.exclude[IncompatibleResultTypeProblem]
-                ("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$activeContext")
           )
 
         case v if v.startsWith("1.3") =>

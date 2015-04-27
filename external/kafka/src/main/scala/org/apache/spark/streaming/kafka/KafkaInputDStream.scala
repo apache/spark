@@ -31,7 +31,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.Utils
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
@@ -111,8 +111,7 @@ class KafkaReceiver[
     val topicMessageStreams = consumerConnector.createMessageStreams(
       topics, keyDecoder, valueDecoder)
 
-    val executorPool =
-      ThreadUtils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
+    val executorPool = Utils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
     try {
       // Start the messages handler for each partition
       topicMessageStreams.values.foreach { streams =>

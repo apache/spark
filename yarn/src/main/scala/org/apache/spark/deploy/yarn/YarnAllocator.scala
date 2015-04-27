@@ -112,7 +112,7 @@ private[yarn] class YarnAllocator(
     SparkEnv.driverActorSystemName,
     sparkConf.get("spark.driver.host"),
     sparkConf.get("spark.driver.port"),
-    CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)

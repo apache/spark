@@ -34,7 +34,6 @@ import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -55,88 +54,86 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * Param for rank of the matrix factorization.
    * @group param
    */
-  val rank = new IntParam(this, "rank", "rank of the factorization")
+  val rank = new IntParam(this, "rank", "rank of the factorization", Some(10))
 
   /** @group getParam */
-  def getRank: Int = getOrDefault(rank)
+  def getRank: Int = get(rank)
 
   /**
    * Param for number of user blocks.
    * @group param
    */
-  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks")
+  val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
 
   /** @group getParam */
-  def getNumUserBlocks: Int = getOrDefault(numUserBlocks)
+  def getNumUserBlocks: Int = get(numUserBlocks)
 
   /**
    * Param for number of item blocks.
    * @group param
    */
   val numItemBlocks =
-    new IntParam(this, "numItemBlocks", "number of item blocks")
+    new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
 
   /** @group getParam */
-  def getNumItemBlocks: Int = getOrDefault(numItemBlocks)
+  def getNumItemBlocks: Int = get(numItemBlocks)
 
   /**
    * Param to decide whether to use implicit preference.
    * @group param
    */
-  val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
+  val implicitPrefs =
+    new BooleanParam(this, "implicitPrefs", "whether to use implicit preference", Some(false))
 
   /** @group getParam */
-  def getImplicitPrefs: Boolean = getOrDefault(implicitPrefs)
+  def getImplicitPrefs: Boolean = get(implicitPrefs)
 
   /**
    * Param for the alpha parameter in the implicit preference formulation.
    * @group param
    */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference")
+  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference", Some(1.0))
 
   /** @group getParam */
-  def getAlpha: Double = getOrDefault(alpha)
+  def getAlpha: Double = get(alpha)
 
   /**
    * Param for the column name for user ids.
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids")
+  val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
 
   /** @group getParam */
-  def getUserCol: String = getOrDefault(userCol)
+  def getUserCol: String = get(userCol)
 
   /**
    * Param for the column name for item ids.
    * @group param
    */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
+  val itemCol =
+    new Param[String](this, "itemCol", "column name for item ids", Some("item"))
 
   /** @group getParam */
-  def getItemCol: String = getOrDefault(itemCol)
+  def getItemCol: String = get(itemCol)
 
   /**
    * Param for the column name for ratings.
    * @group param
    */
-  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
+  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
 
   /** @group getParam */
-  def getRatingCol: String = getOrDefault(ratingCol)
+  def getRatingCol: String = get(ratingCol)
 
   /**
    * Param for whether to apply nonnegativity constraints.
    * @group param
    */
   val nonnegative = new BooleanParam(
-    this, "nonnegative", "whether to use nonnegative constraint for least squares")
+    this, "nonnegative", "whether to use nonnegative constraint for least squares", Some(false))
 
   /** @group getParam */
-  def getNonnegative: Boolean = getOrDefault(nonnegative)
-
-  setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
-    implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
-    ratingCol -> "rating", nonnegative -> false)
+  val getNonnegative: Boolean = get(nonnegative)
 
   /**
    * Validates and transforms the input schema.
@@ -145,7 +142,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     assert(schema(map(userCol)).dataType == IntegerType)
     assert(schema(map(itemCol)).dataType== IntegerType)
     val ratingType = schema(map(ratingCol)).dataType
@@ -174,7 +171,7 @@ class ALSModel private[ml] (
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     import dataset.sqlContext.implicits._
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     val users = userFactors.toDF("id", "features")
     val items = itemFactors.toDF("id", "features")
 
@@ -286,7 +283,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   setCheckpointInterval(10)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     val ratings = dataset
       .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
       .map { row =>

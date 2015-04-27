@@ -62,10 +62,10 @@ private[spark] class TaskSchedulerImpl(
   val conf = sc.conf
 
   // How often to check for speculative tasks
-  val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
+  val SPECULATION_INTERVAL = conf.getLong("spark.speculation.interval", 100)
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
+  val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
@@ -142,10 +142,11 @@ private[spark] class TaskSchedulerImpl(
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
-      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL_MS milliseconds,
-            SPECULATION_INTERVAL_MS milliseconds) {
+      import sc.env.actorSystem.dispatcher
+      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
+            SPECULATION_INTERVAL milliseconds) {
         Utils.tryOrStopSparkContext(sc) { checkSpeculatableTasks() }
-      }(sc.env.actorSystem.dispatcher)
+      }
     }
   }
 
@@ -172,7 +173,7 @@ private[spark] class TaskSchedulerImpl(
               this.cancel()
             }
           }
-        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS)
+        }, STARVATION_TIMEOUT, STARVATION_TIMEOUT)
       }
       hasReceivedTask = true
     }
@@ -393,7 +394,7 @@ private[spark] class TaskSchedulerImpl(
 
   def error(message: String) {
     synchronized {
-      if (activeTaskSets.nonEmpty) {
+      if (activeTaskSets.size > 0) {
         // Have each task set throw a SparkException with the error
         for ((taskSetId, manager) <- activeTaskSets) {
           try {
@@ -406,7 +407,8 @@ private[spark] class TaskSchedulerImpl(
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
+        logError("Exiting due to error from cluster scheduler: " + message)
+        System.exit(1)
       }
     }
   }

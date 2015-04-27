@@ -28,7 +28,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -100,7 +99,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Utils.getContextOrSparkClassLoader.loadClass(driver)
+    if (driver != null) Class.forName(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -130,8 +129,6 @@ private[sql] case class JDBCRelation(
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan {
-
-  override val needConversion: Boolean = false
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 

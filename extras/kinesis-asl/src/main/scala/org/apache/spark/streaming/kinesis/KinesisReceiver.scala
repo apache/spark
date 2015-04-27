@@ -23,7 +23,6 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.Utils
 
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
@@ -119,7 +118,7 @@ private[kinesis] class KinesisReceiver(
    *    method.
    */
   override def onStart() {
-    workerId = Utils.localHostName() + ":" + UUID.randomUUID()
+    workerId = InetAddress.getLocalHost.getHostAddress() + ":" + UUID.randomUUID()
     credentialsProvider = new DefaultAWSCredentialsProviderChain()
     kinesisClientLibConfiguration = new KinesisClientLibConfiguration(appName, streamName,
       credentialsProvider, workerId).withKinesisEndpoint(endpointUrl)

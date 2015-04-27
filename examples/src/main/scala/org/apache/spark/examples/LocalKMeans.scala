@@ -40,8 +40,8 @@ object LocalKMeans {
   val convergeDist = 0.001
   val rand = new Random(42)
 
-  def generateData: Array[DenseVector[Double]] = {
-    def generatePoint(i: Int): DenseVector[Double] = {
+  def generateData = {
+    def generatePoint(i: Int) = {
       DenseVector.fill(D){rand.nextDouble * R}
     }
     Array.tabulate(N)(generatePoint)

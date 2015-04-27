@@ -18,10 +18,8 @@
 package org.apache.spark.ml.impl.estimator
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
-import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -55,14 +53,14 @@ private[spark] trait PredictorParams extends Params
       paramMap: ParamMap,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
-    SchemaUtils.checkColumnType(schema, map(featuresCol), featuresDataType)
+    checkInputColumn(schema, map(featuresCol), featuresDataType)
     if (fitting) {
       // TODO: Allow other numeric types
-      SchemaUtils.checkColumnType(schema, map(labelCol), DoubleType)
+      checkInputColumn(schema, map(labelCol), DoubleType)
     }
-    SchemaUtils.appendColumn(schema, map(predictionCol), DoubleType)
+    addOutputColumn(schema, map(predictionCol), DoubleType)
   }
 }
 
@@ -100,7 +98,7 @@ private[spark] abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     val model = train(dataset, map)
     Params.inheritValues(map, this, model) // copy params to model
     model
@@ -143,7 +141,7 @@ private[spark] abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame, paramMap: ParamMap): RDD[LabeledPoint] = {
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
     dataset.select(map(labelCol), map(featuresCol))
       .map { case Row(label: Double, features: Vector) =>
       LabeledPoint(label, features)
@@ -203,7 +201,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+    val map = this.paramMap ++ paramMap
 
     // Prepare model
     val tmpModel = if (paramMap.size != 0) {

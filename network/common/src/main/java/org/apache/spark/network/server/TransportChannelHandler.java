@@ -19,8 +19,6 @@ package org.apache.spark.network.server;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.timeout.IdleState;
-import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,11 +40,6 @@ import org.apache.spark.network.util.NettyUtils;
  * Client.
  * This means that the Client also needs a RequestHandler and the Server needs a ResponseHandler,
  * for the Client's responses to the Server's requests.
- *
- * This class also handles timeouts from a {@link io.netty.handler.timeout.IdleStateHandler}.
- * We consider a connection timed out if there are outstanding fetch or RPC requests but no traffic
- * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
- * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
   private final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
@@ -54,17 +47,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;
   private final TransportRequestHandler requestHandler;
-  private final long requestTimeoutNs;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
-      TransportRequestHandler requestHandler,
-      long requestTimeoutMs) {
+      TransportRequestHandler requestHandler) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
-    this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
   }
 
   public TransportClient getClient() {
@@ -101,27 +91,6 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       requestHandler.handle((RequestMessage) request);
     } else {
       responseHandler.handle((ResponseMessage) request);
-    }
-  }
-
-  /** Triggered based on events from an {@link io.netty.handler.timeout.IdleStateHandler}. */
-  @Override
-  public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-    if (evt instanceof IdleStateEvent) {
-      IdleStateEvent e = (IdleStateEvent) evt;
-      // See class comment for timeout semantics. In addition to ensuring we only timeout while
-      // there are outstanding requests, we also do a secondary consistency check to ensure
-      // there's no race between the idle timeout and incrementing the numOutstandingRequests.
-      boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
-      boolean isActuallyOverdue =
-        System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
-      if (e.state() == IdleState.ALL_IDLE && hasInFlightRequests && isActuallyOverdue) {
-        String address = NettyUtils.getRemoteAddress(ctx.channel());
-        logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-          "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
-          "is wrong.", address, requestTimeoutNs / 1000 / 1000);
-        ctx.close();
-      }
     }
   }
 }

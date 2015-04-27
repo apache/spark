@@ -436,8 +436,7 @@ private[worker] class Worker(
         sparkHome,
         driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
         self,
-        akkaUrl,
-        securityMgr)
+        akkaUrl)
       drivers(driverId) = driver
       driver.start()
 

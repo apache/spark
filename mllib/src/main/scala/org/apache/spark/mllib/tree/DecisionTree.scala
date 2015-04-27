@@ -1147,10 +1147,7 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    // TODO: Do not fail; just ignore the useless feature.
-    assert(splits.length > 0,
-      s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
-        "  Please remove this feature and then try again.")
+    assert(splits.length > 0)
     // set number of splits accordingly
     metadata.setNumSplits(featureIndex, splits.length)
 

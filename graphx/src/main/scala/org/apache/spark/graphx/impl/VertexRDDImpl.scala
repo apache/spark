@@ -71,9 +71,9 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
-  override def getStorageLevel: StorageLevel = partitionsRDD.getStorageLevel
+  override def getStorageLevel = partitionsRDD.getStorageLevel
 
-  override def checkpoint(): Unit = {
+  override def checkpoint() = {
     partitionsRDD.checkpoint()
   }
 

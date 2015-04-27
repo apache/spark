@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext
@@ -48,7 +46,7 @@ cqlsh:test> SELECT * FROM users;
 """
 if __name__ == "__main__":
     if len(sys.argv) != 7:
-        print("""
+        print >> sys.stderr, """
         Usage: cassandra_outputformat <host> <keyspace> <cf> <user_id> <fname> <lname>
 
         Run with example jar:
@@ -62,7 +60,7 @@ if __name__ == "__main__":
            ...   fname text,
            ...   lname text
            ... );
-        """, file=sys.stderr)
+        """
         exit(-1)
 
     host = sys.argv[1]

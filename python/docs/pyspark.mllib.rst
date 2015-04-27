@@ -31,13 +31,6 @@ pyspark.mllib.feature module
     :undoc-members:
     :show-inheritance:
 
-pyspark.mllib.fpm module
-------------------------
-
-.. automodule:: pyspark.mllib.fpm
-    :members:
-    :undoc-members:
-
 pyspark.mllib.linalg module
 ---------------------------
 

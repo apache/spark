@@ -18,8 +18,7 @@
 """
 A Gaussian Mixture Model clustering program using MLlib.
 """
-from __future__ import print_function
-
+import sys
 import random
 import argparse
 import numpy as np
@@ -60,7 +59,7 @@ if __name__ == "__main__":
     model = GaussianMixture.train(data, args.k, args.convergenceTol,
                                   args.maxIterations, args.seed)
     for i in range(args.k):
-        print(("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
-               "sigma = ", model.gaussians[i].sigma.toArray()))
-    print(("Cluster labels (first 100): ", model.predict(data).take(100)))
+        print ("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
+               "sigma = ", model.gaussians[i].sigma.toArray())
+    print ("Cluster labels (first 100): ", model.predict(data).take(100))
     sc.stop()

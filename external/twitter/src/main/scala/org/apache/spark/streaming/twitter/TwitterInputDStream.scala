@@ -70,7 +70,7 @@ class TwitterReceiver(
     try {
       val newTwitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
       newTwitterStream.addListener(new StatusListener {
-        def onStatus(status: Status): Unit = {
+        def onStatus(status: Status) = {
           store(status)
         }
         // Unimplemented

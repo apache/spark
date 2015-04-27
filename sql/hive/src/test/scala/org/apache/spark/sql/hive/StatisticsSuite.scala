@@ -120,7 +120,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     // Try to analyze a temp table
     sql("""SELECT * FROM src""").registerTempTable("tempTable")
-    intercept[UnsupportedOperationException] {
+    intercept[NotImplementedError] {
       analyze("tempTable")
     }
     catalog.unregisterTable(Seq("tempTable"))
@@ -142,7 +142,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         after: () => Unit,
         query: String,
         expectedAnswer: Seq[Row],
-        ct: ClassTag[_]): Unit = {
+        ct: ClassTag[_]) = {
       before()
 
       var df = sql(query)

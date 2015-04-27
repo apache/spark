@@ -32,7 +32,7 @@ private[sql] object KeywordNormalizer {
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def parse(input: String): LogicalPlan = {
+  def apply(input: String): LogicalPlan = {
     // Initialize the Keywords.
     lexical.initialize(reservedWords)
     phrase(start)(new lexical.Scanner(input)) match {

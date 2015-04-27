@@ -24,7 +24,6 @@ import scala.reflect.ClassTag
 import akka.serialization.Serialization
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
 
 
 /**
@@ -60,9 +59,9 @@ private[master] class FileSystemPersistenceEngine(
     val serializer = serialization.findSerializerFor(value)
     val serialized = serializer.toBinary(value)
     val out = new FileOutputStream(file)
-    Utils.tryWithSafeFinally {
+    try {
       out.write(serialized)
-    } {
+    } finally {
       out.close()
     }
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -26,7 +27,7 @@ import org.apache.spark.sql.types._
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
- * when all relations are already filled in and the analyzer needs only to resolve attribute
+ * when all relations are already filled in and the analyser needs only to resolve attribute
  * references.
  */
 object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
@@ -58,7 +59,6 @@ class Analyzer(
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
-      ResolveGenerate ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -140,10 +140,10 @@ class Analyzer(
           case x: Expression if nonSelectedGroupExprSet.contains(x) =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
-            Literal.create(null, expr.dataType)
+            Literal(null, expr.dataType)
           case x if x == g.gid =>
             // replace the groupingId with concrete value (the bit mask)
-            Literal.create(bitmask, IntegerType)
+            Literal(bitmask, IntegerType)
         })
 
         result += GroupExpression(substitution)
@@ -169,36 +169,21 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
+    def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
-        // In hive, if there is same table name in database and CTE definition,
-        // hive will use the table in database, not the CTE one.
-        // Taking into account the reasonableness and the implementation complexity,
-        // here use the CTE definition first, check table name only and ignore database name
-        cteRelations.get(u.tableIdentifier.last)
-          .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
-          .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
+        catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableName}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      val (realPlan, cteRelations) = plan match {
-        // TODO allow subquery to define CTE
-        // Add cte table to a temp relation map,drop `with` plan and keep its child
-        case With(child, relations) => (child, relations)
-        case other => (other, Map.empty[String, LogicalPlan])
-      }
-
-      realPlan transform {
-        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-          i.copy(
-            table = EliminateSubQueries(getTable(u, cteRelations)))
-        case u: UnresolvedRelation =>
-          getTable(u, cteRelations)
-      }
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
+        i.copy(
+          table = EliminateSubQueries(getTable(u)))
+      case u: UnresolvedRelation =>
+        getTable(u)
     }
   }
 
@@ -297,19 +282,18 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
-          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
-            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
+          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
-          case u @ UnresolvedAttribute(nameParts) =>
+          case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+              withPosition(u) { q.resolveChildren(name, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
-            GetField(child, fieldName, resolver)
+            resolveGetField(child, fieldName)
         }
     }
 
@@ -329,6 +313,36 @@ class Analyzer(
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
+    /**
+     * Returns the resolved `GetField`, and report error if no desired field or over one
+     * desired fields are found.
+     */
+    protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
+      def findField(fields: Array[StructField]): Int = {
+        val checkField = (f: StructField) => resolver(f.name, fieldName)
+        val ordinal = fields.indexWhere(checkField)
+        if (ordinal == -1) {
+          throw new AnalysisException(
+            s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+        } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
+          throw new AnalysisException(
+            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+        } else {
+          ordinal
+        }
+      }
+      expr.dataType match {
+        case StructType(fields) =>
+          val ordinal = findField(fields)
+          StructGetField(expr, fields(ordinal), ordinal)
+        case ArrayType(StructType(fields), containsNull) =>
+          val ordinal = findField(fields)
+          ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
+        case otherType =>
+          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
+      }
+    }
   }
 
   /**
@@ -384,12 +398,12 @@ class Analyzer(
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
       // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[Seq[String]] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
+      val unresolved: Seq[String] =
+        ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
 
       // Create a map from name, to resolved attributes, when the desired name can be found
       // prior to the projection.
-      val resolved: Map[Seq[String], NamedExpression] =
+      val resolved: Map[String, NamedExpression] =
         unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
 
       // Construct a set that contains all of the attributes that we need to evaluate the
@@ -474,59 +488,8 @@ class Analyzer(
    */
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, name)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, UnresolvedAttribute(name) :: Nil, child)
-      case Project(Seq(MultiAlias(g: Generator, names)), child) =>
-        Generate(g, join = false, outer = false,
-          qualifier = None, names.map(UnresolvedAttribute(_)), child)
-    }
-  }
-
-  /**
-   * Resolve the Generate, if the output names specified, we will take them, otherwise
-   * we will try to provide the default names, which follow the same rule with Hive.
-   */
-  object ResolveGenerate extends Rule[LogicalPlan] {
-    // Construct the output attributes for the generator,
-    // The output attribute names can be either specified or
-    // auto generated.
-    private def makeGeneratorOutput(
-        generator: Generator,
-        generatorOutput: Seq[Attribute]): Seq[Attribute] = {
-      val elementTypes = generator.elementTypes
-
-      if (generatorOutput.length == elementTypes.length) {
-        generatorOutput.zip(elementTypes).map {
-          case (a, (t, nullable)) if !a.resolved =>
-            AttributeReference(a.name, t, nullable)()
-          case (a, _) => a
-        }
-      } else if (generatorOutput.length == 0) {
-        elementTypes.zipWithIndex.map {
-          // keep the default column names as Hive does _c0, _c1, _cN
-          case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
-        }
-      } else {
-        throw new AnalysisException(
-          s"""
-             |The number of aliases supplied in the AS clause does not match
-             |the number of columns output by the UDTF expected
-             |${elementTypes.size} aliases but got ${generatorOutput.size}
-           """.stripMargin)
-      }
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case p: Generate if p.resolved == false =>
-        // if the generator output names are not specified, we will use the default ones.
-        Generate(
-          p.generator,
-          join = p.join,
-          outer = p.outer,
-          p.qualifier,
-          makeGeneratorOutput(p.generator, p.generatorOutput), p.child)
+      case Project(Seq(Alias(g: Generator, _)), child) =>
+        Generate(g, join = false, outer = false, None, child)
     }
   }
 }

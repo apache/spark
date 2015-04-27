@@ -67,5 +67,3 @@ logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
 known_translations
-DESCRIPTION
-NAMESPACE

@@ -64,7 +64,7 @@ class JavaWrapper(Params):
         :param params: additional params (overwriting embedded values)
         :param java_obj: Java object to receive the params
         """
-        paramMap = self.extractParamMap(params)
+        paramMap = self._merge_params(params)
         for param in self.params:
             if param in paramMap:
                 java_obj.set(param.name, paramMap[param])

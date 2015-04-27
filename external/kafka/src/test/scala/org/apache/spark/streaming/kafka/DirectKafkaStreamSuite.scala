@@ -27,41 +27,31 @@ import scala.language.postfixOps
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
-class DirectKafkaStreamSuite
-  extends FunSuite
-  with BeforeAndAfter
-  with BeforeAndAfterAll
-  with Eventually
-  with Logging {
+class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
+  with BeforeAndAfter with BeforeAndAfterAll with Eventually {
   val sparkConf = new SparkConf()
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  private var sc: SparkContext = _
-  private var ssc: StreamingContext = _
-  private var testDir: File = _
-
-  private var kafkaTestUtils: KafkaTestUtils = _
+  var sc: SparkContext = _
+  var ssc: StreamingContext = _
+  var testDir: File = _
 
   override def beforeAll {
-    kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setup()
+    setupKafka()
   }
 
   override def afterAll {
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
-    }
+    tearDownKafka()
   }
 
   after {
@@ -82,12 +72,12 @@ class DirectKafkaStreamSuite
     val topics = Set("basic1", "basic2", "basic3")
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
-      kafkaTestUtils.createTopic(t)
-      kafkaTestUtils.sendMessages(t, data)
+      createTopic(t)
+      sendMessages(t, data)
     }
     val totalSent = data.values.sum * topics.size
     val kafkaParams = Map(
-      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "metadata.broker.list" -> s"$brokerAddress",
       "auto.offset.reset" -> "smallest"
     )
 
@@ -131,9 +121,9 @@ class DirectKafkaStreamSuite
     val topic = "largest"
     val topicPartition = TopicAndPartition(topic, 0)
     val data = Map("a" -> 10)
-    kafkaTestUtils.createTopic(topic)
+    createTopic(topic)
     val kafkaParams = Map(
-      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "metadata.broker.list" -> s"$brokerAddress",
       "auto.offset.reset" -> "largest"
     )
     val kc = new KafkaCluster(kafkaParams)
@@ -142,7 +132,7 @@ class DirectKafkaStreamSuite
     }
 
     // Send some initial messages before starting context
-    kafkaTestUtils.sendMessages(topic, data)
+    sendMessages(topic, data)
     eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() > 3)
     }
@@ -164,7 +154,7 @@ class DirectKafkaStreamSuite
     stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
-    kafkaTestUtils.sendMessages(topic, newData)
+    sendMessages(topic, newData)
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
@@ -176,9 +166,9 @@ class DirectKafkaStreamSuite
     val topic = "offset"
     val topicPartition = TopicAndPartition(topic, 0)
     val data = Map("a" -> 10)
-    kafkaTestUtils.createTopic(topic)
+    createTopic(topic)
     val kafkaParams = Map(
-      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "metadata.broker.list" -> s"$brokerAddress",
       "auto.offset.reset" -> "largest"
     )
     val kc = new KafkaCluster(kafkaParams)
@@ -187,7 +177,7 @@ class DirectKafkaStreamSuite
     }
 
     // Send some initial messages before starting context
-    kafkaTestUtils.sendMessages(topic, data)
+    sendMessages(topic, data)
     eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() >= 10)
     }
@@ -210,7 +200,7 @@ class DirectKafkaStreamSuite
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
-    kafkaTestUtils.sendMessages(topic, newData)
+    sendMessages(topic, newData)
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
@@ -220,18 +210,18 @@ class DirectKafkaStreamSuite
   // Test to verify the offset ranges can be recovered from the checkpoints
   test("offset recovery") {
     val topic = "recovery"
-    kafkaTestUtils.createTopic(topic)
+    createTopic(topic)
     testDir = Utils.createTempDir()
 
     val kafkaParams = Map(
-      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "metadata.broker.list" -> s"$brokerAddress",
       "auto.offset.reset" -> "smallest"
     )
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
-      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
+      sendMessages(topic, strings.map { _ -> 1}.toMap)
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         assert(strings.forall { DirectKafkaStreamSuite.collectedData.contains })
       }

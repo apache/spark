@@ -23,23 +23,21 @@ class DataTypeParserSuite extends FunSuite {
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
-      assert(DataTypeParser.parse(dataTypeString) === expectedDataType)
+      assert(DataTypeParser(dataTypeString) === expectedDataType)
     }
   }
 
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
-      intercept[DataTypeException](DataTypeParser.parse(dataTypeString))
+      intercept[DataTypeException](DataTypeParser(dataTypeString))
     }
   }
 
   checkDataType("int", IntegerType)
-  checkDataType("integer", IntegerType)
   checkDataType("BooLean", BooleanType)
   checkDataType("tinYint", ByteType)
   checkDataType("smallINT", ShortType)
   checkDataType("INT", IntegerType)
-  checkDataType("INTEGER", IntegerType)
   checkDataType("bigint", LongType)
   checkDataType("float", FloatType)
   checkDataType("dOUBle", DoubleType)

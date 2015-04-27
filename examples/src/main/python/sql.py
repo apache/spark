@@ -15,10 +15,7 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import os
-import sys
 
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
@@ -51,11 +48,7 @@ if __name__ == "__main__":
 
     # A JSON dataset is pointed to by path.
     # The path can be either a single text file or a directory storing text files.
-    if len(sys.argv) < 2:
-        path = "file://" + \
-            os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
-    else:
-        path = sys.argv[1]
+    path = os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
     # Create a DataFrame from the file(s) pointed to by path
     people = sqlContext.jsonFile(path)
     # root
@@ -75,6 +68,6 @@ if __name__ == "__main__":
     teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
-        print(each[0])
+        print each[0]
 
     sc.stop()

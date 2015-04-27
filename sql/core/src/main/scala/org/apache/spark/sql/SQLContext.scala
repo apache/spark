@@ -25,17 +25,15 @@ import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.reflect.TypeToken
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, expressions}
+import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -132,16 +130,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser.apply(_))
 
   @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback.parse(_))
+    new SparkSQLParser(fallback(_))
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
-    ddlParser.parse(sql, false).getOrElse(sqlParser.parse(sql))
+    ddlParser(sql, false).getOrElse(sqlParser(sql))
   }
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
@@ -394,24 +392,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema, needsConversion = true)
-  }
-
-  /**
-   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
-   * converted to Catalyst rows.
-   */
-  private[sql]
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val catalystRows = if (needsConversion) {
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[Row])
-    } else {
-      rowRDD
-    }
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
     DataFrame(this, logicalPlan)
   }
 
@@ -462,7 +445,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { row =>
         new GenericRow(
           extractors.zip(attributeSeq).map { case (e, attr) =>
-            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
           }.toArray[Any]
         ) : Row
       }
@@ -621,7 +604,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    createDataFrame(rowRDD, appliedSchema)
   }
 
   /**
@@ -650,7 +633,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+    createDataFrame(rowRDD, appliedSchema)
   }
 
   /**
@@ -875,8 +858,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * passed to this function.
    *
    * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param lowerBound the minimum value of `columnName` to retrieve
+   * @param upperBound the maximum value of `columnName` to retrieve
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    *
@@ -1083,7 +1066,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
+      Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
   protected[sql] def openSession(): SQLSession = {
@@ -1120,12 +1103,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
     def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
-    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
+    lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
-    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
+    lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
@@ -1134,7 +1117,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
-    lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
+    lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[Row] = executedPlan.execute()
@@ -1197,7 +1180,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case FloatType => true
       case DateType => true
       case TimestampType => true
-      case StringType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
       case StructType(_) => true
@@ -1224,12 +1206,56 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
+    val (dataType, _) = inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }
   }
 
+  /**
+   * Infers the corresponding SQL data type of a Java class.
+   * @param clazz Java class
+   * @return (SQL data type, nullable)
+   */
+  private def inferDataType(clazz: Class[_]): (DataType, Boolean) = {
+    // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
+    clazz match {
+      case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
+
+      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+      case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+      case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+      case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+      case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+      case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+      case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
+
+      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+      case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+      case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+      case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+      case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+      case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+      case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+
+      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+      case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+      case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+
+      case c: Class[_] if c.isArray =>
+        val (dataType, nullable) = inferDataType(c.getComponentType)
+        (ArrayType(dataType, nullable), true)
+
+      case _ =>
+        val beanInfo = Introspector.getBeanInfo(clazz)
+        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+        val fields = properties.map { property =>
+          val (dataType, nullable) = inferDataType(property.getPropertyType)
+          new StructField(property.getName, dataType, nullable)
+        }
+        (new StructType(fields), true)
+    }
+  }
 }
-
-

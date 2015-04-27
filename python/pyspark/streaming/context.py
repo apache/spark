@@ -14,12 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from __future__ import print_function
-
 import os
 import sys
 
+from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import RDD, SparkConf
@@ -159,7 +157,7 @@ class StreamingContext(object):
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
         except Exception:
-            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
+            print >>sys.stderr, "failed to load StreamingContext from checkpoint"
             raise
 
         jsc = jssc.sparkContext()
@@ -304,7 +302,9 @@ class StreamingContext(object):
             rdds = [self._sc.parallelize(input) for input in rdds]
         self._check_serializers(rdds)
 
-        queue = self._jvm.PythonDStream.toRDDQueue([r._jrdd for r in rdds])
+        jrdds = ListConverter().convert([r._jrdd for r in rdds],
+                                        SparkContext._gateway._gateway_client)
+        queue = self._jvm.PythonDStream.toRDDQueue(jrdds)
         if default:
             default = default._reserialize(rdds[0]._jrdd_deserializer)
             jdstream = self._jssc.queueStream(queue, oneAtATime, default._jrdd)
@@ -319,7 +319,8 @@ class StreamingContext(object):
         the transform function parameter will be the same as the order
         of corresponding DStreams in the list.
         """
-        jdstreams = [d._jdstream for d in dstreams]
+        jdstreams = ListConverter().convert([d._jdstream for d in dstreams],
+                                            SparkContext._gateway._gateway_client)
         # change the final serializer to sc.serializer
         func = TransformFunction(self._sc,
                                  lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
@@ -342,5 +343,6 @@ class StreamingContext(object):
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
         first = dstreams[0]
-        jrest = [d._jdstream for d in dstreams[1:]]
+        jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
+                                        SparkContext._gateway._gateway_client)
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)

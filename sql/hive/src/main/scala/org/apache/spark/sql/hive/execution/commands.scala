@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -58,13 +58,12 @@ case class DropTable(
     try {
       hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
     } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
+      // This table's metadata is not in
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
       // Other Throwables can be caused by users providing wrong parameters in OPTIONS
       // (e.g. invalid paths). We catch it and log a warning message.
       // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
+      case e: Throwable => log.warn(s"${e.getMessage}")
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
@@ -76,17 +75,11 @@ case class DropTable(
 private[hive]
 case class AddJar(path: String) extends RunnableCommand {
 
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, false) :: Nil)
-    schema.toAttributes
-  }
-
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
-    Seq(Row(0))
+    Seq.empty[Row]
   }
 }
 
