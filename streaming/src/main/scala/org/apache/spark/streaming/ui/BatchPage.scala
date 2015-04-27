@@ -80,9 +80,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
     // In the first row, output op id and its information needs to be shown. In other rows, these
     // cells will be taken up due to "rowspan".
+    // scalastyle:off
     val prefixCells =
       if (isFirstRow) {
-        <td rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpId.toString}</td>
+        <td class="output-op-id-cell" rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpId.toString}</td>
         <td rowspan={numSparkJobRowsInOutputOp.toString}>
           <span class="description-input" title={lastStageDescription}>
             {lastStageDescription}
@@ -92,6 +93,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       } else {
         Nil
       }
+    // scalastyle:on
 
     <tr>
       {prefixCells}

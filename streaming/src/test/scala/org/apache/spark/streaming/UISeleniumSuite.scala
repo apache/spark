@@ -65,7 +65,18 @@ class UISeleniumSuite
   private def setupStreams(ssc: StreamingContext): Unit = {
     val rdds = Queue(ssc.sc.parallelize(1 to 4, 4))
     val inputStream = ssc.queueStream(rdds)
-    inputStream.foreachRDD(rdd => rdd.foreach(_ => {}))
+    inputStream.foreachRDD { rdd =>
+      rdd.foreach(_ => {})
+      rdd.foreach(_ => {})
+    }
+    inputStream.foreachRDD { rdd =>
+      rdd.foreach(_ => {})
+      try {
+        rdd.foreach(_ => throw new RuntimeException("Oops"))
+      } catch {
+        case e: SparkException if e.getMessage.contains("Oops") =>
+      }
+    }
   }
 
   test("attaching and detaching a Streaming tab") {
@@ -115,9 +126,31 @@ class UISeleniumSuite
           List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
             "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
         }
-        val jobLinks =
-          findAll(cssSelector("""#batch-job-table a""")).flatMap(_.attribute("href")).toSeq
-        jobLinks.size should be >= (1)
+
+        // Check we have 2 output op ids
+        val outputOpIds = findAll(cssSelector(".output-op-id-cell")).toSeq
+        outputOpIds.map(_.attribute("rowspan")) should be (List(Some("2"), Some("2")))
+        outputOpIds.map(_.text) should be (List("0", "1"))
+
+        // Check job ids
+        val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
+        jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
+
+        val jobLinks = jobIdCells.flatMap(_.attribute("href"))
+        jobLinks.size should be (4)
+
+        // Check stage progress
+        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toSeq should be
+          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+
+        // Check job progress
+        findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
+          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+
+        // Check stacktrack
+        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
+        errorCells should have size 1
+        errorCells(0) should include("java.lang.RuntimeException: Oops")
 
         // Check the job link in the batch page is right
         go to (jobLinks(0))
