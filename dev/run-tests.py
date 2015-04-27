@@ -23,21 +23,17 @@ import sys
 import shutil
 import subprocess
 
-spark_proj_root = \
+SPARK_PROJ_ROOT = \
     os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
-user_home_dir = os.environ.get("HOME")
+USER_HOME_DIR = os.environ.get("HOME")
 
-sbt_maven_profile_args_env = "SBT_MAVEN_PROFILES_ARGS"
-amplab_jenkins_build_tool_env = "AMPLAB_JENKINS_BUILD_TOOL"
-amplab_jenkins_build_tool = os.environ.get(amplab_jenkins_build_tool_env)
-amplab_jenkins = os.environ.get("AMPLAB_JENKINS")
+SBT_MAVEN_PROFILE_ARGS_ENV = "SBT_MAVEN_PROFILES_ARGS"
+AMPLAB_JENKINS_BUILD_TOOL = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL")
+AMPLAB_JENKINS = os.environ.get("AMPLAB_JENKINS")
 
-resolving_re = "^.*[info].*Resolving"
-merging_re = "^.*[warn].*Merging"
-including_re = "^.*[info].*Including"
-sbt_output_filter = re.compile(resolving_re + "|" + 
-                               merging_re + "|" +
-                               including_re)
+SBT_OUTPUT_FILTER = re.compile("^.*[info].*Resolving" + "|" + 
+                               "^.*[warn].*Merging" + "|" +
+                               "^.*[info].*Including")
 
 
 def get_error_codes(err_code_file):
@@ -76,7 +72,7 @@ def run_cmd(cmd):
     if not isinstance(cmd, list):
         cmd = cmd.split()
     try:
-        subprocess.check_output(cmd)
+        subprocess.check_call(cmd)
     except subprocess.CalledProcessError as e:
         print "[error] running", e.cmd, "; received return code", e.returncode
         sys.exit(e.returncode)
@@ -86,7 +82,7 @@ def set_sbt_maven_profile_args():
     """Properly sets the SBT environment variable arguments with additional
     checks to determine if this is running on an Amplab Jenkins machine"""
 
-    # base environment values for sbt_maven_profile_args_env which will be appended on
+    # base environment values for SBT_MAVEN_PROFILE_ARGS_ENV which will be appended on
     sbt_maven_profile_args_base = ["-Pkinesis-asl"]
 
     sbt_maven_profile_arg_dict = {
@@ -99,11 +95,11 @@ def set_sbt_maven_profile_args():
     # set the SBT maven build profile argument environment variable and ensure
     # we build against the right version of Hadoop
     if os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE"):
-        os.environ[sbt_maven_profile_args_env] = \
+        os.environ[SBT_MAVEN_PROFILE_ARGS_ENV] = \
             " ".join(sbt_maven_profile_arg_dict.get(ajbp, []) 
                      + sbt_maven_profile_args_base)
     else:
-        os.environ[sbt_maven_profile_args_env] = \
+        os.environ[SBT_MAVEN_PROFILE_ARGS_ENV] = \
             " ".join(sbt_maven_profile_arg_dict.get("hadoop2.3", [])
                      + sbt_maven_profile_args_base)
 
@@ -176,7 +172,7 @@ def determine_test_suite():
     @return a set of unique test names"""
     test_suite = list()
 
-    if amplab_jenkins:
+    if AMPLAB_JENKINS:
         run_cmd(['git', 'fetch', 'origin', 'master:master']).wait()
 
         raw_output = subprocess.check_output(['git', 'diff', '--name-only', 'master'])
@@ -209,7 +205,7 @@ def determine_test_suite():
 
 def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = error_codes[err_block]
-    line_str = "".join(['='] * 72)
+    line_str = '=' * 72
 
     print
     print line_str
@@ -236,7 +232,7 @@ def exec_maven(mvn_args=[]):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    return subprocess.Popen(["./build/mvn"] + mvn_args)
+    run_cmd(["./build/mvn"] + mvn_args)
 
 
 def exec_sbt(sbt_args=[]):
@@ -253,9 +249,9 @@ def exec_sbt(sbt_args=[]):
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, ''):
-        if not sbt_output_filter.match(line):
+        if not SBT_OUTPUT_FILTER.match(line):
             print line,    
-    return sbt_proc
+    sbt_proc.wait()
 
 
 def build_apache_spark():
@@ -265,7 +261,7 @@ def build_apache_spark():
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
 
-    sbt_maven_profile_args = os.environ.get(sbt_maven_profile_args_env).split()
+    sbt_maven_profile_args = os.environ.get(SBT_MAVEN_PROFILE_ARGS_ENV).split()
     hive_profile_args = sbt_maven_profile_args + ["-Phive", 
                                                   "-Phive-thriftserver"]
     hive_12_profile_args = hive_profile_args + ["-Phive-0.12.0"]
@@ -284,8 +280,8 @@ def build_apache_spark():
     print "[info] Building Spark with these arguments:", 
     print " ".join(hive_12_profile_args)
 
-    if amplab_jenkins_build_tool == "maven":
-        exec_maven(hive_12_profile_args + base_mvn_args).wait()
+    if AMPLAB_JENKINS_BUILD_TOOL == "maven":
+        exec_maven(hive_12_profile_args + base_mvn_args)
     else:
         exec_sbt(hive_12_profile_args + sbt_hive_12_goals).wait()
 
@@ -296,10 +292,10 @@ def build_apache_spark():
     print "[info] Building Spark with these arguments:", 
     print " ".join(hive_profile_args)
 
-    if amplab_jenkins_build_tool == "maven":
-        exec_maven(hive_profile_args + base_mvn_args).wait()
+    if AMPLAB_JENKINS_BUILD_TOOL == "maven":
+        exec_maven(hive_profile_args + base_mvn_args)
     else:
-        exec_sbt(hive_profile_args + sbt_hive_goals).wait()
+        exec_sbt(hive_profile_args + sbt_hive_goals)
 
 
 def detect_binary_inop_with_mima():
@@ -321,8 +317,8 @@ def run_scala_tests(test_suite=[]):
     # enabled.
     if "SQL" in test_suite:
         sbt_maven_profile_args = \
-            os.environ.get(sbt_maven_profile_args_env).split()
-        os.environ[sbt_maven_profile_args_env] = \
+            os.environ.get(SBT_MAVEN_PROFILE_ARGS_ENV).split()
+        os.environ[SBT_MAVEN_PROFILE_ARGS_ENV] = \
             " ".join(sbt_maven_profile_args + ["-Phive", "-Phive-thriftserver"])
 
     # if we only have changes in SQL build a custom test string
@@ -336,23 +332,23 @@ def run_scala_tests(test_suite=[]):
         sbt_maven_test_args = ["test"]
 
     # get the latest sbt maven profile arguments
-    sbt_maven_profile_args = os.environ.get(sbt_maven_profile_args_env).split()
+    sbt_maven_profile_args = os.environ.get(SBT_MAVEN_PROFILE_ARGS_ENV).split()
 
     print "[info] Running Spark tests with these arguments:",
     print " ".join(sbt_maven_profile_args), 
     print " ".join(sbt_maven_test_args)
 
-    if amplab_jenkins_build_tool == "maven":
-        exec_maven(["test"] + sbt_maven_profile_args + ["--fail-at-end"]).wait()
+    if AMPLAB_JENKINS_BUILD_TOOL == "maven":
+        exec_maven(["test"] + sbt_maven_profile_args + ["--fail-at-end"])
     else:
-        exec_sbt(sbt_maven_profile_args + sbt_maven_test_args).wait()
+        exec_sbt(sbt_maven_profile_args + sbt_maven_test_args)
 
 
 def run_python_tests(test_suite=[]):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
     
     # Add path for Python3 in Jenkins if we're calling from a Jenkins machine
-    if amplab_jenkins:
+    if AMPLAB_JENKINS:
         os.environ["PATH"] = os.environ.get("PATH")+":/home/anaconda/envs/py3k/bin"
 
     run_cmd(["./python/run-tests"])
@@ -369,16 +365,16 @@ def run_sparkr_tests(test_suite=[]):
 
 if __name__ == "__main__":
     # Ensure the user home directory (HOME) is valid and is an absolute directory
-    if not user_home_dir or not os.path.isabs(user_home_dir):
+    if not USER_HOME_DIR or not os.path.isabs(USER_HOME_DIR):
         print "[error] Cannot determine your home directory as an absolute path;",
         print "ensure the $HOME environment variable is set properly."
         sys.exit(1)
 
-    os.chdir(spark_proj_root)
+    os.chdir(SPARK_PROJ_ROOT)
 
     rm_r("./work")
-    rm_r(os.path.join(user_home_dir, ".ivy2/local/org.apache.spark"))
-    rm_r(os.path.join(user_home_dir, ".ivy2/cache/org.apache.spark"))
+    rm_r(os.path.join(USER_HOME_DIR, ".ivy2/local/org.apache.spark"))
+    rm_r(os.path.join(USER_HOME_DIR, ".ivy2/cache/org.apache.spark"))
 
     error_codes = get_error_codes("./dev/run-tests-codes.sh")
 
