@@ -72,9 +72,11 @@ private[python] class PythonMLLibAPI extends Serializable {
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
   def appendBias(data: org.apache.spark.mllib.linalg.Vector)
+  : org.apache.spark.mllib.linalg.Vector
     = MLUtils.appendBias(data)
 
   def loadVectors(jsc: JavaSparkContext, path: String)
+  : RDD[org.apache.spark.mllib.linalg.Vector]
     = MLUtils.loadVectors(jsc.sc, path)
 
   private def trainRegressionModel(
