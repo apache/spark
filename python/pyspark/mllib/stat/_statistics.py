@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark import RDD
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
@@ -38,7 +38,7 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
         return self.call("variance").toArray()
 
     def count(self):
-        return self.call("count")
+        return int(self.call("count"))
 
     def numNonzeros(self):
         return self.call("numNonzeros").toArray()
@@ -48,6 +48,12 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
     def min(self):
         return self.call("min").toArray()
+
+    def normL1(self):
+        return self.call("normL1").toArray()
+
+    def normL2(self):
+        return self.call("normL2").toArray()
 
 
 class Statistics(object):
@@ -72,7 +78,7 @@ class Statistics(object):
         >>> cStats.variance()
         array([  4.,  13.,   0.,  25.])
         >>> cStats.count()
-        3L
+        3
         >>> cStats.numNonzeros()
         array([ 3.,  2.,  0.,  3.])
         >>> cStats.max()
@@ -118,20 +124,20 @@ class Statistics(object):
         >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]),
         ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
         >>> pearsonCorr = Statistics.corr(rdd)
-        >>> print str(pearsonCorr).replace('nan', 'NaN')
+        >>> print(str(pearsonCorr).replace('nan', 'NaN'))
         [[ 1.          0.05564149         NaN  0.40047142]
          [ 0.05564149  1.                 NaN  0.91359586]
          [        NaN         NaN  1.                 NaN]
          [ 0.40047142  0.91359586         NaN  1.        ]]
         >>> spearmanCorr = Statistics.corr(rdd, method="spearman")
-        >>> print str(spearmanCorr).replace('nan', 'NaN')
+        >>> print(str(spearmanCorr).replace('nan', 'NaN'))
         [[ 1.          0.10540926         NaN  0.4       ]
          [ 0.10540926  1.                 NaN  0.9486833 ]
          [        NaN         NaN  1.                 NaN]
          [ 0.4         0.9486833          NaN  1.        ]]
         >>> try:
         ...     Statistics.corr(rdd, "spearman")
-        ...     print "Method name as second argument without 'method=' shouldn't be allowed."
+        ...     print("Method name as second argument without 'method=' shouldn't be allowed.")
         ... except TypeError:
         ...     pass
         """
@@ -147,6 +153,7 @@ class Statistics(object):
             return callMLlibFunc("corr", x.map(float), y.map(float), method)
 
     @staticmethod
+    @ignore_unicode_prefix
     def chiSqTest(observed, expected=None):
         """
         .. note:: Experimental
@@ -182,11 +189,11 @@ class Statistics(object):
         >>> from pyspark.mllib.linalg import Vectors, Matrices
         >>> observed = Vectors.dense([4, 6, 5])
         >>> pearson = Statistics.chiSqTest(observed)
-        >>> print pearson.statistic
+        >>> print(pearson.statistic)
         0.4
         >>> pearson.degreesOfFreedom
         2
-        >>> print round(pearson.pValue, 4)
+        >>> print(round(pearson.pValue, 4))
         0.8187
         >>> pearson.method
         u'pearson'
@@ -196,12 +203,12 @@ class Statistics(object):
         >>> observed = Vectors.dense([21, 38, 43, 80])
         >>> expected = Vectors.dense([3, 5, 7, 20])
         >>> pearson = Statistics.chiSqTest(observed, expected)
-        >>> print round(pearson.pValue, 4)
+        >>> print(round(pearson.pValue, 4))
         0.0027
 
         >>> data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
         >>> chi = Statistics.chiSqTest(Matrices.dense(3, 4, data))
-        >>> print round(chi.statistic, 4)
+        >>> print(round(chi.statistic, 4))
         21.9958
 
         >>> data = [LabeledPoint(0.0, Vectors.dense([0.5, 10.0])),
@@ -212,9 +219,9 @@ class Statistics(object):
         ...         LabeledPoint(1.0, Vectors.dense([3.5, 40.0])),]
         >>> rdd = sc.parallelize(data, 4)
         >>> chi = Statistics.chiSqTest(rdd)
-        >>> print chi[0].statistic
+        >>> print(chi[0].statistic)
         0.75
-        >>> print chi[1].statistic
+        >>> print(chi[1].statistic)
         1.5
         """
         if isinstance(observed, RDD):

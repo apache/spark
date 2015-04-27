@@ -48,9 +48,9 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
 
   protected def initialize() {}
 
-  def hasNext = buffer.hasRemaining
+  override def hasNext: Boolean = buffer.hasRemaining
 
-  def extractTo(row: MutableRow, ordinal: Int): Unit = {
+  override def extractTo(row: MutableRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 
@@ -61,7 +61,7 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
   protected def underlyingBuffer = buffer
 }
 
-private[sql] abstract class NativeColumnAccessor[T <: NativeType](
+private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)

@@ -32,6 +32,10 @@ abstract class DataSourceTest extends QueryTest with BeforeAndAfter {
         override val extendedResolutionRules =
           PreInsertCastAndRename ::
           Nil
+
+        override val extendedCheckRules = Seq(
+          sources.PreWriteCheck(catalog)
+        )
       }
   }
 }

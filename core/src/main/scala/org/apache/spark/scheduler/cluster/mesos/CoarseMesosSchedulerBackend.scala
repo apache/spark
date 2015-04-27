@@ -28,7 +28,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{Utils, AkkaUtils}
@@ -47,7 +47,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with MScheduler
   with Logging {
 
@@ -148,7 +148,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
@@ -207,7 +207,7 @@ private[spark] class CoarseMesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      val filters = Filters.newBuilder().setRefuseSeconds(-1).build()
+      val filters = Filters.newBuilder().setRefuseSeconds(5).build()
 
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.toString
@@ -262,20 +262,12 @@ private[spark] class CoarseMesosSchedulerBackend(
       .build()
   }
 
-  /** Check whether a Mesos task state represents a finished task */
-  private def isFinished(state: MesosTaskState) = {
-    state == MesosTaskState.TASK_FINISHED ||
-      state == MesosTaskState.TASK_FAILED ||
-      state == MesosTaskState.TASK_KILLED ||
-      state == MesosTaskState.TASK_LOST
-  }
-
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
     logInfo("Mesos task " + taskId + " is now " + state)
     synchronized {
-      if (isFinished(state)) {
+      if (TaskState.isFinished(TaskState.fromMesos(state))) {
         val slaveId = taskIdToSlaveId(taskId)
         slaveIdsWithExecutors -= slaveId
         taskIdToSlaveId -= taskId
@@ -285,7 +277,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           coresByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
-        if (state == MesosTaskState.TASK_FAILED || state == MesosTaskState.TASK_LOST) {
+        if (TaskState.isFailed(TaskState.fromMesos(state))) {
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +

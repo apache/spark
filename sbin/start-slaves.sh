@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+# Starts a slave instance on each machine specified in the conf/slaves file.
+
 sbin="`dirname "$0"`"
 sbin="`cd "$sbin"; pwd`"
 
@@ -57,13 +59,4 @@ if [ "$START_TACHYON" == "true" ]; then
 fi
 
 # Launch the slaves
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" 1 "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
-else
-  if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
-    SPARK_WORKER_WEBUI_PORT=8081
-  fi
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 )) --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i )) "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"
-  done
-fi
+"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" "spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT"

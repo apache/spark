@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, analysis}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.types.{DataTypeConversions, StructType, StructField}
+import org.apache.spark.sql.types.{StructType, StructField}
 
 object LocalRelation {
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
@@ -31,7 +31,8 @@ object LocalRelation {
 
   def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
     val schema = StructType.fromAttributes(output)
-    LocalRelation(output, data.map(row => DataTypeConversions.productToRow(row, schema)))
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    LocalRelation(output, data.map(converter(_).asInstanceOf[Row]))
   }
 }
 

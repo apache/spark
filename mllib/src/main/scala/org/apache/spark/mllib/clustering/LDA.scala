@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
+import breeze.linalg.{DenseVector => BDV, normalize}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
@@ -177,7 +177,7 @@ class LDA private (
   def getBeta: Double = getTopicConcentration
 
   /** Alias for [[setTopicConcentration()]] */
-  def setBeta(beta: Double): this.type = setBeta(beta)
+  def setBeta(beta: Double): this.type = setTopicConcentration(beta)
 
   /**
    * Maximum number of iterations for learning.

@@ -26,13 +26,13 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 import org.apache.spark.sql.catalyst.plans.logical._
 
 private[sql] object KeywordNormalizer {
-  def apply(str: String) = str.toLowerCase()
+  def apply(str: String): String = str.toLowerCase()
 }
 
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def apply(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
     lexical.initialize(reservedWords)
     phrase(start)(new lexical.Scanner(input)) match {
@@ -42,7 +42,7 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 
   protected case class Keyword(str: String) {
-    def normalize = KeywordNormalizer(str)
+    def normalize: String = KeywordNormalizer(str)
     def parser: Parser[String] = normalize
   }
 
@@ -81,7 +81,7 @@ private[sql] abstract class AbstractSparkSQLParser
 
 class SqlLexical extends StdLexical {
   case class FloatLit(chars: String) extends Token {
-    override def toString = chars
+    override def toString: String = chars
   }
 
   /* This is a work around to support the lazy setting */
@@ -120,7 +120,7 @@ class SqlLexical extends StdLexical {
     | failure("illegal character")
     )
 
-  override def identChar = letter | elem('_')
+  override def identChar: Parser[Elem] = letter | elem('_')
 
   override def whitespace: Parser[Any] =
     ( whitespaceChar

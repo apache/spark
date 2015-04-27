@@ -58,7 +58,7 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
   override def initialize(
       initialSize: Int,
       columnName: String = "",
-      useCompression: Boolean = false) = {
+      useCompression: Boolean = false): Unit = {
 
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
@@ -73,7 +73,7 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
     columnType.append(row, ordinal, buffer)
   }
 
-  override def build() = {
+  override def build(): ByteBuffer = {
     buffer.flip().asInstanceOf[ByteBuffer]
   }
 }
@@ -84,10 +84,10 @@ private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
   extends BasicColumnBuilder[T, JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
-private[sql] abstract class NativeColumnBuilder[T <: NativeType](
+private[sql] abstract class NativeColumnBuilder[T <: AtomicType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#JvmType](columnStats, columnType)
+  extends BasicColumnBuilder[T, T#InternalType](columnStats, columnType)
   with NullableColumnBuilder
   with AllCompressionSchemes
   with CompressibleColumnBuilder[T]
@@ -153,6 +153,7 @@ private[sql] object ColumnBuilder {
     val builder: ColumnBuilder = dataType match {
       case IntegerType => new IntColumnBuilder
       case LongType => new LongColumnBuilder
+      case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder

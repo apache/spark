@@ -27,11 +27,12 @@ private[sql] case class InsertIntoDataSource(
     overwrite: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = DataFrame(sqlContext, query)
     // Apply the schema of the existing table to the new data.
-    val df = sqlContext.createDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
+    val df = sqlContext.createDataFrame(
+      data.queryExecution.toRdd, logicalRelation.schema, needsConversion = false)
     relation.insert(df, overwrite)
 
     // Invalidate the cache.

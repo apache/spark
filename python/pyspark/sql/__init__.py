@@ -16,26 +16,45 @@
 #
 
 """
-public classes of Spark SQL:
+Important classes of Spark SQL and DataFrames:
 
     - L{SQLContext}
-      Main entry point for SQL functionality.
+      Main entry point for :class:`DataFrame` and SQL functionality.
     - L{DataFrame}
-      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, DataFrames also support SQL.
-    - L{GroupedData}
+      A distributed collection of data grouped into named columns.
     - L{Column}
-      Column is a DataFrame with a single column.
+      A column expression in a :class:`DataFrame`.
     - L{Row}
-      A Row of data returned by a Spark SQL query.
+      A row of data in a :class:`DataFrame`.
     - L{HiveContext}
-      Main entry point for accessing data stored in Apache Hive..
+      Main entry point for accessing data stored in Apache Hive.
+    - L{GroupedData}
+      Aggregation methods, returned by :func:`DataFrame.groupBy`.
+    - L{DataFrameNaFunctions}
+      Methods for handling missing data (null values).
+    - L{functions}
+      List of built-in functions available for :class:`DataFrame`.
+    - L{types}
+      List of data types available.
 """
+from __future__ import absolute_import
 
-from pyspark.sql.context import SQLContext, HiveContext
+# fix the module name conflict for Python 3+
+import sys
+from . import _types as types
+modname = __name__ + '.types'
+types.__name__ = modname
+# update the __module__ for all objects, make them picklable
+for v in types.__dict__.values():
+    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
+        v.__module__ = modname
+sys.modules[modname] = types
+del modname, sys
+
 from pyspark.sql.types import Row
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
+from pyspark.sql.context import SQLContext, HiveContext
+from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'DataFrameNaFunctions'
 ]

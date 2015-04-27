@@ -27,7 +27,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.SignalLogger
+import org.apache.spark.util.{SignalLogger, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -61,7 +61,7 @@ class HistoryServer(
   private val appCache = CacheBuilder.newBuilder()
     .maximumSize(retainedApplications)
     .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]) = {
+      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
         detachSparkUI(rm.getValue())
       }
     })
@@ -149,14 +149,14 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList() = provider.getListing()
+  def getApplicationList(): Iterable[ApplicationHistoryInfo] = provider.getListing()
 
   /**
    * Returns the provider configuration to show in the listing page.
    *
    * @return A map with the provider's configuration.
    */
-  def getProviderConfig() = provider.getConfig()
+  def getProviderConfig(): Map[String, String] = provider.getConfig()
 
 }
 
@@ -194,11 +194,7 @@ object HistoryServer extends Logging {
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
 
-    Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
-      override def run() = {
-        server.stop()
-      }
-    })
+    Utils.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }

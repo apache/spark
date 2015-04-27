@@ -275,7 +275,7 @@ private[worker] class Worker(
     }
   }
 
-  override def receiveWithLogging = {
+  override def receiveWithLogging: PartialFunction[Any, Unit] = {
     case RegisteredWorker(masterUrl, masterWebUiUrl) =>
       logInfo("Successfully registered with master " + masterUrl)
       registered = true
@@ -436,7 +436,8 @@ private[worker] class Worker(
         sparkHome,
         driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
         self,
-        akkaUrl)
+        akkaUrl,
+        securityMgr)
       drivers(driverId) = driver
       driver.start()
 
