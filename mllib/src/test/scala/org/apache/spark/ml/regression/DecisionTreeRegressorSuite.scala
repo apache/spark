@@ -66,7 +66,7 @@ class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: test("model save/load")
+  // TODO: test("model save/load")   SPARK-6725
 }
 
 private[ml] object DecisionTreeRegressorSuite extends FunSuite {

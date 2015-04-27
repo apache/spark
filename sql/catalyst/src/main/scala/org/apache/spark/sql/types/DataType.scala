@@ -40,32 +40,46 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 abstract class DataType {
-  /** Matches any expression that evaluates to this DataType */
-  def unapply(a: Expression): Boolean = a match {
+  /**
+   * Enables matching against DataType for expressions:
+   * {{{
+   *   case Cast(child @ BinaryType(), StringType) =>
+   *     ...
+   * }}}
+   */
+  private[sql] def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType == this => true
     case _ => false
   }
 
-  /** The default size of a value of this data type. */
+  /**
+   * The default size of a value of this data type, used internally for size estimation.
+   */
   def defaultSize: Int
 
+  /** Name of the type used in JSON serialization. */
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
   private[sql] def jsonValue: JValue = typeName
 
+  /** The compact JSON representation of this data type. */
   def json: String = compact(render(jsonValue))
 
+  /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))
 
+  /** Readable string representation for the type. */
   def simpleString: String = typeName
 
-  /** Check if `this` and `other` are the same data type when ignoring nullability
-   *  (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+  /**
+   * Check if `this` and `other` are the same data type when ignoring nullability
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
     DataType.equalsIgnoreNullability(this, other)
 
-  /** Returns the same data type but set all nullability fields are true
+  /**
+   * Returns the same data type but set all nullability fields are true
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def asNullable: DataType
@@ -104,12 +118,25 @@ abstract class NumericType extends AtomicType {
 
 
 private[sql] object NumericType {
+  /**
+   * Enables matching against NumericType for expressions:
+   * {{{
+   *   case Cast(child @ NumericType(), StringType) =>
+   *     ...
+   * }}}
+   */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 
-/** Matcher for any expressions that evaluate to [[IntegralType]]s */
 private[sql] object IntegralType {
+  /**
+   * Enables matching against IntegralType for expressions:
+   * {{{
+   *   case Cast(child @ IntegralType(), StringType) =>
+   *     ...
+   * }}}
+   */
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
     case _ => false
@@ -122,9 +149,14 @@ private[sql] abstract class IntegralType extends NumericType {
 }
 
 
-
-/** Matcher for any expressions that evaluate to [[FractionalType]]s */
 private[sql] object FractionalType {
+  /**
+   * Enables matching against FractionalType for expressions:
+   * {{{
+   *   case Cast(child @ FractionalType(), StringType) =>
+   *     ...
+   * }}}
+   */
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
     case _ => false
