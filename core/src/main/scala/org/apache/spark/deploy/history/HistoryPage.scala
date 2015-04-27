@@ -68,7 +68,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
-                ({if (requestedIncomplete) "Incomplete" else "Complete"}  applications)
+                {if (requestedIncomplete) "(Incomplete applications)"}
                 <span style="float: right">
                   {
                     if (actualPage > 1) {
@@ -93,8 +93,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else {
-              <h4>No {if (requestedIncomplete) "running" else "completed"}
-                applications found!</h4> ++
+              <h4>No completed applications found!</h4> ++
               <p>Did you specify the correct logging directory?
                 Please verify your setting of <span style="font-style:italic">
                 spark.history.fs.logDirectory</span> and whether you have the permissions to
