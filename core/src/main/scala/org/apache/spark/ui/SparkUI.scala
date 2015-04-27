@@ -147,7 +147,7 @@ private[spark] object SparkUI {
     val storageStatusListener = new StorageStatusListener
     val executorsListener = new ExecutorsListener(storageStatusListener)
     val storageListener = new StorageListener(storageStatusListener)
-    val visualizationListener = new VisualizationListener
+    val visualizationListener = new VisualizationListener(conf)
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)

@@ -19,6 +19,7 @@ package org.apache.spark.ui.viz
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 
@@ -26,7 +27,7 @@ import org.apache.spark.ui.SparkUI
  * A SparkListener that constructs a graph of the RDD DAG for each stage.
  * This graph will be used for rendering visualization in the UI later.
  */
-private[ui] class VisualizationListener extends SparkListener {
+private[ui] class VisualizationListener(conf: SparkConf) extends SparkListener {
 
   // A list of stage IDs to track the order in which stages are inserted
   private val stageIds = new mutable.ArrayBuffer[Int]

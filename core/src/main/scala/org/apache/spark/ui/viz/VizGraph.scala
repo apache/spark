@@ -71,7 +71,7 @@ private[ui] object VizGraph {
 
     // Populate nodes, edges, and scopes
     rddInfos.foreach { rdd =>
-      val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name, rdd.isCached))
+      val node = nodes.getOrElseUpdate(rdd.id, VizNode(rdd.id, rdd.name))
       edges ++= rdd.parentIds.map { parentId => VizEdge(parentId, rdd.id) }
 
       if (rdd.scope == null) {

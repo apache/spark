@@ -15,6 +15,31 @@
  * limitations under the License.
  */
 
+var stageVizIsRendered = false
+
+/*
+ * Render or remove the stage visualization on the UI.
+ * This assumes that the visualization is stored in the "#viz-graph" element.
+ */
+function toggleStageViz() {
+  $(".expand-visualization-arrow").toggleClass('arrow-closed');
+  $(".expand-visualization-arrow").toggleClass('arrow-open');
+  var shouldRender = $(".expand-visualization-arrow").hasClass("arrow-open");
+  if (shouldRender) {
+    // If the viz is already rendered, just show it
+    if (stageVizIsRendered) {
+      $("#viz-graph").show();
+    } else {
+      renderStageViz();
+      stageVizIsRendered = true;
+    }
+  } else {
+    // Instead of emptying the element once and for all, cache it for use
+    // again later in case we want to expand the visualization again
+    $("#viz-graph").hide();
+  }
+}
+
 /*
  * Render a DAG that describes the RDDs for a given stage.
  *
@@ -27,6 +52,14 @@
  */
 function renderStageViz() {
 
+  // If there is not a dot file to render, report error
+  if (d3.select("#viz-dot-file").empty()) {
+    d3.select("#viz-graph")
+      .append("div")
+      .text("No visualization information available for this stage.");
+    return;
+  }
+
   // Parse the dot file and render it in an SVG
   var dot = d3.select("#viz-dot-file").text();
   var escaped_dot = dot
@@ -35,7 +68,7 @@ function renderStageViz() {
     .replace(/&quot;/g, "\"");
   var g = graphlibDot.read(escaped_dot);
   var render = new dagreD3.render();
-  var svg = d3.select("#viz-graph");
+  var svg = d3.select("#viz-graph").append("svg");
   svg.call(render, g);
 
   // Set the appropriate SVG dimensions to ensure that all elements are displayed
@@ -88,7 +121,6 @@ function renderStageViz() {
   var endY = toFloat(svg.style("height")) + svgMargin;
   var newViewBox = startX + " " + startY + " " + endX + " " + endY;
   svg.attr("viewBox", newViewBox);
-
 }
 
 /* Helper method to convert attributes to numeric values. */
