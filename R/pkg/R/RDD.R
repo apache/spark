@@ -1591,15 +1591,14 @@ setMethod("intersection",
             keys(filterRDD(cogroup(rdd1, rdd2, numPartitions = numPartitions), filterFunction))
           })
 
-#' Zip an RDD's partitions with one (or more) RDD(s).
-#'
-#' Return a new RDD by applying a function to the zipped partitions. 
-#' Assumes that all the RDDs have the same number of partitions*, but does *not* 
-#' require them to have the same number of elements in each partition.
+#' Zips an RDD's partitions with one (or more) RDD(s).
+#' Same as zipPartitions in Spark.
 #' 
-#' @param x An RDD to be zipped.
-#' @param other Another RDD to be zipped.
-#' @return An RDD zipped from the two RDDs.
+#' @param ... RDDs to be zipped.
+#' @param func A function to transform zipped partitions.
+#' @return A new RDD by applying a function to the zipped partitions. 
+#'         Assumes that all the RDDs have the *same number of partitions*, but 
+#'         does *not* require them to have the same number of elements in each partition.
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1625,9 +1624,9 @@ setMethod("zipPartitions",
             }
             
             rrdds <- lapply(rrdds, function(rdd) {
-              mapPartitionsWithIndex(rdd, function(split, part) {
+              mapPartitionsWithIndex(rdd, function(partIndex, part) {
                 print(length(part))
-                list(list(split, part))
+                list(list(partIndex, part))
               })
             })
             union.rdd <- Reduce(unionRDD, rrdds)
