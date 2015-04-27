@@ -24,7 +24,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 import scala.util.control.NonFatal
 
@@ -46,7 +46,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
-  private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
+  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
@@ -97,7 +97,7 @@ private[spark] abstract class YarnSchedulerBackend(
     private var amEndpoint: Option[RpcEndpointRef] = None
 
     private val askAmThreadPool =
-      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
+      ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
     implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
 
     override def receive: PartialFunction[Any, Unit] = {

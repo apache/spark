@@ -27,7 +27,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
@@ -64,6 +64,40 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW DATABASES")
+    }
+  }
+
+  createQueryTest("insert table with generator with column name",
+    """
+      |  CREATE TABLE gen_tmp (key Int);
+      |  INSERT OVERWRITE TABLE gen_tmp
+      |    SELECT explode(array(1,2,3)) AS val FROM src LIMIT 3;
+      |  SELECT key FROM gen_tmp ORDER BY key ASC;
+    """.stripMargin)
+
+  createQueryTest("insert table with generator with multiple column names",
+    """
+      |  CREATE TABLE gen_tmp (key Int, value String);
+      |  INSERT OVERWRITE TABLE gen_tmp
+      |    SELECT explode(map(key, value)) as (k1, k2) FROM src LIMIT 3;
+      |  SELECT key, value FROM gen_tmp ORDER BY key, value ASC;
+    """.stripMargin)
+
+  createQueryTest("insert table with generator without column name",
+    """
+      |  CREATE TABLE gen_tmp (key Int);
+      |  INSERT OVERWRITE TABLE gen_tmp
+      |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
+      |  SELECT key FROM gen_tmp ORDER BY key ASC;
+    """.stripMargin)
+
+  test("multiple generator in projection") {
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(key, value)), key FROM src").collect()
+    }
+
+    intercept[AnalysisException] {
+      sql("SELECT explode(map(key, value)) as k1, k2, key FROM src").collect()
     }
   }
 
@@ -456,7 +490,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("lateral view2",
     "SELECT * FROM src LATERAL VIEW explode(array(1,2)) tbl")
 
-
   createQueryTest("lateral view3",
     "FROM src SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX")
 
@@ -477,6 +510,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("lateral view6",
     "SELECT * FROM src LATERAL VIEW explode(map(key+3,key+4)) D as k, v")
+
+  createQueryTest("Specify the udtf output",
+    "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
