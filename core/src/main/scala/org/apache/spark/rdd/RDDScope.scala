@@ -18,8 +18,7 @@
 package org.apache.spark.rdd
 
 import java.util.concurrent.atomic.AtomicInteger
-
-import org.apache.spark.annotation.RDDScoped
+import org.apache.spark.SparkContext
 
 /**
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
@@ -38,15 +37,6 @@ private[spark] object RDDScope {
   // between different scopes of the same name
   private val scopeCounter = new AtomicInteger(0)
 
-  // Consider only methods that belong to these classes as potential RDD operations
-  // This is to limit the amount of reflection we do when we traverse the stack trace
-  private val classesWithScopeMethods = Set(
-    "org.apache.spark.SparkContext",
-    "org.apache.spark.rdd.RDD",
-    "org.apache.spark.rdd.PairRDDFunctions",
-    "org.apache.spark.rdd.AsyncRDDActions"
-  )
-
   /**
    * Make a globally unique scope ID from the scope name.
    *
@@ -62,64 +52,48 @@ private[spark] object RDDScope {
   }
 
   /**
-   * Retrieve the hierarchical scope from the stack trace when an RDD is first created.
-   *
-   * This considers all methods marked with the @RDDScoped annotation and chains them together
-   * in the order they are invoked. Each level in the scope hierarchy represents a unique
-   * invocation of a particular RDD operation.
-   *
-   * For example: treeAggregate_0;reduceByKey_1;combineByKey_2;mapPartitions_3
-   * This means this RDD is created by the user calling treeAggregate, which calls
-   * `reduceByKey`, and then `combineByKey`, and then `mapPartitions` to create this RDD.
+   * Execute the given body such that all RDDs created in this body will have the same scope.
+   * The name of the scope will be the name of the method that immediately encloses this one.
    */
-  private[spark] def getScope: Option[String] = {
-
-    // TODO: Note that this approach does not correctly associate the same invocation across RDDs
-    // For instance, a call to `textFile` creates both a HadoopRDD and a MapPartitionsRDD, but
-    // there is no way to associate the invocation across these two RDDs to draw the same scope
-    // around them. This is because the stack trace simply does not provide information for us
-    // to make any reasonable association across RDDs. We may need a higher level approach that
-    // involves setting common variables before and after the RDD operation itself.
-
-    val rddScopeNames = Thread.currentThread.getStackTrace
-      // Avoid reflecting on all classes in the stack trace
-      .filter { ste => classesWithScopeMethods.contains(ste.getClassName) }
-      // Return the corresponding method if it has the @RDDScoped annotation
-      .flatMap { ste =>
-        // Note that this is an approximation since we match the method only by name
-        // Unfortunate we cannot be more precise because the stack trace does not include
-        // parameter information
-        Class.forName(ste.getClassName).getDeclaredMethods.find { m =>
-          m.getName == ste.getMethodName &&
-          m.getDeclaredAnnotations.exists { a =>
-            a.annotationType() == classOf[RDDScoped]
-          }
-        }
-      }
-      // Use the method name as the scope name for now
-      .map { m => m.getName }
-
-    // It is common for such methods to internally invoke other methods with the same name
-    // as aliases (e.g. union, reduceByKey). Here we remove adjacent duplicates such that
-    // the scope chain does not capture this (e.g. a, a, b, c, b, c, c => a, b, c, b, c).
-    // This is surprisingly difficult to express even in Scala.
-    var prev: String = null
-    val dedupedRddScopeNames = rddScopeNames.flatMap { n =>
-      if (n != prev) {
-        prev = n
-        Some(n)
-      } else {
-        None
-      }
-    }
-
-    // Chain scope IDs to denote hierarchy, with outermost scope first
-    val rddScopeIds = dedupedRddScopeNames.map(makeScopeId)
-    if (rddScopeIds.nonEmpty) {
-      Some(rddScopeIds.reverse.mkString(SCOPE_NESTING_DELIMITER))
-    } else {
-      None
-    }
+  private[spark] def withScope[T](
+      sc: SparkContext,
+      allowNesting: Boolean = false)(body: => T): T = {
+    val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
+    withScope[T](sc, callerMethodName, allowNesting)(body)
   }
 
+  /**
+   * Execute the given body such that all RDDs created in this body will have the same scope.
+   *
+   * If nesting is allowed, this concatenates the previous scope with the new one in a way that
+   * signifies the hierarchy. Otherwise, if nesting is not allowed, then any children calls to
+   * this method executed in the body will have no effect.
+   */
+  private[spark] def withScope[T](
+      sc: SparkContext,
+      name: String,
+      allowNesting: Boolean = false)(body: => T): T = {
+    // Save the old scope to restore it later
+    val scopeKey = SparkContext.RDD_SCOPE_KEY
+    val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
+    val oldScope = sc.getLocalProperty(scopeKey)
+    val oldNoOverride = sc.getLocalProperty(noOverrideKey)
+    try {
+      // Set the scope only if the higher level caller allows us to do so
+      if (sc.getLocalProperty(noOverrideKey) == null) {
+        val oldScopeId = Option(oldScope).map { _ + SCOPE_NESTING_DELIMITER }.getOrElse("")
+        val newScopeId = oldScopeId + makeScopeId(name)
+        sc.setLocalProperty(scopeKey, newScopeId)
+      }
+      // Optionally disallow the child body to override our scope
+      if (!allowNesting) {
+        sc.setLocalProperty(noOverrideKey, "true")
+      }
+      body
+    } finally {
+      // Remember to restore any state that was modified before exiting
+      sc.setLocalProperty(scopeKey, oldScope)
+      sc.setLocalProperty(noOverrideKey, oldNoOverride)
+    }
+  }
 }
