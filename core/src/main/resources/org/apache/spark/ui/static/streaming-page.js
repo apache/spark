@@ -22,6 +22,8 @@ var binCount = 10;
 
 // An invisible div to show details of a point in the graph
 var graphTooltip = d3.select("body").append("div")
+    .attr("class", "label")
+    .style("display", "inline-block")
     .style("position", "absolute")
     .style("z-index", "10")
     .style("visibility", "hidden")
@@ -146,7 +148,7 @@ function drawDistribution(id, values, minY, maxY, unitY) {
         //.domain([0, d3.max(data, function(d) { return d.y; })])
         .range([0, width]);
 
-    var xAxis = d3.svg.axis().scale(x).orient("bottom").ticks(5);
+    var xAxis = d3.svg.axis().scale(x).orient("top").ticks(5);
     var yAxis = d3.svg.axis().scale(y).orient("left").ticks(0).tickFormat(function(d) { return ""; });
 
     var svg = d3.select(id).append("svg")
@@ -157,15 +159,15 @@ function drawDistribution(id, values, minY, maxY, unitY) {
 
     svg.append("g")
         .attr("class", "x axis")
-        .attr("transform", "translate(0," + height + ")")
+        .attr("transform", "translate(0," + 0 + ")")
         .call(xAxis)
 
     svg.append("g")
         .attr("class", "y axis")
         .call(yAxis)
-        .append("text")
-            .attr("transform", "translate(0," + (-3) + ")")
-            .text(unitY);
+       // .append("text")
+         //   .attr("transform", "translate(0," + (-3) + ")")
+           // .text(unitY);
 
     var bar = svg.selectAll(".bar")
         .data(data)
@@ -175,7 +177,7 @@ function drawDistribution(id, values, minY, maxY, unitY) {
                   .attr("width", function(d) { return x(d.y); })
                   .attr("height", function(d) { return height - y(d.dx); })
                   .on('mouseover', function(d) {
-                      var tip = "[" + formatBinValue(d.x) + ", " + formatBinValue(d.x + d.dx) + "): " + d.y;
+                      var tip = d.y + " between " + formatBinValue(d.x) + " " + unitY + " and " + formatBinValue(d.x + d.dx) + " " + unitY;
 
                       // Calculate the location for tip
                       var scrollTop  = document.documentElement.scrollTop || document.body.scrollTop;

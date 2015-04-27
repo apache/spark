@@ -42,7 +42,8 @@
 }
 
 .bar rect:hover {
-  fill: orange;
+  //fill: rgb(49, 91, 125);
+  fill: rgb(100, 185, 255);
 }
 
 .timeline {
