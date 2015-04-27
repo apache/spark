@@ -142,7 +142,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
     // will take some mucking w/ jersey to get a better error msg in this case
 
-
     val badQuantiles = getContentAndCode(
       "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=foo,0.1")
     badQuantiles._1 should be (HttpServletResponse.SC_BAD_REQUEST)
@@ -183,7 +182,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
   }
 
-
   def generateExpectation(path: String): Unit = {
     val json = getUrl(path)
     val dir = new File(expRoot, path)
@@ -192,7 +190,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     out.write(json)
     out.close()
   }
-
 }
 
 object HistoryServerSuite {
@@ -242,5 +239,4 @@ object HistoryServerSuite {
         "got code: " + code + " when getting " + path + " w/ error: " + error)
     }
   }
-
 }

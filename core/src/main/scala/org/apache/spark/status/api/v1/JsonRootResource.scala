@@ -51,7 +51,6 @@ private[v1] class JsonRootResource extends UIRootFromServletContext {
     new OneJobResource(uiRoot)
   }
 
-
   @Path("applications/{appId}/executors")
   def getExecutors(): ExecutorListResource = {
     new ExecutorListResource(uiRoot)
@@ -96,7 +95,6 @@ private[spark] object JsonRootResource {
     jerseyContext
   }
 }
-
 
 /**
  * This trait is shared by the all the root containers for application UI information --

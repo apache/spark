@@ -118,7 +118,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         s"${listener.numCompletedJobs}, only showing ${completedJobs.size}"
       }
 
-
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">

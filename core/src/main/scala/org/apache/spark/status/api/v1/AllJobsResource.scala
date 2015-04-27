@@ -68,7 +68,6 @@ private[v1] object AllJobsResource {
     statusToJobs
   }
 
-
   def convertJobData(
     job: JobUIData,
     listener: JobProgressListener,
