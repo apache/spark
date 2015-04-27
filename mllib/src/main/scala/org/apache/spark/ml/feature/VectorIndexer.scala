@@ -37,17 +37,23 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
   /**
    * Threshold for the number of values a categorical feature can take.
    * If a feature is found to have > maxCategories values, then it is declared continuous.
+   * Must be >= 2.
    *
    * (default = 20)
    */
   val maxCategories = new IntParam(this, "maxCategories",
-    "Threshold for the number of values a categorical feature can take." +
+    "Threshold for the number of values a categorical feature can take (>= 2)." +
       " If a feature is found to have > maxCategories values, then it is declared continuous.")
+
+  setDefault(maxCategories -> 20)
 
   /** @group getParam */
   def getMaxCategories: Int = getOrDefault(maxCategories)
 
-  setDefault(maxCategories -> 20)
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(maxCategories) >= 2,
+      s"VectorIndexer maxCategories must be >= 2, but was ${getOrDefault(maxCategories)}")
+  }
 }
 
 /**

@@ -38,13 +38,13 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 private[ml] trait DecisionTreeParams extends PredictorParams {
 
   /**
-   * Maximum depth of the tree.
+   * Maximum depth of the tree (>= 0).
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
    * @group param
    */
   final val maxDepth: IntParam =
-    new IntParam(this, "maxDepth", "Maximum depth of the tree." +
+    new IntParam(this, "maxDepth", "Maximum depth of the tree. (>= 0)" +
       " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.")
 
   /**
@@ -173,6 +173,24 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group expertGetParam */
   final def getCheckpointInterval: Int = getOrDefault(checkpointInterval)
 
+  /**
+   * Same as [[validate()]], but renamed to force concrete classes to explicitly implement
+   * validation (in case concrete classes have their own parameters).
+   */
+  protected def validateImpl(paramMap: ParamMap): Unit = {
+    val map = extractParamMap(paramMap)
+    require(map(maxDepth) >= 0, s"${this.getClass.getSimpleName}" +
+      s" maxDepth must be >= 0, but was ${map(maxDepth)}")
+    require(map(maxBins) >= 2, s"${this.getClass.getSimpleName}" +
+      s" maxBins must be >= 2, but was ${map(maxBins)}")
+    require(map(minInstancesPerNode) >= 1, s"${this.getClass.getSimpleName}" +
+      s" minInstancesPerNode must be >= 1, but was ${map(minInstancesPerNode)}")
+    require(map(maxMemoryInMB) > 0, s"${this.getClass.getSimpleName}" +
+      s" maxMemoryInMB must be > 0, but was ${map(maxMemoryInMB)}")
+    require(map(checkpointInterval) >= 1, s"${this.getClass.getSimpleName}" +
+      s" checkpointInterval must be >= 1, but was ${map(checkpointInterval)}")
+  }
+
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
@@ -299,12 +317,12 @@ private[ml] object TreeRegressorParams {
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /**
-   * Fraction of the training data used for learning each decision tree.
+   * Fraction of the training data used for learning each decision tree, in range (0, 1].
    * (default = 1.0)
    * @group param
    */
   final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
-    "Fraction of the training data used for learning each decision tree.")
+    "Fraction of the training data used for learning each decision tree, in range (0, 1].")
 
   setDefault(subsamplingRate -> 1.0)
 
@@ -320,6 +338,14 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
+
+  override protected def validateImpl(paramMap: ParamMap): Unit = {
+    super.validateImpl(paramMap)
+    val map = extractParamMap(paramMap)
+    val rate = map(subsamplingRate)
+    require(0.0 < rate && rate <= 1.0, s"${this.getClass.getSimpleName}" +
+      s" subsamplingRate must be in range (0, 1], but was $rate")
+  }
 
   /**
    * Create a Strategy instance to use with the old API.
@@ -402,6 +428,18 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = getOrDefault(featureSubsetStrategy)
+
+  override protected def validateImpl(paramMap: ParamMap): Unit = {
+    super.validateImpl(paramMap)
+    val map = extractParamMap(paramMap)
+    require(map(numTrees) >= 1, s"${this.getClass.getSimpleName}" +
+      s" numTrees must be >= 1, but was ${map(numTrees)}")
+    require(
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(map(featureSubsetStrategy)),
+      s"RandomForestParams was given unrecognized featureSubsetStrategy:" +
+        s" ${map(featureSubsetStrategy)}. Supported" +
+        s" options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}")
+  }
 }
 
 private[ml] object RandomForestParams {

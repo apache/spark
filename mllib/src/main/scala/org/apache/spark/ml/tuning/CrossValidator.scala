@@ -61,15 +61,26 @@ private[ml] trait CrossValidatorParams extends Params {
   def getEvaluator: Evaluator = getOrDefault(evaluator)
 
   /**
-   * param for number of folds for cross validation
+   * Param for number of folds for cross validation.  Must be >= 2.
+   * Default: 3
    * @group param
    */
-  val numFolds: IntParam = new IntParam(this, "numFolds", "number of folds for cross validation")
+  val numFolds: IntParam =
+    new IntParam(this, "numFolds", "number of folds for cross validation (>= 2)")
 
   /** @group getParam */
   def getNumFolds: Int = getOrDefault(numFolds)
 
   setDefault(numFolds -> 3)
+
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(numFolds) >= 2,
+      s"CrossValidator numFolds must be >= 2, but was ${getOrDefault(numFolds)}")
+    val map = extractParamMap(paramMap)
+    getEstimatorParamMaps.foreach { eMap =>
+      getEstimator.validate(map ++ eMap)
+    }
+  }
 }
 
 /**
@@ -101,8 +112,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val est = map(estimator)
     val eval = map(evaluator)
     val epm = map(estimatorParamMaps)
-    val numModels = epm.size
-    val metrics = new Array[Double](epm.size)
+    val numModels = epm.length
+    val metrics = new Array[Double](epm.length)
     val splits = MLUtils.kFold(dataset.rdd, map(numFolds), 0)
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()

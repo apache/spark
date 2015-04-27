@@ -38,6 +38,8 @@ import org.apache.spark.sql.types._
 @AlphaComponent
 class VectorAssembler extends Transformer with HasInputCols with HasOutputCol {
 
+  override def validate(paramMap: ParamMap): Unit = { }
+
   /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
