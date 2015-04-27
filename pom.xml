@@ -129,9 +129,9 @@
     <zookeeper.version>3.4.5</zookeeper.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>0.13.1a</hive.version>
+    <hive.version>1.1.0</hive.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>0.13.1</hive.version.short>
+    <hive.version.short>1.1.0</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.6.0rc3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
