@@ -245,12 +245,12 @@ def serve_logs(args):
     WORKER_LOG_SERVER_PORT = \
         int(conf.get('celery', 'WORKER_LOG_SERVER_PORT'))
     flask_app.run(
-        host='0.0.0.0', port=WORKER_LOG_SERVER_PORT, debug=True)
+        host='0.0.0.0', port=WORKER_LOG_SERVER_PORT)
 
 
 def worker(args):
     # Worker to serve static log files through this simple flask app
-    sp = subprocess.Popen("airflow serve_logs", shell=True)
+    sp = subprocess.Popen(['airflow', 'serve_logs'])
 
     # Celery worker
     from airflow.executors.celery_executor import app as celery_app
