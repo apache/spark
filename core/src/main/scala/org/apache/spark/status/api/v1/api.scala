@@ -220,7 +220,6 @@ class OutputMetricDistributions(
   val recordsWritten: IndexedSeq[Double]
 )
 
-
 class ShuffleReadMetricDistributions(
   val readBytes: IndexedSeq[Double],
   val readRecords: IndexedSeq[Double],
@@ -241,13 +240,4 @@ class AccumulableInfo (
   val id: Long,
   val name: String,
   val update: Option[String],
-  val value: String) {
-
-  override def equals(other: Any): Boolean = other match {
-    case acc: AccumulableInfo =>
-      this.id == acc.id && this.name == acc.name &&
-        this.value == acc.value
-    case _ => false
-  }
-}
-
+  val value: String)

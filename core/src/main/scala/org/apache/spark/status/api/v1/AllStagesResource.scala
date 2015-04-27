@@ -16,7 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util.Date
+import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{GET, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
@@ -33,14 +33,14 @@ private[v1] class AllStagesResource(uiRoot: UIRoot) {
   @GET
   def stageList(
     @PathParam("appId") appId: String,
-    @QueryParam("status") statuses: java.util.List[StageStatus]
+    @QueryParam("status") statuses: JList[StageStatus]
   ): Seq[StageData] = {
     uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.jobProgressListener
       val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
       val adjStatuses = {
         if (statuses.isEmpty()) {
-          java.util.Arrays.asList(StageStatus.values(): _*)
+          Arrays.asList(StageStatus.values(): _*)
         } else {
           statuses
         }
@@ -279,5 +279,4 @@ private[v1] object AllStagesResource {
       recordsWritten = internal.shuffleRecordsWritten
     )
   }
-
 }

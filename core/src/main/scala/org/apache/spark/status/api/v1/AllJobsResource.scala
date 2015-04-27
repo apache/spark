@@ -16,8 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util
-import java.util.Date
+import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
@@ -32,16 +31,15 @@ private[v1] class AllJobsResource(uiRoot: UIRoot) {
   @GET
   def jobsList(
     @PathParam("appId") appId: String,
-    @QueryParam("status") statuses: java.util.List[JobExecutionStatus]
+    @QueryParam("status") statuses: JList[JobExecutionStatus]
   ): Seq[JobData] = {
     uiRoot.withSparkUI(appId) { ui =>
       val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
         AllJobsResource.getStatusToJobs(ui)
-      val adjStatuses: util.List[JobExecutionStatus] = {
+      val adjStatuses: JList[JobExecutionStatus] = {
         if (statuses.isEmpty) {
-          java.util.Arrays.asList(JobExecutionStatus.values(): _*)
-        }
-        else {
+          Arrays.asList(JobExecutionStatus.values(): _*)
+        } else {
           statuses
         }
       }

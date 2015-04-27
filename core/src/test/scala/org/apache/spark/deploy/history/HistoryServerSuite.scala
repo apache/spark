@@ -52,6 +52,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     server.bind()
     port = server.boundPort
   }
+
   def stop(): Unit = {
     server.stop()
   }
@@ -102,27 +103,26 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "stage with accumulable json" -> "applications/local-1426533911241/stages/0/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
-    // TODO multi-attempt stages
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
   // in the test resource folder
   cases.foreach { case (name, path) =>
-      test(name) {
-        val (code, jsonOpt, errOpt) = getContentAndCode(path)
-        code should be (HttpServletResponse.SC_OK)
-        jsonOpt should be ('defined)
-        errOpt should be (None)
-        val json = jsonOpt.get
-        val exp = IOUtils.toString(new FileInputStream(
-          new File(expRoot, path + "/json_expectation")))
-        // compare the ASTs so formatting differences don't cause failures
-        import org.json4s._
-        import org.json4s.jackson.JsonMethods._
-        val jsonAst = parse(json)
-        val expAst = parse(exp)
-        assertValidDataInJson(jsonAst, expAst)
-      }
+    test(name) {
+      val (code, jsonOpt, errOpt) = getContentAndCode(path)
+      code should be (HttpServletResponse.SC_OK)
+      jsonOpt should be ('defined)
+      errOpt should be (None)
+      val json = jsonOpt.get
+      val exp = IOUtils.toString(new FileInputStream(
+        new File(expRoot, path + "/json_expectation")))
+      // compare the ASTs so formatting differences don't cause failures
+      import org.json4s._
+      import org.json4s.jackson.JsonMethods._
+      val jsonAst = parse(json)
+      val expAst = parse(exp)
+      assertValidDataInJson(jsonAst, expAst)
+    }
   }
 
   test("security") {

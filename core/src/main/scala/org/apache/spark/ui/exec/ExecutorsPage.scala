@@ -28,21 +28,21 @@ import org.apache.spark.util.Utils
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
 private[ui] case class ExecutorSummaryInfo(
-  id: String,
-  hostPort: String,
-  rddBlocks: Int,
-  memoryUsed: Long,
-  diskUsed: Long,
-  activeTasks: Int,
-  failedTasks: Int,
-  completedTasks: Int,
-  totalTasks: Int,
-  totalDuration: Long,
-  totalInputBytes: Long,
-  totalShuffleRead: Long,
-  totalShuffleWrite: Long,
-  maxMemory: Long,
-  executorLogs: Map[String, String])
+    id: String,
+    hostPort: String,
+    rddBlocks: Int,
+    memoryUsed: Long,
+    diskUsed: Long,
+    activeTasks: Int,
+    failedTasks: Int,
+    completedTasks: Int,
+    totalTasks: Int,
+    totalDuration: Long,
+    totalInputBytes: Long,
+    totalShuffleRead: Long,
+    totalShuffleWrite: Long,
+    maxMemory: Long,
+    executorLogs: Map[String, String])
 
 
 private[ui] class ExecutorsPage(

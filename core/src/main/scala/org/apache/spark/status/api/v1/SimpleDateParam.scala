@@ -27,7 +27,7 @@ import scala.util.Try
 private[v1] class SimpleDateParam(val originalValue: String) {
   val timestamp: Long = {
     SimpleDateParam.formats.collectFirst {
-      case fmt if Try{ fmt.parse(originalValue) }.isSuccess =>
+      case fmt if Try(fmt.parse(originalValue)).isSuccess =>
         fmt.parse(originalValue).getTime()
     }.getOrElse(
       throw new WebApplicationException(

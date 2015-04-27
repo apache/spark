@@ -768,7 +768,6 @@ private[master] class Master(
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
-        return None
       }
       
       val (eventLogFile, status) = if (inProgressExists) {
