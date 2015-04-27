@@ -26,6 +26,7 @@
 
 set -o pipefail
 set -e
+set -x
 
 # Figure out where the Spark framework is installed
 SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
