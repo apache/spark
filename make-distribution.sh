@@ -228,6 +228,7 @@ cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+zip -r "$DISTDIR"/python/lib/pyspark.zip "$SPARK_HOME"/python/lib/pyspark
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 
