@@ -24,10 +24,10 @@ import org.apache.spark.sql.types.{LongType, DataType}
 /**
  * Returns monotonically increasing 64-bit integers.
  *
- * The generated ID is guaranteed by be monotonically increasing and unique, but not consecutive.
+ * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
  * The current implementation puts the partition ID in the upper 31 bits, and the lower 33 bits
  * represent the record number within each partition. The assumption is that the data frame has
- * less than 1 billion partitions, and each partition has less than 20 billion records.
+ * less than 1 billion partitions, and each partition has less than 4 billion records.
  *
  * Since this expression is stateful, it cannot be a case object.
  */
