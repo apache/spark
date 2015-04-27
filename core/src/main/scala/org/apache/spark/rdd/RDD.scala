@@ -591,12 +591,12 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: String)(implicit codec: Codec): RDD[String] = new PipedRDD(this, command)(codec)
+  def pipe(command: String)(implicit codec: Codec = Codec("UTF")): RDD[String] = new PipedRDD(this, command)(codec)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: String, env: Map[String, String])(implicit code: Codec): RDD[String] =
+  def pipe(command: String, env: Map[String, String])(implicit code: Codec = Codec("UTF-8")): RDD[String] =
     new PipedRDD(this, command, env)(codec)
 
   /**
@@ -623,7 +623,7 @@ abstract class RDD[T: ClassTag](
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false)(implicit codec: Codec): RDD[String] = {
+      separateWorkingDir: Boolean = false)(implicit codec: Codec = Codec("UTF-8")): RDD[String] = {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
