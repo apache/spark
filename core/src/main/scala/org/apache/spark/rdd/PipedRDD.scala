@@ -27,6 +27,7 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.io.Codec
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -43,7 +44,7 @@ private[spark] class PipedRDD[T: ClassTag](
     envVars: Map[String, String],
     printPipeContext: (String => Unit) => Unit,
     printRDDElement: (T, String => Unit) => Unit,
-    separateWorkingDir: Boolean)
+    separateWorkingDir: Boolean)(implicit codec: Codec = Codec("UTF-8"))
   extends RDD[String](prev) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
@@ -54,9 +55,9 @@ private[spark] class PipedRDD[T: ClassTag](
       envVars: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false) =
+      separateWorkingDir: Boolean = false)(implicit codec: Codec = Codec("UTF-8")) =
     this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir)
+      separateWorkingDir)(codec)
 
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
@@ -122,7 +123,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
       override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+        for (line <- Source.fromInputStream(proc.getErrorStream)(codec).getLines) {
           System.err.println(line)
         }
       }
@@ -149,7 +150,7 @@ private[spark] class PipedRDD[T: ClassTag](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream).getLines()
+    val lines = Source.fromInputStream(proc.getInputStream)(codec).getLines()
     new Iterator[String] {
       def next(): String = lines.next()
       def hasNext: Boolean = {
