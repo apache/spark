@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import java.util.Random
 
 import breeze.linalg.{DenseVector => BDV, normalize}
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
@@ -30,12 +31,19 @@ import org.apache.spark.rdd.RDD
 /**
  * :: Experimental ::
  *
- * An LDAOptimizer contains an algorithm for LDA and performs the actual computation, which
- * stores internal data structure (Graph or Matrix) and any other parameter for the algorithm.
- * The interface is isolated to improve the extensibility of LDA.
+ * An LDAOptimizer specifies which optimization/learning/inference algorithm to use, and it can
+ * hold optimizer-specific parameters for users to set.
  */
 @Experimental
 trait LDAOptimizer{
+
+  /*
+    DEVELOPERS NOTE:
+
+    An LDAOptimizer contains an algorithm for LDA and performs the actual computation, which
+    stores internal data structure (Graph or Matrix) and other parameters for the algorithm.
+    The interface is isolated to improve the extensibility of LDA.
+   */
 
   /**
    * Initializer for the optimizer. LDA passes the common parameters to the optimizer and
@@ -75,6 +83,7 @@ trait LDAOptimizer{
 class EMLDAOptimizer extends LDAOptimizer{
 
   import LDA._
+
   /**
    * Following fields will only be initialized through initialState method
    */

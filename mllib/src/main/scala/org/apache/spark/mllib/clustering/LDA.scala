@@ -37,6 +37,10 @@ import org.apache.spark.util.Utils
  *  - "token": instance of a term appearing in a document
  *  - "topic": multinomial distribution over words representing some concept
  *
+ * References:
+ *  - Original LDA paper (journal version):
+ *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ *
  * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
  *       (Wikipedia)]]
  */
@@ -47,12 +51,11 @@ class LDA private (
     private var docConcentration: Double,
     private var topicConcentration: Double,
     private var seed: Long,
-    private var checkpointInterval: Int) extends Logging {
+    private var checkpointInterval: Int,
+    private var ldaOptimizer: LDAOptimizer) extends Logging {
 
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
-    seed = Utils.random.nextLong(), checkpointInterval = 10)
-
-  private var ldaOptimizer: LDAOptimizer = getDefaultOptimizer("EM")
+    seed = Utils.random.nextLong(), checkpointInterval = 10, ldaOptimizer = new EMLDAOptimizer)
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
@@ -208,7 +211,7 @@ class LDA private (
 
 
   /** LDAOptimizer used to perform the actual calculation */
-  def getOptimizer(): LDAOptimizer = ldaOptimizer
+  def getOptimizer: LDAOptimizer = ldaOptimizer
 
   /**
    * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
@@ -220,22 +223,16 @@ class LDA private (
 
   /**
    * Set the LDAOptimizer used to perform the actual calculation by algorithm name.
-   * Currently "EM" is supported.
+   * Currently "em" is supported.
    */
   def setOptimizer(optimizerName: String): this.type = {
-    this.ldaOptimizer = getDefaultOptimizer(optimizerName)
+    this.ldaOptimizer =
+      optimizerName.toLowerCase match {
+        case "em" => new EMLDAOptimizer
+        case other =>
+          throw new IllegalArgumentException(s"Only em is supported but got $other.")
+      }
     this
-  }
-
-  /**
-   * Get the default optimizer from String parameter.
-   */
-  private def getDefaultOptimizer(optimizerName: String): LDAOptimizer = {
-    optimizerName match{
-      case "EM" => new EMLDAOptimizer()
-      case other =>
-        throw new UnsupportedOperationException(s"Only EM are supported but got $other.")
-    }
   }
 
   /**
