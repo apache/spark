@@ -39,9 +39,6 @@ class BaseSensorOperator(BaseOperator):
         self.poke_interval = poke_interval
         self.timeout = timeout
 
-        # Since a sensor pokes in a loop, no need for higher level retries
-        self.retries = 0
-
     def poke(self):
         '''
         Function that the sensors defined while deriving this class should
@@ -329,9 +326,10 @@ class S3PrefixSensor(BaseSensorOperator):
         logging.info('Poking for prefix : {self.prefix}\n'
                      'in bucket s3://{self.bucket_name}'.format(**locals()))
         hook = hooks.S3Hook(s3_conn_id=self.s3_conn_id)
-        return hook.check_for_prefix(prefix=self.prefix,
-                                          delimiter=self.delimiter,
-                                          bucket_name=self.bucket_name)
+        return hook.check_for_prefix(
+            prefix=self.prefix,
+            delimiter=self.delimiter,
+            bucket_name=self.bucket_name)
 
 
 class TimeSensor(BaseSensorOperator):
