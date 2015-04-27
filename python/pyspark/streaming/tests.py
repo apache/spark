@@ -649,7 +649,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, jSendData)
 
-        stream = KafkaUtils.createDirectStreamFromOffset(self.ssc, kafkaParams, fromOffsets)
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams, fromOffsets)
         self._validateStreamResult(sendData, stream)
 
     def test_kafka_rdd(self):
@@ -681,7 +681,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, jSendData)
 
-        rdd = KafkaUtils.createRDDWithLeaders(self.sc, kafkaParams, offsetRanges, leaders)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
         self._validateRddResult(sendData, rdd)
 
 if __name__ == "__main__":

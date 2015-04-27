@@ -236,7 +236,6 @@ object KafkaUtils {
     new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
   }
 
-
   /**
    * Create a RDD from Kafka using offset ranges for each topic and partition.
    *
@@ -564,20 +563,6 @@ private class KafkaUtilsPythonHelper {
   def createRDD(
       jsc: JavaSparkContext,
       kafkaParams: JMap[String, String],
-      offsetRanges: JList[OffsetRange]): JavaPairRDD[Array[Byte], Array[Byte]] = {
-    KafkaUtils.createRDD[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
-      jsc,
-      classOf[Array[Byte]],
-      classOf[Array[Byte]],
-      classOf[DefaultDecoder],
-      classOf[DefaultDecoder],
-      kafkaParams,
-      offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())))
-  }
-
-  def createRDD(
-      jsc: JavaSparkContext,
-      kafkaParams: JMap[String, String],
       offsetRanges: JList[OffsetRange],
       leaders: JMap[TopicAndPartition, Broker]): JavaPairRDD[Array[Byte], Array[Byte]] = {
     val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
@@ -609,48 +594,56 @@ private class KafkaUtilsPythonHelper {
   def createDirectStream(
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
-      topics: JSet[String]): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
-    KafkaUtils.createDirectStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
-      jssc,
-      classOf[Array[Byte]],
-      classOf[Array[Byte]],
-      classOf[DefaultDecoder],
-      classOf[DefaultDecoder],
-      kafkaParams,
-      topics)
-  }
+      topics: JSet[String],
+      fromOffsets: JMap[TopicAndPartition, JLong]
+    ): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
 
-  def createDirectStream(
-      jssc: JavaStreamingContext,
-      kafkaParams: JMap[String, String],
-      fromOffsets: JMap[TopicAndPartition, JLong])
-    : JavaPairInputDStream[Array[Byte], Array[Byte]] = {
-    val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
-      (Array[Byte], Array[Byte])] {
-      def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
-        (t1.key(), t1.message())
+    if (!fromOffsets.isEmpty) {
+      import scala.collection.JavaConversions._
+      val topicsFromOffsets = fromOffsets.keySet().map(_.topic)
+      if (topicsFromOffsets != topics.toSet) {
+        throw new IllegalStateException(s"The specified topics: ${topics.toSet.mkString(" ")} " +
+          s"do not equal to the topic from offsets: ${topicsFromOffsets.mkString(" ")}")
+      }
     }
 
-    val jstream = KafkaUtils.createDirectStream[
-      Array[Byte],
-      Array[Byte],
-      DefaultDecoder,
-      DefaultDecoder,
-      (Array[Byte], Array[Byte])](
+    if (fromOffsets.isEmpty) {
+      KafkaUtils.createDirectStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
         jssc,
         classOf[Array[Byte]],
         classOf[Array[Byte]],
         classOf[DefaultDecoder],
         classOf[DefaultDecoder],
-        classOf[(Array[Byte], Array[Byte])],
         kafkaParams,
-        fromOffsets,
-        messageHandler)
-    new JavaPairInputDStream(jstream.inputDStream)
+        topics)
+    } else {
+      val messageHandler = new JFunction[MessageAndMetadata[Array[Byte], Array[Byte]],
+        (Array[Byte], Array[Byte])] {
+        def call(t1: MessageAndMetadata[Array[Byte], Array[Byte]]): (Array[Byte], Array[Byte]) =
+          (t1.key(), t1.message())
+      }
+
+      val jstream = KafkaUtils.createDirectStream[
+        Array[Byte],
+        Array[Byte],
+        DefaultDecoder,
+        DefaultDecoder,
+        (Array[Byte], Array[Byte])](
+          jssc,
+          classOf[Array[Byte]],
+          classOf[Array[Byte]],
+          classOf[DefaultDecoder],
+          classOf[DefaultDecoder],
+          classOf[(Array[Byte], Array[Byte])],
+          kafkaParams,
+          fromOffsets,
+          messageHandler)
+      new JavaPairInputDStream(jstream.inputDStream)
+    }
   }
 
-  def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long)
-      : OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+  def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long
+    ): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 
   def createTopicAndPartition(topic: String, partition: Int): TopicAndPartition =
     TopicAndPartition(topic, partition)
