@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.DriverManager
 
+import org.apache.spark.util.random.BernoulliCellSampler
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -31,7 +33,7 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, ResolvedStar}
@@ -964,6 +966,23 @@ class DataFrame private[sql](
     sqlContext.createDataFrame(
       queryExecution.toRdd.map(_.copy()).repartition(numPartitions),
       schema, needsConversion = false)
+  }
+
+  /**
+   * Randomly splits this DataFrame with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed
+   *
+   * @return split DataFrames in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[DataFrame] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    normalizedCumWeights.sliding(2).map { x =>
+      this.sqlContext.createDataFrame(new PartitionwiseSampledRDD[Row, Row](
+        rdd, new BernoulliCellSampler[Row](x(0), x(1)), true, seed), schema)
+    }.toArray
   }
 
   /**
