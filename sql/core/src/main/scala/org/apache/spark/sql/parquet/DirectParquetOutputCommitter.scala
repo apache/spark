@@ -37,10 +37,11 @@ private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: T
   override def setupTask(taskContext: TaskAttemptContext): Unit = {}
 
   override def commitJob(jobContext: JobContext) {
-    try {
-      val configuration = ContextUtil.getConfiguration(jobContext)
-      val fileSystem = outputPath.getFileSystem(configuration)
-      if (configuration.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
+    val configuration = ContextUtil.getConfiguration(jobContext)
+    val fileSystem = outputPath.getFileSystem(configuration)
+
+    if (configuration.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
+      try {
         val outputStatus = fileSystem.getFileStatus(outputPath)
         val footers = ParquetFileReader.readAllFootersInParallel(configuration, outputStatus)
         try {
@@ -54,15 +55,19 @@ private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: T
             }
           }
         }
+      } catch {
+        case e: Exception => LOG.warn("could not write summary file for " + outputPath, e)
       }
-      if (configuration.getBoolean("mapreduce.fileoutputcommitter.marksuccessfuljobs", true)) {
+    }
+
+    if (configuration.getBoolean("mapreduce.fileoutputcommitter.marksuccessfuljobs", true)) {
+      try {
         val successPath = new Path(outputPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
         fileSystem.create(successPath).close()
+      } catch {
+        case e: Exception => LOG.warn("could not write success file for " + outputPath, e)
       }
-    } catch {
-      case e: Exception => LOG.warn("could not write summary file for " + outputPath, e)
     }
   }
-
 }
 
