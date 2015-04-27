@@ -108,9 +108,8 @@ class S3ToHiveTransfer(BaseOperator):
                     delimiter=self.delimiter,
                     recreate=self.recreate)
             else:
-                with open(f.name,'r') as tmpf:
+                with open(f.name, 'r') as tmpf:
                     if self.check_headers:
-                        tmpf.seek(0)
                         header_l = tmpf.readline()
                         header_line = header_l.rstrip()
                         header_list = header_line.split(self.delimiter)
