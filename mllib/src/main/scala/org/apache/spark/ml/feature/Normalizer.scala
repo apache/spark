@@ -31,19 +31,24 @@ import org.apache.spark.sql.types.DataType
 @AlphaComponent
 class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
 
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(p) >= 0, s"Normalizer p must be >= 0, but was ${getOrDefault(p)}")
+  }
+
   /**
-   * Normalization in L^p^ space, p = 2 by default.
+   * Normalization in L^p^ space.  Must be >= 1.
+   * (default: p = 2)
    * @group param
    */
   val p = new DoubleParam(this, "p", "the p norm value")
+
+  setDefault(p -> 2.0)
 
   /** @group getParam */
   def getP: Double = getOrDefault(p)
 
   /** @group setParam */
   def setP(value: Double): this.type = set(p, value)
-
-  setDefault(p -> 2.0)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
     val normalizer = new feature.Normalizer(paramMap(p))

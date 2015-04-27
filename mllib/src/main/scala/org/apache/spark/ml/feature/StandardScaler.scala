@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
-  
+
   /**
    * False by default. Centers the data with mean before scaling. 
    * It will build a dense output, so this does not work on sparse input 
@@ -45,6 +45,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
    * @group param
    */
   val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
+
+  override def validate(paramMap: ParamMap): Unit = { }
 }
 
 /**
@@ -56,7 +58,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
   setDefault(withMean -> false, withStd -> true)
-  
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 

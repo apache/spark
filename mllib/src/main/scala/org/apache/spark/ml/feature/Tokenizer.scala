@@ -29,6 +29,8 @@ import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 @AlphaComponent
 class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
+  override def validate(paramMap: ParamMap): Unit = { }
+
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
     _.toLowerCase.split("\\s")
   }
@@ -43,20 +45,24 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 /**
  * :: AlphaComponent ::
  * A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default) 
- * or using it to split the text (set matching to false). Optional parameters also allow to fold
- * the text to lowercase prior to it being tokenized and to filer tokens using a minimal length. 
+ * or using it to split the text (set matching to false). Optional parameters also allow filtering
+ * tokens using a minimal length.
  * It returns an array of strings that can be empty.
- * The default parameters are regex = "\\p{L}+|[^\\p{L}\\s]+", matching = true, 
- * lowercase = false, minTokenLength = 1
  */
 @AlphaComponent
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(minTokenLength) >= 0,
+      s"RegexTokenizer minTokenLength must be >= 0, but was ${getOrDefault(minTokenLength)}")
+  }
+
   /**
-   * param for minimum token length, default is one to avoid returning empty strings
+   * Minimum token length, >= 0.
+   * Default: 1, to avoid returning empty strings
    * @group param
    */
-  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length")
+  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)")
 
   /** @group setParam */
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
@@ -65,7 +71,8 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def getMinTokenLength: Int = getOrDefault(minTokenLength)
 
   /**
-   * param sets regex as splitting on gaps (true) or matching tokens (false)
+   * Indicates whether regex splits on gaps (true) or matching tokens (false).
+   * Default: false
    * @group param
    */
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
@@ -77,7 +84,8 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def getGaps: Boolean = getOrDefault(gaps)
 
   /**
-   * param sets regex pattern used by tokenizer 
+   * Regex pattern used by tokenizer.
+   * Default: "\\p{L}+|[^\\p{L}\\s]+"
    * @group param
    */
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")

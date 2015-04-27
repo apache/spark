@@ -132,12 +132,18 @@ trait Params extends Identifiable with Serializable {
   /**
    * Validates parameter values stored internally plus the input parameter map.
    * Raises an exception if any parameter is invalid.
+   *
+   * This generally checks parameters which do not specify input/output columns;
+   * input/output columns are checked during schema validation.
    */
-  def validate(paramMap: ParamMap): Unit = {}
+  def validate(paramMap: ParamMap): Unit
 
   /**
    * Validates parameter values stored internally.
    * Raise an exception if any parameter value is invalid.
+   *
+   * This generally checks parameters which do not specify input/output columns;
+   * input/output columns are checked during schema validation.
    */
   def validate(): Unit = validate(ParamMap.empty)
 

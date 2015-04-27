@@ -138,6 +138,15 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false)
 
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(regParam) >= 0,
+      s"ALS regParam must be >= 0, but was ${getOrDefault(regParam)}")
+    require(getOrDefault(maxIter) >= 0,
+      s"ALS maxIter must be >= 0, but was ${getOrDefault(maxIter)}")
+    require(getOrDefault(checkpointInterval) >= 1,
+      s"ALS checkpointInterval must be >= 1, but was ${getOrDefault(checkpointInterval)}")
+  }
+
   /**
    * Validates and transforms the input schema.
    * @param schema input schema

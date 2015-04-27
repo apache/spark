@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.DoubleType
 class BinaryClassificationEvaluator extends Evaluator with Params
   with HasRawPredictionCol with HasLabelCol {
 
+  override def validate(paramMap: ParamMap): Unit = { }
+
   /**
    * param for metric name in evaluation
    * @group param

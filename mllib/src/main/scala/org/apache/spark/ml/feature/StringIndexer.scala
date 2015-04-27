@@ -33,6 +33,8 @@ import org.apache.spark.util.collection.OpenHashMap
  */
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
 
+  override def validate(paramMap: ParamMap): Unit = { }
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = extractParamMap(paramMap)

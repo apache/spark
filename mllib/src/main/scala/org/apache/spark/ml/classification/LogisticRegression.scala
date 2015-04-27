@@ -34,6 +34,16 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   with HasRegParam with HasMaxIter with HasFitIntercept with HasThreshold {
 
   setDefault(regParam -> 0.1, maxIter -> 100, threshold -> 0.5)
+
+  override def validate(paramMap: ParamMap): Unit = {
+    require(getOrDefault(regParam) >= 0,
+      s"LogisticRegression regParam must be >= 0, but was ${getOrDefault(regParam)}")
+    require(getOrDefault(maxIter) >= 0,
+      s"LogisticRegression maxIter must be >= 0, but was ${getOrDefault(maxIter)}")
+    val threshold_ = getOrDefault(threshold)
+    require(threshold_ >= 0 && threshold_ <= 1,
+      s"LogisticRegression threshold must be in range [0,1], but was $threshold_")
+  }
 }
 
 /**
