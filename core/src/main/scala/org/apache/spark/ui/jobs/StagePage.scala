@@ -36,12 +36,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val progressListener = parent.progressListener
   private val vizListener = parent.vizListener
 
+  /**
+   * Return a DOM element that contains an RDD DAG visualization for this stage.
+   * If there is no visualization information for this stage, return an empty element.
+   */
   private def renderViz(stageId: Int): Seq[Node] = {
     val graph = vizListener.getVizGraph(stageId)
     if (graph.isEmpty) {
-      return Seq.empty
-    }
-    {
+      Seq.empty
+    } else {
       <div id="viz-dot-file" style="display:none">
         {VizGraph.makeDotFile(graph.get)}
       </div>

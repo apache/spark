@@ -42,7 +42,7 @@ class RDDInfo(
     import Utils.bytesToString
     val _scope = Option(scope).getOrElse("--")
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
-      "MemorySize: %s; TachyonSize: %s; DiskSize: %s (scope: %s)").format(
+      "MemorySize: %s; TachyonSize: %s; DiskSize: %s [scope: %s]").format(
         name, id, storageLevel.toString, numCachedPartitions, numPartitions,
         bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize), _scope)
   }

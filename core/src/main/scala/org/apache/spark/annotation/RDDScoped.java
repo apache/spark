@@ -20,9 +20,10 @@ package org.apache.spark.annotation;
 import java.lang.annotation.*;
 
 /**
- * Blah blah blah blah blah.
- * This should really be private and not displayed on the docs.
+ * An annotation to mark a method as an RDD operation that encloses its body in a scope.
+ * This is used to compute the scope of an RDD when it is instantiated.
  */
+// TODO: This should really be private[spark]
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})
 public @interface RDDScoped {}

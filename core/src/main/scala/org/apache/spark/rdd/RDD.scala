@@ -1450,7 +1450,13 @@ abstract class RDD[T: ClassTag](
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()
 
-  /** Dem scopes. Tis null if de scope is not defined'eh. TODO: Make this private[spark]. */
+  /**
+   * The scope in which this RDD is defined.
+   *
+   * This is more flexible than the call site and can be defined hierarchically.
+   * For more detail, see the documentation of {{RDDScope}}. This scope is null if
+   * the user instantiates this RDD himself without using any Spark operations.
+   */
   @transient private[spark] val scope = RDDScope.getScope.orNull
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
@@ -1602,11 +1608,8 @@ abstract class RDD[T: ClassTag](
     firstDebugString(this).mkString("\n")
   }
 
-  override def toString: String = {
-    val _name = Option(name).map(_ + " ").getOrElse("")
-    val _scope = Option(scope).map(" (scope: " + _ + ")").getOrElse("")
-    "%s%s[%d] at %s%s".format(_name, getClass.getSimpleName, id, getCreationSite, _scope)
-  }
+  override def toString: String = "%s%s[%d] at %s".format(
+    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCreationSite)
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)

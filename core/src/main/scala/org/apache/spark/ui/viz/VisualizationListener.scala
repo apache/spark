@@ -20,22 +20,40 @@ package org.apache.spark.ui.viz
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
+import org.apache.spark.ui.SparkUI
 
 /**
- * A SparkListener that...
+ * A SparkListener that constructs a graph of the RDD DAG for each stage.
+ * This graph will be used for rendering visualization in the UI later.
  */
 private[ui] class VisualizationListener extends SparkListener {
-  private val graphsByStageId = new mutable.HashMap[Int, VizGraph] // stage ID -> viz graph
 
-  /**  */
+  // A list of stage IDs to track the order in which stages are inserted
+  private val stageIds = new mutable.ArrayBuffer[Int]
+
+  // Stage ID -> graph metadata for the stage
+  private val stageIdToGraph = new mutable.HashMap[Int, VizGraph]
+
+  // How many stages to retain graph metadata for
+  private val retainedStages =
+    conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
+
+  /** Return the graph metadata for the given stage, or None if no such information exists. */
   def getVizGraph(stageId: Int): Option[VizGraph] = {
-    graphsByStageId.get(stageId)
+    stageIdToGraph.get(stageId)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val stageId = stageCompleted.stageInfo.stageId
     val rddInfos = stageCompleted.stageInfo.rddInfos
     val vizGraph = VizGraph.makeVizGraph(rddInfos)
-    graphsByStageId(stageId) = vizGraph
+    stageIdToGraph(stageId) = vizGraph
+
+    // Remove metadata for old stages
+    if (stageIds.size >= retainedStages) {
+      val toRemove = math.max(retainedStages / 10, 1)
+      stageIds.take(toRemove).foreach { id => stageIdToGraph.remove(id) }
+      stageIds.trimStart(toRemove)
+    }
   }
 }
