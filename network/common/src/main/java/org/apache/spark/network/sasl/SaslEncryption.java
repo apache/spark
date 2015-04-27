@@ -17,8 +17,10 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
@@ -35,7 +37,6 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCountUtil;
 
-import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -135,7 +136,9 @@ class SaslEncryption {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
-    private final ByteArrayWritableChannel byteChannel;
+    private final int maxOutboundBlockSize;
+    private final ExposedByteArrayOutputStream byteStream;
+    private final WritableByteChannel byteChannel;
 
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
@@ -151,7 +154,9 @@ class SaslEncryption {
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
-      this.byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      this.maxOutboundBlockSize = maxOutboundBlockSize;
+      this.byteStream = new ExposedByteArrayOutputStream(maxOutboundBlockSize);
+      this.byteChannel = Channels.newChannel(byteStream);
     }
 
     /**
@@ -251,19 +256,19 @@ class SaslEncryption {
     }
 
     private void nextChunk() throws IOException {
-      byteChannel.reset();
+      byteStream.reset();
       if (isByteBuf) {
-        int copied = byteChannel.write(buf.nioBuffer());
-        buf.skipBytes(copied);
+        int count = Math.min(maxOutboundBlockSize, buf.readableBytes());
+        buf.readBytes(byteStream, count);
       } else {
         region.transferTo(byteChannel, region.transfered());
       }
 
-      byte[] encrypted = backend.wrap(byteChannel.getData(), 0, byteChannel.length());
+      byte[] encrypted = backend.wrap(byteStream.getData(), 0, byteStream.size());
       this.currentChunk = ByteBuffer.wrap(encrypted);
       this.currentChunkSize = encrypted.length;
       this.currentHeader = Unpooled.copyLong(8 + currentChunkSize);
-      this.unencryptedChunkSize = byteChannel.length();
+      this.unencryptedChunkSize = byteStream.size();
     }
 
     @Override
@@ -277,6 +282,19 @@ class SaslEncryption {
       if (region != null) {
         region.release();
       }
+    }
+
+  }
+
+  /** Extends BAOS to expose the internal buffer, so data can be read without copying. */
+  private static class ExposedByteArrayOutputStream extends ByteArrayOutputStream {
+
+    ExposedByteArrayOutputStream(int size) {
+      super(size);
+    }
+
+    byte[] getData() {
+      return buf;
     }
 
   }
