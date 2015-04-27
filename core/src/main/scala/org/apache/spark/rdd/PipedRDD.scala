@@ -39,8 +39,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] class PipedRDD[T: ClassTag](
     prev: RDD[T],
-    command: Seq[String],
-    envVars: Map[String, String],
+    command: (Partition) => Seq[String],
+    envVars: (Partition) => Map[String, String],
     printPipeContext: (String => Unit) => Unit,
     printRDDElement: (T, String => Unit) => Unit,
     separateWorkingDir: Boolean)
@@ -51,11 +51,11 @@ private[spark] class PipedRDD[T: ClassTag](
   def this(
       prev: RDD[T],
       command: String,
-      envVars: Map[String, String] = Map(),
+      envVars: (Partition) => Map[String, String] = (_) => Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false) =
-    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
+    this(prev, (_) => PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
       separateWorkingDir)
 
 
@@ -72,10 +72,10 @@ private[spark] class PipedRDD[T: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[String] = {
-    val pb = new ProcessBuilder(command)
+    val pb = new ProcessBuilder(command(split))
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
-    envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
+    envVars(split).foreach { case (variable, value) => currentEnvVars.put(variable, value) }
 
     // for compatibility with Hadoop which sets these env variables
     // so the user code can access the input filename

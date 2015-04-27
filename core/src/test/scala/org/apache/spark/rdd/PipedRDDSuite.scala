@@ -114,6 +114,33 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("pipe with env variable func" ) {
+    if (testCommandAvailable("printenv")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+      val piped = nums.pipeWithPartition((_) => Seq("printenv", "PARTITION"), (p:Partition) => Map("PARTITION" -> s"${p.index}"))
+      val c = piped.collect()
+      assert(c.size === 2)
+      assert(c(0) === "0")
+      assert(c(1) === "1")
+    } else {
+      assert(true)
+    }
+  }
+
+
+  test("pipe with commnad func" ) {
+    if (testCommandAvailable("printenv")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+      val piped = nums.pipeWithPartition((p: Partition) => Seq("printenv", s"SPLIT_${p.index}"), (_) => Map("SPLIT_0" -> "S0", "SPLIT_1" -> "S1" ))
+      val c = piped.collect()
+      assert(c.size === 2)
+      assert(c(0) === "S0")
+      assert(c(1) === "S1")
+    } else {
+      assert(true)
+    }
+  }
+
   test("pipe with non-zero exit status") {
     if (testCommandAvailable("cat")) {
       val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
