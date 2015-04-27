@@ -101,6 +101,29 @@ class HierarchicalClusteringModelSuite
     assert(model.WSSSE(data) === 0.0)
   }
 
+  test("clustering should be done correctly") {
+    for (numClusters <- Array(9, 99, 999)) {
+      val app = new HierarchicalClustering().setNumClusters(numClusters).setSeed(1)
+      val localData = (1 to 1000).toSeq.map { i =>
+        val label = i % numClusters
+        val sparseVector = Vectors.sparse(numClusters, Seq((label, label.toDouble)))
+        val denseVector = Vectors.fromBreeze(sparseVector.toBreeze.toDenseVector)
+        (label, denseVector, sparseVector)
+      }
+      // dense version
+      val denseData = sc.parallelize(localData.map(_._2), 2)
+      val denseModel = app.run(denseData)
+      assert(denseModel.getCenters().size === numClusters)
+      assert(denseModel.getClusters().forall(_.variancesNorm == 0.0))
+
+      // sparse version
+      val sparseData = sc.parallelize(localData.map(_._3), 2)
+      val sparseModel = app.run(sparseData)
+      assert(sparseModel.getCenters().size === numClusters)
+      assert(sparseModel.getClusters().forall(_.variancesNorm == 0.0))
+    }
+  }
+
   test("save a model, and then load the model") {
     val app = new HierarchicalClustering().setNumClusters(5).setSeed(1)
 

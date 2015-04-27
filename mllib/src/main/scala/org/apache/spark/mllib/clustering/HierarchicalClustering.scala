@@ -290,8 +290,8 @@ class HierarchicalClustering private (
           s"at ${tryTimes} times in ${appName}")
 
       // divide the failed clusters again
-      sc.broadcast(failedIndexes)
-      dividableData = data.filter { case (idx, point) => failedIndexes.contains(idx)}
+      val bcFailedIndexes = sc.broadcast(failedIndexes)
+      dividableData = data.filter { case (idx, point) => bcFailedIndexes.value.contains(idx)}
       val missingStats = divide(dividableData, failedCenters)
       stats = stats ++ missingStats
       tryTimes += 1
@@ -381,11 +381,11 @@ class HierarchicalClustering private (
     if (newCenters.size == 0) {
       return Map.empty[Long, (BV[Double], Double, BV[Double])]
     }
-    sc.broadcast(newCenters)
+    var bcNewCenters = sc.broadcast(newCenters)
 
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    sc.broadcast(metric)
+    val bcMetric = sc.broadcast(metric)
 
     val vectorSize = newCenters(newCenters.keySet.min).size
     var stats = newCenters.keys.map { idx =>
@@ -402,11 +402,11 @@ class HierarchicalClustering private (
         val map = mutable.Map.empty[Long, (BV[Double], Double, BV[Double])]
         iter.foreach { case (idx, point) =>
           // calculate next index number
-          val childrenCenters = Array(2 * idx, 2 * idx + 1).filter(newCenters.keySet.contains(_))
-              .map(newCenters(_)).toArray
+          val childrenCenters = Array(2 * idx, 2 * idx + 1)
+              .filter(bcNewCenters.value.keySet.contains(_)).map(bcNewCenters.value(_)).toArray
           if (childrenCenters.size >= 1) {
             val closestIndex =
-              HierarchicalClustering.findClosestCenter(metric)(childrenCenters)(point)
+              HierarchicalClustering.findClosestCenter(bcMetric.value)(childrenCenters)(point)
             val nextIndex = 2 * idx + closestIndex
 
             // get a map value or else get a sparse vector
@@ -423,6 +423,7 @@ class HierarchicalClustering private (
 
       // calculate the center of each cluster
       newCenters = eachStats.map { case (idx, (sum, n, sumOfSquares)) => (idx, sum :/ n)}
+      bcNewCenters = sc.broadcast(newCenters)
 
       // update summary of each cluster
       stats = eachStats.toMap
@@ -447,22 +448,23 @@ class HierarchicalClustering private (
     // extract the centers of the clusters
     val sc = data.sparkContext
     var centers = dividedClusters.map { case (idx, cluster) => (idx, cluster.center)}
-    sc.broadcast(centers)
+    val bcCenters = sc.broadcast(centers)
 
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    sc.broadcast(metric)
+    val bcMetric = sc.broadcast(metric)
 
     // update the indexes to their children indexes
     data.map { case (idx, point) =>
-      val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(centers.keySet.contains(_))
+      val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(bcCenters.value.keySet.contains(_))
       childrenIndexes.size match {
         // stay the index if the number of children is not enough
         case s if s < 2 => (idx, point)
         // update the indexes
         case _ => {
-          val nextCenters = childrenIndexes.map(centers(_)).map(_.toBreeze)
-          val closestIndex = HierarchicalClustering.findClosestCenter(metric)(nextCenters)(point)
+          val nextCenters = childrenIndexes.map(bcCenters.value(_)).map(_.toBreeze)
+          val closestIndex = HierarchicalClustering
+              .findClosestCenter(bcMetric.value)(nextCenters)(point)
           val nextIndex = 2 * idx + closestIndex
           (nextIndex, point)
         }
