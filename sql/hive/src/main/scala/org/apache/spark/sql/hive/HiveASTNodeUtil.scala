@@ -18,11 +18,14 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, ASTNode}
-
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.lib.Node
+
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 private[hive] object HiveASTNodeUtil {
   val nativeCommands = Seq(
@@ -268,5 +271,23 @@ private[hive] object HiveASTNodeUtil {
       case other => sys.error("Hive only supports tables names like 'tableName' " +
         s"or 'databaseName.tableName', found '$other'")
     }
+  }
+
+  def dumpTree(
+      node: Node,
+      builder: StringBuilder = new StringBuilder,
+      indent: Int = 0): StringBuilder = {
+    node match {
+      case a: ASTNode => builder.append(
+        ("  " * indent) + a.getText + " " +
+          a.getLine + ", " +
+          a.getTokenStartIndex + "," +
+          a.getTokenStopIndex + ", " +
+          a.getCharPositionInLine + "\n")
+      case other => sys.error(s"Non ASTNode encountered: $other")
+    }
+
+    Option(node.getChildren).map(_.toList).getOrElse(Nil).foreach(dumpTree(_, builder, indent + 1))
+    builder
   }
 }

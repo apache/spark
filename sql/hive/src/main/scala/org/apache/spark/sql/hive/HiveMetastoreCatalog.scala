@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.parquet.{ParquetRelation2, Partition => ParquetPartition, PartitionSpec}
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, DDLParser, LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -218,7 +218,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.
-      createPlanForView(table, alias)
+      HiveQlConverter.createPlanForView(table, alias)
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
@@ -232,14 +232,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       MetastoreRelation(databaseName, tblName, alias)(
         table.getTTable, partitions.map(part => part.getTPartition))(hive)
     }
-  }
-
-  /** Creates LogicalPlan for a given VIEW */
-  private def createPlanForView(view: Table, alias: Option[String]): Subquery = alias match {
-    // because hive use things like `_c0` to build the expanded text
-    // currently we cannot support view from "create view v1(c1) as ..."
-    case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
-    case Some(aliasText) => Subquery(aliasText, createPlan(view.getViewExpandedText))
   }
 
   private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {

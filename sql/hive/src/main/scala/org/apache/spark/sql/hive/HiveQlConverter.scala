@@ -21,8 +21,6 @@ import java.sql.Date
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
@@ -40,6 +38,7 @@ import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, Analyz
 import org.apache.spark.sql.hive.HiveASTNodeUtil._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
+import org.apache.hadoop.hive.ql.metadata.Table
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -87,6 +86,14 @@ private[hive] object HiveQlConverter {
             |${e.getStackTrace.head}
           """.stripMargin)
     }
+  }
+
+  /** Creates LogicalPlan for a given VIEW */
+  def createPlanForView(view: Table, alias: Option[String]): Subquery = alias match {
+    // because hive use things like `_c0` to build the expanded text
+    // currently we cannot support view from "create view v1(c1) as ..."
+    case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
+    case Some(aliasText) => Subquery(aliasText, createPlan(view.getViewExpandedText))
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
@@ -1060,21 +1067,5 @@ private[hive] object HiveQlConverter {
     })
 
     (keys, bitmasks)
-  }
-
-  def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
-    : StringBuilder = {
-    node match {
-      case a: ASTNode => builder.append(
-        ("  " * indent) + a.getText + " " +
-          a.getLine + ", " +
-          a.getTokenStartIndex + "," +
-          a.getTokenStopIndex + ", " +
-          a.getCharPositionInLine + "\n")
-      case other => sys.error(s"Non ASTNode encountered: $other")
-    }
-
-    Option(node.getChildren).map(_.toList).getOrElse(Nil).foreach(dumpTree(_, builder, indent + 1))
-    builder
   }
 }
