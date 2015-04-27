@@ -401,7 +401,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
-  test("SPARK-7119: ScriptTransform should consider the output data type") {
+  test("SPARK-7119: ScriptTransform doesn't consider the output data type") {
     val s = sql("""
                   |SELECT tKey + 1 FROM (SELECT TRANSFORM (key) USING 'cat'
                   |AS (tKey INT) FROM src) t
@@ -444,7 +444,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
     """.stripMargin.replaceAll("\n", " "))
 
-  test("transform with SerDe2") {
+  ignore("transform with SerDe2") {
 
     sql("CREATE TABLE small_src(key INT, value STRING)")
     sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")

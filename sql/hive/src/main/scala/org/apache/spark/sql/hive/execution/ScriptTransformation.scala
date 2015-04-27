@@ -22,9 +22,19 @@ import java.util.Properties
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
+import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector._
+import org.apache.hadoop.hive.serde2.SerDeUtils
+import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.hive.ql.exec.RecordReader
+import org.apache.hadoop.hive.ql.exec.RecordWriter
+import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.parse.HiveParser
+import org.apache.hadoop.hive.ql.plan.PlanUtils
+import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -61,67 +71,48 @@ case class ScriptTransformation(
       val proc = builder.start()
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
-      val reader = new BufferedReader(new InputStreamReader(inputStream))
+      val dataInputStream = new DataInputStream(inputStream)
  
-      val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
+      val outputTableDesc = ioschema.initOutputSerDe(output)
+      val outputSerde = outputTableDesc.getDeserializerClass().newInstance()
+      outputSerde.initialize(null, outputTableDesc.getProperties())
+      val outputSoi: StructObjectInspector = ioschema.initOutputputSoi(outputSerde)
+
+      val hConf = new HiveConf()
+
+      val scriptOutputReader: RecordReader = ioschema.getRecordReader()
+      scriptOutputReader.initialize(dataInputStream, hConf, outputTableDesc.getProperties())
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
         var cacheRow: Row = null
-        var curLine: String = null
         var eof: Boolean = false
+        val writable = scriptOutputReader.createRow()
 
         override def hasNext: Boolean = {
-          if (outputSerde == null) {
-            if (curLine == null) {
-              curLine = reader.readLine()
-              curLine != null
-            } else {
-              true
-            }
-          } else {
-            !eof
-          }
+          !eof
         }
 
         def deserialize(): Row = {
           if (cacheRow != null) return cacheRow
 
           val mutableRow = new SpecificMutableRow(output.map(_.dataType))
-          try {
-            val dataInputStream = new DataInputStream(inputStream)
-            val writable = outputSerde.getSerializedClass().newInstance
-            writable.readFields(dataInputStream)
+          val bytes = scriptOutputReader.next(writable)
 
-            val raw = outputSerde.deserialize(writable)
-            val dataList = outputSoi.getStructFieldsDataAsList(raw)
-            val fieldList = outputSoi.getAllStructFieldRefs()
-            
-            var i = 0
-            dataList.foreach( element => {
-              if (element == null) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow(i) = unwrap(element, fieldList(i).getFieldObjectInspector)
-              }
-              i += 1
-            })
-            return mutableRow
-          } catch {
-            case e: EOFException =>
-              eof = true
-              return null
+          if (bytes <= 0) {
+            eof = true
+            return null
           }
-        }
 
-        def makeRow(dataList: Seq[String]): Row = {
-          val mutableRow = new SpecificMutableRow(output.map(_.dataType))
-
+          val raw = outputSerde.deserialize(writable)
+          val dataList = outputSoi.getStructFieldsDataAsList(raw)
+          val fieldList = outputSoi.getAllStructFieldRefs()
+            
           var i = 0
           dataList.foreach( element => {
             if (element == null) {
               mutableRow.setNullAt(i)
             } else {
-              mutableRow(i) = ioschema.parseScriptOutput(element, output(i).dataType)
+              mutableRow(i) = unwrap(element, fieldList(i).getFieldObjectInspector)
             }
             i += 1
           })
@@ -133,31 +124,27 @@ case class ScriptTransformation(
             throw new NoSuchElementException
           }
  
-          if (outputSerde == null) {
-            val prevLine = curLine
-            curLine = reader.readLine()
-            if (!ioschema.schemaLess) {
-              makeRow(prevLine.split(
-                ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
-            } else {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
-                .asInstanceOf[Array[Any]])
-            }
-          } else {
-            val ret = deserialize()
-            if (!eof) {
-              cacheRow = null
-              cacheRow = deserialize()
-            }
-            ret
+          val ret = deserialize()
+          if (!eof) {
+            cacheRow = null
+            cacheRow = deserialize()
           }
+          ret
         }
       }
 
-      val (inputSerde, inputSoi) = ioschema.initInputSerDe(input)
+      val inputTableDesc = ioschema.initInputSerDe(input)
+      val inputSerde: Serializer = inputTableDesc.getDeserializerClass()
+        .newInstance().asInstanceOf[Serializer]
+      inputSerde.initialize(hConf, inputTableDesc.getProperties())
+
+      val inputSoi = ioschema.initInputSoi(input)
+
       val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
+
+      val scriptOutWriter: RecordWriter = ioschema.getRecordWriter()
+      scriptOutWriter.initialize(dataOutputStream, hConf)
 
       // Put the write(output to the pipeline) into a single thread
       // and keep the collector as remain in the main thread.
@@ -168,17 +155,10 @@ case class ScriptTransformation(
           iter
             .map(outputProjection)
             .foreach { row =>
-            if (inputSerde == null) {
-              val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-                ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
-
-              outputStream.write(data)
-            } else {
-              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-              prepareWritable(writable).write(dataOutputStream)
-            }
+            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+            scriptOutWriter.write(prepareWritable(writable))
           }
-          outputStream.close()
+          scriptOutWriter.close()
         }
       }).start()
 
@@ -192,31 +172,53 @@ case class ScriptTransformation(
  */
 private[hive]
 case class HiveScriptIOSchema (
-    inputRowFormat: Seq[(String, String)],
-    outputRowFormat: Seq[(String, String)],
+    inputRowFormat: Seq[(String, String, String)],
+    outputRowFormat: Seq[(String, String, String)],
     inputSerdeClass: String,
     outputSerdeClass: String,
     inputSerdeProps: Seq[(String, String)],
     outputSerdeProps: Seq[(String, String)],
+    recordReader: String,
+    recordWriter: String,
     schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
 
-  val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
-                          ("TOK_TABLEROWFORMATLINES", "\n"))
+  @transient val hConf = new HiveConf()
+  val defaultSerdeName: String = hConf.getVar(HiveConf.ConfVars.HIVESCRIPTSERDE)
+  val defaultSerdeClass: Class[_ <: Deserializer] = Utils.classForName(defaultSerdeName)
+    .asInstanceOf[Class[_ <: Deserializer]]
 
-  val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
-  val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+  val fieldSeparator: Int =
+    if (HiveConf.getBoolVar(hConf, HiveConf.ConfVars.HIVESCRIPTESCAPE)) {
+      Utilities.ctrlaCode
+    } else {
+      Utilities.tabCode
+    }
 
-  
-  def initInputSerDe(input: Seq[Expression]): (AbstractSerDe, ObjectInspector) = {
+  def initInputSerDe(input: Seq[Expression]): TableDesc = {
     val (columns, columnTypes) = parseAttrs(input)
-    val serde = initSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps)
-    (serde, initInputSoi(serde, columns, columnTypes))
+    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+    val inInfo: TableDesc =
+      if (inputSerdeClass != "") {
+        getTableDescFromSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps, inputRowFormat)
+      } else {
+        PlanUtils.getTableDesc(defaultSerdeClass, fieldSeparator.toString, columns.mkString(","),
+          columnTypesNames, false, true)
+      }
+    inInfo
   }
 
-  def initOutputSerDe(output: Seq[Attribute]): (AbstractSerDe, StructObjectInspector) = {
+  def initOutputSerDe(output: Seq[Attribute]): TableDesc = {
     val (columns, columnTypes) = parseAttrs(output)
-    val serde = initSerDe(outputSerdeClass, columns, columnTypes, outputSerdeProps)
-    (serde, initOutputputSoi(serde))
+    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+    val outInfo: TableDesc =
+      if (outputSerdeClass != "") {
+        getTableDescFromSerDe(outputSerdeClass, columns, columnTypes, outputSerdeProps,
+          outputRowFormat)
+      } else {
+        PlanUtils.getTableDesc(defaultSerdeClass, fieldSeparator.toString, columns.mkString(","),
+          columnTypesNames, false)
+      }
+    outInfo
   }
 
   def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
@@ -235,70 +237,95 @@ case class HiveScriptIOSchema (
 
     (columns, columnTypes)
   }
+
+  def getTableDescFromSerDe(
+      serdeClassName: String,
+      columns: Seq[String],
+      columnTypes: Seq[DataType],
+      serdeProps: Seq[(String, String)],
+      rowFormat: Seq[(String, String, String)]): TableDesc = {
+    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+    if (serdeClassName != "") {
+      val className = serdeClassName.split("'")(1)
+      val serdeClass: Class[_ <: Deserializer] = Utils.classForName(className)
+        .asInstanceOf[Class[_ <: Deserializer]]
+
+      val tblDesc: TableDesc = PlanUtils.getTableDesc(serdeClass, Utilities.tabCode.toString,
+        columns.mkString(","), columnTypesNames, false)
  
-  def initSerDe(serdeClassName: String, columns: Seq[String],
-    columnTypes: Seq[DataType], serdeProps: Seq[(String, String)]): AbstractSerDe = {
-
-    val serde: AbstractSerDe = if (serdeClassName != "") {
-      val trimed_class = serdeClassName.split("'")(1)
-      Utils.classForName(trimed_class)
-        .newInstance.asInstanceOf[AbstractSerDe]
-    } else {
-      null
-    }
-
-    if (serde != null) {
-      val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
-
       var propsMap = serdeProps.map(kv => {
         (kv._1.split("'")(1), kv._2.split("'")(1))
       }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
       propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
-    
-      val properties = new Properties()
-      properties.putAll(propsMap)
-      serde.initialize(null, properties)
-    }
+      propsMap.map(kv => tblDesc.getProperties().setProperty(kv._1, kv._2))
 
-    serde
+      return tblDesc
+    } else if (rowFormat != Nil) {
+      val tblDesc: TableDesc = PlanUtils.getDefaultTableDesc(Utilities.ctrlaCode.toString,
+        columns.mkString(","), columnTypesNames, false)
+      rowFormat.foreach { (tuple) =>
+        tuple._1 match {
+          case "TOK_TABLEROWFORMATFIELD" =>
+            val fieldDelim: String = tuple._2
+            tblDesc.getProperties().setProperty(serdeConstants.FIELD_DELIM, fieldDelim)
+            tblDesc.getProperties().setProperty(serdeConstants.SERIALIZATION_FORMAT,
+              fieldDelim)
+            if (tuple._3 != null)  {
+              val fieldEscape: String = tuple._3
+              tblDesc.getProperties().setProperty(serdeConstants.ESCAPE_CHAR, fieldEscape)
+            }
+          case "TOK_TABLEROWFORMATCOLLITEMS" =>
+            tblDesc.getProperties().setProperty(serdeConstants.COLLECTION_DELIM, tuple._2)
+          case "TOK_TABLEROWFORMATMAPKEYS" =>
+            tblDesc.getProperties().setProperty(serdeConstants.MAPKEY_DELIM, tuple._2)
+          case "TOK_TABLEROWFORMATLINES" =>
+            val lineDelim: String = tuple._2
+            tblDesc.getProperties().setProperty(serdeConstants.LINE_DELIM, lineDelim)
+            if (!lineDelim.equals("\n") && !lineDelim.equals("10")) {
+              sys.error("Lines terminated by non newline.")
+            }
+          case "TOK_TABLEROWFORMATNULL" =>
+            val nullFormat: String = tuple._2
+            tblDesc.getProperties().setProperty(serdeConstants.SERIALIZATION_NULL_FORMAT,
+              nullFormat)
+        }
+      }
+      return tblDesc
+    }
+    null
   }
 
-  def initInputSoi(inputSerde: AbstractSerDe, columns: Seq[String], columnTypes: Seq[DataType])
-    : ObjectInspector = {
+  def getRecordReader(): RecordReader = {
+    val hConf = new HiveConf()
+    val readerName =
+      if (recordReader == "") {
+        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDREADER)
+      } else {
+        recordReader
+      }
+    Utils.classForName(readerName).newInstance.asInstanceOf[RecordReader]
+  }
 
-    if (inputSerde != null) {
-      val fieldObjectInspectors = columnTypes.map(toInspector(_))
-      ObjectInspectorFactory
-        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
-        .asInstanceOf[ObjectInspector]
-    } else {
-      null
-    }
+  def getRecordWriter(): RecordWriter = {
+    val hConf = new HiveConf()
+    val writerName =
+      if (recordWriter == "") {
+        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDWRITER)
+      } else {
+        recordWriter
+      }
+    Utils.classForName(writerName).newInstance.asInstanceOf[RecordWriter]
   }
  
-  def initOutputputSoi(outputSerde: AbstractSerDe): StructObjectInspector = {
-    if (outputSerde != null) {
-      outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
-    } else {
-      null
-    }
+  def initInputSoi(input: Seq[Expression]): ObjectInspector = {
+    val (columns, columnTypes) = parseAttrs(input)
+    val fieldObjectInspectors = columnTypes.map(toInspector(_))
+    ObjectInspectorFactory
+      .getStandardStructObjectInspector(columns, fieldObjectInspectors)
+      .asInstanceOf[ObjectInspector]
   }
-
-  def parseScriptOutput(data: String, dt: DataType): Any = {
-    try {
-      dt match {
-        case BooleanType => data.toBoolean
-        case ByteType => data.toByte
-        case ShortType => data.toShort
-        case IntegerType => data.toInt
-        case LongType => data.toLong
-        case FloatType => data.toFloat
-        case DoubleType => data.toDouble
-        case StringType => UTF8String(data)
-        case _ => sys.error(s"ScriptTransformation doesn't support output type $dt")
-      }
-    } catch {
-      case nfe: NumberFormatException => sys.error(s"$data is not in type $dt")
-    }
+ 
+  def initOutputputSoi(outputSerde: Deserializer): StructObjectInspector = {
+    outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
   }
 }

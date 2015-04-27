@@ -664,6 +664,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token("TOK_RECORDREADER", readerClause) ::
                    outputClause) :: Nil) =>
 
+            val recordWriter = writerClause match {
+              case Token(writer, Nil) :: Nil => writer
+              case Nil => ""
+            }
+
+            val recordReader = readerClause match {
+              case Token(reader, Nil) :: Nil => reader
+              case Nil => ""
+            }
+
             val (output, schemaLess) = outputClause match {
               case Token("TOK_ALIASLIST", aliases) :: Nil =>
                 (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
@@ -677,10 +687,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
 
             def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String)], String, Seq[(String, String)]) = clause match {
+              : (Seq[(String, String, String)], String, Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
-                  case Token(name, Token(value, Nil) :: Nil) => (name, value)
+                  case Token(name, Token(value, Nil) :: Nil) => (name, value, null)
+                  case Token(name, Token(value1, Nil) :: Token(value2, Nil) :: Nil) =>
+                    (name, value1, value2)
                 }
                 (rowFormat, "", Nil)
 
@@ -707,7 +719,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             val schema = HiveScriptIOSchema(
               inRowFormat, outRowFormat,
               inSerdeClass, outSerdeClass,
-              inSerdeProps, outSerdeProps, schemaLess)
+              inSerdeProps, outSerdeProps,
+              recordReader, recordWriter, schemaLess)
 
             Some(
               logical.ScriptTransformation(
