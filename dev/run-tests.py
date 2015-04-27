@@ -183,7 +183,7 @@ def determine_test_suite():
     test_suite = list()
 
     if AMPLAB_JENKINS:
-        run_cmd(['git', 'fetch', 'origin', 'master:master']).wait()
+        run_cmd(['git', 'fetch', 'origin', 'master:master'])
 
         raw_output = subprocess.check_output(['git', 'diff', '--name-only', 'master'])
         # remove any empty strings
