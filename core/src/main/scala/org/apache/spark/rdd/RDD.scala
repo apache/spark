@@ -23,6 +23,7 @@ import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
+import scala.io.Codec
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.io.{Writable, BytesWritable, NullWritable, Text}
@@ -590,13 +591,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: String): RDD[String] = new PipedRDD(this, command)
+  def pipe(command: String)(implicit codec: Codec): RDD[String] = new PipedRDD(this, command)(codec)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: String, env: Map[String, String]): RDD[String] =
-    new PipedRDD(this, command, env)
+  def pipe(command: String, env: Map[String, String])(implicit code: Codec): RDD[String] =
+    new PipedRDD(this, command, env)(codec)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
@@ -622,11 +623,11 @@ abstract class RDD[T: ClassTag](
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false): RDD[String] = {
+      separateWorkingDir: Boolean = false)(implicit codec: Codec): RDD[String] = {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
-      separateWorkingDir)
+      separateWorkingDir)(codec)
   }
 
   /**
