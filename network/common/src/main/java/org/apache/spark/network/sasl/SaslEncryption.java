@@ -118,6 +118,7 @@ class SaslEncryption {
       if (msg.hasArray()) {
         data = msg.array();
         offset = msg.arrayOffset();
+        msg.skipBytes(length);
       } else {
         data = new byte[length];
         msg.readBytes(data);
