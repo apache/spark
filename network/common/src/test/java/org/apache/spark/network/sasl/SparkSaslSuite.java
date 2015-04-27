@@ -64,6 +64,9 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class SparkSaslSuite {
 
+  private static final String BLOCK_SIZE_CONF = "spark.network.sasl.maxEncryptedBlockSizeKb";
+
+
   /** Provides a secret key holder which returns secret key == appId */
   private SecretKeyHolder secretKeyHolder = new SecretKeyHolder() {
     @Override
@@ -201,9 +204,38 @@ public class SparkSaslSuite {
   }
 
   @Test
+  public void testEncryptedMessageChunking() throws Exception {
+    File file = File.createTempFile("sasltest", ".txt");
+    try {
+      TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+
+      byte[] data = new byte[8 * 1024];
+      new Random().nextBytes(data);
+      Files.write(data, file);
+
+      SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
+      // It doesn't really matter what we return here, as long as it's not null.
+      when(backend.wrap(any(byte[].class), anyInt(), anyInt())).thenReturn(data);
+
+      FileSegmentManagedBuffer msg = new FileSegmentManagedBuffer(conf, file, 0, file.length());
+      SaslEncryption.EncryptedMessage emsg =
+        new SaslEncryption.EncryptedMessage(backend, msg.convertToNetty(), data.length / 8);
+
+      ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);
+      while (emsg.transfered() < emsg.count()) {
+        channel.reset();
+        emsg.transferTo(channel, emsg.transfered());
+      }
+
+      verify(backend, times(8)).wrap(any(byte[].class), anyInt(), anyInt());
+    } finally {
+      file.delete();
+    }
+  }
+
+  @Test
   public void testFileRegionEncryption() throws Exception {
-    final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSizeKb";
-    System.setProperty(blockSizeConf, "1");
+    System.setProperty(BLOCK_SIZE_CONF, "1");
 
     final AtomicReference<ManagedBuffer> response = new AtomicReference();
     final File file = File.createTempFile("sasltest", ".txt");
@@ -260,7 +292,7 @@ public class SparkSaslSuite {
       if (response.get() != null) {
         response.get().release();
       }
-      System.clearProperty(blockSizeConf);
+      System.clearProperty(BLOCK_SIZE_CONF);
     }
   }
 
