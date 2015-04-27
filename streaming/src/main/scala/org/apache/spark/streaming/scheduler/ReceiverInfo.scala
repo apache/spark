@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.ActorRef
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEndpointRef
 
 /**
  * :: DeveloperApi ::
@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 case class ReceiverInfo(
     streamId: Int,
     name: String,
-    private[streaming] val actor: ActorRef,
+    private[streaming] val endpoint: RpcEndpointRef,
     active: Boolean,
     location: String,
     lastErrorMessage: String = "",

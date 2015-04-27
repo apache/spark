@@ -102,7 +102,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   def validateModelFit(
       piData: Array[Double],
       thetaData: Array[Array[Double]],
-      model: NaiveBayesModel) = {
+      model: NaiveBayesModel): Unit = {
     def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
       (d1 - d2).abs <= precision
     }

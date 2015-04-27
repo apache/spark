@@ -45,7 +45,7 @@ case class LeftSemiJoinBNL(
   override def right: SparkPlan = broadcast
 
   @transient private lazy val boundCondition =
-    InterpretedPredicate(
+    InterpretedPredicate.create(
       condition
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))

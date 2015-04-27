@@ -113,10 +113,12 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
 
-  override protected def formatVersion: String = "1.0"
+  override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 
 object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
+
+  private[spark] def formatVersion: String = "1.0"
 
   private[tree] object SaveLoadV1_0 {
 

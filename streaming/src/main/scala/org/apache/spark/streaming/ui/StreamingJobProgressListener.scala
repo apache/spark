@@ -33,7 +33,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
-  private val completedaBatchInfos = new Queue[BatchInfo]
+  private val completedBatchInfos = new Queue[BatchInfo]
   private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
@@ -62,7 +62,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = {
     synchronized {
-      runningBatchInfos(batchSubmitted.batchInfo.batchTime) = batchSubmitted.batchInfo
+      waitingBatchInfos(batchSubmitted.batchInfo.batchTime) = batchSubmitted.batchInfo
     }
   }
 
@@ -79,8 +79,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     synchronized {
       waitingBatchInfos.remove(batchCompleted.batchInfo.batchTime)
       runningBatchInfos.remove(batchCompleted.batchInfo.batchTime)
-      completedaBatchInfos.enqueue(batchCompleted.batchInfo)
-      if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
+      completedBatchInfos.enqueue(batchCompleted.batchInfo)
+      if (completedBatchInfos.size > batchInfoLimit) completedBatchInfos.dequeue()
       totalCompletedBatches += 1L
 
       batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
@@ -118,7 +118,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def retainedCompletedBatches: Seq[BatchInfo] = synchronized {
-    completedaBatchInfos.toSeq
+    completedBatchInfos.toSeq
   }
 
   def processingDelayDistribution: Option[Distribution] = synchronized {
@@ -149,7 +149,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }.toMap
   }
 
-  def lastReceivedBatchRecords: Map[Int, Long] = {
+  def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       (0 until numReceivers).map { receiverId =>
@@ -160,24 +160,24 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
-  def receiverInfo(receiverId: Int): Option[ReceiverInfo] = {
+  def receiverInfo(receiverId: Int): Option[ReceiverInfo] = synchronized {
     receiverInfos.get(receiverId)
   }
 
-  def lastCompletedBatch: Option[BatchInfo] = {
-    completedaBatchInfos.sortBy(_.batchTime)(Time.ordering).lastOption
+  def lastCompletedBatch: Option[BatchInfo] = synchronized {
+    completedBatchInfos.sortBy(_.batchTime)(Time.ordering).lastOption
   }
 
-  def lastReceivedBatch: Option[BatchInfo] = {
+  def lastReceivedBatch: Option[BatchInfo] = synchronized {
     retainedBatches.lastOption
   }
 
-  private def retainedBatches: Seq[BatchInfo] = synchronized {
+  private def retainedBatches: Seq[BatchInfo] = {
     (waitingBatchInfos.values.toSeq ++
-      runningBatchInfos.values.toSeq ++ completedaBatchInfos).sortBy(_.batchTime)(Time.ordering)
+      runningBatchInfos.values.toSeq ++ completedBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }
 
   private def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {
-    Distribution(completedaBatchInfos.flatMap(getMetric(_)).map(_.toDouble))
+    Distribution(completedBatchInfos.flatMap(getMetric(_)).map(_.toDouble))
   }
 }

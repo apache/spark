@@ -99,7 +99,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-  def getMaxIter: Int = get(maxIter)
+  def getMaxIter: Int = getOrDefault(maxIter)
 }
 
 /**
@@ -174,11 +174,11 @@ private class MyLogisticRegressionModel(
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
    *
-   * This is used for the defaul implementation of [[transform()]].
+   * This is used for the default implementation of [[transform()]].
    */
   override protected def copy(): MyLogisticRegressionModel = {
     val m = new MyLogisticRegressionModel(parent, fittingParamMap, weights)
-    Params.inheritValues(this.paramMap, this, m)
+    Params.inheritValues(extractParamMap(), this, m)
     m
   }
 }

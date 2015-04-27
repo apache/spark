@@ -185,7 +185,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
-      analyzer(logical)
+      analyzer.execute(logical)
     }
   }
 
@@ -262,12 +262,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |WITH SERDEPROPERTIES ('field.delim'='\\t')
        """.stripMargin.cmd,
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
-    TestTable("sales",
-      s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
-         |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
-         |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
          |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
