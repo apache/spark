@@ -39,3 +39,6 @@ echo $GIT_SHA > ./GIT_SHA
 echo $GIT_BRANCH >> ./GIT_DESC
 echo $GIT_DESC >> ./GIT_DESC
 echo $GIT_HUMAN >> ./GIT_DESC
+
+# Fix mysterious packserv permissions errors
+chmod +rx -R *
