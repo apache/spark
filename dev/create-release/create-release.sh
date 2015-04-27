@@ -117,7 +117,7 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   echo "Created Nexus staging repository: $staged_repo_id"
 
   build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.11.sh
