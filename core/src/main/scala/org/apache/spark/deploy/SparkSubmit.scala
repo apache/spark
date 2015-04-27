@@ -39,7 +39,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
-import org.apache.spark.util.{Utils, ChildFirstURLClassLoader, MutableURLClassLoader}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 /**
  * Whether to submit, kill, or request the status of an application.
