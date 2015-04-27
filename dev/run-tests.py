@@ -22,6 +22,7 @@ import re
 import sys
 import shutil
 import subprocess
+from collections import namedtuple
 
 SPARK_PROJ_ROOT = \
     os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
@@ -144,13 +145,22 @@ def determine_java_version(java_exe):
     """Given a valid java executable will return its version in tuple format as:
     [<major-version>, <minor-version>, <patch-version>, <update-version>]"""
 
-    raw_output = subprocess.check_output([java_exe, "-version"], stderr=subprocess.STDOUT)
+    raw_output = subprocess.check_output([java_exe, "-version"], 
+                                         stderr=subprocess.STDOUT)
     raw_version_str = raw_output.split('\n')[0] # eg 'java version "1.8.0_25"'
     version_str = raw_version_str.split()[-1].strip('"') # eg '1.8.0_25'
     version, update = version_str.split('_') # eg ['1.8.0', '25']
 
+    JavaVersion = namedtuple('JavaVersion', 
+                             ['major', 'minor', 'patch', 'update'])
+
     # map over the values and convert them to integers
-    return map(lambda x: int(x), version.split('.') + [update])
+    version_info = map(lambda x: int(x), version.split('.') + [update])
+
+    return JavaVersion(major=version_info[0],
+                       minor=version_info[1],
+                       patch=version_info[2],
+                       update=version_info[3])
 
 
 def multi_starts_with(orig_str, *prefixes):
@@ -391,7 +401,7 @@ if __name__ == "__main__":
 
     java_version = determine_java_version(java_exe)
 
-    if java_version[1] < 8:
+    if java_version.minor < 8:
         print "[warn] Java 8 tests will not run because JDK version is < 1.8."
 
     test_suite = determine_test_suite()
