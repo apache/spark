@@ -103,7 +103,7 @@ class Main {
    * quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
    */
   private static String prepareWindowsCommand(List<String> cmd, Map<String, String> childEnv) {
-    StringBuilder cmdline = new StringBuilder("");
+    StringBuilder cmdline = new StringBuilder();
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
       cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
       cmdline.append(" && ");
