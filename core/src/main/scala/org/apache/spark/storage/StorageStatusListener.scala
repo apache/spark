@@ -25,13 +25,17 @@ import org.apache.spark.scheduler._
 /**
  * :: DeveloperApi ::
  * A SparkListener that maintains executor storage status.
+ *
+ * Unlike JobProgressListener, this class is thread-safe, so users do not need to synchronize
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
-  def storageStatusList: Seq[StorageStatus] = executorIdToStorageStatus.values.toSeq
+  def storageStatusList: Seq[StorageStatus] = synchronized {
+    executorIdToStorageStatus.values.toSeq
+  }
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {

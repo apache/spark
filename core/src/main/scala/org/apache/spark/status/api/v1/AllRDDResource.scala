@@ -30,7 +30,6 @@ private[v1] class AllRDDResource(uiRoot: UIRoot) {
     @PathParam("appId") appId: String
   ): Seq[RDDStorageInfo] = {
     uiRoot.withSparkUI(appId) { ui =>
-      // should all access on storageListener also be synchronized?
       val storageStatusList = ui.storageListener.storageStatusList
       val rddInfos = ui.storageListener.rddInfoList
       rddInfos.map{rddInfo =>
